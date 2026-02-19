@@ -1,0 +1,126 @@
+<div class="min-h-screen bg-gray-100 flex flex-col md:flex-row">
+
+  <!-- Left side: Image and Branding -->
+  <div
+    class="relative md:w-1/2 flex flex-col justify-center items-center text-white bg-indigo-900 overflow-hidden min-h-[300px] md:min-h-screen">
+    <!-- Background Image with Overlay -->
+    <div class="absolute inset-0 z-0">
+      <img src="/src/assets/tailor_workshop.jpg" alt="A tailor's workshop" class="w-full h-full object-cover">
+      <div class="absolute inset-0 bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 opacity-75"></div>
+    </div>
+
+    <!-- Content -->
+    <div class="relative z-10 text-center p-8 animate-fade-in">
+      <div class="inline-block bg-white/20 p-4 rounded-full mb-6 backdrop-blur-sm">
+        <svg class="h-12 w-12 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
+        </svg>
+      </div>
+      <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight">TMG Cothings</h1>
+      <p class="mt-4 text-lg text-indigo-200">The future of order management is here.</p>
+    </div>
+
+    <!-- Decorative shape for mobile view transition -->
+    <div
+      class="absolute bottom-0 left-0 w-full h-16 bg-gray-100 [clip-path:polygon(0_100%,100%_100%,100%_0)] md:hidden">
+    </div>
+  </div>
+
+  <!-- Right side: Login Form -->
+  <div class="w-full md:w-1/2 flex justify-center items-center p-8 sm:p-12 bg-gray-50">
+    <div class="w-full max-w-md bg-white p-8 sm:p-10 rounded-2xl shadow-xl">
+      <div class="text-center mb-8">
+        <img src="/src/assets/logo.jpeg" alt="Company Logo" width="60" height="60" class="rounded-full mx-auto mb-3">
+        <h2 class="text-3xl font-bold text-gray-800">Welcome Back</h2>
+        <p class="text-gray-500 mt-1">Please sign in to continue.</p>
+      </div>
+
+      <form class="space-y-5" (ngSubmit)="login()" #loginForm="ngForm">
+        <div>
+          <label for="username" class="sr-only">Username</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                fill="currentColor">
+                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <input id="username" name="username" type="text" required
+              class="appearance-none block w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-300 rounded-md text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500 sm:text-sm"
+              [ngModel]="username()" (ngModelChange)="username.set($event)" placeholder="Username">
+          </div>
+        </div>
+
+        <div>
+          <label for="password" class="sr-only">Password</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                fill="currentColor">
+                <path fill-rule="evenodd"
+                  d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z"
+                  clip-rule="evenodd" />
+              </svg>
+            </div>
+            <input id="password" name="password" [type]="showPassword() ? 'text' : 'password'" required
+              class="appearance-none block w-full pl-10 pr-10 py-3 bg-gray-50 border border-gray-300 rounded-md text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500 sm:text-sm"
+              [ngModel]="password()" (ngModelChange)="password.set($event)" placeholder="Password">
+            <button type="button" (click)="togglePasswordVisibility()"
+              class="absolute inset-y-0 right-0 pr-3 flex items-center text-sm leading-5 text-gray-500 hover:text-gray-700">
+              @if (showPassword()) {
+              <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  d="M3.28 2.22a.75.75 0 00-1.06 1.06l14.5 14.5a.75.75 0 101.06-1.06l-1.745-1.745a10.029 10.029 0 003.3-4.38 1.651 1.651 0 000-1.185A10.004 10.004 0 0010 5c-1.42 0-2.772.32-3.999.898L3.28 2.22zM7.5 12a2.5 2.5 0 013.313-2.262l1.652 1.652a2.5 2.5 0 01-3.313 2.262L7.5 12zM15.75 11a1.651 1.651 0 000-1.185A10.002 10.002 0 0010 5c-1.036 0-2.024.195-2.933.55l.628.628A7.485 7.485 0 0110 6.5a7.485 7.485 0 013.54 1.001l.628.628c.355-.909.552-1.897.552-2.93z" />
+              </svg>
+              } @else {
+              <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                <path fill-rule="evenodd"
+                  d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                  clip-rule="evenodd" />
+              </svg>
+              }
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end">
+          <div class="text-sm">
+            <a href="#" class="font-medium text-violet-600 hover:text-violet-500">
+              Forgot your password?
+            </a>
+          </div>
+        </div>
+
+        @if(loginError()) {
+        <div class="rounded-md bg-red-50 p-4">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                  clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm font-medium text-red-800">{{ loginError() }}</p>
+            </div>
+          </div>
+        </div>
+        }
+
+        <div>
+          <button type="submit"
+            class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-lg">
+            Sign In
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+</div>

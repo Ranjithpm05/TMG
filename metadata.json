@@ -1,0 +1,7 @@
+{
+  "name": "Garment Order Management",
+  "description": "An application to manage clients, apparel designs, and sales orders for a garment business. It features master screens for clients and designs, and a sales order entry screen with a simulated barcode scanning process.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

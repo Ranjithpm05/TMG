@@ -1,0 +1,161 @@
+@if (isAuthenticated()) {
+<div class="flex h-screen bg-gray-100 font-sans">
+  <!-- Static sidebar for desktop -->
+  <aside class="hidden md:flex flex-col w-64 bg-gray-800 text-white shadow-xl">
+    <div class="flex items-center justify-start h-20 shadow-md px-4">
+      <img src="/src/assets/logo.jpeg" alt="Company Logo" width="50" height="50" class="rounded-full">
+      <span class="ml-3 text-2xl font-bold">TMG Cothings</span>
+    </div>
+    <nav class="flex-1 flex flex-col justify-between px-2 py-4">
+      <div class="space-y-2">
+        @if(canView('sales')) {
+        <button (click)="setView('sales')"
+          class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
+          [class.bg-gray-900]="currentView() === 'sales'">
+          <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01">
+            </path>
+          </svg>
+          Sales Order
+        </button>
+        }
+        @if(canView('clients')) {
+        <button (click)="setView('clients')"
+          class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
+          [class.bg-gray-900]="currentView() === 'clients'">
+          <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197m0 0A5.975 5.975 0 0112 13a5.975 5.975 0 013 1.803M15 21a9 9 0 00-3-5.647M12 13a9 9 0 00-3 5.647" />
+          </svg>
+          Client Master
+        </button>
+        }
+        @if(canView('designs')) {
+        <button (click)="setView('designs')"
+          class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
+          [class.bg-gray-900]="currentView() === 'designs'">
+          <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+          </svg>
+          Design Master
+        </button>
+        }
+        @if(canView('users')) {
+        <button (click)="setView('users')"
+          class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
+          [class.bg-gray-900]="currentView() === 'users'">
+          <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.084-1.28-.24-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.084-1.28.24-1.857m10.514-6.32a4 4 0 10-5.028 0m5.028 0a4 4 0 11-5.028 0M7 11a4 4 0 100-8 4 4 0 000 8z" />
+          </svg>
+          User Management
+        </button>
+        }
+      </div>
+      <div>
+        <button (click)="logout()"
+          class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-red-700 hover:text-white transition-colors">
+          <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+          </svg>
+          Logout
+        </button>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- Content area -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <header class="flex md:hidden justify-between items-center bg-white p-4 shadow-md">
+      <div class="flex items-center">
+        <img src="/src/assets/logo.jpeg" alt="Company Logo" width="40" height="40" class="rounded-full">
+        <span class="ml-3 text-xl font-bold">TMG Cothings</span>
+      </div>
+      <button (click)="toggleSidebar()" class="text-gray-500 focus:outline-none focus:text-gray-700">
+        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Mobile sidebar -->
+    @if (isSidebarOpen()) {
+    <div class="fixed inset-0 flex z-40 md:hidden" role="dialog" aria-modal="true">
+      <div class="fixed inset-0 bg-gray-600 bg-opacity-75" (click)="toggleSidebar()"></div>
+      <div class="relative flex-1 flex flex-col max-w-xs w-full bg-gray-800 text-white">
+        <div class="absolute top-0 right-0 -mr-12 pt-2">
+          <button type="button"
+            class="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+            (click)="toggleSidebar()">
+            <span class="sr-only">Close sidebar</span>
+            <svg class="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
+          <div class="flex-shrink-0 flex items-center px-4">
+            <img src="/src/assets/logo.jpeg" alt="Company Logo" width="40" height="40" class="rounded-full">
+            <span class="ml-3 text-xl font-bold">TMG Cothings</span>
+          </div>
+          <nav class="mt-5 px-2 space-y-1">
+            @if(canView('sales')) { <button (click)="setView('sales')"
+              [class]="currentView() === 'sales' ? 'bg-gray-900' : 'hover:bg-gray-700'"
+              class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md">Sales Order</button> }
+            @if(canView('clients')) { <button (click)="setView('clients')"
+              [class]="currentView() === 'clients' ? 'bg-gray-900' : 'hover:bg-gray-700'"
+              class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md">Client Master</button> }
+            @if(canView('designs')) { <button (click)="setView('designs')"
+              [class]="currentView() === 'designs' ? 'bg-gray-900' : 'hover:bg-gray-700'"
+              class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md">Design Master</button> }
+            @if(canView('users')) { <button (click)="setView('users')"
+              [class]="currentView() === 'users' ? 'bg-gray-900' : 'hover:bg-gray-700'"
+              class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md">User Management</button>
+            }
+          </nav>
+        </div>
+        <div class="flex-shrink-0 flex bg-gray-700 p-4">
+          <button (click)="logout()" class="w-full flex-shrink-0 group block">
+            <div class="flex items-center">
+              <div>
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                  </path>
+                </svg>
+              </div>
+              <div class="ml-3">
+                <p class="text-base font-medium">Logout</p>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+    }
+
+    <main class="flex-1 overflow-y-auto">
+      <div class="p-4 sm:p-6 md:p-8">
+        @switch (currentView()) {
+        @case ('sales') { <app-sales-order></app-sales-order> }
+        @case ('clients') { <app-client-master></app-client-master> }
+        @case ('designs') { <app-design-master></app-design-master> }
+        @case ('users') { <app-user-management></app-user-management> }
+        }
+      </div>
+    </main>
+  </div>
+</div>
+} @else {
+<app-login></app-login>
+}

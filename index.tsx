@@ -1,0 +1,27 @@
+import { bootstrapApplication } from '@angular/platform-browser';
+import { provideHttpClient } from '@angular/common/http';
+import { provideZonelessChangeDetection } from '@angular/core';
+
+import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
+import { provideFirestore, getFirestore } from '@angular/fire/firestore';
+
+import { AppComponent } from './src/app.component';
+
+const firebaseConfig = {
+    apiKey: "AIzaSyB8g1fUiGZv_lBPm7FGWBTQtCpo0R35Xgg",
+    authDomain: "tmg-clothings.firebaseapp.com",
+    projectId: "tmg-clothings",
+    storageBucket: "tmg-clothings.firebasestorage.app",
+    messagingSenderId: "801729913378",
+    appId: "1:801729913378:web:f940bcc11c1fe21071a07b",
+    measurementId: "G-LTR73S5839"
+};
+
+bootstrapApplication(AppComponent, {
+  providers: [
+    provideZonelessChangeDetection(),
+    provideHttpClient(),
+    provideFirebaseApp(() => initializeApp(firebaseConfig)),
+    provideFirestore(() => getFirestore()),
+  ],
+}).catch(err => console.error(err));
