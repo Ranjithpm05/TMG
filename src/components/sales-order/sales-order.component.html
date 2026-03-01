@@ -42,7 +42,7 @@
 
         <!-- Modal Body (Scrollable & Printable Content) -->
         <div class="overflow-y-auto print-area" id="invoice-content">
-           <div class="p-8"> <!-- Retain original padding -->
+           <div class="p-8">
             <!-- Header -->
             <div class="text-center border-b pb-4">
               <h1 class="text-3xl font-bold text-gray-800">TMG CLOTHINGS</h1>
@@ -85,11 +85,9 @@
                   <tr class="border-b-2 border-black">
                     <th class="py-2 text-left font-semibold">SNo</th>
                     <th class="py-2 text-left font-semibold">Product</th>
-                    <!-- Dynamic Size Headers -->
                     @for(size of printableUniqueSizes(); track size) {
                       <th class="py-2 text-center font-semibold">{{size}}</th>
                     }
-                    <!-- <th class="py-2 text-right font-semibold">MRP (&#8377;)</th> -->
                     <th class="py-2 text-right font-semibold">GST (%)</th>
                     <th class="py-2 text-right font-semibold">Disc (%)</th>
                     <th class="py-2 text-right font-semibold">Rate (&#8377;)</th>
@@ -104,22 +102,19 @@
                       <td class="py-2 text-left align-top">
                           @if (item.design) {
                             <div>{{ item.design.styleNo }}</div>
-                            @if (item.design.group?.toUpperCase().includes('SHIRT')) {
-                              <div class="text-xs text-gray-600">{{ item.design.color }},{{ printGetSleeveTypeAbbreviation(item.sleeveType) }}</div>
-                            } @else {
-                              <div class="text-xs text-gray-600">{{ item.design.color }}, {{ item.design.sizes[0]?.fabricType }}</div>
+                            @if (item.design.color) {
+                              <div class="text-gray-500 text-xs">{{ item.design.color }}</div>
                             }
-                          } @else {
-                            <div class="text-red-500">Details Missing</div>
+                            @if (item.sleeveType) {
+                              <div class="text-gray-500 text-xs">{{ printGetSleeveTypeAbbreviation(item.sleeveType) }}</div>
+                            }
                           }
                       </td>
-                      <!-- Dynamic Size Data -->
                       @for(size of printableUniqueSizes(); track size) {
-                          <td class="py-2 text-center align-top">{{ printGetItemQtyForSize(item, size) }}</td>
+                        <td class="py-2 text-center align-top">{{ printGetItemQtyForSize(item, size) }}</td>
                       }
-                      <!-- <td class="py-2 text-right align-top">{{ printGetItemPrice(item) | number:'1.2-2' }}</td> -->
-                      <td class="py-2 text-right align-top">-</td>
-                      <td class="py-2 text-right align-top">{{ 0.0 | number:'1.1-1' }}</td>
+                      <td class="py-2 text-right align-top">0</td>
+                      <td class="py-2 text-right align-top">0</td>
                       <td class="py-2 text-right align-top">{{ printGetItemPrice(item) | number:'1.2-2' }}</td>
                       <td class="py-2 text-right align-top font-semibold">{{ printGetItemTotalQty(item) }}</td>
                       <td class="py-2 text-right align-top font-semibold">{{ printGetItemTotalPrice(item) | number:'1.2-2' }}</td>
@@ -195,40 +190,7 @@
          <canvas #canvas class="hidden"></canvas>
          <!-- Viewfinder Overlay -->
          <div class="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
-            <!-- New Scanning Line animation -->
-            <style>
-              .scan-line {
-                width: 100%;
-                height: 2px;
-                background: linear-gradient(90deg, transparent, rgba(0, 255, 0, 0.8), transparent);
-                animation: scan-anim 3s ease-in-out infinite;
-                box-shadow: 0 0 10px rgba(0, 255, 0, 0.7);
-                border-radius: 2px;
-                position: absolute;
-                left: 0;
-                transition: background 0.3s, box-shadow 0.3s;
-              }
-              .scan-line.success {
-                background: linear-gradient(90deg, transparent, #4ade80, transparent); /* Tailwind green-400 */
-                box-shadow: 0 0 15px #4ade80;
-              }
-              .scan-line.duplicate {
-                background: linear-gradient(90deg, transparent, #facc15, transparent); /* Tailwind yellow-400 */
-                box-shadow: 0 0 15px #facc15;
-              }
-              @keyframes scan-anim {
-                  0%, 100% { top: 10%; }
-                  50% { top: 90%; }
-              }
-            </style>
-            <!-- Shaded overlay -->
-            <div class="absolute inset-0" style="background: linear-gradient(0deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 20%, rgba(0,0,0,0) 35%, rgba(0,0,0,0) 65%, rgba(0,0,0,0.2) 80%, rgba(0,0,0,0.6) 100%), linear-gradient(90deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 20%, rgba(0,0,0,0) 35%, rgba(0,0,0,0) 65%, rgba(0,0,0,0.2) 80%, rgba(0,0,0,0.6) 100%);">
-            </div>
-            <!-- Viewfinder Box -->
-            <div class="relative w-4/5 h-3/5 max-w-[500px] transition-all duration-300">
-                <!-- The animated line -->
-                <div class="scan-line" [class]="scanLineFeedbackClass()"></div>
-                <!-- Corner Brackets -->
+            <div class="relative w-48 h-48">
                 <div class="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 rounded-tl-lg transition-colors" [class]="viewfinderBorderClass()"></div>
                 <div class="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 rounded-tr-lg transition-colors" [class]="viewfinderBorderClass()"></div>
                 <div class="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 rounded-bl-lg transition-colors" [class]="viewfinderBorderClass()"></div>
@@ -321,77 +283,68 @@
           <div class="max-h-32 overflow-y-auto bg-gray-50 p-3 rounded-md border text-sm text-gray-800">
              <ul class="list-disc list-inside space-y-1">
                 @for(design of state.designs; track design.id) {
-                  <li>{{ design.styleNo }} - {{ design.color }} ({{ design.group }})</li>
+                  <li>{{ design.styleNo }} - {{ design.color }}</li>
                 }
              </ul>
           </div>
         </div>
 
-        <!-- Inputs -->
-        <div class="space-y-4 pt-4 border-t">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-            @if (state.containsShirt) {
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Sleeve Type (for shirts)</label>
-                @if (state.determinedSleeveType) {
-                  <p class="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm sm:text-sm text-gray-700">
-                    {{ state.determinedSleeveType }} Sleeve <span class="text-gray-500">(auto-detected)</span>
-                  </p>
-                } @else {
-                  <select 
-                      class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-                      [ngModel]="state.selectedSleeveType"
-                      (ngModelChange)="updateConsolidatedState({ selectedSleeveType: $event })">
-                    <option [ngValue]="null" disabled>-- Select Sleeve Type --</option>
-                    <option value="Full">Full Sleeve</option>
-                    <option value="Half">Half Sleeve</option>
-                  </select>
+        <!-- Shirt Sleeve Type Selector -->
+        @if (state.containsShirt) {
+          <div class="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <p class="text-sm font-semibold text-amber-800 mb-3">Shirt(s) detected. Select sleeve type:</p>
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="sleeveTypeScan" value="Full"
+                  [checked]="state.selectedSleeveType === 'Full'"
+                  (change)="updateConsolidatedState({ selectedSleeveType: 'Full' })"
+                  class="text-indigo-600 focus:ring-indigo-500">
+                <span class="text-sm font-medium text-gray-700">Full Sleeve (F/s)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="sleeveTypeScan" value="Half"
+                  [checked]="state.selectedSleeveType === 'Half'"
+                  (change)="updateConsolidatedState({ selectedSleeveType: 'Half' })"
+                  class="text-indigo-600 focus:ring-indigo-500">
+                <span class="text-sm font-medium text-gray-700">Half Sleeve (H/s)</span>
+              </label>
+            </div>
+          </div>
+        }
+
+        <!-- Size Selection -->
+        <div>
+          <div class="flex justify-between items-center mb-3">
+            <h4 class="text-md font-semibold text-gray-700">Select Sizes & Quantities</h4>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox"
+                [checked]="isAllSizesSelectedForConsolidatedEntry()"
+                [indeterminate]="isSomeSizesSelectedForConsolidatedEntry()"
+                (change)="toggleAllSizesSelectionForConsolidatedEntry($any($event.target).checked)"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+              <span class="text-sm text-gray-600">Select All</span>
+            </label>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            @for (size of state.allPossibleSizes; track size) {
+              <div [class]="'border-2 rounded-lg p-3 transition-all ' + (isSizeSelected(size) ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white')">
+                <label class="flex items-center gap-2 cursor-pointer mb-2">
+                  <input type="checkbox"
+                    [checked]="isSizeSelected(size)"
+                    (change)="toggleSizeSelection(size, $any($event.target).checked)"
+                    class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                  <span class="font-semibold text-gray-800">{{ size }}</span>
+                </label>
+                @if (isSizeSelected(size)) {
+                  <input
+                    type="text"
+                    [ngModel]="getQuantityForSelectedSize(size)"
+                    (ngModelChange)="updateQuantityForSelectedSize(size, $event)"
+                    placeholder="Qty e.g. 1, 1/2"
+                    class="w-full text-sm px-2 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white">
                 }
               </div>
             }
-
-          </div>
-
-
-          <div class="pt-4">
-            <label class="block text-sm font-medium text-gray-700">Select Sizes & Quantities</label>
-            <!-- Select All Checkbox -->
-            <div class="mt-2 flex items-center p-2.5 border-b border-gray-200 mb-3">
-              <div class="flex items-center h-5">
-                <input id="select-all-sizes" type="checkbox"
-                       class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                       [checked]="isAllSizesSelectedForConsolidatedEntry()"
-                       [indeterminate]="isSomeSizesSelectedForConsolidatedEntry()"
-                       (change)="toggleAllSizesSelectionForConsolidatedEntry($any($event.target).checked)">
-              </div>
-              <div class="ml-3 text-sm">
-                <label for="select-all-sizes" class="font-medium text-gray-800">Select All Sizes</label>
-              </div>
-            </div>
-            
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              @for(size of state.allPossibleSizes; track size) {
-                <div class="flex items-center gap-4 p-2.5 border rounded-lg transition-all" [class.bg-indigo-50]="isSizeSelected(size)">
-                  <div class="flex-grow flex items-center">
-                    <input type="checkbox" [id]="'size-check-' + size" 
-                           class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                           [checked]="isSizeSelected(size)"
-                           (change)="toggleSizeSelection(size, $any($event.target).checked)">
-                    <label [for]="'size-check-' + size" class="ml-2 font-medium text-gray-800">{{ size }}</label>
-                  </div>
-
-                  @if (isSizeSelected(size)) {
-                    <div class="animate-fade-in-sm">
-                      <label [for]="'qty-input-' + size" class="sr-only">Quantity for {{size}}</label>
-                      <input type="text" [id]="'qty-input-' + size"
-                             class="block w-16 text-center px-2 py-1 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                             [ngModel]="getQuantityForSelectedSize(size)"
-                             (ngModelChange)="updateQuantityForSelectedSize(size, $event)">
-                    </div>
-                  }
-                </div>
-              }
-            </div>
           </div>
         </div>
       </div>
@@ -400,7 +353,7 @@
         <button (click)="cancelConsolidatedEntry()" type="button" class="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
           Cancel
         </button>
-        <button (click)="addConsolidatedItemsToOrder()" 
+        <button (click)="addConsolidatedItemsToOrder()"
                 [disabled]="isConsolidatedAddDisabled()"
                 class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed">
           Add to Order
@@ -410,6 +363,472 @@
   </div>
 }
 
+<!-- ═══════════════════════════════════════════════════════════
+     Manual Entry Modal
+═══════════════════════════════════════════════════════════ -->
+@if (manualEntryState().isActive) {
+  @let ms = manualEntryState();
+  <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 animate-fade-in">
+    <div class="bg-white rounded-xl shadow-2xl m-4 w-full max-w-3xl flex flex-col" style="max-height: 92vh;">
+
+      <!-- Header -->
+      <div class="p-5 border-b flex items-center justify-between">
+        <div>
+          <h3 class="text-xl font-bold text-gray-800">Manual Sales Entry</h3>
+          <!-- Step Indicator -->
+          <div class="flex items-center gap-2 mt-2">
+            <span [class]="'text-sm font-medium ' + (ms.step === 'select-designs' ? 'text-indigo-600' : 'text-gray-400')">
+              1. Select Designs
+            </span>
+            <svg class="w-4 h-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+            </svg>
+            <span [class]="'text-sm font-medium ' + (ms.step === 'select-colors' ? 'text-indigo-600' : 'text-gray-400')">
+              2. Select Colors
+            </span>
+            <svg class="w-4 h-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+            </svg>
+            <span [class]="'text-sm font-medium ' + (ms.step === 'select-sizes' ? 'text-indigo-600' : 'text-gray-400')">
+              3. Sizes &amp; Quantities
+            </span>
+          </div>
+        </div>
+        <button (click)="cancelManualEntry()" class="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Body (scrollable) -->
+      <div class="flex-1 overflow-y-auto p-5">
+
+        <!-- ── STEP 1: Select Designs ──────────────────────── -->
+        @if (ms.step === 'select-designs') {
+          <p class="text-sm text-gray-500 mb-3">Select one or more design numbers to add to this order.</p>
+
+          <!-- Search Box -->
+          <div class="relative mb-4">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg class="h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search by design number or group..."
+              [ngModel]="manualDesignSearchTerm()"
+              (ngModelChange)="manualDesignSearchTerm.set($event)"
+              class="block w-full pl-9 pr-9 py-2 border border-gray-300 rounded-lg text-sm bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            @if (manualDesignSearchTerm()) {
+              <button
+                (click)="manualDesignSearchTerm.set('')"
+                class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            }
+          </div>
+
+          <!-- Selected count badge -->
+          @if (ms.selectedStyleNos.length > 0) {
+            <div class="mb-3 flex items-center gap-2">
+              <span class="text-xs font-medium text-indigo-700 bg-indigo-100 px-2 py-1 rounded-full">
+                {{ ms.selectedStyleNos.length }} design(s) selected
+              </span>
+              <button (click)="manualDesignSearchTerm.set('')" class="text-xs text-gray-400 hover:text-indigo-600 underline">Show all</button>
+            </div>
+          }
+
+          <!-- Empty states -->
+          @if (ms.designGroups.length === 0) {
+            <div class="text-center py-10 text-gray-500">No designs available in the master.</div>
+          } @else if (manualFilteredDesignGroups().length === 0) {
+            <div class="text-center py-10">
+              <svg class="mx-auto h-10 w-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p class="mt-2 text-sm text-gray-500">No designs match "<strong>{{ manualDesignSearchTerm() }}</strong>"</p>
+              <button (click)="manualDesignSearchTerm.set('')" class="mt-2 text-xs text-indigo-600 hover:underline">Clear search</button>
+            </div>
+          }
+
+          <!-- Design Cards Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            @for (dg of manualFilteredDesignGroups(); track dg.styleNo) {
+              <label [class]="'flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all hover:border-indigo-400 ' + (manualIsStyleSelected(dg.styleNo) ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white')">
+                <input type="checkbox"
+                  [checked]="manualIsStyleSelected(dg.styleNo)"
+                  (change)="manualToggleDesignStyle(dg.styleNo, $any($event.target).checked)"
+                  class="mt-0.5 h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                <div>
+                  <p class="font-semibold text-gray-800 text-sm">{{ dg.styleNo }}</p>
+                  <p class="text-xs text-gray-500">{{ dg.group || 'No Group' }}</p>
+                  <p class="text-xs text-indigo-500 mt-0.5">{{ dg.designs.length }} color(s)</p>
+                </div>
+              </label>
+            }
+          </div>
+        }
+
+        <!-- ── STEP 2: Select Colors ───────────────────────── -->
+        <!-- @if (ms.step === 'select-colors') {
+          <p class="text-sm text-gray-500 mb-4">For each selected design, choose the colors to order.</p>
+          <div class="space-y-5">
+            @for (sel of ms.designSelections; track sel.styleNo) {
+              <div class="border rounded-lg overflow-hidden">
+                <div class="bg-gray-50 px-4 py-3 flex items-center justify-between border-b">
+                  <div>
+                    <span class="font-semibold text-gray-800">{{ sel.styleNo }}</span>
+                    <span class="text-xs text-gray-500 ml-2">{{ sel.allDesigns[0]?.group }}</span>
+                  </div>
+                  <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full font-medium">
+                    {{ sel.selectedColorDesigns.length }} selected
+                  </span>
+                </div>
+                <div class="p-3 flex flex-wrap gap-2">
+                  @for (design of sel.allDesigns; track design.id) {
+                    <label [class]="'flex items-center gap-2 px-3 py-2 rounded-full border-2 cursor-pointer text-sm font-medium transition-all ' + (manualIsColorSelected(sel.styleNo, design.id) ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300')">
+                      <input type="checkbox"
+                        [checked]="manualIsColorSelected(sel.styleNo, design.id)"
+                        (change)="manualToggleColor(sel.styleNo, design, $any($event.target).checked)"
+                        class="sr-only">
+                      {{ design.color || 'No Color' }}
+                    </label>
+                  }
+                  @if (sel.allDesigns.length === 0) {
+                    <span class="text-xs text-gray-400 italic">No color variants available.</span>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        } -->
+        @if (ms.step === 'select-colors') {
+            <p class="text-sm text-gray-500 mb-4">
+                For each selected design, choose the colors to order.
+            </p>
+
+            <div class="space-y-6">
+
+                @for (sel of ms.designSelections; track sel.styleNo) {
+
+                <div class="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+
+                    <!-- Header -->
+                    <div class="bg-gray-50 px-4 py-3 flex items-center justify-between border-b">
+
+                    <div>
+                        <span class="font-semibold text-gray-800">
+                        {{ sel.styleNo }}
+                        </span>
+                        <span class="text-xs text-gray-500 ml-2">
+                        {{ sel.allDesigns[0]?.group }}
+                        </span>
+                    </div>
+
+                    <!-- Select All -->
+                    <label class="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox"
+                        [checked]="isAllColorsSelected(sel)"
+                        [indeterminate]="isSomeColorsSelected(sel)"
+                        (change)="manualToggleAllColors(sel.styleNo, $event.target.checked)"
+                        class="w-4 h-4 accent-indigo-600" />
+
+                        <span class="text-sm font-medium text-gray-700">
+                        Select All
+                        </span>
+                    </label>
+
+                    </div>
+
+                    <!-- Colors List -->
+                    <div class="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+
+                    @for (design of sel.allDesigns; track design.id) {
+
+                        <label
+                        class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all"
+                        [ngClass]="manualIsColorSelected(sel.styleNo, design.id)
+                            ? 'border-indigo-500 bg-indigo-50'
+                            : 'border-gray-200 bg-white hover:border-indigo-300'">
+
+                        <input type="checkbox"
+                            [checked]="manualIsColorSelected(sel.styleNo, design.id)"
+                            (change)="manualToggleColor(sel.styleNo, design, $event.target.checked)"
+                            class="w-4 h-4 accent-indigo-600" />
+
+                        <span class="text-sm font-medium text-gray-700">
+                            {{ design.color || 'No Color' }}
+                        </span>
+
+                        </label>
+
+                    }
+
+                    </div>
+
+                    <!-- Footer Count -->
+                    <div class="px-4 pb-3 text-xs text-gray-500">
+                    {{ sel.selectedColorDesigns.length }} of {{ sel.allDesigns.length }} selected
+                    </div>
+
+                </div>
+
+                }
+
+            </div>
+            }
+
+        <!-- ── STEP 3: Sizes & Quantities ──────────────────── -->
+        <!-- @if (ms.step === 'select-sizes') {
+          @let totalColors = getManualTotalSelectedColors();
+
+          @if (ms.containsShirt) {
+            <div class="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p class="text-sm font-medium text-amber-800 mb-2">⚠️ Shirt designs selected — choose sleeve type:</p>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="manualSleeveType" value="Full"
+                    [checked]="ms.selectedSleeveType === 'Full'"
+                    (change)="updateManualEntryState({ selectedSleeveType: 'Full' })"
+                    class="text-indigo-600 focus:ring-indigo-500">
+                  <span class="text-sm font-medium text-gray-700">Full Sleeve (F/s)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="manualSleeveType" value="Half"
+                    [checked]="ms.selectedSleeveType === 'Half'"
+                    (change)="updateManualEntryState({ selectedSleeveType: 'Half' })"
+                    class="text-indigo-600 focus:ring-indigo-500">
+                  <span class="text-sm font-medium text-gray-700">Half Sleeve (H/s)</span>
+                </label>
+              </div>
+            </div>
+          }
+
+          <div class="mb-4 p-4 bg-indigo-50 border-2 border-indigo-300 rounded-xl flex items-center justify-between">
+            <div>
+              <p class="text-xs text-indigo-500 font-medium uppercase tracking-wide">Selected Colors Count (Base)</p>
+              <p class="text-3xl font-extrabold text-indigo-700 leading-none mt-0.5">{{ totalColors }}</p>
+              <p class="text-xs text-indigo-400 mt-1">Qty = Colors Count × Fraction</p>
+            </div>
+            <div class="text-right text-xs text-indigo-500 space-y-1">
+              <p>{{ totalColors }} × 1 = <strong>{{ totalColors }}</strong></p>
+              <p>{{ totalColors }} × 1/2 = <strong>{{ totalColors | number }} ÷ 2 = {{ (totalColors / 2) | number:'1.0-0' }}</strong></p>
+              <p>{{ totalColors }} × 3/4 = <strong>{{ (totalColors * 0.75) | number:'1.0-0' }}</strong></p>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center mb-3">
+            <span class="text-sm font-semibold text-gray-700">Select Sizes &amp; Fraction</span>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox"
+                [checked]="manualIsAllSizesSelected()"
+                [indeterminate]="manualIsSomeSizesSelected()"
+                (change)="manualToggleAllSizes($any($event.target).checked)"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+              <span class="text-sm text-gray-600">Select All</span>
+            </label>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            @for (size of ms.allPossibleSizes; track size) {
+              <div [class]="'border-2 rounded-xl p-3 transition-all ' +
+                (manualIsSizeSelected(size) ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white')">
+
+                <label class="flex items-center gap-2 cursor-pointer mb-3">
+                  <input type="checkbox"
+                    [checked]="manualIsSizeSelected(size)"
+                    (change)="manualToggleSize(size, $any($event.target).checked)"
+                    class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                  <span class="font-bold text-gray-800">Size {{ size }}</span>
+                </label>
+
+                @if (manualIsSizeSelected(size)) {
+                
+                  <div class="flex gap-1.5 mb-3">
+                    @for (frac of ['1', '1/2', '3/4', '2']; track frac) {
+                      <button type="button"
+                        (click)="manualSetSizeFraction(size, frac)"
+                        [class]="'flex-1 py-2 text-sm font-bold rounded-lg border-2 transition-all ' +
+                          (manualGetSizeFraction(size) === frac
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                            : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600')">
+                        {{ frac }}
+                      </button>
+                    }
+                  </div>
+
+                  <div class="flex items-center justify-between bg-white border border-indigo-200 rounded-lg px-3 py-2">
+                    <span class="text-xs text-gray-400">
+                      {{ totalColors }} × {{ manualGetSizeFraction(size) }}
+                    </span>
+                    <span class="text-base font-extrabold text-indigo-700">
+                      = {{ manualComputedQtyForSize(size) }} pcs
+                    </span>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          @if (ms.allPossibleSizes.length === 0) {
+            <div class="text-center py-8 text-gray-400 text-sm">No size variations found for the selected designs.</div>
+          }
+        } -->
+          <!-- STEP 3 : Sizes & Quantities -->
+            <div *ngIf="manualEntryState().step === 'select-sizes'" class="mt-6">
+
+            <!-- ===== Top Summary Card ===== -->
+            <div class="bg-gradient-to-r from-indigo-50 to-purple-50 
+                        border border-indigo-200 rounded-xl p-5 mb-6 shadow-sm">
+
+                <div class="flex justify-between items-center">
+
+                <div>
+                    <div class="text-sm text-gray-500 uppercase tracking-wide">
+                    Selected Colors
+                    </div>
+                    <div class="text-4xl font-bold text-indigo-600">
+                    {{ getManualTotalSelectedColors() }}
+                    </div>
+                </div>
+
+                <div class="text-right text-sm text-gray-600 space-y-1">
+                    <div>1/2 → Applies to half colors</div>
+                    <div>3/4 → Applies to remaining 1/4</div>
+                    <div>1 or more → Applies to all colors</div>
+                </div>
+
+                </div>
+            </div>
+
+            <!-- ===== Size Header + Select All ===== -->
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-700">
+                Select Sizes & Fraction
+                </h3>
+
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox"
+                        [checked]="manualIsAllSizesSelected()"
+                        [indeterminate]="manualIsSomeSizesSelected()"
+                        (change)="manualToggleAllSizes($event.target.checked)"
+                        class="w-4 h-4 accent-indigo-600" />
+                <span class="text-sm font-medium text-gray-700">Select All</span>
+                </label>
+            </div>
+
+            <!-- ===== Size Cards ===== -->
+            <div class="grid md:grid-cols-2 gap-5">
+
+                <div *ngFor="let size of manualEntryState().allPossibleSizes"
+                    class="border rounded-xl p-5 shadow-sm transition-all duration-200"
+                    [ngClass]="manualIsSizeSelected(size) 
+                        ? 'border-indigo-500 bg-indigo-50' 
+                        : 'border-gray-200 bg-white hover:border-indigo-300'">
+
+                <!-- Card Header -->
+                <div class="flex justify-between items-center mb-4">
+
+                    <label class="flex items-center gap-3 cursor-pointer select-none">
+                    <input type="checkbox"
+                            [checked]="manualIsSizeSelected(size)"
+                            (change)="manualToggleSize(size, $event.target.checked)"
+                            class="w-4 h-4 accent-indigo-600" />
+
+                    <span class="font-semibold text-gray-800 text-lg">
+                        Size {{ size }}
+                    </span>
+                    </label>
+
+                    <!-- Applied Badge -->
+                    <div *ngIf="manualIsSizeSelected(size)"
+                        class="text-xs px-3 py-1 rounded-full 
+                                bg-indigo-100 text-indigo-700 font-medium">
+                    {{ getManualSizeDisplayText(size) }}
+                    </div>
+
+                </div>
+
+                <!-- Fraction Buttons -->
+                <div *ngIf="manualIsSizeSelected(size)"
+                    class="grid grid-cols-4 gap-3">
+
+                    <button *ngFor="let f of ['1','1/2','3/4','2']"
+                            type="button"
+                            (click)="manualSetSizeFraction(size, f)"
+                            class="py-2 rounded-lg border text-sm font-medium transition-all"
+                            [ngClass]="manualGetSizeFraction(size) === f
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow'
+                            : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-indigo-100'">
+                    {{ f }}
+                    </button>
+
+                </div>
+
+                </div>
+
+            </div>
+
+            </div>
+
+      </div>
+
+      <!-- Footer Actions -->
+      <div class="p-5 border-t bg-gray-50 flex items-center justify-between gap-3 rounded-b-xl">
+        <div class="flex gap-2">
+          @if (ms.step !== 'select-designs') {
+            <button (click)="manualGoBack()" type="button"
+              class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+              <svg class="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              Back
+            </button>
+          }
+          <button (click)="cancelManualEntry()" type="button"
+            class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Cancel
+          </button>
+        </div>
+
+        @if (ms.step === 'select-designs') {
+          <button (click)="manualGoToColorStep()" type="button"
+            [disabled]="ms.selectedStyleNos.length === 0"
+            class="inline-flex items-center px-5 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-300 disabled:cursor-not-allowed">
+            Next: Select Colors
+            <svg class="w-4 h-4 ml-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+        }
+
+        @if (ms.step === 'select-colors') {
+          <button (click)="manualGoToSizeStep()" type="button"
+            [disabled]="getManualTotalSelectedColors() === 0"
+            class="inline-flex items-center px-5 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-300 disabled:cursor-not-allowed">
+            Next: Select Sizes
+            <svg class="w-4 h-4 ml-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+        }
+
+        <button (click)="addManualItemsToOrder()" type="button" [disabled]="manualEntryIsAddDisabled()" class="inline-flex items-center px-5 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-300 disabled:cursor-not-allowed">
+            <svg class="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            Add to Order
+        </button>
+
+      </div>
+
+    </div>
+  </div>
+}
 
 <div class="animate-fade-in">
   @if(mode() === 'list') {
@@ -511,14 +930,22 @@
 
       <!-- Add Items to Order -->
       <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
-         <h3 class="text-lg font-semibold text-gray-700">Add Items to Order</h3>
-         <p class="text-sm text-gray-500 mb-4">Use the batch scanner to add multiple items to the order at once.</p>
-         <div class="flex justify-center">
-             <button (click)="startBatchScan()" type="button" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h4a1 1 0 010 2H5v1.5a.5.5 0 001 0V5h1.5a.5.5 0 000-1H6V3a1 1 0 011-1h4a1 1 0 011 1v1h1.5a.5.5 0 000-1H12V3a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-2 0V5h-1.5a.5.5 0 00-1 0V6h-1v1.5a.5.5 0 001 0V7h1a1 1 0 011 1v4a1 1 0 01-1 1h-1v1.5a.5.5 0 001 0V12h1.5a.5.5 0 000-1H15v-1a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 010-2h1.5a.5.5 0 000-1H15v-1.5a.5.5 0 00-1 0V15h-1a1 1 0 01-1-1v-4a1 1 0 011-1h1V7.5a.5.5 0 00-1 0V9h-1.5a.5.5 0 000 1H12v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-1H4.5a.5.5 0 000-1H6v-1.5a.5.5 0 00-1 0V9H3a1 1 0 01-1-1V4zm14 12h1.5a.5.5 0 000-1H17v-1.5a.5.5 0 00-1 0V15H4.5a.5.5 0 000 1H6v1.5a.5.5 0 001 0V16h1.5a.5.5 0 000-1H8v-1a1 1 0 011-1h4a1 1 0 011 1v1h1.5a.5.5 0 000 1H12v1.5a.5.5 0 001 0V16h4z" clip-rule="evenodd" /></svg>
-               Scan Items
-             </button>
-         </div>
+        <h3 class="text-lg font-semibold text-gray-700">Add Items to Order</h3>
+        <p class="text-sm text-gray-500 mb-4">Use the batch scanner or enter items manually.</p>
+        <div class="flex flex-col sm:flex-row justify-center gap-3">
+          <!-- Scan Items Button -->
+          <button (click)="startBatchScan()" type="button" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h4a1 1 0 010 2H5v1.5a.5.5 0 001 0V5h1.5a.5.5 0 000-1H6V3a1 1 0 011-1h4a1 1 0 011 1v1h1.5a.5.5 0 000-1H12V3a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-2 0V5h-1.5a.5.5 0 00-1 0V6h-1v1.5a.5.5 0 001 0V7h1a1 1 0 011 1v4a1 1 0 01-1 1h-1v1.5a.5.5 0 001 0V12h1.5a.5.5 0 000-1H15v-1a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 010-2h1.5a.5.5 0 000-1H15v-1.5a.5.5 0 00-1 0V15h-1a1 1 0 01-1-1v-4a1 1 0 011-1h1V7.5a.5.5 0 00-1 0V9h-1.5a.5.5 0 000 1H12v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-1H4.5a.5.5 0 000-1H6v-1.5a.5.5 0 00-1 0V9H3a1 1 0 01-1-1V4zm14 12h1.5a.5.5 0 000-1H17v-1.5a.5.5 0 00-1 0V15H4.5a.5.5 0 000 1H6v1.5a.5.5 0 001 0V16h1.5a.5.5 0 000-1H8v-1a1 1 0 011-1h4a1 1 0 011 1v1h1.5a.5.5 0 000 1H12v1.5a.5.5 0 001 0V16h4z" clip-rule="evenodd" /></svg>
+            Scan Items
+          </button>
+          <!-- Manual Entry Button -->
+          <button (click)="startManualEntry()" type="button" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border-2 border-indigo-500 shadow-sm text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+            Manual Entry
+          </button>
+        </div>
       </div>
 
       <!-- Order Items List -->
@@ -529,42 +956,41 @@
             <div class="text-center py-10 border-2 border-dashed border-gray-200 rounded-lg">
               <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7l8 5 8-5"/></svg>
               <h3 class="mt-2 text-sm font-medium text-gray-900">No designs added</h3>
-              <p class="mt-1 text-sm text-gray-500">Use the scanner to add items to the order.</p>
+              <p class="mt-1 text-sm text-gray-500">Use the scanner or manual entry to add items to the order.</p>
             </div>
           }
           @for(itemGroup of orderItemsGroupedByDesign(); track itemGroup[0].design.id) {
             @for(item of itemGroup; track item.sleeveType; let i = $index) {
-                <div class="border border-gray-200 rounded-lg p-4 animate-fade-in-sm">
-                  <div class="flex justify-between items-start">
-                    <div>
-                      <p class="font-bold text-gray-800">{{ item.design.styleNo }} - {{ item.design.color }}</p>
-                      @if (item.sleeveType) {
-                         <p class="text-sm text-gray-600 font-medium">{{ item.sleeveType }} Sleeve</p>
-                      }
-                      <p class="text-sm text-gray-500">{{ item.design.sizes[0]?.fabricType }}</p>
-                    </div>
-                    <!-- Only show remove button for the whole group on the first item to avoid clutter, or implement specific removal -->
-                    @if(i === 0) {
-                      <button (click)="removeOrderItemGroup(itemGroup)" class="text-gray-400 hover:text-red-500 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
+              <div class="border border-gray-200 rounded-lg p-4 animate-fade-in-sm">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <p class="font-bold text-gray-800">{{ item.design.styleNo }} - {{ item.design.color }}</p>
+                    @if (item.sleeveType) {
+                       <p class="text-sm text-gray-600 font-medium">{{ item.sleeveType }} Sleeve</p>
                     }
+                    <p class="text-sm text-gray-500">{{ item.design.sizes[0]?.fabricType }}</p>
                   </div>
-                  <div class="mt-4 pt-4 border-t">
-                    @if(item.itemSizes.length > 0) {
-                      <div class="space-y-1">
-                        @for(sizeItem of item.itemSizes; track sizeItem.size) {
-                          <div class="grid grid-cols-[4rem_6rem_1fr_auto] items-center gap-x-4 p-2 rounded-md hover:bg-gray-50 transition-colors">
-                            <span class="font-semibold text-gray-800 text-right">{{ sizeItem.size }}:</span>
-                            <input type="text" [ngModel]="sizeItem.quantity" (ngModelChange)="updateItemQuantity(item, sizeItem.size, $event)" class="block w-full text-center px-2 py-1 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                            <span class="text-gray-600 text-sm">pcs @ {{ sizeItem.price | number:'1.2-2' }}</span>
-                            <button (click)="removeItemSize(item, sizeItem.size)" class="text-gray-400 hover:text-red-500 text-xs font-semibold uppercase tracking-wider pr-2">Remove</button>
-                          </div>
-                        }
-                      </div>
-                    }
-                  </div>
+                  @if(i === 0) {
+                    <button (click)="removeOrderItemGroup(itemGroup)" class="text-gray-400 hover:text-red-500 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  }
                 </div>
+                <div class="mt-4 pt-4 border-t">
+                  @if(item.itemSizes.length > 0) {
+                    <div class="space-y-1">
+                      @for(sizeItem of item.itemSizes; track sizeItem.size) {
+                        <div class="grid grid-cols-[4rem_6rem_1fr_auto] items-center gap-x-4 p-2 rounded-md hover:bg-gray-50 transition-colors">
+                          <span class="font-semibold text-gray-800 text-right">{{ sizeItem.size }}:</span>
+                          <input type="text" [ngModel]="sizeItem.quantity" (ngModelChange)="updateItemQuantity(item, sizeItem.size, $event)" class="block w-full text-center px-2 py-1 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                          <span class="text-gray-600 text-sm">pcs @ {{ sizeItem.price | number:'1.2-2' }}</span>
+                          <button (click)="removeItemSize(item, sizeItem.size)" class="text-gray-400 hover:text-red-500 text-xs font-semibold uppercase tracking-wider pr-2">Remove</button>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
             }
           }
         </div>

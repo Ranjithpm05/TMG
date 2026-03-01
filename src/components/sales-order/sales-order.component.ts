@@ -39,6 +39,54 @@ const EMPTY_CONSOLIDATED_ENTRY_STATE: ConsolidatedEntryState = {
   portion: 'All',
 };
 
+// --- State for Manual Entry ---
+type ManualEntryStep = 'select-designs' | 'select-colors' | 'select-sizes';
+
+type ManualDesignSelection = {
+  styleNo: string;
+  allDesigns: Design[];
+  selectedColorDesigns: Design[];
+};
+
+/**
+ * SIZE-BASED QUANTITY CALCULATION
+ *
+ * totalColors = total selected design-color combinations (auto-computed, not entered by user).
+ *
+ * Per size the user picks a fraction: '1', '1/2', '3/4', '2'
+ *
+ * Final qty = Math.floor(totalColors × fraction)
+ *
+ *   totalColors=10, fraction='1'   → floor(10 × 1.0)  = 10
+ *   totalColors=10, fraction='1/2' → floor(10 × 0.5)  =  5
+ *   totalColors=10, fraction='3/4' → floor(10 × 0.75) =  7
+ *   totalColors=10, fraction='2'   → floor(10 × 2.0)  = 20
+ */
+type ManualEntryState = {
+  isActive: boolean;
+  step: ManualEntryStep;
+  designGroups: { styleNo: string; group: string; designs: Design[] }[];
+  selectedStyleNos: string[];
+  designSelections: ManualDesignSelection[];
+  allPossibleSizes: string[];
+  /** fraction per size: '1' | '1/2' | '3/4' | '2'. key present = size selected. */
+  sizeFractions: Record<string, string>;
+  containsShirt: boolean;
+  selectedSleeveType: 'Full' | 'Half' | null;
+};
+
+const EMPTY_MANUAL_ENTRY_STATE: ManualEntryState = {
+  isActive: false,
+  step: 'select-designs',
+  designGroups: [],
+  selectedStyleNos: [],
+  designSelections: [],
+  allPossibleSizes: [],
+  sizeFractions: {},
+  containsShirt: false,
+  selectedSleeveType: null,
+};
+
 
 @Component({
   selector: 'app-sales-order',
@@ -60,7 +108,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     clients = signal<Client[]>([]);
     salesOrders = signal<SalesOrder[]>([]);
     orderToDelete = signal<SalesOrder | null>(null);
-    designs = signal<Design[]>([]); // All available designs
+    designs = signal<Design[]>([]);
 
     // --- State for form view ---
     editableOrder = signal<SalesOrder | null>(null);
@@ -73,8 +121,22 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     isBatchScanning = signal(false);
     scannedBarcodes = signal<string[]>([]);
     consolidatedEntryState = signal<ConsolidatedEntryState>(EMPTY_CONSOLIDATED_ENTRY_STATE);
-    scanFeedback = signal<'idle' | 'success' | 'duplicate'>('idle'); // For visual feedback in viewfinder
-    lastAddedBarcode = signal<string | null>(null); // For list item highlight
+    scanFeedback = signal<'idle' | 'success' | 'duplicate'>('idle');
+    lastAddedBarcode = signal<string | null>(null);
+
+    // --- State for Manual Entry ---
+    manualEntryState = signal<ManualEntryState>(EMPTY_MANUAL_ENTRY_STATE);
+    manualDesignSearchTerm = signal<string>('');
+
+    manualFilteredDesignGroups = computed(() => {
+      const term = this.manualDesignSearchTerm().toLowerCase().trim();
+      const groups = this.manualEntryState().designGroups;
+      if (!term) return groups;
+      return groups.filter(dg =>
+        dg.styleNo.toLowerCase().includes(term) ||
+        dg.group.toLowerCase().includes(term)
+      );
+    });
 
     viewfinderBorderClass = computed(() => {
         switch (this.scanFeedback()) {
@@ -97,7 +159,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
             return '';
         }
     });
-    
+
     scannerMessage = computed(() => {
         switch (this.scanFeedback()) {
         case 'duplicate':
@@ -114,19 +176,35 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   isConsolidatedAddDisabled = computed(() => {
     const state = this.consolidatedEntryState();
     if (!state.isActive) return true;
-
-    // Check if any size has been selected with a quantity > 0
     const hasValidSelection = Object.values(state.sizeQuantities).some(qty => this.parseFractionalQuantity(qty) > 0);
     if (!hasValidSelection) {
       return true;
     }
-
-    // If there's a shirt, a sleeve type must be selected
     if (state.containsShirt && !state.selectedSleeveType) {
       return true;
     }
-
     return false;
+  });
+
+  // --- Manual Entry Computed ---
+  manualEntryIsAddDisabled = computed(() => {
+    const state = this.manualEntryState();
+    if (state.step !== 'select-sizes') return true;
+    if (Object.keys(state.sizeFractions).length === 0) return true;
+    if (state.containsShirt && !state.selectedSleeveType) return true;
+    return false;
+  });
+
+  manualIsAllSizesSelected = computed(() => {
+    const state = this.manualEntryState();
+    if (state.allPossibleSizes.length === 0) return false;
+    return state.allPossibleSizes.every(s => state.sizeFractions.hasOwnProperty(s));
+  });
+
+  manualIsSomeSizesSelected = computed(() => {
+    const state = this.manualEntryState();
+    const n = Object.keys(state.sizeFractions).length;
+    return n > 0 && n < state.allPossibleSizes.length;
   });
 
   filteredClientsForDropdown = computed(() => {
@@ -158,7 +236,6 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
             grouped.get(designId)!.push(item);
         }
 
-        // Sort items within each group by sleeveType for consistent ordering
         grouped.forEach(groupItems => {
             groupItems.sort((a, b) => (a.sleeveType || '').localeCompare(b.sleeveType || ''));
         });
@@ -185,11 +262,8 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   private stream: MediaStream | null = null;
   private animationFrameId: number | null = null;
 
-  // --- OPTIMIZATION: Throttling properties for the scanner loop ---
   private lastTickTime = 0;
-  private readonly SCAN_INTERVAL = 33; // Scan at ~30 FPS
-
-  // --- Scanning Accuracy Tuning ---
+  private readonly SCAN_INTERVAL = 33;
   private lastScannedTime: number = 0;
 
 
@@ -248,7 +322,6 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
   showEditForm(order: SalesOrder) {
     const orderCopy = JSON.parse(JSON.stringify(order));
-
     this.editableOrder.set(orderCopy);
     this.selectedClientId.set(orderCopy.clientId);
     this.deliveryDate.set(orderCopy.deliveryDate);
@@ -271,6 +344,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.orderItems.set([]);
     this.deliveryDate.set(new Date().toISOString().split('T')[0]);
     this.cancelConsolidatedEntry();
+    this.cancelManualEntry();
   }
 
   // --- Helpers for List View Template ---
@@ -350,86 +424,62 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
         return;
       }
       try {
-        // --- OPTIMIZATION: Request a 720p resolution for broader compatibility and performance ---
-        const constraints = {
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            advanced: [{ focusMode: 'continuous' }]
-          } as any
-        };
-        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+        this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         this.videoElement.nativeElement.srcObject = this.stream;
-        this.videoElement.nativeElement.play();
-        this.animationFrameId = requestAnimationFrame(() => this.tick());
+        await this.videoElement.nativeElement.play();
+        this.scanLoop();
       } catch (err) {
-        Swal.fire({ icon: 'error', title: 'Camera Error', text: 'Could not access camera. Please ensure permissions are granted.' });
+        Swal.fire({ icon: 'error', title: 'Camera Error', text: 'Could not access camera. Please check permissions.' });
         this.isBatchScanning.set(false);
       }
+    }, 100);
+  }
+
+  private scanLoop() {
+    if (!this.isBatchScanning()) return;
+
+    this.animationFrameId = requestAnimationFrame((timestamp) => {
+      if (timestamp - this.lastTickTime < this.SCAN_INTERVAL) {
+        this.scanLoop();
+        return;
+      }
+      this.lastTickTime = timestamp;
+
+      const video = this.videoElement?.nativeElement;
+      const canvas = this.canvasElement?.nativeElement;
+
+      if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+          if (code) {
+            const now = Date.now();
+            if (now - this.lastScannedTime > 1500) {
+              this.lastScannedTime = now;
+              this.handleScannedBarcode(code.data);
+            }
+          }
+        }
+      }
+      this.scanLoop();
     });
   }
 
-  tick() {
-    if (!this.isBatchScanning()) return;
-    this.animationFrameId = requestAnimationFrame(() => this.tick());
-
-    const now = Date.now();
-    if (now - this.lastTickTime < this.SCAN_INTERVAL) return;
-    this.lastTickTime = now;
-
-    if (this.videoElement?.nativeElement.readyState === this.videoElement.nativeElement.HAVE_ENOUGH_DATA) {
-      const canvas = this.canvasElement?.nativeElement;
-      const video = this.videoElement.nativeElement;
-      const ctx = canvas?.getContext('2d', { willReadFrequently: true });
-
-      if (ctx && canvas) {
-        const videoWidth = video.videoWidth;
-        const videoHeight = video.videoHeight;
-        const cropSize = Math.min(videoWidth, videoHeight, 640);
-        
-        if (canvas.width !== cropSize) canvas.width = cropSize;
-        if (canvas.height !== cropSize) canvas.height = cropSize;
-        
-        const sx = (videoWidth - cropSize) / 2;
-        const sy = (videoHeight - cropSize) / 2;
-
-        ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, cropSize, cropSize);
-        const imageData = ctx.getImageData(0, 0, cropSize, cropSize);
-        
-        // Use 'attemptBoth' for better reliability with different QR code types (e.g., inverted)
-        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
-
-        if (code?.data) {
-          this.addBarcodeToBatch(code.data);
-        }
-      }
+  private handleScannedBarcode(barcode: string) {
+    const currentBarcodes = this.scannedBarcodes();
+    if (currentBarcodes.includes(barcode)) {
+      this.scanFeedback.set('duplicate');
+    } else {
+      this.scannedBarcodes.update(codes => [...codes, barcode]);
+      this.lastAddedBarcode.set(barcode);
+      this.scanFeedback.set('success');
+      setTimeout(() => this.lastAddedBarcode.set(null), 1500);
     }
-  }
-
-  addBarcodeToBatch(barcode: string) {
-    const now = Date.now();
-    // Prevent hyper-fast double scans. If any scan was successful in the last 400ms, ignore this one.
-    if (now - this.lastScannedTime < 400) {
-        return;
-    }
-
-    // Check if the barcode has already been scanned in this session.
-    if (this.scannedBarcodes().includes(barcode)) {
-        this.lastScannedTime = now;
-        this.scanFeedback.set('duplicate');
-        setTimeout(() => this.scanFeedback.set('idle'), 400); // Give feedback for duplicate
-        return;
-    }
-
-    this.lastScannedTime = now;
-
-    this.scannedBarcodes.update(codes => [...codes, barcode]);
-    this.lastAddedBarcode.set(barcode);
-    setTimeout(() => this.lastAddedBarcode.set(null), 500);
-
-    this.scanFeedback.set('success');
-    setTimeout(() => this.scanFeedback.set('idle'), 300);
+    setTimeout(() => this.scanFeedback.set('idle'), 800);
   }
 
   removeScannedBarcode(index: number) {
@@ -437,15 +487,25 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   }
 
   stopBatchScan() {
-    if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
-    this.stream?.getTracks().forEach(track => track.stop());
     this.isBatchScanning.set(false);
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+    if (this.stream) {
+      this.stream.getTracks().forEach(track => track.stop());
+      this.stream = null;
+    }
+    if (this.videoElement?.nativeElement) {
+      this.videoElement.nativeElement.srcObject = null;
+    }
   }
 
-  processScannedBarcodes() {
-    this.stopBatchScan();
+  async processScannedBarcodes() {
     const barcodes = this.scannedBarcodes();
     if (barcodes.length === 0) return;
+
+    this.stopBatchScan();
 
     const barcodeDetails = new Map<string, { design: Design; sizeVar: SizePrice }>();
     this.designs().forEach(d => d.sizes.forEach(s => barcodeDetails.set(s.BARCODE, { design: d, sizeVar: s })));
@@ -453,13 +513,13 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     const uniqueDesigns = new Map<string, Design>();
     for (const barcode of barcodes) {
       const details = barcodeDetails.get(barcode.trim());
-      if (details) {
+      if (details && !uniqueDesigns.has(details.design.id)) {
         uniqueDesigns.set(details.design.id, details.design);
       }
     }
 
     if (uniqueDesigns.size === 0) {
-      Swal.fire({ icon: 'error', title: 'No Designs Found', text: 'No valid designs found for the scanned barcodes.' });
+      Swal.fire({ icon: 'warning', title: 'No Matching Designs', text: 'None of the scanned barcodes matched any known designs in the system.' });
       return;
     }
 
@@ -472,7 +532,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     if (containsShirt) {
       const scannedSleeveTypes = new Set<'Full' | 'Half'>();
       for (const barcode of barcodes) {
-        const details:any = barcodeDetails.get(barcode.trim());
+        const details: any = barcodeDetails.get(barcode.trim());
         if (details && details.design.group.toUpperCase().includes('SHIRT')) {
           scannedSleeveTypes.add(details.sizeVar.sleeveType);
         }
@@ -494,8 +554,8 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       portion: 'All',
     });
   }
-  
-  
+
+
   addConsolidatedItemsToOrder() {
     const state = this.consolidatedEntryState();
     const { sizeQuantities, selectedSleeveType, scannedBarcodes } = state;
@@ -511,23 +571,19 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Map barcode values to their design details for quick lookup
     const barcodeDetails = new Map<string, { design: Design; sizeVar: SizePrice }>();
     this.designs().forEach(d => d.sizes.forEach(s => barcodeDetails.set(s.BARCODE, { design: d, sizeVar: s })));
 
-    // Pre-calculate counts of each design scanned (ignoring the size of the scanned barcode)
     const designScannedCounts = new Map<string, number>();
     for (const barcode of scannedBarcodes) {
         const details = barcodeDetails.get(barcode.trim());
         if (details) {
             const isShirt = details.design.group.toUpperCase().includes('SHIRT');
-            // Group by design and the sleeve type selected in the modal
             const key = `${details.design.id}` + (isShirt ? `-${selectedSleeveType}` : '');
             designScannedCounts.set(key, (designScannedCounts.get(key) || 0) + 1);
         }
     }
 
-    // Get the unique set of designs present in the scanned items
     const uniqueDesigns = new Map<string, Design>();
     for(const barcode of scannedBarcodes) {
         const details = barcodeDetails.get(barcode.trim());
@@ -535,36 +591,31 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
             uniqueDesigns.set(details.design.id, details.design);
         }
     }
-    
+
     let itemsAddedCount = 0;
     const designsArray = Array.from(uniqueDesigns.values());
 
-    // Iterate over each size the user has selected in the modal
     for (const [size, quantityRuleString] of Object.entries(sizeQuantities)) {
         const trimmedRule = (quantityRuleString || '0').trim();
-        
+
         let totalTargetForSize = 0;
         if (trimmedRule.includes('/')) {
             const parts = trimmedRule.split('/');
             const denominator = parseInt(parts[1], 10);
             if (!isNaN(denominator) && denominator !== 0) {
-                // As per requirement: 3/4 of 10 is 3, 3/4 of 4 is 1, 1/2 of 4 is 2
-                // This matches ceil(totalScanned / denominator)
                 totalTargetForSize = Math.ceil(totalScannedItems / denominator);
             }
         } else {
             const literalValue = parseFloat(trimmedRule);
             if (!isNaN(literalValue)) {
-                // For literal numbers, we multiply by number of designs to ensure "X per design"
                 totalTargetForSize = literalValue * designsArray.length;
             }
         }
-        
+
         if (totalTargetForSize <= 0) continue;
 
         let remainingForSize = totalTargetForSize;
 
-        // Distribute the total target among the designs proportionally
         for (let i = 0; i < designsArray.length; i++) {
             const design = designsArray[i];
             const isShirt = design.group.toUpperCase().includes('SHIRT');
@@ -575,22 +626,19 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
             let finalQuantity = 0;
             if (i === designsArray.length - 1) {
-                // Last design gets the remaining quantity to ensure the total matches the target
                 finalQuantity = remainingForSize;
             } else {
-                // Proportional distribution: (Total Target * (Design Scans / Total Scans))
                 finalQuantity = Math.round(totalTargetForSize * (countOfDesignScanned / totalScannedItems));
                 if (finalQuantity > remainingForSize) finalQuantity = remainingForSize;
             }
 
             if (finalQuantity > 0) {
-                // Find the specific size variation for the current design, size, and sleeve type
-                const sizeVar = design.sizes.find(s => 
-                    isShirt 
-                    ? s.size === size && s.sleeveType === selectedSleeveType 
+                const sizeVar = design.sizes.find(s =>
+                    isShirt
+                    ? s.size === size && s.sleeveType === selectedSleeveType
                     : s.size === size
                 );
-                
+
                 if (sizeVar) {
                     this.addOrUpdateOrderItem(design, sizeVar, finalQuantity);
                     itemsAddedCount++;
@@ -699,7 +747,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       }
     });
   }
-  
+
   updateConsolidatedState(patch: Partial<ConsolidatedEntryState>) {
     this.consolidatedEntryState.update(state => ({ ...state, ...patch }));
   }
@@ -895,15 +943,12 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     try {
       let date: Date;
 
-      // Firestore Timestamp
       if (order.createdAt instanceof Timestamp) {
         date = order.createdAt.toDate();
       }
-      // Already a Date
       else if (order.createdAt instanceof Date) {
         date = order.createdAt;
       }
-      // Fallback (string / number)
       else {
         date = new Date(order.createdAt);
       }
@@ -990,4 +1035,359 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
     return words.trim().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   }
+
+  // ─── Manual Entry ────────────────────────────────────────────────────────────
+
+  startManualEntry() {
+    this.manualDesignSearchTerm.set('');
+    const allDesigns = this.designs();
+    const groupMap = new Map<string, { styleNo: string; group: string; designs: Design[] }>();
+    for (const d of allDesigns) {
+      if (!groupMap.has(d.styleNo)) {
+        groupMap.set(d.styleNo, { styleNo: d.styleNo, group: d.group || '', designs: [] });
+      }
+      groupMap.get(d.styleNo)!.designs.push(d);
+    }
+    const designGroups = Array.from(groupMap.values()).sort((a, b) =>
+      a.styleNo.localeCompare(b.styleNo)
+    );
+    this.manualEntryState.set({
+      ...EMPTY_MANUAL_ENTRY_STATE,
+      isActive: true,
+      designGroups,
+    });
+  }
+
+  manualToggleDesignStyle(styleNo: string, isSelected: boolean) {
+    this.manualEntryState.update(state => {
+      const selectedStyleNos = isSelected
+        ? [...state.selectedStyleNos, styleNo]
+        : state.selectedStyleNos.filter(s => s !== styleNo);
+      return { ...state, selectedStyleNos };
+    });
+  }
+
+  manualIsStyleSelected(styleNo: string): boolean {
+    return this.manualEntryState().selectedStyleNos.includes(styleNo);
+  }
+
+  manualGoToColorStep() {
+    this.manualEntryState.update(state => {
+      if (state.selectedStyleNos.length === 0) return state;
+      const designSelections: ManualDesignSelection[] = state.selectedStyleNos.map(styleNo => {
+        const group = state.designGroups.find(g => g.styleNo === styleNo)!;
+        return { styleNo, allDesigns: group.designs, selectedColorDesigns: [] };
+      });
+      return { ...state, step: 'select-colors', designSelections };
+    });
+  }
+
+  manualToggleColor(styleNo: string, design: Design, isSelected: boolean) {
+    this.manualEntryState.update(state => {
+      const selections = state.designSelections.map(sel => {
+        if (sel.styleNo !== styleNo) return sel;
+        const selectedColorDesigns = isSelected
+          ? [...sel.selectedColorDesigns, design]
+          : sel.selectedColorDesigns.filter(d => d.id !== design.id);
+        return { ...sel, selectedColorDesigns };
+      });
+      return { ...state, designSelections: selections };
+    });
+  }
+
+  manualIsColorSelected(styleNo: string, designId: string | undefined): boolean {
+    const sel = this.manualEntryState().designSelections.find(s => s.styleNo === styleNo);
+    if (!sel) return false;
+    return sel.selectedColorDesigns.some(d => d.id === designId);
+  }
+
+  manualGoToSizeStep() {
+    this.manualEntryState.update(state => {
+      const allSelectedDesigns = state.designSelections.flatMap(s => s.selectedColorDesigns);
+      if (allSelectedDesigns.length === 0) return state;
+      const containsShirt = allSelectedDesigns.some(d => d.group?.toUpperCase().includes('SHIRT'));
+      const allSizes = allSelectedDesigns.flatMap(d => d.sizes.map(s => s.size));
+      const uniqueSizes = [...new Set(allSizes)].sort((a, b) =>
+        String(a).localeCompare(String(b), undefined, { numeric: true })
+      );
+      return {
+        ...state,
+        step: 'select-sizes',
+        allPossibleSizes: uniqueSizes,
+        sizeFractions: {},
+        containsShirt,
+        selectedSleeveType: null,
+      };
+    });
+  }
+
+  manualIsSizeSelected(size: string): boolean {
+    return this.manualEntryState().sizeFractions.hasOwnProperty(size);
+  }
+
+  manualGetSizeFraction(size: string): string {
+    return this.manualEntryState().sizeFractions[size] ?? '1';
+  }
+
+  manualSetSizeFraction(size: string, fraction: string) {
+    this.manualEntryState.update(state => ({
+      ...state,
+      sizeFractions: { ...state.sizeFractions, [size]: fraction },
+    }));
+  }
+
+  manualToggleSize(size: string, isSelected: boolean) {
+    this.manualEntryState.update(state => {
+      const sizeFractions = { ...state.sizeFractions };
+      if (isSelected) {
+        if (!sizeFractions[size]) sizeFractions[size] = '1';
+      } else {
+        delete sizeFractions[size];
+      }
+      return { ...state, sizeFractions };
+    });
+  }
+
+  manualToggleAllSizes(isSelected: boolean) {
+    this.manualEntryState.update(state => {
+      if (isSelected) {
+        const sizeFractions = { ...state.sizeFractions };
+        for (const size of state.allPossibleSizes) {
+          if (!sizeFractions[size]) sizeFractions[size] = '1';
+        }
+        return { ...state, sizeFractions };
+      } else {
+        return { ...state, sizeFractions: {} };
+      }
+    });
+  }
+
+  manualGoBack() {
+    this.manualEntryState.update(state => {
+      if (state.step === 'select-colors') return { ...state, step: 'select-designs' };
+      if (state.step === 'select-sizes') return { ...state, step: 'select-colors' };
+      return state;
+    });
+  }
+
+  /**
+   * totalColors = total selected design-color combinations (Step 2).
+   * Final qty per size = Math.floor(totalColors × fraction)
+   *
+   *   totalColors=10, '1'   → floor(10 × 1.00) = 10
+   *   totalColors=10, '1/2' → floor(10 × 0.50) =  5
+   *   totalColors=10, '3/4' → floor(10 × 0.75) =  7
+   *   totalColors=10, '2'   → floor(10 × 2.00) = 20
+   */
+  manualComputedQtyForSize(size: string): number {
+    const state = this.manualEntryState();
+    const fraction = state.sizeFractions[size];
+    if (!fraction) return 0;
+    const totalColors = state.designSelections.reduce(
+      (sum, sel) => sum + sel.selectedColorDesigns.length, 0
+    );
+    if (totalColors <= 0) return 0;
+    const fracVal = this.parseFractionalQuantity(fraction);
+    if (fracVal <= 0) return 0;
+    return Math.floor(totalColors * fracVal);
+  }
+
+//   addManualItemsToOrder() {
+//     const state = this.manualEntryState();
+//     const { sizeFractions, selectedSleeveType, containsShirt } = state;
+
+//     if (containsShirt && !selectedSleeveType) {
+//       Swal.fire({ icon: 'warning', title: 'Select Sleeve Type', text: 'Please select Full or Half Sleeve for shirt designs.' });
+//       return;
+//     }
+//     if (Object.keys(sizeFractions).length === 0) {
+//       Swal.fire({ icon: 'warning', title: 'No Sizes Selected', text: 'Please select at least one size.' });
+//       return;
+//     }
+
+//     const allSelectedDesigns = state.designSelections.flatMap(s => s.selectedColorDesigns);
+//     const totalColors = allSelectedDesigns.length;
+
+//     if (totalColors === 0) {
+//       Swal.fire({ icon: 'warning', title: 'No Colors Selected', text: 'No design-color combinations selected.' });
+//       return;
+//     }
+
+//     // qty per size = Math.floor(totalColors × fraction)
+//     const sizeQtyMap: Record<string, number> = {};
+//     for (const [size, fraction] of Object.entries(sizeFractions)) {
+//       const fracVal = this.parseFractionalQuantity(fraction);
+//       if (fracVal <= 0) continue;
+//       const qty = Math.floor(totalColors * fracVal);
+//       if (qty > 0) sizeQtyMap[size] = qty;
+//     }
+
+//     if (Object.keys(sizeQtyMap).length === 0) {
+//       Swal.fire({ icon: 'warning', title: 'Zero Quantities', text: 'All quantities are zero. Select more colors or use a larger fraction.' });
+//       return;
+//     }
+
+//     let itemsAdded = 0;
+//     for (const design of allSelectedDesigns) {
+//       for (const [size, quantity] of Object.entries(sizeQtyMap)) {
+//         const isShirt = design.group?.toUpperCase().includes('SHIRT');
+//         const sizeVar = design.sizes.find(s =>
+//           isShirt ? s.size === size && s.sleeveType === selectedSleeveType
+//                   : s.size === size
+//         );
+//         if (sizeVar) {
+//           this.addOrUpdateOrderItem(design, sizeVar, quantity);
+//           itemsAdded++;
+//         }
+//       }
+//     }
+
+//     if (itemsAdded === 0) {
+//       Swal.fire({ icon: 'info', title: 'No Matches', text: 'Selected sizes did not match any design size variations. Check sleeve type for shirts.' });
+//     } else {
+//       this.cancelManualEntry();
+//     }
+//   }
+addManualItemsToOrder() {
+  const state = this.manualEntryState();
+  const { sizeFractions, selectedSleeveType, containsShirt } = state;
+
+  if (containsShirt && !selectedSleeveType) {
+    Swal.fire({ icon: 'warning', title: 'Select Sleeve Type', text: 'Please select Full or Half Sleeve for shirt designs.' });
+    return;
+  }
+
+  const allSelectedDesigns = state.designSelections.flatMap(s => s.selectedColorDesigns);
+  const totalColors = allSelectedDesigns.length;
+
+  if (totalColors === 0) {
+    Swal.fire({ icon: 'warning', title: 'No Colors Selected', text: 'No design-color combinations selected.' });
+    return;
+  }
+
+  let itemsAdded = 0;
+
+  for (const [size, fractionString] of Object.entries(sizeFractions)) {
+
+    if (!fractionString) continue;
+
+    let applyColorCount = 0;
+    let perColorQty = 1;
+
+    // Fraction logic
+    if (fractionString.includes('/')) {
+      const [num, den] = fractionString.split('/').map(Number);
+      if (!den || den === 0) continue;
+
+      const fractionValue = num / den;
+
+      // Apply to remaining portion
+      applyColorCount = Math.floor(totalColors * (1 - fractionValue));
+      perColorQty = 1;
+    }
+    else {
+      const numericValue = parseFloat(fractionString);
+      if (isNaN(numericValue) || numericValue <= 0) continue;
+
+      // Apply to all colors
+      applyColorCount = totalColors;
+      perColorQty = numericValue;
+    }
+
+    if (applyColorCount <= 0) continue;
+
+    // Apply only first N colors
+    const applicableDesigns = allSelectedDesigns.slice(0, applyColorCount);
+
+    for (const design of applicableDesigns) {
+
+      const isShirt = design.group?.toUpperCase().includes('SHIRT');
+
+      const sizeVar = design.sizes.find(s =>
+        isShirt
+          ? s.size === size && s.sleeveType === selectedSleeveType
+          : s.size === size
+      );
+
+      if (sizeVar) {
+        this.addOrUpdateOrderItem(design, sizeVar, perColorQty);
+        itemsAdded++;
+      }
+    }
+  }
+
+  if (itemsAdded === 0) {
+    Swal.fire({
+      icon: 'info',
+      title: 'No Matches',
+      text: 'Selected sizes did not match any design size variations.'
+    });
+  } else {
+    this.cancelManualEntry();
+  }
+}
+
+  cancelManualEntry() {
+    this.manualEntryState.set(EMPTY_MANUAL_ENTRY_STATE);
+    this.manualDesignSearchTerm.set('');
+  }
+
+  updateManualEntryState(patch: Partial<ManualEntryState>) {
+    this.manualEntryState.update(state => ({ ...state, ...patch }));
+  }
+
+    getManualTotalSelectedColors(): number {
+        return this.manualEntryState().designSelections.reduce(
+        (sum, sel) => sum + sel.selectedColorDesigns.length, 0
+        );
+    }
+
+    getManualSizeDisplayText(size: string): string {
+        const state = this.manualEntryState();
+        const fraction = state.sizeFractions[size];
+        if (!fraction) return '';
+
+        const totalColors = this.getManualTotalSelectedColors();
+        if (totalColors === 0) return '';
+
+        if (fraction.includes('/')) {
+            const [num, den] = fraction.split('/').map(Number);
+            if (!den || den === 0) return '';
+
+            const fractionValue = num / den;
+            const applyCount = Math.floor(totalColors * (1 - fractionValue));
+
+            return `Applies to ${applyCount} colors (1 each)`;
+        } else {
+            const numericValue = parseFloat(fraction);
+            if (isNaN(numericValue) || numericValue <= 0) return '';
+
+            return `All ${totalColors} colors (${numericValue} each)`;
+        }
+    }
+
+    isAllColorsSelected(sel: ManualDesignSelection): boolean {
+        return sel.selectedColorDesigns.length === sel.allDesigns.length
+                && sel.allDesigns.length > 0;
+    }
+
+    isSomeColorsSelected(sel: ManualDesignSelection): boolean {
+        return sel.selectedColorDesigns.length > 0 &&
+            sel.selectedColorDesigns.length < sel.allDesigns.length;
+    }
+
+    manualToggleAllColors(styleNo: string, isSelected: boolean) {
+        this.manualEntryState.update(state => {
+            const designSelections = state.designSelections.map(sel => {
+            if (sel.styleNo !== styleNo) return sel;
+
+            return {
+                ...sel,
+                selectedColorDesigns: isSelected ? [...sel.allDesigns] : []
+            };
+            });
+
+            return { ...state, designSelections };
+        });
+    }
 }
