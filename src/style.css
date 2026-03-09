@@ -1,11 +1,9 @@
 /* Global styles for the Garment Order Management application */
 
 body {
-  /* Replicates the 'bg-gray-100' and 'antialiased' Tailwind classes from index.html */
-  background-color: #f3f4f6; /* Tailwind's gray-100 */
+  background-color: #f3f4f6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* A sensible default font stack similar to Tailwind's font-sans */
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
@@ -18,12 +16,12 @@ body {
 }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* 
-  Component-specific styles have been removed from this file.
-  Due to the use of the Tailwind CSS Play CDN, all styling must be done
-  via utility classes directly in the HTML templates to ensure the
-  Just-In-Time (JIT) compiler detects and generates the required CSS.
-*/
+/* --- Scanner scan-line sweep --- */
+@keyframes scanLine {
+  0%   { top: 5%;  opacity: 0.8; }
+  50%  { top: 90%; opacity: 1;   }
+  100% { top: 5%;  opacity: 0.8; }
+}

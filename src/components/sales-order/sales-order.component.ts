@@ -39,52 +39,21 @@ const EMPTY_CONSOLIDATED_ENTRY_STATE: ConsolidatedEntryState = {
   portion: 'All',
 };
 
-// --- State for Manual Entry ---
-type ManualEntryStep = 'select-designs' | 'select-colors' | 'select-sizes';
-
-type ManualDesignSelection = {
-  styleNo: string;
-  allDesigns: Design[];
-  selectedColorDesigns: Design[];
-};
-
-/**
- * SIZE-BASED QUANTITY CALCULATION
- *
- * totalColors = total selected design-color combinations (auto-computed, not entered by user).
- *
- * Per size the user picks a fraction: '1', '1/2', '3/4', '2'
- *
- * Final qty = Math.floor(totalColors × fraction)
- *
- *   totalColors=10, fraction='1'   → floor(10 × 1.0)  = 10
- *   totalColors=10, fraction='1/2' → floor(10 × 0.5)  =  5
- *   totalColors=10, fraction='3/4' → floor(10 × 0.75) =  7
- *   totalColors=10, fraction='2'   → floor(10 × 2.0)  = 20
- */
-type ManualEntryState = {
+// --- State for Manual Design Selection ---
+type ManualDesignSelectionState = {
   isActive: boolean;
-  step: ManualEntryStep;
-  designGroups: { styleNo: string; group: string; designs: Design[] }[];
-  selectedStyleNos: string[];
-  designSelections: ManualDesignSelection[];
-  allPossibleSizes: string[];
-  /** fraction per size: '1' | '1/2' | '3/4' | '2'. key present = size selected. */
-  sizeFractions: Record<string, string>;
-  containsShirt: boolean;
-  selectedSleeveType: 'Full' | 'Half' | null;
+  styleSearchTerm: string;
+  selectedStyleNos: string[];      // multiple style numbers can be checked
+  expandedStyleNo: string | null;  // which style's color panel is currently open
+  confirmedDesigns: Design[];
 };
 
-const EMPTY_MANUAL_ENTRY_STATE: ManualEntryState = {
+const EMPTY_MANUAL_SELECTION_STATE: ManualDesignSelectionState = {
   isActive: false,
-  step: 'select-designs',
-  designGroups: [],
+  styleSearchTerm: '',
   selectedStyleNos: [],
-  designSelections: [],
-  allPossibleSizes: [],
-  sizeFractions: {},
-  containsShirt: false,
-  selectedSleeveType: null,
+  expandedStyleNo: null,
+  confirmedDesigns: [],
 };
 
 
@@ -108,7 +77,11 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     clients = signal<Client[]>([]);
     salesOrders = signal<SalesOrder[]>([]);
     orderToDelete = signal<SalesOrder | null>(null);
-    designs = signal<Design[]>([]);
+    designs = signal<Design[]>([]); // All available designs
+
+    // --- Date filter (defaults to current month) ---
+    filterFromDate = signal<string>(this.currentMonthStart());
+    filterToDate   = signal<string>(this.currentMonthEnd());
 
     // --- State for form view ---
     editableOrder = signal<SalesOrder | null>(null);
@@ -124,19 +97,8 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     scanFeedback = signal<'idle' | 'success' | 'duplicate'>('idle');
     lastAddedBarcode = signal<string | null>(null);
 
-    // --- State for Manual Entry ---
-    manualEntryState = signal<ManualEntryState>(EMPTY_MANUAL_ENTRY_STATE);
-    manualDesignSearchTerm = signal<string>('');
-
-    manualFilteredDesignGroups = computed(() => {
-      const term = this.manualDesignSearchTerm().toLowerCase().trim();
-      const groups = this.manualEntryState().designGroups;
-      if (!term) return groups;
-      return groups.filter(dg =>
-        dg.styleNo.toLowerCase().includes(term) ||
-        dg.group.toLowerCase().includes(term)
-      );
-    });
+    // --- State for Manual Design Selection ---
+    manualDesignSelectionState = signal<ManualDesignSelectionState>(EMPTY_MANUAL_SELECTION_STATE);
 
     viewfinderBorderClass = computed(() => {
         switch (this.scanFeedback()) {
@@ -159,7 +121,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
             return '';
         }
     });
-
+    
     scannerMessage = computed(() => {
         switch (this.scanFeedback()) {
         case 'duplicate':
@@ -167,6 +129,21 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
         default:
             return 'Align QR code within the frame';
         }
+    });
+
+    // --- State for printing ---
+    orderToPrint = signal<SalesOrder | null>(null);
+    clientForPrint = signal<Client | null>(null);
+
+    // --- Print-specific computed signals and properties ---
+    private ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    private tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+    printableOrderItems = computed(() => this.orderToPrint()?.items || []);
+    printableUniqueSizes = computed(() => {
+        const allSizes = this.printableOrderItems().flatMap(item => (item.design?.sizes || []).map(s => s.size));
+        const unique = [...new Set(allSizes)];
+        return unique.sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
     });
 
   // --- State for searchable client dropdown ---
@@ -177,34 +154,9 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     const state = this.consolidatedEntryState();
     if (!state.isActive) return true;
     const hasValidSelection = Object.values(state.sizeQuantities).some(qty => this.parseFractionalQuantity(qty) > 0);
-    if (!hasValidSelection) {
-      return true;
-    }
-    if (state.containsShirt && !state.selectedSleeveType) {
-      return true;
-    }
-    return false;
-  });
-
-  // --- Manual Entry Computed ---
-  manualEntryIsAddDisabled = computed(() => {
-    const state = this.manualEntryState();
-    if (state.step !== 'select-sizes') return true;
-    if (Object.keys(state.sizeFractions).length === 0) return true;
+    if (!hasValidSelection) return true;
     if (state.containsShirt && !state.selectedSleeveType) return true;
     return false;
-  });
-
-  manualIsAllSizesSelected = computed(() => {
-    const state = this.manualEntryState();
-    if (state.allPossibleSizes.length === 0) return false;
-    return state.allPossibleSizes.every(s => state.sizeFractions.hasOwnProperty(s));
-  });
-
-  manualIsSomeSizesSelected = computed(() => {
-    const state = this.manualEntryState();
-    const n = Object.keys(state.sizeFractions).length;
-    return n > 0 && n < state.allPossibleSizes.length;
   });
 
   filteredClientsForDropdown = computed(() => {
@@ -222,509 +174,98 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     return this.clients().find(c => c.id === selectedId)?.clientName ?? 'Select a client...';
   });
 
-    orderItemsGroupedByDesign = computed(() => {
-        const items = this.orderItems();
-        if (!items) return [];
+  // --- Manual Entry Computed Properties ---
 
-        const grouped = new Map<string, OrderItem[]>();
-
-        for (const item of items) {
-            const designId = item.design.id;
-            if (!grouped.has(designId)) {
-                grouped.set(designId, []);
-            }
-            grouped.get(designId)!.push(item);
-        }
-
-        grouped.forEach(groupItems => {
-            groupItems.sort((a, b) => (a.sleeveType || '').localeCompare(b.sleeveType || ''));
-        });
-
-        return Array.from(grouped.values());
-    });
-
-  // --- State for printing ---
-  orderToPrint = signal<SalesOrder | null>(null);
-  clientForPrint = signal<Client | null>(null);
-
-  // --- Print-specific computed signals and properties ---
-  private ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-  private tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-  printableOrderItems = computed(() => this.orderToPrint()?.items || []);
-  printableUniqueSizes = computed(() => {
-    const allSizes = this.printableOrderItems().flatMap(item => (item.design?.sizes || []).map(s => s.size));
-    const unique = [...new Set(allSizes)];
-    return unique.sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+  /** Unique style numbers, filtered by the search term */
+  uniqueStyleNosForManual = computed(() => {
+    const term = this.manualDesignSelectionState().styleSearchTerm.toLowerCase().trim();
+    const allStyles = [...new Set(this.designs().map(d => d.styleNo))].sort((a, b) =>
+      String(a).localeCompare(String(b), undefined, { numeric: true })
+    );
+    if (!term) return allStyles;
+    return allStyles.filter(s => s.toLowerCase().includes(term));
   });
 
+  /** Colors (Design records) for the currently expanded style */
+  colorsForManualStyle = computed(() => {
+    const styleNo = this.manualDesignSelectionState().expandedStyleNo;
+    if (!styleNo) return [];
+    return this.designs().filter(d => d.styleNo === styleNo);
+  });
+
+  /** Set of design IDs confirmed so far */
+  confirmedDesignIds = computed(() =>
+    new Set(this.manualDesignSelectionState().confirmedDesigns.map(d => d.id))
+  );
+
+  /** IDs of colors selected under the currently expanded style */
+  selectedColorIdsForCurrentStyle = computed(() => {
+    const styleNo = this.manualDesignSelectionState().expandedStyleNo;
+    if (!styleNo) return new Set<string>();
+    return new Set(
+      this.manualDesignSelectionState().confirmedDesigns
+        .filter(d => d.styleNo === styleNo)
+        .map(d => d.id)
+    );
+  });
+
+  /** True if every color of the expanded style is selected */
+  isAllColorsSelectedForCurrentStyle = computed(() => {
+    const colors = this.colorsForManualStyle();
+    if (colors.length === 0) return false;
+    const selected = this.selectedColorIdsForCurrentStyle();
+    return colors.every(d => selected.has(d.id!));
+  });
+
+  /** True if some (but not all) colors of the expanded style are selected */
+  isSomeColorsSelectedForCurrentStyle = computed(() => {
+    const colors = this.colorsForManualStyle();
+    const selected = this.selectedColorIdsForCurrentStyle();
+    const count = colors.filter(d => selected.has(d.id!)).length;
+    return count > 0 && count < colors.length;
+  });
+
+  /** Returns count of confirmed colors for a given style number */
+  getSelectedColorCountForStyle(styleNo: string): number {
+    return this.manualDesignSelectionState().confirmedDesigns.filter(d => d.styleNo === styleNo).length;
+  }
+
+  canProceedFromManual = computed(() =>
+    this.manualDesignSelectionState().confirmedDesigns.length > 0
+  );
 
   private stream: MediaStream | null = null;
   private animationFrameId: number | null = null;
-
+  private lastScannedTime = 0;
   private lastTickTime = 0;
-  private readonly SCAN_INTERVAL = 33;
-  private lastScannedTime: number = 0;
+  private readonly SCAN_INTERVAL = 60;          // scan every 60 ms (was 150)
+  private readonly SCAN_DEBOUNCE = 800;         // ms before same code accepted again
+  private torchEnabled = false;
+  private torchTrack: MediaStreamTrack | null = null;
+  isTorchAvailable = signal(false);
+  isTorchOn = signal(false);
+  // offscreen canvas reused across frames to avoid GC pressure
+  private enhanceCanvas: HTMLCanvasElement | null = null;
 
+  // --- Print state ---
+  printOrder = signal<SalesOrder | null>(null);
 
-  ngOnInit() {
-    this.clientService.getClients().subscribe(clients => this.clients.set(clients));
-    this.designService.getDesigns().subscribe(designs => this.designs.set(designs));
-    this.loadSalesOrders();
-    this.resetFormFields();
-  }
-
-  ngOnDestroy() {
-    this.stopBatchScan();
-  }
-
-  loadSalesOrders() {
-    Swal.fire({
-      title: 'Loading Sales Orders...',
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading()
-    });
-    this.salesOrderService.getSalesOrders().subscribe({
-      next: (orders) => {
-        this.salesOrders.set(orders)
-        Swal.close()
-      },
-      error: (err) => {
-        Swal.close()
-        Swal.fire('Error', 'Failed to load Sales Orders', 'error');
-      }
-    });
-  }
-
-  // --- Client Dropdown Logic ---
-  toggleClientDropdown() {
-    this.isClientDropdownOpen.update(v => !v);
-    if (!this.isClientDropdownOpen()) {
-      this.clientSearchTerm.set('');
+  orderItemsGroupedByDesign = computed(() => {
+    const items = this.orderItems();
+    const groups = new Map<string, OrderItem[]>();
+    for (const item of items) {
+      const key = item.design.styleNo;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(item);
     }
-  }
-
-  closeDropdownOnEscape() {
-    this.isClientDropdownOpen.set(false);
-  }
-
-  selectClient(client: Client) {
-    this.selectedClientId.set(client.id);
-    this.isClientDropdownOpen.set(false);
-    this.clientSearchTerm.set('');
-  }
-
-  // --- View Switching ---
-  showAddForm() {
-    this.resetFormFields();
-    this.mode.set('form');
-  }
-
-  showEditForm(order: SalesOrder) {
-    const orderCopy = JSON.parse(JSON.stringify(order));
-    this.editableOrder.set(orderCopy);
-    this.selectedClientId.set(orderCopy.clientId);
-    this.deliveryDate.set(orderCopy.deliveryDate);
-    this.orderItems.set(orderCopy.items);
-    this.mode.set('form');
-  }
-
-  cancel() {
-    this.switchToListView();
-  }
-
-  private switchToListView() {
-    this.resetFormFields();
-    this.mode.set('list');
-  }
-
-  private resetFormFields() {
-    this.editableOrder.set(null);
-    this.selectedClientId.set(null);
-    this.orderItems.set([]);
-    this.deliveryDate.set(new Date().toISOString().split('T')[0]);
-    this.cancelConsolidatedEntry();
-    this.cancelManualEntry();
-  }
-
-  // --- Helpers for List View Template ---
-  getClientName(clientId: string): string {
-    return this.clients().find(c => c.id === clientId)?.clientName ?? 'Unknown Client';
-  }
-
-  getOrderTotalQuantity(order: SalesOrder): number {
-    return order.items.reduce((total, item) => total + item.itemSizes.reduce((itemTotal, size) => itemTotal + (Number(size.quantity) || 0), 0), 0);
-  }
-
-  getOrderTotalPrice(order: SalesOrder): number {
-    return order.items.reduce((total, item) => total + item.itemSizes.reduce((itemTotal, size) => itemTotal + ((Number(size.quantity) || 0) * (Number(size.price) || 0)), 0), 0);
-  }
-
-
-  // --- New Item Addition Logic ---
-  addOrUpdateOrderItem(design: Design, sizeVar: SizePrice, quantity: number) {
-    this.orderItems.update(currentItems => {
-      const itemsCopy = JSON.parse(JSON.stringify(currentItems));
-
-      let existingItem;
-      const isShirt = design.group.toUpperCase().includes('SHIRT');
-
-      if (isShirt) {
-        existingItem = itemsCopy.find((item: OrderItem) =>
-          item.design.id === design.id && item.sleeveType === sizeVar.sleeveType
-        );
-      } else {
-        existingItem = itemsCopy.find((item: OrderItem) => item.design.id === design.id);
-      }
-
-      if (existingItem) {
-        const existingSize = existingItem.itemSizes.find((s: OrderItemSize) => s.size === sizeVar.size);
-        if (existingSize) {
-          existingSize.quantity = (Number(existingSize.quantity) || 0) + quantity;
-          existingSize.price = sizeVar.WSP;
-        } else {
-          existingItem.itemSizes.push({
-            size: sizeVar.size,
-            quantity: quantity,
-            price: sizeVar.WSP
-          });
-          existingItem.itemSizes.sort((a: OrderItemSize, b: OrderItemSize) =>
-            String(a.size).localeCompare(String(b.size), undefined, { numeric: true })
-          );
-        }
-      } else {
-        const newOrderItem: OrderItem = {
-          design: design,
-          itemSizes: [{
-            size: sizeVar.size,
-            quantity: quantity,
-            price: sizeVar.WSP
-          }]
-        };
-        if (isShirt) {
-          newOrderItem.sleeveType = sizeVar.sleeveType;
-        }
-        itemsCopy.push(newOrderItem);
-      }
-      return itemsCopy;
-    });
-  }
-
-  // --- Batch Scanning and Consolidated Entry ---
-  async startBatchScan() {
-    this.isBatchScanning.set(true);
-    this.scannedBarcodes.set([]);
-    this.lastScannedTime = 0;
-    this.lastTickTime = 0;
-
-    setTimeout(async () => {
-      if (!this.videoElement || !navigator.mediaDevices?.getUserMedia) {
-        Swal.fire({ icon: 'error', title: 'Error', text: 'Camera not supported by your browser or element not ready.' });
-        this.isBatchScanning.set(false);
-        return;
-      }
-      try {
-        this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        this.videoElement.nativeElement.srcObject = this.stream;
-        await this.videoElement.nativeElement.play();
-        this.scanLoop();
-      } catch (err) {
-        Swal.fire({ icon: 'error', title: 'Camera Error', text: 'Could not access camera. Please check permissions.' });
-        this.isBatchScanning.set(false);
-      }
-    }, 100);
-  }
-
-  private scanLoop() {
-    if (!this.isBatchScanning()) return;
-
-    this.animationFrameId = requestAnimationFrame((timestamp) => {
-      if (timestamp - this.lastTickTime < this.SCAN_INTERVAL) {
-        this.scanLoop();
-        return;
-      }
-      this.lastTickTime = timestamp;
-
-      const video = this.videoElement?.nativeElement;
-      const canvas = this.canvasElement?.nativeElement;
-
-      if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.height = video.videoHeight;
-        canvas.width = video.videoWidth;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
-          if (code) {
-            const now = Date.now();
-            if (now - this.lastScannedTime > 1500) {
-              this.lastScannedTime = now;
-              this.handleScannedBarcode(code.data);
-            }
-          }
-        }
-      }
-      this.scanLoop();
-    });
-  }
-
-  private handleScannedBarcode(barcode: string) {
-    const currentBarcodes = this.scannedBarcodes();
-    if (currentBarcodes.includes(barcode)) {
-      this.scanFeedback.set('duplicate');
-    } else {
-      this.scannedBarcodes.update(codes => [...codes, barcode]);
-      this.lastAddedBarcode.set(barcode);
-      this.scanFeedback.set('success');
-      setTimeout(() => this.lastAddedBarcode.set(null), 1500);
-    }
-    setTimeout(() => this.scanFeedback.set('idle'), 800);
-  }
-
-  removeScannedBarcode(index: number) {
-    this.scannedBarcodes.update(codes => codes.filter((_, i) => i !== index));
-  }
-
-  stopBatchScan() {
-    this.isBatchScanning.set(false);
-    if (this.animationFrameId) {
-      cancelAnimationFrame(this.animationFrameId);
-      this.animationFrameId = null;
-    }
-    if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop());
-      this.stream = null;
-    }
-    if (this.videoElement?.nativeElement) {
-      this.videoElement.nativeElement.srcObject = null;
-    }
-  }
-
-  async processScannedBarcodes() {
-    const barcodes = this.scannedBarcodes();
-    if (barcodes.length === 0) return;
-
-    this.stopBatchScan();
-
-    const barcodeDetails = new Map<string, { design: Design; sizeVar: SizePrice }>();
-    this.designs().forEach(d => d.sizes.forEach(s => barcodeDetails.set(s.BARCODE, { design: d, sizeVar: s })));
-
-    const uniqueDesigns = new Map<string, Design>();
-    for (const barcode of barcodes) {
-      const details = barcodeDetails.get(barcode.trim());
-      if (details && !uniqueDesigns.has(details.design.id)) {
-        uniqueDesigns.set(details.design.id, details.design);
-      }
-    }
-
-    if (uniqueDesigns.size === 0) {
-      Swal.fire({ icon: 'warning', title: 'No Matching Designs', text: 'None of the scanned barcodes matched any known designs in the system.' });
-      return;
-    }
-
-    const designsArray = Array.from(uniqueDesigns.values());
-    const containsShirt = designsArray.some(d => d.group.toUpperCase().includes('SHIRT'));
-    const allSizes = designsArray.flatMap(d => d.sizes.map(s => s.size));
-    const uniqueSizes = [...new Set(allSizes)].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
-
-    let determinedSleeveType: 'Full' | 'Half' | null = null;
-    if (containsShirt) {
-      const scannedSleeveTypes = new Set<'Full' | 'Half'>();
-      for (const barcode of barcodes) {
-        const details: any = barcodeDetails.get(barcode.trim());
-        if (details && details.design.group.toUpperCase().includes('SHIRT')) {
-          scannedSleeveTypes.add(details.sizeVar.sleeveType);
-        }
-      }
-      if (scannedSleeveTypes.size === 1) {
-        determinedSleeveType = scannedSleeveTypes.values().next().value;
-      }
-    }
-
-    this.consolidatedEntryState.set({
-      isActive: true,
-      designs: designsArray,
-      scannedBarcodes: barcodes,
-      containsShirt,
-      determinedSleeveType,
-      selectedSleeveType: determinedSleeveType,
-      allPossibleSizes: uniqueSizes,
-      sizeQuantities: {},
-      portion: 'All',
-    });
-  }
-
-
-  addConsolidatedItemsToOrder() {
-    const state = this.consolidatedEntryState();
-    const { sizeQuantities, selectedSleeveType, scannedBarcodes } = state;
-
-    if (Object.keys(sizeQuantities).length === 0 || (state.containsShirt && !selectedSleeveType)) {
-      Swal.fire({ icon: 'warning', title: 'Incomplete Selection', text: 'Please select at least one size and specify a sleeve type for shirts.' });
-      return;
-    }
-
-    const totalScannedItems = scannedBarcodes.length;
-    if (totalScannedItems === 0) {
-      this.cancelConsolidatedEntry();
-      return;
-    }
-
-    const barcodeDetails = new Map<string, { design: Design; sizeVar: SizePrice }>();
-    this.designs().forEach(d => d.sizes.forEach(s => barcodeDetails.set(s.BARCODE, { design: d, sizeVar: s })));
-
-    const designScannedCounts = new Map<string, number>();
-    for (const barcode of scannedBarcodes) {
-        const details = barcodeDetails.get(barcode.trim());
-        if (details) {
-            const isShirt = details.design.group.toUpperCase().includes('SHIRT');
-            const key = `${details.design.id}` + (isShirt ? `-${selectedSleeveType}` : '');
-            designScannedCounts.set(key, (designScannedCounts.get(key) || 0) + 1);
-        }
-    }
-
-    const uniqueDesigns = new Map<string, Design>();
-    for(const barcode of scannedBarcodes) {
-        const details = barcodeDetails.get(barcode.trim());
-        if(details && !uniqueDesigns.has(details.design.id)) {
-            uniqueDesigns.set(details.design.id, details.design);
-        }
-    }
-
-    let itemsAddedCount = 0;
-    const designsArray = Array.from(uniqueDesigns.values());
-
-    for (const [size, quantityRuleString] of Object.entries(sizeQuantities)) {
-        const trimmedRule = (quantityRuleString || '0').trim();
-
-        let totalTargetForSize = 0;
-        if (trimmedRule.includes('/')) {
-            const parts = trimmedRule.split('/');
-            const denominator = parseInt(parts[1], 10);
-            if (!isNaN(denominator) && denominator !== 0) {
-                totalTargetForSize = Math.ceil(totalScannedItems / denominator);
-            }
-        } else {
-            const literalValue = parseFloat(trimmedRule);
-            if (!isNaN(literalValue)) {
-                totalTargetForSize = literalValue * designsArray.length;
-            }
-        }
-
-        if (totalTargetForSize <= 0) continue;
-
-        let remainingForSize = totalTargetForSize;
-
-        for (let i = 0; i < designsArray.length; i++) {
-            const design = designsArray[i];
-            const isShirt = design.group.toUpperCase().includes('SHIRT');
-            const designKey = `${design.id}` + (isShirt ? `-${selectedSleeveType}` : '');
-            const countOfDesignScanned = designScannedCounts.get(designKey) || 0;
-
-            if (countOfDesignScanned === 0) continue;
-
-            let finalQuantity = 0;
-            if (i === designsArray.length - 1) {
-                finalQuantity = remainingForSize;
-            } else {
-                finalQuantity = Math.round(totalTargetForSize * (countOfDesignScanned / totalScannedItems));
-                if (finalQuantity > remainingForSize) finalQuantity = remainingForSize;
-            }
-
-            if (finalQuantity > 0) {
-                const sizeVar = design.sizes.find(s =>
-                    isShirt
-                    ? s.size === size && s.sleeveType === selectedSleeveType
-                    : s.size === size
-                );
-
-                if (sizeVar) {
-                    this.addOrUpdateOrderItem(design, sizeVar, finalQuantity);
-                    itemsAddedCount++;
-                    remainingForSize -= finalQuantity;
-                }
-            }
-        }
-    }
-
-    if (itemsAddedCount === 0 && totalScannedItems > 0) {
-        Swal.fire({ icon: 'info', title: 'No Matching Items', text: `The selected sizes/sleeve type did not match any of the designs in the specified barcodes.` });
-    }
-
-    this.cancelConsolidatedEntry();
-  }
-
-    cancelConsolidatedEntry() {
-        this.consolidatedEntryState.set(EMPTY_CONSOLIDATED_ENTRY_STATE);
-        this.scannedBarcodes.set([]);
-    }
-
-    isSizeSelected(size: string): boolean {
-        return this.consolidatedEntryState().sizeQuantities.hasOwnProperty(size);
-    }
-
-    getQuantityForSelectedSize(size: string): string {
-        return this.consolidatedEntryState().sizeQuantities[size] || '1';
-    }
-
-    toggleSizeSelection(size: string, isSelected: boolean) {
-        this.consolidatedEntryState.update(state => {
-        const newQuantities = { ...state.sizeQuantities };
-        if (isSelected) {
-            if (!newQuantities.hasOwnProperty(size)) {
-            newQuantities[size] = '1'
-            }
-        } else {
-            delete newQuantities[size];
-        }
-        return { ...state, sizeQuantities: newQuantities };
-        });
-    }
-
-  private parseFractionalQuantity(value: unknown): number {
-    if (typeof value === 'number') {
-      return value >= 0 ? value : 0;
-    }
-    if (typeof value !== 'string') {
-      const num = Number(value);
-      return !isNaN(num) && num >= 0 ? num : 0;
-    }
-
-    const trimmed = value.trim();
-    if (trimmed === '') {
-      return 0;
-    }
-
-    if (trimmed.includes('/')) {
-      const parts = trimmed.split('/');
-      if (parts.length === 2) {
-        const numerator = parseFloat(parts[0]);
-        const denominator = parseFloat(parts[1]);
-        if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
-          const result = numerator / denominator;
-          return !isNaN(result) && result >= 0 ? result : 0;
-        }
-      }
-    }
-
-    const num = parseFloat(trimmed);
-    return !isNaN(num) && num >= 0 ? num : 0;
-  }
-
-  updateQuantityForSelectedSize(size: string, quantity: unknown) {
-    const newQuantity = (typeof quantity === 'string' ? quantity.trim() : String(quantity)) || '1';
-    this.consolidatedEntryState.update(state => {
-      const newQuantities = { ...state.sizeQuantities, [size]: newQuantity };
-      return { ...state, sizeQuantities: newQuantities };
-    });
-  }
+    return Array.from(groups.values());
+  });
 
   isAllSizesSelectedForConsolidatedEntry = computed(() => {
     const state = this.consolidatedEntryState();
     if (state.allPossibleSizes.length === 0) return false;
     return state.allPossibleSizes.every(size => this.parseFractionalQuantity(state.sizeQuantities[size] ?? '0') > 0);
- });
+  });
 
   isSomeSizesSelectedForConsolidatedEntry = computed(() => {
     const state = this.consolidatedEntryState();
@@ -732,191 +273,104 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     return selectedCount > 0 && selectedCount < state.allPossibleSizes.length;
   });
 
-  toggleAllSizesSelectionForConsolidatedEntry(isSelected: boolean) {
-    this.consolidatedEntryState.update(state => {
-      if (isSelected) {
-        const newQuantities = { ...state.sizeQuantities };
-        for (const size of state.allPossibleSizes) {
-          if (this.parseFractionalQuantity(newQuantities[size] ?? '0') <= 0) {
-            newQuantities[size] = '1';
-          }
-        }
-        return { ...state, sizeQuantities: newQuantities };
+  /** Orders filtered by the selected date range (based on createdAt) */
+  filteredSalesOrders = computed(() => {
+    const orders = this.salesOrders();
+    const from = this.filterFromDate();
+    const to   = this.filterToDate();
+    if (!from && !to) return orders;
+
+    const fromMs = from ? new Date(from).setHours(0, 0, 0, 0)    : -Infinity;
+    const toMs   = to   ? new Date(to).setHours(23, 59, 59, 999)  :  Infinity;
+
+    return orders.filter(order => {
+      const raw: any = order.createdAt;
+      let d: Date;
+      if (raw && typeof raw.toDate === 'function') {
+        d = raw.toDate();
+      } else if (raw instanceof Date) {
+        d = raw;
+      } else if (raw) {
+        d = new Date(raw);
       } else {
-        return { ...state, sizeQuantities: {} };
+        // fall back to deliveryDate if createdAt is missing
+        d = new Date(order.deliveryDate);
       }
+      const ms = d.getTime();
+      return ms >= fromMs && ms <= toMs;
     });
+  });
+
+  isCurrentMonthFilter = computed(() =>
+    this.filterFromDate() === this.currentMonthStart() &&
+    this.filterToDate()   === this.currentMonthEnd()
+  );
+
+  // --- Date helpers ---
+  private currentMonthStart(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
   }
 
-  updateConsolidatedState(patch: Partial<ConsolidatedEntryState>) {
-    this.consolidatedEntryState.update(state => ({ ...state, ...patch }));
+  private currentMonthEnd(): string {
+    const d = new Date();
+    const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
   }
 
-  // --- Form Logic ---
-  removeOrderItemGroup(itemGroup: OrderItem[]) {
-    if (!itemGroup || itemGroup.length === 0) return;
-    const designIdToRemove = itemGroup[0].design.id;
-    this.orderItems.update(items => items.filter(item => item.design.id !== designIdToRemove));
+  resetToCurrentMonth() {
+    this.filterFromDate.set(this.currentMonthStart());
+    this.filterToDate.set(this.currentMonthEnd());
   }
 
-  removeItemSize(itemToRemoveFrom: OrderItem, sizeToRemove: string) {
-    const uniqueKey = itemToRemoveFrom.design.id + (itemToRemoveFrom.sleeveType || '');
-    this.orderItems.update(items => {
-      const newItems = items.map(item => {
-        const currentItemKey = item.design.id + (item.sleeveType || '');
-        if (currentItemKey === uniqueKey) {
-          const updatedItem = JSON.parse(JSON.stringify(item));
-          updatedItem.itemSizes = updatedItem.itemSizes.filter((s: OrderItemSize) => s.size !== sizeToRemove);
-          return updatedItem;
-        }
-        return item;
-      });
-      return newItems.filter(orderItem => orderItem.itemSizes.length > 0);
-    });
+  clearDateFilter() {
+    this.filterFromDate.set('');
+    this.filterToDate.set('');
   }
 
-  updateItemQuantity(itemToUpdate: OrderItem, sizeToUpdate: string, newQuantity: unknown) {
-    const finalQuantity = this.parseFractionalQuantity(newQuantity);
-
-    const uniqueKey = itemToUpdate.design.id + (itemToUpdate.sleeveType || '');
-    this.orderItems.update(items => {
-      return items.map(item => {
-        const currentItemKey = item.design.id + (item.sleeveType || '');
-        if (currentItemKey === uniqueKey) {
-          const updatedItemSizes = item.itemSizes.map(sizeItem =>
-            sizeItem.size === sizeToUpdate ? { ...sizeItem, quantity: finalQuantity } : sizeItem
-          );
-          return { ...item, itemSizes: updatedItemSizes };
-        }
-        return item;
-      });
-    });
+  ngOnInit() {
+    this.clientService.getClients().subscribe(clients => this.clients.set(clients));
+    this.designService.getDesigns().subscribe(designs => this.designs.set(designs));
+    this.loadSalesOrders();
   }
 
-  // --- Template Helpers for Item Display ---
-  getTotalQuantity(): number {
-    return this.orderItems().reduce((total, item) =>
-      total + item.itemSizes.reduce((itemTotal, size) => itemTotal + (Number(size.quantity) || 0), 0), 0);
+  ngOnDestroy() {
+    if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
+    this.stream?.getTracks().forEach(track => track.stop());
   }
 
-  getTotalPrice(): number {
-    return this.orderItems().reduce((total, item) =>
-      total + item.itemSizes.reduce((itemTotal, size) => itemTotal + ((Number(size.quantity) || 0) * (Number(size.price) || 0)), 0), 0);
+  loadSalesOrders() {
+    this.salesOrderService.getSalesOrders().subscribe(orders => this.salesOrders.set(orders));
   }
 
-  saveOrder() {
-    if (!this.selectedClientId()) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Please select a client.'
-      });
-      return;
-    }
-    if (this.orderItems().length === 0) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Please add at least one design to the order.'
-      });
-      return;
-    }
-
-    const editableOrder = this.editableOrder();
-    Swal.fire({
-      title: editableOrder ? 'Updating Sales Order...' : 'Creating Sales Order...',
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading()
-    });
-
-    if (editableOrder) {
-      const updatedOrder: SalesOrder = {
-        ...editableOrder,
-        clientId: this.selectedClientId()!,
-        deliveryDate: this.deliveryDate(),
-        items: this.orderItems()
-      };
-      this.salesOrderService.updateSalesOrder(updatedOrder).subscribe({
-        next: () => {
-          Swal.fire({
-            icon: 'success',
-            title: 'Updated!',
-            text: `Sales Order ${updatedOrder.id} updated successfully!`,
-            timer: 2000,
-            showConfirmButton: false
-          });
-          this.loadSalesOrders();
-          this.switchToListView();
-        },
-        error: (err) => {
-          Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: 'Failed to update sales order.'
-          })
-        }
-      });
-    } else {
-      const orderData = {
-        clientId: this.selectedClientId()!,
-        deliveryDate: this.deliveryDate(),
-        items: this.orderItems()
-      };
-      this.salesOrderService.createSalesOrder(orderData as any).subscribe({
-        next: (savedOrder) => {
-          Swal.fire({
-            icon: 'success',
-            title: 'Created!',
-            text: `Sales Order ${savedOrder.id} created successfully!`,
-            timer: 2000,
-            showConfirmButton: false
-          });
-          this.loadSalesOrders();
-          this.switchToListView();
-        },
-        error: (err) => {
-          Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: err.message
-          });
-        }
-      });
-    }
+  switchToListView() {
+    this.mode.set('list');
+    this.editableOrder.set(null);
+    this.orderItems.set([]);
+    this.selectedClientId.set(null);
+    this.deliveryDate.set('');
   }
 
-  requestDeleteOrder(order: SalesOrder) {
-    this.orderToDelete.set(order);
+  showAddForm() {
+    this.editableOrder.set(null);
+    this.orderItems.set([]);
+    this.selectedClientId.set(null);
+    this.deliveryDate.set('');
+    this.mode.set('form');
   }
 
-  async confirmDelete() {
-    try {
-      if (!this.orderToDelete()) return;
-      await this.salesOrderService.deleteSalesOrder(this.orderToDelete()!.id)
-      Swal.fire({
-        icon: 'success',
-        title: 'Deleted!',
-        text: 'Client deleted successfully',
-        timer: 2000,
-        showConfirmButton: false
-      });
-      this.loadSalesOrders();
-      this.cancelDelete();
-    }
-    catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.message
-      });
-    }
+  showEditForm(order: SalesOrder) {
+    this.editableOrder.set(order);
+    this.orderItems.set(JSON.parse(JSON.stringify(order.items)));
+    this.selectedClientId.set(order.clientId);
+    const rawDate = order.deliveryDate as any;
+    const date = rawDate instanceof Timestamp
+      ? formatDate(rawDate.toDate(), 'yyyy-MM-dd', 'en-US')
+      : order.deliveryDate;
+    this.deliveryDate.set(date);
+    this.mode.set('form');
   }
 
-  cancelDelete() {
-    this.orderToDelete.set(null);
-  }
-
-  // --- Integrated Print Logic ---
   showPrintView(order: SalesOrder) {
     const client = this.clients().find(c => c.id === order.clientId);
     if (client) {
@@ -926,7 +380,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       Swal.fire({ icon: 'error', title: 'Client Not Found', text: 'Could not find client details for this order.' });
     }
   }
-
+  
   closePrintView() {
     this.orderToPrint.set(null);
     this.clientForPrint.set(null);
@@ -995,7 +449,6 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     const words = this.privateNumberToWords(Math.floor(total));
     return `${words} Rupees only`;
   }
-
   private privateNumberToWords(num: number): string {
     if (num === 0) return 'Zero';
     if (num > 9999999) return 'Number too large';
@@ -1036,358 +489,719 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     return words.trim().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   }
 
-  // ─── Manual Entry ────────────────────────────────────────────────────────────
+  selectClient(client: Client) {
+    this.selectedClientId.set(client.id!);
+    this.isClientDropdownOpen.set(false);
+    this.clientSearchTerm.set('');
+  }
+
+  updateConsolidatedState(partial: Partial<ConsolidatedEntryState>) {
+    this.consolidatedEntryState.update(s => ({ ...s, ...partial }));
+  }
+
+  removeOrderItem(designId: string, sleeveType?: string) {
+    this.orderItems.update(items =>
+      items.filter(item =>
+        !(item.design.id === designId && item.sleeveType === sleeveType)
+      )
+    );
+  }
+
+  getClientName(clientId: string): string {
+    return this.clients().find(c => c.id === clientId)?.clientName ?? 'Unknown Client';
+  }
+
+  getOrderTotalQuantity(order: SalesOrder): number {
+    return order.items.reduce((total, item) => total + item.itemSizes.reduce((itemTotal, size) => itemTotal + (Number(size.quantity) || 0), 0), 0);
+  }
+
+  getOrderTotalPrice(order: SalesOrder): number {
+    return order.items.reduce((total, item) => total + item.itemSizes.reduce((itemTotal, size) => itemTotal + ((Number(size.quantity) || 0) * (Number(size.price) || 0)), 0), 0);
+  }
+
+  // --- New Item Addition Logic ---
+  addOrUpdateOrderItem(design: Design, sizeVar: SizePrice, quantity: number) {
+    this.orderItems.update(currentItems => {
+      const itemsCopy = JSON.parse(JSON.stringify(currentItems));
+      let existingItem;
+      const isShirt = design.group.toUpperCase().includes('SHIRT');
+
+      if (isShirt) {
+        existingItem = itemsCopy.find((item: OrderItem) =>
+          item.design.id === design.id && item.sleeveType === sizeVar.sleeveType
+        );
+      } else {
+        existingItem = itemsCopy.find((item: OrderItem) => item.design.id === design.id);
+      }
+
+      if (existingItem) {
+        const existingSize = existingItem.itemSizes.find((s: OrderItemSize) => s.size === sizeVar.size);
+        if (existingSize) {
+          existingSize.quantity = (Number(existingSize.quantity) || 0) + quantity;
+          existingSize.price = sizeVar.WSP;
+        } else {
+          existingItem.itemSizes.push({ size: sizeVar.size, quantity: quantity, price: sizeVar.WSP });
+          existingItem.itemSizes.sort((a: OrderItemSize, b: OrderItemSize) =>
+            String(a.size).localeCompare(String(b.size), undefined, { numeric: true })
+          );
+        }
+      } else {
+        const newOrderItem: OrderItem = {
+          design: design,
+          itemSizes: [{ size: sizeVar.size, quantity: quantity, price: sizeVar.WSP }]
+        };
+        if (isShirt) newOrderItem.sleeveType = sizeVar.sleeveType;
+        itemsCopy.push(newOrderItem);
+      }
+      return itemsCopy;
+    });
+  }
+
+  // ============================================================
+  // --- Manual Design Selection ---
+  // ============================================================
 
   startManualEntry() {
-    this.manualDesignSearchTerm.set('');
-    const allDesigns = this.designs();
-    const groupMap = new Map<string, { styleNo: string; group: string; designs: Design[] }>();
-    for (const d of allDesigns) {
-      if (!groupMap.has(d.styleNo)) {
-        groupMap.set(d.styleNo, { styleNo: d.styleNo, group: d.group || '', designs: [] });
-      }
-      groupMap.get(d.styleNo)!.designs.push(d);
-    }
-    const designGroups = Array.from(groupMap.values()).sort((a, b) =>
-      a.styleNo.localeCompare(b.styleNo)
-    );
-    this.manualEntryState.set({
-      ...EMPTY_MANUAL_ENTRY_STATE,
-      isActive: true,
-      designGroups,
-    });
+    this.manualDesignSelectionState.set({ ...EMPTY_MANUAL_SELECTION_STATE, isActive: true });
   }
 
-  manualToggleDesignStyle(styleNo: string, isSelected: boolean) {
-    this.manualEntryState.update(state => {
-      const selectedStyleNos = isSelected
-        ? [...state.selectedStyleNos, styleNo]
-        : state.selectedStyleNos.filter(s => s !== styleNo);
-      return { ...state, selectedStyleNos };
-    });
+  cancelManualEntry() {
+    this.manualDesignSelectionState.set(EMPTY_MANUAL_SELECTION_STATE);
   }
 
-  manualIsStyleSelected(styleNo: string): boolean {
-    return this.manualEntryState().selectedStyleNos.includes(styleNo);
-  }
-
-  manualGoToColorStep() {
-    this.manualEntryState.update(state => {
-      if (state.selectedStyleNos.length === 0) return state;
-      const designSelections: ManualDesignSelection[] = state.selectedStyleNos.map(styleNo => {
-        const group = state.designGroups.find(g => g.styleNo === styleNo)!;
-        return { styleNo, allDesigns: group.designs, selectedColorDesigns: [] };
-      });
-      return { ...state, step: 'select-colors', designSelections };
-    });
-  }
-
-  manualToggleColor(styleNo: string, design: Design, isSelected: boolean) {
-    this.manualEntryState.update(state => {
-      const selections = state.designSelections.map(sel => {
-        if (sel.styleNo !== styleNo) return sel;
-        const selectedColorDesigns = isSelected
-          ? [...sel.selectedColorDesigns, design]
-          : sel.selectedColorDesigns.filter(d => d.id !== design.id);
-        return { ...sel, selectedColorDesigns };
-      });
-      return { ...state, designSelections: selections };
-    });
-  }
-
-  manualIsColorSelected(styleNo: string, designId: string | undefined): boolean {
-    const sel = this.manualEntryState().designSelections.find(s => s.styleNo === styleNo);
-    if (!sel) return false;
-    return sel.selectedColorDesigns.some(d => d.id === designId);
-  }
-
-  manualGoToSizeStep() {
-    this.manualEntryState.update(state => {
-      const allSelectedDesigns = state.designSelections.flatMap(s => s.selectedColorDesigns);
-      if (allSelectedDesigns.length === 0) return state;
-      const containsShirt = allSelectedDesigns.some(d => d.group?.toUpperCase().includes('SHIRT'));
-      const allSizes = allSelectedDesigns.flatMap(d => d.sizes.map(s => s.size));
-      const uniqueSizes = [...new Set(allSizes)].sort((a, b) =>
-        String(a).localeCompare(String(b), undefined, { numeric: true })
-      );
-      return {
-        ...state,
-        step: 'select-sizes',
-        allPossibleSizes: uniqueSizes,
-        sizeFractions: {},
-        containsShirt,
-        selectedSleeveType: null,
-      };
-    });
-  }
-
-  manualIsSizeSelected(size: string): boolean {
-    return this.manualEntryState().sizeFractions.hasOwnProperty(size);
-  }
-
-  manualGetSizeFraction(size: string): string {
-    return this.manualEntryState().sizeFractions[size] ?? '1';
-  }
-
-  manualSetSizeFraction(size: string, fraction: string) {
-    this.manualEntryState.update(state => ({
-      ...state,
-      sizeFractions: { ...state.sizeFractions, [size]: fraction },
+  setManualStyleSearch(term: string) {
+    this.manualDesignSelectionState.update(s => ({
+      ...s, styleSearchTerm: term, expandedStyleNo: null
     }));
   }
 
-  manualToggleSize(size: string, isSelected: boolean) {
-    this.manualEntryState.update(state => {
-      const sizeFractions = { ...state.sizeFractions };
-      if (isSelected) {
-        if (!sizeFractions[size]) sizeFractions[size] = '1';
-      } else {
-        delete sizeFractions[size];
-      }
-      return { ...state, sizeFractions };
-    });
+  /** Expands/collapses the color panel for a style number */
+  toggleExpandedStyle(styleNo: string) {
+    this.manualDesignSelectionState.update(s => ({
+      ...s,
+      expandedStyleNo: s.expandedStyleNo === styleNo ? null : styleNo
+    }));
   }
 
-  manualToggleAllSizes(isSelected: boolean) {
-    this.manualEntryState.update(state => {
-      if (isSelected) {
-        const sizeFractions = { ...state.sizeFractions };
-        for (const size of state.allPossibleSizes) {
-          if (!sizeFractions[size]) sizeFractions[size] = '1';
+  /** Returns true if the given styleNo is checked (at least one color confirmed) */
+  isStyleNoChecked(styleNo: string): boolean {
+    return this.manualDesignSelectionState().selectedStyleNos.includes(styleNo);
+  }
+
+  /**
+   * Toggles a style number on/off.
+   * Checking it auto-selects ALL colors; unchecking removes all its colors.
+   */
+  toggleManualStyleNo(styleNo: string) {
+    const allColors = this.designs().filter(d => d.styleNo === styleNo);
+    this.manualDesignSelectionState.update(state => {
+      const isChecked = state.selectedStyleNos.includes(styleNo);
+      if (isChecked) {
+        // Uncheck: remove this style and all its colors
+        return {
+          ...state,
+          selectedStyleNos: state.selectedStyleNos.filter(s => s !== styleNo),
+          confirmedDesigns: state.confirmedDesigns.filter(d => d.styleNo !== styleNo),
+          expandedStyleNo: state.expandedStyleNo === styleNo ? null : state.expandedStyleNo,
+        };
+      } else {
+        // Check: add this style and auto-select all its colors
+        const newDesigns = [...state.confirmedDesigns];
+        for (const color of allColors) {
+          if (!newDesigns.find(d => d.id === color.id)) newDesigns.push(color);
         }
-        return { ...state, sizeFractions };
-      } else {
-        return { ...state, sizeFractions: {} };
+        return {
+          ...state,
+          selectedStyleNos: [...state.selectedStyleNos, styleNo],
+          confirmedDesigns: newDesigns,
+          expandedStyleNo: styleNo,  // auto-expand to show colors
+        };
       }
     });
   }
 
-  manualGoBack() {
-    this.manualEntryState.update(state => {
-      if (state.step === 'select-colors') return { ...state, step: 'select-designs' };
-      if (state.step === 'select-sizes') return { ...state, step: 'select-colors' };
-      return state;
+  /** Toggles an individual color (Design) on/off */
+  toggleManualDesignColor(design: Design) {
+    this.manualDesignSelectionState.update(state => {
+      const exists = state.confirmedDesigns.find(d => d.id === design.id);
+      let newConfirmed: Design[];
+      let newStyleNos: string[];
+
+      if (exists) {
+        newConfirmed = state.confirmedDesigns.filter(d => d.id !== design.id);
+        // If no colors remain for this style, uncheck the style too
+        const remaining = newConfirmed.filter(d => d.styleNo === design.styleNo);
+        newStyleNos = remaining.length > 0
+          ? state.selectedStyleNos
+          : state.selectedStyleNos.filter(s => s !== design.styleNo);
+      } else {
+        newConfirmed = [...state.confirmedDesigns, design];
+        // Ensure style is marked as checked
+        newStyleNos = state.selectedStyleNos.includes(design.styleNo!)
+          ? state.selectedStyleNos
+          : [...state.selectedStyleNos, design.styleNo!];
+      }
+
+      return { ...state, confirmedDesigns: newConfirmed, selectedStyleNos: newStyleNos };
+    });
+  }
+
+  /** Selects or deselects ALL colors for the currently expanded style */
+  toggleAllColorsForCurrentStyle(selectAll: boolean) {
+    const styleNo = this.manualDesignSelectionState().expandedStyleNo;
+    if (!styleNo) return;
+    const allColors = this.designs().filter(d => d.styleNo === styleNo);
+
+    this.manualDesignSelectionState.update(state => {
+      const withoutThisStyle = state.confirmedDesigns.filter(d => d.styleNo !== styleNo);
+      const newConfirmed = selectAll ? [...withoutThisStyle, ...allColors] : withoutThisStyle;
+      const newStyleNos = selectAll
+        ? (state.selectedStyleNos.includes(styleNo) ? state.selectedStyleNos : [...state.selectedStyleNos, styleNo])
+        : state.selectedStyleNos.filter(s => s !== styleNo);
+      return { ...state, confirmedDesigns: newConfirmed, selectedStyleNos: newStyleNos };
+    });
+  }
+
+  removeManualConfirmedDesign(design: Design) {
+    this.manualDesignSelectionState.update(s => {
+      const newConfirmed = s.confirmedDesigns.filter(d => d.id !== design.id);
+      const remaining = newConfirmed.filter(d => d.styleNo === design.styleNo);
+      const newStyleNos = remaining.length > 0
+        ? s.selectedStyleNos
+        : s.selectedStyleNos.filter(n => n !== design.styleNo);
+      return { ...s, confirmedDesigns: newConfirmed, selectedStyleNos: newStyleNos };
     });
   }
 
   /**
-   * totalColors = total selected design-color combinations (Step 2).
-   * Final qty per size = Math.floor(totalColors × fraction)
-   *
-   *   totalColors=10, '1'   → floor(10 × 1.00) = 10
-   *   totalColors=10, '1/2' → floor(10 × 0.50) =  5
-   *   totalColors=10, '3/4' → floor(10 × 0.75) =  7
-   *   totalColors=10, '2'   → floor(10 × 2.00) = 20
+   * Takes all confirmed designs and opens the Consolidated Entry (size/qty) modal.
+   * Each confirmed design is treated as one unit for proportional distribution.
    */
-  manualComputedQtyForSize(size: string): number {
-    const state = this.manualEntryState();
-    const fraction = state.sizeFractions[size];
-    if (!fraction) return 0;
-    const totalColors = state.designSelections.reduce(
-      (sum, sel) => sum + sel.selectedColorDesigns.length, 0
+  proceedFromManualToSizeEntry() {
+    const { confirmedDesigns } = this.manualDesignSelectionState();
+    if (confirmedDesigns.length === 0) return;
+
+    const containsShirt = confirmedDesigns.some(d => d.group?.toUpperCase().includes('SHIRT'));
+    const allSizes = confirmedDesigns.flatMap(d => d.sizes.map(s => s.size));
+    const uniqueSizes = [...new Set(allSizes)].sort((a, b) =>
+      String(a).localeCompare(String(b), undefined, { numeric: true })
     );
-    if (totalColors <= 0) return 0;
-    const fracVal = this.parseFractionalQuantity(fraction);
-    if (fracVal <= 0) return 0;
-    return Math.floor(totalColors * fracVal);
-  }
 
-//   addManualItemsToOrder() {
-//     const state = this.manualEntryState();
-//     const { sizeFractions, selectedSleeveType, containsShirt } = state;
+    // One pseudo-barcode per confirmed design (uses the first size barcode of each design)
+    // This ensures uniform 1-each distribution in addConsolidatedItemsToOrder()
+    const pseudoBarcodes: string[] = confirmedDesigns
+      .map(d => d.sizes[0]?.BARCODE)
+      .filter((b): b is string => !!b);
 
-//     if (containsShirt && !selectedSleeveType) {
-//       Swal.fire({ icon: 'warning', title: 'Select Sleeve Type', text: 'Please select Full or Half Sleeve for shirt designs.' });
-//       return;
-//     }
-//     if (Object.keys(sizeFractions).length === 0) {
-//       Swal.fire({ icon: 'warning', title: 'No Sizes Selected', text: 'Please select at least one size.' });
-//       return;
-//     }
-
-//     const allSelectedDesigns = state.designSelections.flatMap(s => s.selectedColorDesigns);
-//     const totalColors = allSelectedDesigns.length;
-
-//     if (totalColors === 0) {
-//       Swal.fire({ icon: 'warning', title: 'No Colors Selected', text: 'No design-color combinations selected.' });
-//       return;
-//     }
-
-//     // qty per size = Math.floor(totalColors × fraction)
-//     const sizeQtyMap: Record<string, number> = {};
-//     for (const [size, fraction] of Object.entries(sizeFractions)) {
-//       const fracVal = this.parseFractionalQuantity(fraction);
-//       if (fracVal <= 0) continue;
-//       const qty = Math.floor(totalColors * fracVal);
-//       if (qty > 0) sizeQtyMap[size] = qty;
-//     }
-
-//     if (Object.keys(sizeQtyMap).length === 0) {
-//       Swal.fire({ icon: 'warning', title: 'Zero Quantities', text: 'All quantities are zero. Select more colors or use a larger fraction.' });
-//       return;
-//     }
-
-//     let itemsAdded = 0;
-//     for (const design of allSelectedDesigns) {
-//       for (const [size, quantity] of Object.entries(sizeQtyMap)) {
-//         const isShirt = design.group?.toUpperCase().includes('SHIRT');
-//         const sizeVar = design.sizes.find(s =>
-//           isShirt ? s.size === size && s.sleeveType === selectedSleeveType
-//                   : s.size === size
-//         );
-//         if (sizeVar) {
-//           this.addOrUpdateOrderItem(design, sizeVar, quantity);
-//           itemsAdded++;
-//         }
-//       }
-//     }
-
-//     if (itemsAdded === 0) {
-//       Swal.fire({ icon: 'info', title: 'No Matches', text: 'Selected sizes did not match any design size variations. Check sleeve type for shirts.' });
-//     } else {
-//       this.cancelManualEntry();
-//     }
-//   }
-addManualItemsToOrder() {
-  const state = this.manualEntryState();
-  const { sizeFractions, selectedSleeveType, containsShirt } = state;
-
-  if (containsShirt && !selectedSleeveType) {
-    Swal.fire({ icon: 'warning', title: 'Select Sleeve Type', text: 'Please select Full or Half Sleeve for shirt designs.' });
-    return;
-  }
-
-  const allSelectedDesigns = state.designSelections.flatMap(s => s.selectedColorDesigns);
-  const totalColors = allSelectedDesigns.length;
-
-  if (totalColors === 0) {
-    Swal.fire({ icon: 'warning', title: 'No Colors Selected', text: 'No design-color combinations selected.' });
-    return;
-  }
-
-  let itemsAdded = 0;
-
-  for (const [size, fractionString] of Object.entries(sizeFractions)) {
-
-    if (!fractionString) continue;
-
-    let applyColorCount = 0;
-    let perColorQty = 1;
-
-    // Fraction logic
-    if (fractionString.includes('/')) {
-      const [num, den] = fractionString.split('/').map(Number);
-      if (!den || den === 0) continue;
-
-      const fractionValue = num / den;
-
-      // Apply to remaining portion
-      applyColorCount = Math.floor(totalColors * (1 - fractionValue));
-      perColorQty = 1;
-    }
-    else {
-      const numericValue = parseFloat(fractionString);
-      if (isNaN(numericValue) || numericValue <= 0) continue;
-
-      // Apply to all colors
-      applyColorCount = totalColors;
-      perColorQty = numericValue;
-    }
-
-    if (applyColorCount <= 0) continue;
-
-    // Apply only first N colors
-    const applicableDesigns = allSelectedDesigns.slice(0, applyColorCount);
-
-    for (const design of applicableDesigns) {
-
-      const isShirt = design.group?.toUpperCase().includes('SHIRT');
-
-      const sizeVar = design.sizes.find(s =>
-        isShirt
-          ? s.size === size && s.sleeveType === selectedSleeveType
-          : s.size === size
-      );
-
-      if (sizeVar) {
-        this.addOrUpdateOrderItem(design, sizeVar, perColorQty);
-        itemsAdded++;
-      }
-    }
-  }
-
-  if (itemsAdded === 0) {
-    Swal.fire({
-      icon: 'info',
-      title: 'No Matches',
-      text: 'Selected sizes did not match any design size variations.'
+    this.consolidatedEntryState.set({
+      isActive: true,
+      designs: confirmedDesigns,
+      scannedBarcodes: pseudoBarcodes,
+      containsShirt,
+      determinedSleeveType: null,
+      selectedSleeveType: null,
+      allPossibleSizes: uniqueSizes,
+      sizeQuantities: {},
+      portion: 'All',
     });
-  } else {
+
     this.cancelManualEntry();
   }
-}
 
-  cancelManualEntry() {
-    this.manualEntryState.set(EMPTY_MANUAL_ENTRY_STATE);
-    this.manualDesignSearchTerm.set('');
-  }
+  // ============================================================
+  // --- Batch Scanning and Consolidated Entry ---
+  // ============================================================
 
-  updateManualEntryState(patch: Partial<ManualEntryState>) {
-    this.manualEntryState.update(state => ({ ...state, ...patch }));
-  }
+  async startBatchScan() {
+    this.isBatchScanning.set(true);
+    this.scannedBarcodes.set([]);
+    this.lastScannedTime = 0;
+    this.lastTickTime = 0;
+    this.isTorchAvailable.set(false);
+    this.isTorchOn.set(false);
+    this.torchTrack = null;
+    this.enhanceCanvas = document.createElement('canvas');
 
-    getManualTotalSelectedColors(): number {
-        return this.manualEntryState().designSelections.reduce(
-        (sum, sel) => sum + sel.selectedColorDesigns.length, 0
-        );
-    }
+    setTimeout(async () => {
+      if (!this.videoElement || !navigator.mediaDevices?.getUserMedia) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Camera not supported by your browser or element not ready.' });
+        this.isBatchScanning.set(false);
+        return;
+      }
+      try {
+        // Request the highest available resolution for better distance detection
+        const constraints: MediaStreamConstraints = {
+          video: {
+            facingMode: 'environment',
+            width:  { ideal: 1920, min: 640 },
+            height: { ideal: 1080, min: 480 },
+          } as any
+        };
 
-    getManualSizeDisplayText(size: string): string {
-        const state = this.manualEntryState();
-        const fraction = state.sizeFractions[size];
-        if (!fraction) return '';
+        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
 
-        const totalColors = this.getManualTotalSelectedColors();
-        if (totalColors === 0) return '';
+        // Enable continuous autofocus and check torch availability
+        const videoTrack = this.stream.getVideoTracks()[0];
+        if (videoTrack) {
+          const caps = videoTrack.getCapabilities() as any;
 
-        if (fraction.includes('/')) {
-            const [num, den] = fraction.split('/').map(Number);
-            if (!den || den === 0) return '';
+          // Apply focus + exposure settings where supported
+          const applyConstraints: any = {};
+          if (caps.focusMode?.includes('continuous'))  applyConstraints.focusMode  = 'continuous';
+          if (caps.exposureMode?.includes('continuous')) applyConstraints.exposureMode = 'continuous';
+          if (caps.whiteBalanceMode?.includes('continuous')) applyConstraints.whiteBalanceMode = 'continuous';
+          if (Object.keys(applyConstraints).length > 0) {
+            await videoTrack.applyConstraints({ advanced: [applyConstraints] } as any).catch(() => {});
+          }
 
-            const fractionValue = num / den;
-            const applyCount = Math.floor(totalColors * (1 - fractionValue));
-
-            return `Applies to ${applyCount} colors (1 each)`;
-        } else {
-            const numericValue = parseFloat(fraction);
-            if (isNaN(numericValue) || numericValue <= 0) return '';
-
-            return `All ${totalColors} colors (${numericValue} each)`;
+          // Torch
+          if (caps.torch) {
+            this.isTorchAvailable.set(true);
+            this.torchTrack = videoTrack;
+          }
         }
+
+        this.videoElement.nativeElement.srcObject = this.stream;
+        this.videoElement.nativeElement.play();
+        this.animationFrameId = requestAnimationFrame(() => this.tick());
+      } catch (err) {
+        Swal.fire({ icon: 'error', title: 'Camera Error', text: 'Could not access camera. Please ensure permissions are granted.' });
+        this.isBatchScanning.set(false);
+      }
+    });
+  }
+
+  async toggleTorch() {
+    if (!this.torchTrack || !this.isTorchAvailable()) return;
+    this.torchEnabled = !this.torchEnabled;
+    await this.torchTrack.applyConstraints({ advanced: [{ torch: this.torchEnabled } as any] }).catch(() => {});
+    this.isTorchOn.set(this.torchEnabled);
+  }
+
+  tick() {
+    if (!this.isBatchScanning()) return;
+    this.animationFrameId = requestAnimationFrame(() => this.tick());
+
+    const now = Date.now();
+    if (now - this.lastTickTime < this.SCAN_INTERVAL) return;
+    this.lastTickTime = now;
+
+    const video = this.videoElement?.nativeElement;
+    if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+    const canvas = this.canvasElement?.nativeElement;
+    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+    if (!ctx || !canvas) return;
+
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (!vw || !vh) return;
+
+    // ── PASS 1: Full frame at native resolution ──────────────────────────────
+    // Use the full video frame (no 640 cap) for maximum QR code pixel coverage.
+    // Downscale only if the resolution is extremely large to keep jsQR fast.
+    const scale = Math.min(1, 900 / Math.max(vw, vh));
+    const fw = Math.round(vw * scale);
+    const fh = Math.round(vh * scale);
+
+    if (canvas.width !== fw || canvas.height !== fh) {
+      canvas.width  = fw;
+      canvas.height = fh;
     }
 
-    isAllColorsSelected(sel: ManualDesignSelection): boolean {
-        return sel.selectedColorDesigns.length === sel.allDesigns.length
-                && sel.allDesigns.length > 0;
+    ctx.drawImage(video, 0, 0, vw, vh, 0, 0, fw, fh);
+    let imageData = ctx.getImageData(0, 0, fw, fh);
+    let result = jsQR(imageData.data, fw, fh, { inversionAttempts: 'attemptBoth' });
+
+    if (result?.data) {
+      this.addBarcodeToBatch(result.data);
+      return;
     }
 
-    isSomeColorsSelected(sel: ManualDesignSelection): boolean {
-        return sel.selectedColorDesigns.length > 0 &&
-            sel.selectedColorDesigns.length < sel.allDesigns.length;
+    // ── PASS 2: Enhanced center-crop ─────────────────────────────────────────
+    // Crop the central 60 % of the frame, scale up to 640 px, and apply a
+    // contrast boost.  This handles codes that are small / far away.
+    const ec = this.enhanceCanvas!;
+    const cropFraction = 0.6;
+    const cx = vw * (1 - cropFraction) / 2;
+    const cy = vh * (1 - cropFraction) / 2;
+    const cw = vw * cropFraction;
+    const ch = vh * cropFraction;
+
+    const eSize = 640;
+    if (ec.width !== eSize || ec.height !== eSize) {
+      ec.width  = eSize;
+      ec.height = eSize;
     }
 
-    manualToggleAllColors(styleNo: string, isSelected: boolean) {
-        this.manualEntryState.update(state => {
-            const designSelections = state.designSelections.map(sel => {
-            if (sel.styleNo !== styleNo) return sel;
+    const ec2 = ec.getContext('2d', { willReadFrequently: true })!;
+    ec2.drawImage(video, cx, cy, cw, ch, 0, 0, eSize, eSize);
+    const raw = ec2.getImageData(0, 0, eSize, eSize);
 
-            return {
-                ...sel,
-                selectedColorDesigns: isSelected ? [...sel.allDesigns] : []
-            };
-            });
+    // Fast contrast stretch + grayscale binarization
+    const enhanced = this.enhanceImageData(raw);
+    ec2.putImageData(enhanced, 0, 0);
 
-            return { ...state, designSelections };
-        });
+    const enhanced2 = ec2.getImageData(0, 0, eSize, eSize);
+    result = jsQR(enhanced2.data, eSize, eSize, { inversionAttempts: 'attemptBoth' });
+
+    if (result?.data) {
+      this.addBarcodeToBatch(result.data);
     }
+  }
+
+  /**
+   * Boosts contrast using a per-channel min-max stretch then converts to
+   * grayscale-like luminance so that low-contrast / faded codes are readable.
+   */
+  private enhanceImageData(imageData: ImageData): ImageData {
+    const d = new Uint8ClampedArray(imageData.data);
+    const len = d.length;
+
+    // Find luminance range for the center region (ignore edges to avoid vignette bias)
+    let minL = 255, maxL = 0;
+    for (let i = 0; i < len; i += 4) {
+      const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      if (lum < minL) minL = lum;
+      if (lum > maxL) maxL = lum;
+    }
+
+    const range = maxL - minL || 1;
+    const scale = 255 / range;
+
+    for (let i = 0; i < len; i += 4) {
+      const lum = Math.round((0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] - minL) * scale);
+      // Write stretched luminance to all channels (greyscale keeps QR readable)
+      d[i] = d[i + 1] = d[i + 2] = lum;
+      // d[i + 3] stays 255
+    }
+
+    return new ImageData(d, imageData.width, imageData.height);
+  }
+
+  addBarcodeToBatch(barcode: string) {
+    const now = Date.now();
+    if (now - this.lastScannedTime < this.SCAN_DEBOUNCE) return;
+    if (this.scannedBarcodes().includes(barcode)) {
+      this.lastScannedTime = now;
+      this.scanFeedback.set('duplicate');
+      setTimeout(() => this.scanFeedback.set('idle'), 500);
+      return;
+    }
+    this.lastScannedTime = now;
+    this.scannedBarcodes.update(codes => [...codes, barcode]);
+    this.lastAddedBarcode.set(barcode);
+    setTimeout(() => this.lastAddedBarcode.set(null), 600);
+    this.scanFeedback.set('success');
+    setTimeout(() => this.scanFeedback.set('idle'), 400);
+  }
+
+  removeScannedBarcode(index: number) {
+    this.scannedBarcodes.update(codes => codes.filter((_, i) => i !== index));
+  }
+
+  stopBatchScan() {
+    if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
+    // Turn off torch before stopping
+    if (this.torchEnabled && this.torchTrack) {
+      this.torchTrack.applyConstraints({ advanced: [{ torch: false } as any] }).catch(() => {});
+    }
+    this.stream?.getTracks().forEach(track => track.stop());
+    this.isBatchScanning.set(false);
+    this.isTorchOn.set(false);
+    this.isTorchAvailable.set(false);
+    this.torchEnabled = false;
+    this.torchTrack = null;
+    this.enhanceCanvas = null;
+  }
+
+  processScannedBarcodes() {
+    this.stopBatchScan();
+    const barcodes = this.scannedBarcodes();
+    if (barcodes.length === 0) return;
+
+    const barcodeDetails = new Map<string, { design: Design; sizeVar: SizePrice }>();
+    this.designs().forEach(d => d.sizes.forEach(s => barcodeDetails.set(s.BARCODE, { design: d, sizeVar: s })));
+
+    const uniqueDesigns = new Map<string, Design>();
+    for (const barcode of barcodes) {
+      const details = barcodeDetails.get(barcode.trim());
+      if (details) {
+        uniqueDesigns.set(details.design.id, details.design);
+      }
+    }
+
+    if (uniqueDesigns.size === 0) {
+      Swal.fire({ icon: 'error', title: 'No Designs Found', text: 'No valid designs found for the scanned barcodes.' });
+      return;
+    }
+
+    const designsArray = Array.from(uniqueDesigns.values());
+    const containsShirt = designsArray.some(d => d.group.toUpperCase().includes('SHIRT'));
+    const allSizes = designsArray.flatMap(d => d.sizes.map(s => s.size));
+    const uniqueSizes = [...new Set(allSizes)].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+
+    let determinedSleeveType: 'Full' | 'Half' | null = null;
+    if (containsShirt) {
+      const scannedSleeveTypes = new Set<'Full' | 'Half'>();
+      for (const barcode of barcodes) {
+        const details: any = barcodeDetails.get(barcode.trim());
+        if (details && details.design.group.toUpperCase().includes('SHIRT')) {
+          scannedSleeveTypes.add(details.sizeVar.sleeveType);
+        }
+      }
+      if (scannedSleeveTypes.size === 1) {
+        determinedSleeveType = scannedSleeveTypes.values().next().value;
+      }
+    }
+
+    this.consolidatedEntryState.set({
+      isActive: true,
+      designs: designsArray,
+      scannedBarcodes: barcodes,
+      containsShirt,
+      determinedSleeveType,
+      selectedSleeveType: determinedSleeveType,
+      allPossibleSizes: uniqueSizes,
+      sizeQuantities: {},
+      portion: 'All',
+    });
+  }
+
+  addConsolidatedItemsToOrder() {
+    const state = this.consolidatedEntryState();
+    const { sizeQuantities, selectedSleeveType, scannedBarcodes, designs } = state;
+
+    if (Object.keys(sizeQuantities).length === 0 || (state.containsShirt && !selectedSleeveType)) {
+      Swal.fire({ icon: 'warning', title: 'Incomplete Selection', text: 'Please select at least one size and specify a sleeve type for shirts.' });
+      return;
+    }
+
+    // Build the final list of designs to work with.
+    // For scan flow: resolve barcodes → unique designs.
+    // For manual flow: use designs directly (pseudo-barcodes may not resolve).
+    const barcodeDetails = new Map<string, { design: Design; sizeVar: SizePrice }>();
+    this.designs().forEach(d => d.sizes.forEach(s => barcodeDetails.set(s.BARCODE, { design: d, sizeVar: s })));
+
+    const resolvedUnique = new Map<string, Design>();
+    for (const barcode of scannedBarcodes) {
+      const details = barcodeDetails.get(barcode.trim());
+      if (details && !resolvedUnique.has(details.design.id)) {
+        resolvedUnique.set(details.design.id, details.design);
+      }
+    }
+
+    // Fall back to the designs list directly (manual entry case)
+    if (resolvedUnique.size === 0 && designs.length > 0) {
+      for (const d of designs) resolvedUnique.set(d.id!, d);
+    }
+
+    const finalDesigns = Array.from(resolvedUnique.values());
+    if (finalDesigns.length === 0) {
+      this.cancelConsolidatedEntry();
+      return;
+    }
+
+    let itemsAddedCount = 0;
+
+    for (const [size, quantityRuleString] of Object.entries(sizeQuantities)) {
+      const trimmedRule = (quantityRuleString || '0').trim();
+
+      if (trimmedRule.includes('/')) {
+        // ── FRACTION MODE ──────────────────────────────────────────────────────
+        // "N/D" means: apply qty 1 to round(totalDesigns × N/D) designs.
+        // Example: 6 designs, "1/4" → round(6 × 0.25) = 2 designs get qty 1.
+        // Example: 6 designs, "3/4" → round(6 × 0.75) = 5 designs get qty 1.
+        const parts = trimmedRule.split('/');
+        const numerator = parseInt(parts[0], 10);
+        const denominator = parseInt(parts[1], 10);
+
+        if (isNaN(numerator) || isNaN(denominator) || denominator === 0 || numerator <= 0) continue;
+
+        const designsToApply = Math.round(finalDesigns.length * numerator / denominator);
+        if (designsToApply <= 0) continue;
+
+        // Apply qty 1 to the first N qualifying designs
+        let applied = 0;
+        for (const design of finalDesigns) {
+          if (applied >= designsToApply) break;
+          const isShirt = design.group?.toUpperCase().includes('SHIRT');
+          const sizeVar = design.sizes.find(s =>
+            isShirt ? s.size === size && s.sleeveType === selectedSleeveType : s.size === size
+          );
+          if (sizeVar) {
+            this.addOrUpdateOrderItem(design, sizeVar, 1);
+            itemsAddedCount++;
+            applied++;
+          }
+        }
+
+      } else {
+        // ── LITERAL MODE ───────────────────────────────────────────────────────
+        // A plain number means every design gets exactly that qty.
+        // Example: 6 designs, "2" → each of the 6 designs gets qty 2.
+        const literalValue = Math.round(parseFloat(trimmedRule));
+        if (isNaN(literalValue) || literalValue <= 0) continue;
+
+        for (const design of finalDesigns) {
+          const isShirt = design.group?.toUpperCase().includes('SHIRT');
+          const sizeVar = design.sizes.find(s =>
+            isShirt ? s.size === size && s.sleeveType === selectedSleeveType : s.size === size
+          );
+          if (sizeVar) {
+            this.addOrUpdateOrderItem(design, sizeVar, literalValue);
+            itemsAddedCount++;
+          }
+        }
+      }
+    }
+
+    if (itemsAddedCount === 0) {
+      Swal.fire({ icon: 'info', title: 'No Matching Items', text: 'The selected sizes/sleeve type did not match any of the designs.' });
+    }
+
+    this.cancelConsolidatedEntry();
+  }
+
+  cancelConsolidatedEntry() {
+    this.consolidatedEntryState.set(EMPTY_CONSOLIDATED_ENTRY_STATE);
+    this.scannedBarcodes.set([]);
+  }
+
+  isSizeSelected(size: string): boolean {
+    return this.consolidatedEntryState().sizeQuantities.hasOwnProperty(size);
+  }
+
+  getQuantityForSelectedSize(size: string): string {
+    return this.consolidatedEntryState().sizeQuantities[size] || '1';
+  }
+
+  toggleSizeSelection(size: string, isSelected: boolean) {
+    this.consolidatedEntryState.update(state => {
+      const newQuantities = { ...state.sizeQuantities };
+      if (isSelected) {
+        if (!newQuantities.hasOwnProperty(size)) newQuantities[size] = '1';
+      } else {
+        delete newQuantities[size];
+      }
+      return { ...state, sizeQuantities: newQuantities };
+    });
+  }
+
+  toggleAllSizesSelectionForConsolidatedEntry(isSelected: boolean) {
+    this.consolidatedEntryState.update(state => {
+      if (isSelected) {
+        const newQuantities = { ...state.sizeQuantities };
+        for (const size of state.allPossibleSizes) {
+          if (this.parseFractionalQuantity(newQuantities[size] ?? '0') === 0) {
+            newQuantities[size] = '1';
+          }
+        }
+        return { ...state, sizeQuantities: newQuantities };
+      } else {
+        return { ...state, sizeQuantities: {} };
+      }
+    });
+  }
+
+  private parseFractionalQuantity(value: unknown): number {
+    if (typeof value === 'number') return value >= 0 ? value : 0;
+    if (typeof value !== 'string') {
+      const num = Number(value);
+      return !isNaN(num) && num >= 0 ? num : 0;
+    }
+    const trimmed = value.trim();
+    if (trimmed === '') return 0;
+    if (trimmed.includes('/')) {
+      const parts = trimmed.split('/');
+      if (parts.length === 2) {
+        const numerator = parseFloat(parts[0]);
+        const denominator = parseFloat(parts[1]);
+        if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
+          const result = numerator / denominator;
+          return !isNaN(result) && result >= 0 ? result : 0;
+        }
+      }
+    }
+    const num = parseFloat(trimmed);
+    return !isNaN(num) && num >= 0 ? num : 0;
+  }
+
+  updateQuantityForSelectedSize(size: string, quantity: unknown) {
+    const newQuantity = (typeof quantity === 'string' ? quantity.trim() : String(quantity)) || '1';
+    this.consolidatedEntryState.update(state => {
+      const newQuantities = { ...state.sizeQuantities, [size]: newQuantity };
+      return { ...state, sizeQuantities: newQuantities };
+    });
+  }
+
+  // --- Order Save/Delete ---
+  saveOrder() {
+    if (!this.selectedClientId()) {
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Please select a client.' });
+      return;
+    }
+    if (this.orderItems().length === 0) {
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Please add at least one design to the order.' });
+      return;
+    }
+
+    const editableOrder = this.editableOrder();
+    Swal.fire({
+      title: editableOrder ? 'Updating Sales Order...' : 'Creating Sales Order...',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
+
+    if (editableOrder) {
+      const updatedOrder: SalesOrder = {
+        ...editableOrder,
+        clientId: this.selectedClientId()!,
+        deliveryDate: this.deliveryDate(),
+        items: this.orderItems()
+      };
+      this.salesOrderService.updateSalesOrder(updatedOrder).subscribe({
+        next: () => {
+          Swal.fire({ icon: 'success', title: 'Updated!', text: `Sales Order ${updatedOrder.id} updated successfully!`, timer: 2000, showConfirmButton: false });
+          this.loadSalesOrders();
+          this.switchToListView();
+        },
+        error: () => Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to update sales order.' })
+      });
+    } else {
+      const orderData = {
+        clientId: this.selectedClientId()!,
+        deliveryDate: this.deliveryDate(),
+        items: this.orderItems()
+      };
+      this.salesOrderService.createSalesOrder(orderData as any).subscribe({
+        next: (savedOrder) => {
+          Swal.fire({ icon: 'success', title: 'Created!', text: `Sales Order ${savedOrder.id} created successfully!`, timer: 2000, showConfirmButton: false });
+          this.loadSalesOrders();
+          this.switchToListView();
+        },
+        error: (err) => Swal.fire({ icon: 'error', title: 'Error', text: err.message })
+      });
+    }
+  }
+
+  requestDeleteOrder(order: SalesOrder) {
+    this.orderToDelete.set(order);
+  }
+
+  async confirmDelete() {
+    try {
+      if (!this.orderToDelete()) return;
+      await this.salesOrderService.deleteSalesOrder(this.orderToDelete()!.id);
+      Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Order deleted successfully.', timer: 2000, showConfirmButton: false });
+      this.orderToDelete.set(null);
+      this.loadSalesOrders();
+    } catch {
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to delete order.' });
+    }
+  }
+
+  cancelDelete() {
+    this.orderToDelete.set(null);
+  }
 }

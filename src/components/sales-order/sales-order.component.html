@@ -1,27 +1,744 @@
-<!-- 
-  Print-specific styles. 
-  Moved to the top level for reliability, ensuring they are loaded before window.print() is called.
--->
-<style>
-  @media print {
-    body * {
-      visibility: hidden;
-    }
-    .print-area, .print-area * {
-      visibility: visible;
-    }
-    .print-area {
-      position: absolute;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-    }
-    .no-print {
-      display: none !important;
-    }
+<!-- ============================================================ -->
+<!-- MANUAL DESIGN SELECTION MODAL                               -->
+<!-- ============================================================ -->
+@if (manualDesignSelectionState().isActive) {
+  @let mState = manualDesignSelectionState();
+  <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 animate-fade-in">
+    <div class="bg-white rounded-lg shadow-xl m-4 w-full max-w-2xl flex flex-col" style="max-height: 90vh;">
+
+      <!-- Modal Header -->
+      <div class="p-6 border-b flex items-center justify-between">
+        <div>
+          <h3 class="text-xl font-semibold text-gray-800">Manual Design Selection</h3>
+          <p class="text-sm text-gray-500 mt-1">Check design numbers, choose colors, then proceed to sizes.</p>
+        </div>
+        <button (click)="cancelManualEntry()" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-5 overflow-y-auto flex-1">
+
+        <!-- Search -->
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <input type="text"
+                 placeholder="Search design number..."
+                 class="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                 [ngModel]="mState.styleSearchTerm"
+                 (ngModelChange)="setManualStyleSearch($event)">
+        </div>
+
+        <!-- Design Number List with Checkboxes -->
+        @if (uniqueStyleNosForManual().length > 0) {
+          <div class="border border-gray-200 rounded-lg overflow-hidden">
+            <!-- Header row -->
+            <div class="bg-gray-50 px-4 py-2 border-b border-gray-200">
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Design Numbers</span>
+              <span class="ml-2 text-xs text-gray-400">({{ mState.selectedStyleNos.length }} selected)</span>
+            </div>
+
+            <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
+              @for (styleNo of uniqueStyleNosForManual(); track styleNo) {
+                @let isChecked = isStyleNoChecked(styleNo);
+                @let isExpanded = mState.expandedStyleNo === styleNo;
+
+                <div>
+                  <!-- Style row -->
+                  <div class="flex items-center px-4 py-3 hover:bg-gray-50 transition-colors"
+                       [class.bg-indigo-50]="isChecked">
+                    <!-- Checkbox -->
+                    <input type="checkbox"
+                           [id]="'style-' + styleNo"
+                           class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                           [checked]="isChecked"
+                           (change)="toggleManualStyleNo(styleNo)">
+                    <!-- Label -->
+                    <label [for]="'style-' + styleNo"
+                           class="ml-3 flex-1 text-sm font-semibold cursor-pointer select-none"
+                           [class.text-indigo-700]="isChecked"
+                           [class.text-gray-800]="!isChecked">
+                      {{ styleNo }}
+                      @if (isChecked) {
+                        <span class="ml-2 text-xs font-normal text-indigo-500">{{ getSelectedColorCountForStyle(styleNo) }} color(s) selected</span>
+                      }
+                    </label>
+                    <!-- Expand/collapse colors button -->
+                    <button type="button"
+                            (click)="toggleExpandedStyle(styleNo)"
+                            class="ml-2 text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-indigo-100 transition-colors">
+                      Colors
+                      <svg class="w-3.5 h-3.5 transition-transform" [class.rotate-180]="isExpanded" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <!-- Expandable Colors Panel -->
+                  @if (isExpanded) {
+                    <div class="bg-indigo-50 border-t border-indigo-100 px-5 py-3 animate-fade-in">
+
+                      <!-- Select All Colors -->
+                      <div class="flex items-center mb-3 pb-2 border-b border-indigo-200">
+                        <input type="checkbox"
+                               id="select-all-colors"
+                               class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                               [checked]="isAllColorsSelectedForCurrentStyle()"
+                               [indeterminate]="isSomeColorsSelectedForCurrentStyle()"
+                               (change)="toggleAllColorsForCurrentStyle($any($event.target).checked)">
+                        <label for="select-all-colors" class="ml-2 text-sm font-semibold text-indigo-800 cursor-pointer select-none">
+                          Select All Colors
+                        </label>
+                        <span class="ml-auto text-xs text-indigo-600">
+                          {{ selectedColorIdsForCurrentStyle().size }} / {{ colorsForManualStyle().length }}
+                        </span>
+                      </div>
+
+                      <!-- Color Chips -->
+                      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        @for (design of colorsForManualStyle(); track design.id) {
+                          @let isColorSelected = selectedColorIdsForCurrentStyle().has(design.id!);
+                          <button type="button"
+                                  (click)="toggleManualDesignColor(design)"
+                                  class="flex items-center gap-2 px-3 py-2 rounded-lg border-2 text-sm font-medium transition-all text-left"
+                                  [class.border-indigo-500]="isColorSelected"
+                                  [class.bg-white]="isColorSelected"
+                                  [class.text-indigo-700]="isColorSelected"
+                                  [class.shadow-sm]="isColorSelected"
+                                  [class.border-gray-200]="!isColorSelected"
+                                  [class.bg-white]="!isColorSelected"
+                                  [class.text-gray-600]="!isColorSelected">
+                            <span class="flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all"
+                                  [class.border-indigo-500]="isColorSelected"
+                                  [class.bg-indigo-500]="isColorSelected"
+                                  [class.border-gray-300]="!isColorSelected">
+                              @if (isColorSelected) {
+                                <svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                              }
+                            </span>
+                            <span class="truncate">{{ design.color || 'No Color' }}</span>
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        } @else if (mState.styleSearchTerm) {
+          <p class="text-sm text-gray-500 text-center py-4 border border-dashed border-gray-200 rounded-lg">
+            No design numbers found for "{{ mState.styleSearchTerm }}"
+          </p>
+        }
+
+        <!-- Confirmed Designs Basket -->
+        @if (mState.confirmedDesigns.length > 0) {
+          <div class="animate-fade-in">
+            <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
+              Selected ({{ mState.confirmedDesigns.length }} design/color combination{{ mState.confirmedDesigns.length > 1 ? 's' : '' }})
+            </h4>
+            <div class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+              @for (design of mState.confirmedDesigns; track design.id) {
+                <div class="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                  <div class="text-sm">
+                    <span class="font-semibold text-gray-800">{{ design.styleNo }}</span>
+                    @if (design.color) {
+                      <span class="text-gray-500"> — {{ design.color }}</span>
+                    }
+                    @if (design.group) {
+                      <span class="ml-2 text-xs text-gray-400">({{ design.group }})</span>
+                    }
+                  </div>
+                  <button type="button" (click)="removeManualConfirmedDesign(design)"
+                          class="ml-2 text-red-400 hover:text-red-600 flex-shrink-0" title="Remove">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                  </button>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 bg-gray-50 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-b-lg">
+        <p class="text-xs text-gray-500 self-center">
+          @if (mState.confirmedDesigns.length === 0) {
+            Check a design number and select its colors to proceed.
+          } @else {
+            {{ mState.confirmedDesigns.length }} combination(s) ready. Proceed when done.
+          }
+        </p>
+        <div class="flex gap-2 justify-end">
+          <button (click)="cancelManualEntry()" type="button"
+                  class="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Cancel
+          </button>
+          <button (click)="proceedFromManualToSizeEntry()"
+                  [disabled]="!canProceedFromManual()"
+                  type="button"
+                  class="inline-flex items-center justify-center py-2 px-5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-300 disabled:cursor-not-allowed">
+            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+            </svg>
+            Proceed to Sizes
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+}
+
+
+<!-- ============================================================ -->
+<!-- CONSOLIDATED ENTRY MODAL (Size & Quantity)                  -->
+<!-- ============================================================ -->
+@if (consolidatedEntryState().isActive) {
+  @let state = consolidatedEntryState();
+  <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 animate-fade-in">
+    <div class="bg-white rounded-lg shadow-xl m-4 w-full max-w-3xl flex flex-col" style="max-height: 90vh;">
+      <div class="p-6 border-b">
+        <h3 class="text-xl font-semibold text-gray-800">Select Sizes &amp; Quantities</h3>
+        <p class="text-sm text-gray-500">
+          Enter a whole number (e.g. <strong>2</strong> → every design gets qty 2) or a fraction
+          (e.g. <strong>1/4</strong> → qty 1 applied to 1 out of every 4 designs,
+          <strong>3/4</strong> → qty 1 applied to 3 out of every 4 designs).
+        </p>
+      </div>
+
+      <div class="p-6 space-y-6 overflow-y-auto">
+        <!-- Selected Designs List -->
+        <div>
+          <h4 class="text-md font-semibold text-gray-700 mb-2">Applying to {{ state.designs.length }} Design(s):</h4>
+          <div class="max-h-32 overflow-y-auto bg-gray-50 p-3 rounded-md border text-sm text-gray-800">
+            <ul class="list-disc list-inside space-y-1">
+              @for(design of state.designs; track design.id) {
+                <li>{{ design.styleNo }} @if(design.color) { — {{ design.color }} } ({{ design.group }})</li>
+              }
+            </ul>
+          </div>
+        </div>
+
+        <!-- Inputs -->
+        <div class="space-y-4 pt-4 border-t">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+            @if (state.containsShirt) {
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Sleeve Type (for shirts)</label>
+                @if (state.determinedSleeveType) {
+                  <p class="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm sm:text-sm text-gray-700">
+                    {{ state.determinedSleeveType }} Sleeve <span class="text-gray-500">(auto-detected)</span>
+                  </p>
+                } @else {
+                  <select
+                      class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                      [ngModel]="state.selectedSleeveType"
+                      (ngModelChange)="updateConsolidatedState({ selectedSleeveType: $event })">
+                    <option [ngValue]="null" disabled>-- Select Sleeve Type --</option>
+                    <option value="Full">Full Sleeve</option>
+                    <option value="Half">Half Sleeve</option>
+                  </select>
+                }
+              </div>
+            }
+          </div>
+
+          <div class="pt-4">
+            <label class="block text-sm font-medium text-gray-700">Select Sizes &amp; Quantities</label>
+            <!-- Select All Checkbox -->
+            <div class="mt-2 flex items-center p-2.5 border-b border-gray-200 mb-3">
+              <div class="flex items-center h-5">
+                <input id="select-all-sizes" type="checkbox"
+                       class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                       [checked]="isAllSizesSelectedForConsolidatedEntry()"
+                       [indeterminate]="isSomeSizesSelectedForConsolidatedEntry()"
+                       (change)="toggleAllSizesSelectionForConsolidatedEntry($any($event.target).checked)">
+              </div>
+              <div class="ml-3 text-sm">
+                <label for="select-all-sizes" class="font-medium text-gray-800">Select All Sizes</label>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              @for(size of state.allPossibleSizes; track size) {
+                <div class="flex items-center gap-4 p-2.5 border rounded-lg transition-all" [class.bg-indigo-50]="isSizeSelected(size)">
+                  <div class="flex-grow flex items-center">
+                    <input type="checkbox" [id]="'size-check-' + size"
+                           class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                           [checked]="isSizeSelected(size)"
+                           (change)="toggleSizeSelection(size, $any($event.target).checked)">
+                    <label [for]="'size-check-' + size" class="ml-2 font-medium text-gray-800">{{ size }}</label>
+                  </div>
+
+                  @if (isSizeSelected(size)) {
+                    <div class="animate-fade-in-sm">
+                      <label [for]="'qty-input-' + size" class="sr-only">Quantity for {{size}}</label>
+                      <input type="text" [id]="'qty-input-' + size"
+                             class="block w-16 text-center px-2 py-1 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                             [ngModel]="getQuantityForSelectedSize(size)"
+                             (ngModelChange)="updateQuantityForSelectedSize(size, $event)">
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 bg-gray-50 border-t flex justify-end gap-3 rounded-b-lg">
+        <button (click)="cancelConsolidatedEntry()" type="button"
+                class="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+          Cancel
+        </button>
+        <button (click)="addConsolidatedItemsToOrder()"
+                [disabled]="isConsolidatedAddDisabled()"
+                class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed">
+          Add to Order
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+
+<!-- ============================================================ -->
+<!-- DELETE CONFIRMATION MODAL                                    -->
+<!-- ============================================================ -->
+@if (orderToDelete(); as order) {
+  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fade-in">
+    <div class="bg-white rounded-lg shadow-xl p-6 m-4 max-w-sm w-full">
+      <div class="sm:flex sm:items-start">
+        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+          <svg class="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+          <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Delete Sales Order</h3>
+          <div class="mt-2">
+            <p class="text-sm text-gray-500">
+              Are you sure you want to delete order <strong>{{order.salesNo}}</strong>?
+              This action cannot be undone.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+        <button (click)="confirmDelete()" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">
+          Delete
+        </button>
+        <button (click)="cancelDelete()" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+
+<!-- ============================================================ -->
+<!-- BATCH SCAN MODAL                                             -->
+<!-- ============================================================ -->
+@if (isBatchScanning()) {
+  <div class="fixed inset-0 bg-black flex flex-col z-50 animate-fade-in">
+
+    <!-- Full-screen camera view -->
+    <div class="relative flex-1 overflow-hidden">
+      <video #video class="absolute inset-0 w-full h-full object-cover" playsinline autoplay muted></video>
+      <canvas #canvas class="hidden"></canvas>
+
+      <!-- Dark overlay with transparent centre -->
+      <div class="absolute inset-0 pointer-events-none">
+        <!-- Top bar overlay -->
+        <div class="absolute top-0 left-0 right-0 h-24 bg-black bg-opacity-50 flex items-center justify-between px-4 pt-4">
+          <span class="text-white font-semibold text-lg">Scan Barcode / QR</span>
+          <div class="flex items-center gap-3">
+            <!-- Torch toggle -->
+            @if (isTorchAvailable()) {
+              <button (click)="toggleTorch()" type="button"
+                      class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
+                      [class.bg-yellow-400]="isTorchOn()"
+                      [class.text-gray-900]="isTorchOn()"
+                      [class.bg-white/20]="!isTorchOn()"
+                      [class.text-white]="!isTorchOn()">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M7 2v11h3v9l7-12h-4l4-8z"/>
+                </svg>
+                {{ isTorchOn() ? 'Flash On' : 'Flash Off' }}
+              </button>
+            }
+            <button (click)="stopBatchScan()" class="text-white bg-white/20 rounded-full p-1.5">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Viewfinder frame - larger and taller for distance scanning -->
+        <div class="absolute inset-0 flex items-center justify-center">
+          <div class="relative" style="width: min(75vw, 340px); height: min(75vw, 340px);">
+            <!-- Animated scan line -->
+            <div class="absolute inset-x-4 h-0.5 bg-gradient-to-r from-transparent via-green-400 to-transparent opacity-0"
+                 [class.opacity-100]="scanFeedback() === 'idle' || scanFeedback() === 'success'"
+                 style="top: 50%; animation: scanLine 2s linear infinite;"></div>
+
+            <!-- Corner brackets -->
+            <div class="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 rounded-tl-xl transition-colors duration-200"
+                 [class.border-green-400]="scanFeedback() === 'success'"
+                 [class.border-yellow-400]="scanFeedback() === 'duplicate'"
+                 [class.border-white]="scanFeedback() === 'idle'"></div>
+            <div class="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 rounded-tr-xl transition-colors duration-200"
+                 [class.border-green-400]="scanFeedback() === 'success'"
+                 [class.border-yellow-400]="scanFeedback() === 'duplicate'"
+                 [class.border-white]="scanFeedback() === 'idle'"></div>
+            <div class="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 rounded-bl-xl transition-colors duration-200"
+                 [class.border-green-400]="scanFeedback() === 'success'"
+                 [class.border-yellow-400]="scanFeedback() === 'duplicate'"
+                 [class.border-white]="scanFeedback() === 'idle'"></div>
+            <div class="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 rounded-br-xl transition-colors duration-200"
+                 [class.border-green-400]="scanFeedback() === 'success'"
+                 [class.border-yellow-400]="scanFeedback() === 'duplicate'"
+                 [class.border-white]="scanFeedback() === 'idle'"></div>
+          </div>
+        </div>
+
+        <!-- Status message -->
+        <div class="absolute left-0 right-0 flex justify-center" style="top: calc(50% + min(37.5vw, 170px) + 16px)">
+          <span class="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
+                [class.bg-green-500]="scanFeedback() === 'success'"
+                [class.text-white]="scanFeedback() !== 'idle'"
+                [class.bg-yellow-500]="scanFeedback() === 'duplicate'"
+                [class.bg-black/50]="scanFeedback() === 'idle'"
+                [class.text-gray-200]="scanFeedback() === 'idle'">
+            {{ scannerMessage() }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom sheet: scanned list + actions -->
+    <div class="bg-white rounded-t-2xl shadow-2xl flex flex-col" style="max-height: 40vh; min-height: 160px;">
+      <div class="flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-100">
+        <h4 class="font-semibold text-gray-800">
+          Scanned
+          <span class="ml-1 bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{{ scannedBarcodes().length }}</span>
+        </h4>
+        <div class="flex gap-2">
+          <button (click)="stopBatchScan()" type="button"
+                  class="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">
+            Cancel
+          </button>
+          <button (click)="processScannedBarcodes()"
+                  [disabled]="scannedBarcodes().length === 0"
+                  type="button"
+                  class="px-4 py-1.5 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
+            Process ({{ scannedBarcodes().length }})
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-y-auto flex-1 px-4 py-2">
+        @if (scannedBarcodes().length > 0) {
+          <ul class="space-y-1">
+            @for (code of scannedBarcodes(); track code; let i = $index) {
+              <li class="flex justify-between items-center rounded-lg px-3 py-2 text-sm transition-all duration-300"
+                  [class.bg-green-100]="code === lastAddedBarcode()"
+                  [class.scale-105]="code === lastAddedBarcode()"
+                  [class.bg-gray-50]="code !== lastAddedBarcode()">
+                <span class="font-mono text-gray-700 truncate mr-2">{{ code }}</span>
+                <button (click)="removeScannedBarcode(i)" class="text-red-400 hover:text-red-600 flex-shrink-0">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                  </svg>
+                </button>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="text-center text-gray-400 text-sm py-4">Point camera at a barcode to begin scanning.</p>
+        }
+      </div>
+    </div>
+  </div>
+}
+
+
+<!-- ============================================================ -->
+<!-- MAIN CONTENT                                                 -->
+<!-- ============================================================ -->
+<div class="animate-fade-in">
+  @if(mode() === 'list') {
+
+    <!-- Sales Orders List View -->
+    <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+      <!-- Header row -->
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4 mb-5">
+        <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Sales Orders</h2>
+        <button (click)="showAddForm()" class="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+          + Add Sales Order
+        </button>
+      </div>
+
+      <!-- Date Filter Bar -->
+      <div class="flex flex-col sm:flex-row items-start sm:items-end gap-3 mb-5 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+          <span class="text-sm font-medium text-gray-700 whitespace-nowrap">Filter by Date:</span>
+        </div>
+        <div class="flex flex-wrap items-end gap-3 flex-1">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">From</label>
+            <input type="date"
+                   class="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                   [ngModel]="filterFromDate()"
+                   (ngModelChange)="filterFromDate.set($event)">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">To</label>
+            <input type="date"
+                   class="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                   [ngModel]="filterToDate()"
+                   (ngModelChange)="filterToDate.set($event)">
+          </div>
+          <div class="flex gap-2">
+            <button (click)="resetToCurrentMonth()" type="button"
+                    class="px-3 py-1.5 text-sm font-medium rounded-md border transition-colors"
+                    [class.border-indigo-500]="isCurrentMonthFilter()"
+                    [class.bg-indigo-50]="isCurrentMonthFilter()"
+                    [class.text-indigo-700]="isCurrentMonthFilter()"
+                    [class.border-gray-300]="!isCurrentMonthFilter()"
+                    [class.bg-white]="!isCurrentMonthFilter()"
+                    [class.text-gray-600]="!isCurrentMonthFilter()"
+                    title="Reset to current month">
+              This Month
+            </button>
+            <button (click)="clearDateFilter()" type="button"
+                    class="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+                    title="Show all orders">
+              All
+            </button>
+          </div>
+        </div>
+        <!-- Result count -->
+        <span class="text-xs text-gray-500 whitespace-nowrap self-end pb-1">
+          {{ filteredSalesOrders().length }} of {{ salesOrders().length }} order(s)
+        </span>
+      </div>
+
+      <div class="overflow-x-auto">
+        @if (filteredSalesOrders().length > 0) {
+          <table class="min-w-full">
+              <thead class="bg-gray-50">
+                  <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Delivery Date</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Price</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th class="relative px-6 py-3"><span class="sr-only">Actions</span></th>
+                  </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                  @for(order of filteredSalesOrders(); track order.salesNo) {
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ order.salesNo }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{{ getClientName(order.clientId) }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.deliveryDate }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ getOrderTotalQuantity(order) }} pcs</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">&#8377; {{ getOrderTotalPrice(order) | number:'1.2-2' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                  [class]="order.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'">
+                                {{ order.status }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div class="flex justify-end items-center space-x-2">
+                            <button (click)="showPrintView(order)" class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                              Print Invoice
+                            </button>
+                            <button (click)="showEditForm(order)" class="inline-flex items-center px-2.5 py-1.5 border border-transparent shadow-sm text-xs font-medium rounded text-indigo-600 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                              Edit
+                            </button>
+                            <button (click)="requestDeleteOrder(order)" class="inline-flex items-center px-2.5 py-1.5 border border-transparent shadow-sm text-xs font-medium rounded text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                    </tr>
+                  }
+              </tbody>
+          </table>
+        } @else {
+          <div class="text-center py-10 border-2 border-dashed border-gray-200 rounded-lg">
+            <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">
+              @if (salesOrders().length > 0) { No orders match the selected date range. }
+              @else { No sales orders found. }
+            </h3>
+            <p class="mt-1 text-sm text-gray-500">
+              @if (salesOrders().length > 0) {
+                <button (click)="clearDateFilter()" class="text-indigo-600 underline hover:text-indigo-800">Clear filter</button> to see all orders.
+              } @else {
+                Get started by creating a new sales order.
+              }
+            </p>
+          </div>
+        }
+      </div>
+    </div>
+
+  } @else {
+
+    <!-- Sales Order Form View -->
+    <div class="space-y-8">
+
+      <!-- Order Header -->
+      <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+        <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 border-b pb-4 mb-6">{{ isEditMode() ? 'Edit Sales Order' : 'New Sales Order' }}</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Client Selector -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Client</label>
+            <div class="relative mt-1">
+              <button type="button" (click)="isClientDropdownOpen.set(!isClientDropdownOpen())"
+                      class="w-full bg-white border border-gray-300 rounded-md shadow-sm px-3 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                <span class="block truncate" [class.text-gray-400]="!selectedClientId()">{{ selectedClientName() }}</span>
+                <span class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                  <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 01.707.293l3 3a1 1 0 01-1.414 1.414L10 5.414 7.707 7.707a1 1 0 01-1.414-1.414l3-3A1 1 0 0110 3zm-3.707 9.293a1 1 0 011.414 0L10 14.586l2.293-2.293a1 1 0 011.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                </span>
+              </button>
+              @if(isClientDropdownOpen()) {
+                <div class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                  <div class="sticky top-0 bg-white px-2 py-1.5 border-b">
+                    <input type="text" placeholder="Search clients..." class="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                           [ngModel]="clientSearchTerm()" (ngModelChange)="clientSearchTerm.set($event)">
+                  </div>
+                  <ul role="listbox">
+                    @for (client of filteredClientsForDropdown(); track client.id) {
+                      <li (click)="selectClient(client)" class="relative cursor-pointer select-none py-2 pl-3 pr-9 text-gray-900 hover:bg-indigo-600 hover:text-white" role="option">
+                        <span class="block whitespace-normal break-words">{{ client.clientName }} ({{ client.clientCode }})</span>
+                      </li>
+                    } @empty {
+                      <li class="relative cursor-default select-none py-2 px-4 text-gray-500">No clients found.</li>
+                    }
+                  </ul>
+                </div>
+              }
+            </div>
+          </div>
+          <!-- Delivery Date -->
+          <div>
+            <label for="deliveryDate" class="block text-sm font-medium text-gray-700">Delivery Date</label>
+            <input type="date" id="deliveryDate" [ngModel]="deliveryDate()" (ngModelChange)="deliveryDate.set($event)"
+                   class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+          </div>
+        </div>
+      </div>
+
+      <!-- Add Items to Order -->
+      <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+        <h3 class="text-lg font-semibold text-gray-700">Add Items to Order</h3>
+        <p class="text-sm text-gray-500 mb-5">Select designs manually or use the barcode scanner to add items.</p>
+
+        <!-- ★ TWO BUTTONS SIDE BY SIDE -->
+        <div class="flex flex-col sm:flex-row gap-3 justify-center">
+
+          <!-- Manual Entry Button -->
+          <button (click)="startManualEntry()" type="button"
+                  class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border-2 border-indigo-600 shadow-sm text-base font-medium rounded-md text-indigo-700 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M12 11v4m-2-2h4"/>
+            </svg>
+            Manual Entry
+          </button>
+
+          <!-- Scan Items Button -->
+          <button (click)="startBatchScan()" type="button"
+                  class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h4a1 1 0 010 2H5v1.5a.5.5 0 001 0V5h1.5a.5.5 0 000-1H6V3a1 1 0 011-1h4a1 1 0 011 1v1h1.5a.5.5 0 000-1H12V3a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-2 0V5h-1.5a.5.5 0 00-1 0V6h-1v1.5a.5.5 0 001 0V7h1a1 1 0 011 1v4a1 1 0 01-1 1h-1v1.5a.5.5 0 001 0V12h1.5a.5.5 0 000-1H15v-1a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 010-2h1.5a.5.5 0 000-1H15v-1.5a.5.5 0 00-1 0V15h-1a1 1 0 01-1-1v-4a1 1 0 011-1h1V7.5a.5.5 0 00-1 0V9h-1.5a.5.5 0 000 1H12v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-1H4.5a.5.5 0 000-1H6v-1.5a.5.5 0 00-1 0V9H3a1 1 0 01-1-1V4z" clip-rule="evenodd" />
+            </svg>
+            Scan Items
+          </button>
+
+        </div>
+      </div>
+
+      <!-- Order Items List -->
+      <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+        <h3 class="text-lg font-semibold text-gray-700 mb-4">Order Items</h3>
+        <div class="space-y-4">
+          @if(orderItemsGroupedByDesign().length === 0) {
+            <div class="text-center py-10 border-2 border-dashed border-gray-200 rounded-lg">
+              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7l8 5 8-5"/>
+              </svg>
+              <h3 class="mt-2 text-sm font-medium text-gray-900">No designs added</h3>
+              <p class="mt-1 text-sm text-gray-500">Use Manual Entry or the scanner to add items to the order.</p>
+            </div>
+          }
+          @for(itemGroup of orderItemsGroupedByDesign(); track itemGroup[0].design.id) {
+            @for(item of itemGroup; track item.design.id + (item.sleeveType || '')) {
+              <div class="border border-gray-200 rounded-lg p-4">
+                <div class="flex justify-between items-start mb-3">
+                  <div>
+                    <p class="font-semibold text-gray-800">{{ item.design.styleNo }}</p>
+                    <p class="text-sm text-gray-500">{{ item.design.color }} — {{ item.design.group }}
+                      @if(item.sleeveType) { <span class="ml-1 text-xs font-medium text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{{ item.sleeveType }} Sleeve</span> }
+                    </p>
+                  </div>
+                  <button (click)="removeOrderItem(item.design.id!, item.sleeveType)" class="text-red-400 hover:text-red-600" title="Remove">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  </button>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  @for(size of item.itemSizes; track size.size) {
+                    <div class="flex items-center gap-1 bg-gray-100 rounded-md px-2 py-1 text-sm">
+                      <span class="font-medium text-gray-700">{{ size.size }}</span>
+                      <span class="text-gray-400">×</span>
+                      <span class="text-gray-800">{{ size.quantity }}</span>
+                      <span class="text-gray-400 text-xs ml-1">₹{{ size.price }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          }
+        </div>
+      </div>
+
+      <!-- Save / Cancel -->
+      <div class="flex justify-end gap-4 pb-8">
+        <button (click)="switchToListView()" type="button"
+                class="py-2 px-6 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+          Cancel
+        </button>
+        <button (click)="saveOrder()" type="button"
+                class="py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+          {{ isEditMode() ? 'Update Order' : 'Create Order' }}
+        </button>
+      </div>
+
+    </div>
   }
-</style>
+</div>
 
 <!-- Print Preview Modal -->
 @if (orderToPrint(); as order) {
@@ -178,842 +895,3 @@
     </div>
   }
 }
-
-<!-- Batch Scanner Modal -->
-@if (isBatchScanning()) {
-  <div class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 animate-fade-in">
-    <div class="bg-white p-4 rounded-lg shadow-xl max-w-lg w-full mx-4 flex flex-col" style="max-height: 90vh;">
-       <h3 class="text-xl font-semibold text-center mb-4 text-gray-800">Batch Scan Items</h3>
-
-       <div class="relative aspect-video bg-black rounded-md overflow-hidden mb-4">
-         <video #video playsinline class="w-full h-full object-cover"></video>
-         <canvas #canvas class="hidden"></canvas>
-         <!-- Viewfinder Overlay -->
-         <div class="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
-            <div class="relative w-48 h-48">
-                <div class="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 rounded-tl-lg transition-colors" [class]="viewfinderBorderClass()"></div>
-                <div class="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 rounded-tr-lg transition-colors" [class]="viewfinderBorderClass()"></div>
-                <div class="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 rounded-bl-lg transition-colors" [class]="viewfinderBorderClass()"></div>
-                <div class="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 rounded-br-lg transition-colors" [class]="viewfinderBorderClass()"></div>
-            </div>
-            <p class="mt-4 text-white text-sm font-medium bg-black/40 px-3 py-1 rounded-md transition-colors"
-               [class.bg-yellow-600/60]="scanFeedback() === 'duplicate'">
-              {{ scannerMessage() }}
-            </p>
-         </div>
-       </div>
-       <div class="flex-grow overflow-y-auto border rounded-md p-2 bg-gray-50 min-h-[100px]">
-          <h4 class="font-semibold text-gray-600 mb-2">Scanned Barcodes ({{ scannedBarcodes().length }})</h4>
-          @if(scannedBarcodes().length > 0) {
-            <ul class="space-y-1">
-              @for(code of scannedBarcodes(); track code; let i = $index) {
-                <li class="flex justify-between items-center bg-white p-2 rounded text-sm transition-all duration-300"
-                    [class.bg-green-100]="code === lastAddedBarcode()"
-                    [class.scale-105]="code === lastAddedBarcode()"
-                    [class.shadow-lg]="code === lastAddedBarcode()">
-                  <span>{{ code }}</span>
-                  <button (click)="removeScannedBarcode(i)" class="text-red-400 hover:text-red-600">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>
-                  </button>
-                </li>
-              }
-            </ul>
-          } @else {
-            <p class="text-center text-gray-500 text-sm pt-4">Point camera at a barcode to begin.</p>
-          }
-       </div>
-       <div class="mt-4 flex gap-3">
-         <button (click)="stopBatchScan()" class="w-full bg-gray-200 text-gray-800 py-2 rounded-md hover:bg-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400">
-           Cancel
-         </button>
-         <button (click)="processScannedBarcodes()" [disabled]="scannedBarcodes().length === 0" class="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400">
-           Process Scans
-         </button>
-       </div>
-    </div>
-  </div>
-}
-
-
-<!-- Delete Confirmation Modal -->
-@if (orderToDelete(); as order) {
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fade-in">
-    <div class="bg-white rounded-lg shadow-xl p-6 m-4 max-w-sm w-full">
-      <div class="sm:flex sm:items-start">
-        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-          <svg class="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        </div>
-        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-          <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Delete Sales Order</h3>
-          <div class="mt-2">
-            <p class="text-sm text-gray-500">
-              Are you sure you want to delete order <strong>{{order.salesNo}}</strong>? This action cannot be undone.
-            </p>
-          </div>
-        </div>
-      </div>
-      <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-        <button (click)="confirmDelete()" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">
-          Delete
-        </button>
-        <button (click)="cancelDelete()" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm">
-          Cancel
-        </button>
-      </div>
-    </div>
-  </div>
-}
-
-<!-- Consolidated Entry Modal -->
-@if (consolidatedEntryState().isActive) {
-  @let state = consolidatedEntryState();
-  <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 animate-fade-in">
-    <div class="bg-white rounded-lg shadow-xl m-4 w-full max-w-3xl flex flex-col" style="max-height: 90vh;">
-      <div class="p-6 border-b">
-        <h3 class="text-xl font-semibold text-gray-800">Enter Quantities for Scanned Items</h3>
-        <p class="text-sm text-gray-500">Select sizes and quantities to apply to all scanned designs.</p>
-      </div>
-      
-      <div class="p-6 space-y-6 overflow-y-auto">
-        <!-- Scanned Designs List -->
-        <div>
-          <h4 class="text-md font-semibold text-gray-700 mb-2">Applying to {{state.designs.length}} Unique Design(s) from {{state.scannedBarcodes.length}} Scanned Barcode(s):</h4>
-          <div class="max-h-32 overflow-y-auto bg-gray-50 p-3 rounded-md border text-sm text-gray-800">
-             <ul class="list-disc list-inside space-y-1">
-                @for(design of state.designs; track design.id) {
-                  <li>{{ design.styleNo }} - {{ design.color }}</li>
-                }
-             </ul>
-          </div>
-        </div>
-
-        <!-- Shirt Sleeve Type Selector -->
-        @if (state.containsShirt) {
-          <div class="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-            <p class="text-sm font-semibold text-amber-800 mb-3">Shirt(s) detected. Select sleeve type:</p>
-            <div class="flex gap-4">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="sleeveTypeScan" value="Full"
-                  [checked]="state.selectedSleeveType === 'Full'"
-                  (change)="updateConsolidatedState({ selectedSleeveType: 'Full' })"
-                  class="text-indigo-600 focus:ring-indigo-500">
-                <span class="text-sm font-medium text-gray-700">Full Sleeve (F/s)</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="sleeveTypeScan" value="Half"
-                  [checked]="state.selectedSleeveType === 'Half'"
-                  (change)="updateConsolidatedState({ selectedSleeveType: 'Half' })"
-                  class="text-indigo-600 focus:ring-indigo-500">
-                <span class="text-sm font-medium text-gray-700">Half Sleeve (H/s)</span>
-              </label>
-            </div>
-          </div>
-        }
-
-        <!-- Size Selection -->
-        <div>
-          <div class="flex justify-between items-center mb-3">
-            <h4 class="text-md font-semibold text-gray-700">Select Sizes & Quantities</h4>
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox"
-                [checked]="isAllSizesSelectedForConsolidatedEntry()"
-                [indeterminate]="isSomeSizesSelectedForConsolidatedEntry()"
-                (change)="toggleAllSizesSelectionForConsolidatedEntry($any($event.target).checked)"
-                class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-              <span class="text-sm text-gray-600">Select All</span>
-            </label>
-          </div>
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            @for (size of state.allPossibleSizes; track size) {
-              <div [class]="'border-2 rounded-lg p-3 transition-all ' + (isSizeSelected(size) ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white')">
-                <label class="flex items-center gap-2 cursor-pointer mb-2">
-                  <input type="checkbox"
-                    [checked]="isSizeSelected(size)"
-                    (change)="toggleSizeSelection(size, $any($event.target).checked)"
-                    class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                  <span class="font-semibold text-gray-800">{{ size }}</span>
-                </label>
-                @if (isSizeSelected(size)) {
-                  <input
-                    type="text"
-                    [ngModel]="getQuantityForSelectedSize(size)"
-                    (ngModelChange)="updateQuantityForSelectedSize(size, $event)"
-                    placeholder="Qty e.g. 1, 1/2"
-                    class="w-full text-sm px-2 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white">
-                }
-              </div>
-            }
-          </div>
-        </div>
-      </div>
-
-      <div class="p-4 bg-gray-50 border-t flex justify-end gap-3 rounded-b-lg">
-        <button (click)="cancelConsolidatedEntry()" type="button" class="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-          Cancel
-        </button>
-        <button (click)="addConsolidatedItemsToOrder()"
-                [disabled]="isConsolidatedAddDisabled()"
-                class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed">
-          Add to Order
-        </button>
-      </div>
-    </div>
-  </div>
-}
-
-<!-- ═══════════════════════════════════════════════════════════
-     Manual Entry Modal
-═══════════════════════════════════════════════════════════ -->
-@if (manualEntryState().isActive) {
-  @let ms = manualEntryState();
-  <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 animate-fade-in">
-    <div class="bg-white rounded-xl shadow-2xl m-4 w-full max-w-3xl flex flex-col" style="max-height: 92vh;">
-
-      <!-- Header -->
-      <div class="p-5 border-b flex items-center justify-between">
-        <div>
-          <h3 class="text-xl font-bold text-gray-800">Manual Sales Entry</h3>
-          <!-- Step Indicator -->
-          <div class="flex items-center gap-2 mt-2">
-            <span [class]="'text-sm font-medium ' + (ms.step === 'select-designs' ? 'text-indigo-600' : 'text-gray-400')">
-              1. Select Designs
-            </span>
-            <svg class="w-4 h-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
-            </svg>
-            <span [class]="'text-sm font-medium ' + (ms.step === 'select-colors' ? 'text-indigo-600' : 'text-gray-400')">
-              2. Select Colors
-            </span>
-            <svg class="w-4 h-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
-            </svg>
-            <span [class]="'text-sm font-medium ' + (ms.step === 'select-sizes' ? 'text-indigo-600' : 'text-gray-400')">
-              3. Sizes &amp; Quantities
-            </span>
-          </div>
-        </div>
-        <button (click)="cancelManualEntry()" class="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100">
-          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
-      </div>
-
-      <!-- Body (scrollable) -->
-      <div class="flex-1 overflow-y-auto p-5">
-
-        <!-- ── STEP 1: Select Designs ──────────────────────── -->
-        @if (ms.step === 'select-designs') {
-          <p class="text-sm text-gray-500 mb-3">Select one or more design numbers to add to this order.</p>
-
-          <!-- Search Box -->
-          <div class="relative mb-4">
-            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg class="h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
-              </svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Search by design number or group..."
-              [ngModel]="manualDesignSearchTerm()"
-              (ngModelChange)="manualDesignSearchTerm.set($event)"
-              class="block w-full pl-9 pr-9 py-2 border border-gray-300 rounded-lg text-sm bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-            @if (manualDesignSearchTerm()) {
-              <button
-                (click)="manualDesignSearchTerm.set('')"
-                class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </button>
-            }
-          </div>
-
-          <!-- Selected count badge -->
-          @if (ms.selectedStyleNos.length > 0) {
-            <div class="mb-3 flex items-center gap-2">
-              <span class="text-xs font-medium text-indigo-700 bg-indigo-100 px-2 py-1 rounded-full">
-                {{ ms.selectedStyleNos.length }} design(s) selected
-              </span>
-              <button (click)="manualDesignSearchTerm.set('')" class="text-xs text-gray-400 hover:text-indigo-600 underline">Show all</button>
-            </div>
-          }
-
-          <!-- Empty states -->
-          @if (ms.designGroups.length === 0) {
-            <div class="text-center py-10 text-gray-500">No designs available in the master.</div>
-          } @else if (manualFilteredDesignGroups().length === 0) {
-            <div class="text-center py-10">
-              <svg class="mx-auto h-10 w-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p class="mt-2 text-sm text-gray-500">No designs match "<strong>{{ manualDesignSearchTerm() }}</strong>"</p>
-              <button (click)="manualDesignSearchTerm.set('')" class="mt-2 text-xs text-indigo-600 hover:underline">Clear search</button>
-            </div>
-          }
-
-          <!-- Design Cards Grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            @for (dg of manualFilteredDesignGroups(); track dg.styleNo) {
-              <label [class]="'flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all hover:border-indigo-400 ' + (manualIsStyleSelected(dg.styleNo) ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white')">
-                <input type="checkbox"
-                  [checked]="manualIsStyleSelected(dg.styleNo)"
-                  (change)="manualToggleDesignStyle(dg.styleNo, $any($event.target).checked)"
-                  class="mt-0.5 h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                <div>
-                  <p class="font-semibold text-gray-800 text-sm">{{ dg.styleNo }}</p>
-                  <p class="text-xs text-gray-500">{{ dg.group || 'No Group' }}</p>
-                  <p class="text-xs text-indigo-500 mt-0.5">{{ dg.designs.length }} color(s)</p>
-                </div>
-              </label>
-            }
-          </div>
-        }
-
-        <!-- ── STEP 2: Select Colors ───────────────────────── -->
-        <!-- @if (ms.step === 'select-colors') {
-          <p class="text-sm text-gray-500 mb-4">For each selected design, choose the colors to order.</p>
-          <div class="space-y-5">
-            @for (sel of ms.designSelections; track sel.styleNo) {
-              <div class="border rounded-lg overflow-hidden">
-                <div class="bg-gray-50 px-4 py-3 flex items-center justify-between border-b">
-                  <div>
-                    <span class="font-semibold text-gray-800">{{ sel.styleNo }}</span>
-                    <span class="text-xs text-gray-500 ml-2">{{ sel.allDesigns[0]?.group }}</span>
-                  </div>
-                  <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full font-medium">
-                    {{ sel.selectedColorDesigns.length }} selected
-                  </span>
-                </div>
-                <div class="p-3 flex flex-wrap gap-2">
-                  @for (design of sel.allDesigns; track design.id) {
-                    <label [class]="'flex items-center gap-2 px-3 py-2 rounded-full border-2 cursor-pointer text-sm font-medium transition-all ' + (manualIsColorSelected(sel.styleNo, design.id) ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300')">
-                      <input type="checkbox"
-                        [checked]="manualIsColorSelected(sel.styleNo, design.id)"
-                        (change)="manualToggleColor(sel.styleNo, design, $any($event.target).checked)"
-                        class="sr-only">
-                      {{ design.color || 'No Color' }}
-                    </label>
-                  }
-                  @if (sel.allDesigns.length === 0) {
-                    <span class="text-xs text-gray-400 italic">No color variants available.</span>
-                  }
-                </div>
-              </div>
-            }
-          </div>
-        } -->
-        @if (ms.step === 'select-colors') {
-            <p class="text-sm text-gray-500 mb-4">
-                For each selected design, choose the colors to order.
-            </p>
-
-            <div class="space-y-6">
-
-                @for (sel of ms.designSelections; track sel.styleNo) {
-
-                <div class="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-
-                    <!-- Header -->
-                    <div class="bg-gray-50 px-4 py-3 flex items-center justify-between border-b">
-
-                    <div>
-                        <span class="font-semibold text-gray-800">
-                        {{ sel.styleNo }}
-                        </span>
-                        <span class="text-xs text-gray-500 ml-2">
-                        {{ sel.allDesigns[0]?.group }}
-                        </span>
-                    </div>
-
-                    <!-- Select All -->
-                    <label class="flex items-center gap-2 cursor-pointer select-none">
-                        <input type="checkbox"
-                        [checked]="isAllColorsSelected(sel)"
-                        [indeterminate]="isSomeColorsSelected(sel)"
-                        (change)="manualToggleAllColors(sel.styleNo, $event.target.checked)"
-                        class="w-4 h-4 accent-indigo-600" />
-
-                        <span class="text-sm font-medium text-gray-700">
-                        Select All
-                        </span>
-                    </label>
-
-                    </div>
-
-                    <!-- Colors List -->
-                    <div class="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-
-                    @for (design of sel.allDesigns; track design.id) {
-
-                        <label
-                        class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all"
-                        [ngClass]="manualIsColorSelected(sel.styleNo, design.id)
-                            ? 'border-indigo-500 bg-indigo-50'
-                            : 'border-gray-200 bg-white hover:border-indigo-300'">
-
-                        <input type="checkbox"
-                            [checked]="manualIsColorSelected(sel.styleNo, design.id)"
-                            (change)="manualToggleColor(sel.styleNo, design, $event.target.checked)"
-                            class="w-4 h-4 accent-indigo-600" />
-
-                        <span class="text-sm font-medium text-gray-700">
-                            {{ design.color || 'No Color' }}
-                        </span>
-
-                        </label>
-
-                    }
-
-                    </div>
-
-                    <!-- Footer Count -->
-                    <div class="px-4 pb-3 text-xs text-gray-500">
-                    {{ sel.selectedColorDesigns.length }} of {{ sel.allDesigns.length }} selected
-                    </div>
-
-                </div>
-
-                }
-
-            </div>
-            }
-
-        <!-- ── STEP 3: Sizes & Quantities ──────────────────── -->
-        <!-- @if (ms.step === 'select-sizes') {
-          @let totalColors = getManualTotalSelectedColors();
-
-          @if (ms.containsShirt) {
-            <div class="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-              <p class="text-sm font-medium text-amber-800 mb-2">⚠️ Shirt designs selected — choose sleeve type:</p>
-              <div class="flex gap-4">
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="manualSleeveType" value="Full"
-                    [checked]="ms.selectedSleeveType === 'Full'"
-                    (change)="updateManualEntryState({ selectedSleeveType: 'Full' })"
-                    class="text-indigo-600 focus:ring-indigo-500">
-                  <span class="text-sm font-medium text-gray-700">Full Sleeve (F/s)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="manualSleeveType" value="Half"
-                    [checked]="ms.selectedSleeveType === 'Half'"
-                    (change)="updateManualEntryState({ selectedSleeveType: 'Half' })"
-                    class="text-indigo-600 focus:ring-indigo-500">
-                  <span class="text-sm font-medium text-gray-700">Half Sleeve (H/s)</span>
-                </label>
-              </div>
-            </div>
-          }
-
-          <div class="mb-4 p-4 bg-indigo-50 border-2 border-indigo-300 rounded-xl flex items-center justify-between">
-            <div>
-              <p class="text-xs text-indigo-500 font-medium uppercase tracking-wide">Selected Colors Count (Base)</p>
-              <p class="text-3xl font-extrabold text-indigo-700 leading-none mt-0.5">{{ totalColors }}</p>
-              <p class="text-xs text-indigo-400 mt-1">Qty = Colors Count × Fraction</p>
-            </div>
-            <div class="text-right text-xs text-indigo-500 space-y-1">
-              <p>{{ totalColors }} × 1 = <strong>{{ totalColors }}</strong></p>
-              <p>{{ totalColors }} × 1/2 = <strong>{{ totalColors | number }} ÷ 2 = {{ (totalColors / 2) | number:'1.0-0' }}</strong></p>
-              <p>{{ totalColors }} × 3/4 = <strong>{{ (totalColors * 0.75) | number:'1.0-0' }}</strong></p>
-            </div>
-          </div>
-
-          <div class="flex justify-between items-center mb-3">
-            <span class="text-sm font-semibold text-gray-700">Select Sizes &amp; Fraction</span>
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox"
-                [checked]="manualIsAllSizesSelected()"
-                [indeterminate]="manualIsSomeSizesSelected()"
-                (change)="manualToggleAllSizes($any($event.target).checked)"
-                class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-              <span class="text-sm text-gray-600">Select All</span>
-            </label>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            @for (size of ms.allPossibleSizes; track size) {
-              <div [class]="'border-2 rounded-xl p-3 transition-all ' +
-                (manualIsSizeSelected(size) ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white')">
-
-                <label class="flex items-center gap-2 cursor-pointer mb-3">
-                  <input type="checkbox"
-                    [checked]="manualIsSizeSelected(size)"
-                    (change)="manualToggleSize(size, $any($event.target).checked)"
-                    class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                  <span class="font-bold text-gray-800">Size {{ size }}</span>
-                </label>
-
-                @if (manualIsSizeSelected(size)) {
-                
-                  <div class="flex gap-1.5 mb-3">
-                    @for (frac of ['1', '1/2', '3/4', '2']; track frac) {
-                      <button type="button"
-                        (click)="manualSetSizeFraction(size, frac)"
-                        [class]="'flex-1 py-2 text-sm font-bold rounded-lg border-2 transition-all ' +
-                          (manualGetSizeFraction(size) === frac
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                            : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600')">
-                        {{ frac }}
-                      </button>
-                    }
-                  </div>
-
-                  <div class="flex items-center justify-between bg-white border border-indigo-200 rounded-lg px-3 py-2">
-                    <span class="text-xs text-gray-400">
-                      {{ totalColors }} × {{ manualGetSizeFraction(size) }}
-                    </span>
-                    <span class="text-base font-extrabold text-indigo-700">
-                      = {{ manualComputedQtyForSize(size) }} pcs
-                    </span>
-                  </div>
-                }
-              </div>
-            }
-          </div>
-
-          @if (ms.allPossibleSizes.length === 0) {
-            <div class="text-center py-8 text-gray-400 text-sm">No size variations found for the selected designs.</div>
-          }
-        } -->
-          <!-- STEP 3 : Sizes & Quantities -->
-            <div *ngIf="manualEntryState().step === 'select-sizes'" class="mt-6">
-
-            <!-- ===== Top Summary Card ===== -->
-            <div class="bg-gradient-to-r from-indigo-50 to-purple-50 
-                        border border-indigo-200 rounded-xl p-5 mb-6 shadow-sm">
-
-                <div class="flex justify-between items-center">
-
-                <div>
-                    <div class="text-sm text-gray-500 uppercase tracking-wide">
-                    Selected Colors
-                    </div>
-                    <div class="text-4xl font-bold text-indigo-600">
-                    {{ getManualTotalSelectedColors() }}
-                    </div>
-                </div>
-
-                <div class="text-right text-sm text-gray-600 space-y-1">
-                    <div>1/2 → Applies to half colors</div>
-                    <div>3/4 → Applies to remaining 1/4</div>
-                    <div>1 or more → Applies to all colors</div>
-                </div>
-
-                </div>
-            </div>
-
-            <!-- ===== Size Header + Select All ===== -->
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-700">
-                Select Sizes & Fraction
-                </h3>
-
-                <label class="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox"
-                        [checked]="manualIsAllSizesSelected()"
-                        [indeterminate]="manualIsSomeSizesSelected()"
-                        (change)="manualToggleAllSizes($event.target.checked)"
-                        class="w-4 h-4 accent-indigo-600" />
-                <span class="text-sm font-medium text-gray-700">Select All</span>
-                </label>
-            </div>
-
-            <!-- ===== Size Cards ===== -->
-            <div class="grid md:grid-cols-2 gap-5">
-
-                <div *ngFor="let size of manualEntryState().allPossibleSizes"
-                    class="border rounded-xl p-5 shadow-sm transition-all duration-200"
-                    [ngClass]="manualIsSizeSelected(size) 
-                        ? 'border-indigo-500 bg-indigo-50' 
-                        : 'border-gray-200 bg-white hover:border-indigo-300'">
-
-                <!-- Card Header -->
-                <div class="flex justify-between items-center mb-4">
-
-                    <label class="flex items-center gap-3 cursor-pointer select-none">
-                    <input type="checkbox"
-                            [checked]="manualIsSizeSelected(size)"
-                            (change)="manualToggleSize(size, $event.target.checked)"
-                            class="w-4 h-4 accent-indigo-600" />
-
-                    <span class="font-semibold text-gray-800 text-lg">
-                        Size {{ size }}
-                    </span>
-                    </label>
-
-                    <!-- Applied Badge -->
-                    <div *ngIf="manualIsSizeSelected(size)"
-                        class="text-xs px-3 py-1 rounded-full 
-                                bg-indigo-100 text-indigo-700 font-medium">
-                    {{ getManualSizeDisplayText(size) }}
-                    </div>
-
-                </div>
-
-                <!-- Fraction Buttons -->
-                <div *ngIf="manualIsSizeSelected(size)"
-                    class="grid grid-cols-4 gap-3">
-
-                    <button *ngFor="let f of ['1','1/2','3/4','2']"
-                            type="button"
-                            (click)="manualSetSizeFraction(size, f)"
-                            class="py-2 rounded-lg border text-sm font-medium transition-all"
-                            [ngClass]="manualGetSizeFraction(size) === f
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow'
-                            : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-indigo-100'">
-                    {{ f }}
-                    </button>
-
-                </div>
-
-                </div>
-
-            </div>
-
-            </div>
-
-      </div>
-
-      <!-- Footer Actions -->
-      <div class="p-5 border-t bg-gray-50 flex items-center justify-between gap-3 rounded-b-xl">
-        <div class="flex gap-2">
-          @if (ms.step !== 'select-designs') {
-            <button (click)="manualGoBack()" type="button"
-              class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-              <svg class="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-              </svg>
-              Back
-            </button>
-          }
-          <button (click)="cancelManualEntry()" type="button"
-            class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-            Cancel
-          </button>
-        </div>
-
-        @if (ms.step === 'select-designs') {
-          <button (click)="manualGoToColorStep()" type="button"
-            [disabled]="ms.selectedStyleNos.length === 0"
-            class="inline-flex items-center px-5 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-300 disabled:cursor-not-allowed">
-            Next: Select Colors
-            <svg class="w-4 h-4 ml-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-            </svg>
-          </button>
-        }
-
-        @if (ms.step === 'select-colors') {
-          <button (click)="manualGoToSizeStep()" type="button"
-            [disabled]="getManualTotalSelectedColors() === 0"
-            class="inline-flex items-center px-5 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-300 disabled:cursor-not-allowed">
-            Next: Select Sizes
-            <svg class="w-4 h-4 ml-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-            </svg>
-          </button>
-        }
-
-        <button (click)="addManualItemsToOrder()" type="button" [disabled]="manualEntryIsAddDisabled()" class="inline-flex items-center px-5 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-300 disabled:cursor-not-allowed">
-            <svg class="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-            </svg>
-            Add to Order
-        </button>
-
-      </div>
-
-    </div>
-  </div>
-}
-
-<div class="animate-fade-in">
-  @if(mode() === 'list') {
-    <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
-      <div class="flex justify-between items-center border-b pb-4 mb-6">
-         <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Sales Orders</h2>
-         <button (click)="showAddForm()" class="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-           + Add Sales Order
-         </button>
-      </div>
-      <div class="overflow-x-auto">
-        @if (salesOrders().length > 0) {
-          <table class="min-w-full">
-              <thead class="bg-gray-50">
-                  <tr>
-                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Delivery Date</th>
-                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Price</th>
-                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th class="relative px-6 py-3"><span class="sr-only">Actions</span></th>
-                  </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                  @for(order of salesOrders(); track order.salesNo) {
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ order.salesNo }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{{ getClientName(order.clientId) }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.deliveryDate }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ getOrderTotalQuantity(order) }} pcs</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">&#8377; {{ getOrderTotalPrice(order) | number:'1.2-2' }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" [class]="order.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'">
-                                {{ order.status }}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div class="flex justify-end items-center space-x-2">
-                            <button (click)="showPrintView(order)" class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                              Print Invoice
-                            </button>
-                            <button (click)="showEditForm(order)" class="inline-flex items-center px-2.5 py-1.5 border border-transparent shadow-sm text-xs font-medium rounded text-indigo-600 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                              Edit
-                            </button>
-                            <button (click)="requestDeleteOrder(order)" class="inline-flex items-center px-2.5 py-1.5 border border-transparent shadow-sm text-xs font-medium rounded text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                    </tr>
-                  }
-              </tbody>
-          </table>
-        } @else {
-          <div class="text-center py-10 border-2 border-dashed border-gray-200 rounded-lg">
-            <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-            <h3 class="mt-2 text-sm font-medium text-gray-900">No sales orders found</h3>
-            <p class="mt-1 text-sm text-gray-500">Get started by creating a new sales order.</p>
-          </div>
-        }
-      </div>
-    </div>
-  } @else {
-    <div class="space-y-8">
-      <!-- Order Header -->
-      <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
-        <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 border-b pb-4 mb-6">{{ isEditMode() ? 'Edit' : 'Create' }} Sales Order</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label for="clientName" class="block text-sm font-medium text-gray-700">Client Name</label>
-            <div class="relative mt-1">
-              <button type="button" (click)="toggleClientDropdown()" class="relative w-full cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm" aria-haspopup="listbox" [attr.aria-expanded]="isClientDropdownOpen()">
-                <span class="block whitespace-normal break-words">{{ selectedClientName() }}</span>
-                <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                  <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 3a.75.75 0 01.55.24l3.25 3.5a.75.75 0 11-1.1 1.02L10 4.852 7.3 7.76a.75.75 0 01-1.1-1.02l3.25-3.5A.75.75 0 0110 3zm-3.76 9.24a.75.75 0 011.06-.04l2.7 2.478 2.7-2.478a.75.75 0 111.06 1.06l-3.25 3a.75.75 0 01-1.06 0l-3.25-3a.75.75 0 01-.04-1.06z" clip-rule="evenodd" /></svg>
-                </span>
-              </button>
-              @if (isClientDropdownOpen()) {
-                <div (window:keydown.escape)="closeDropdownOnEscape()" class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
-                  <div class="p-2"><input type="text" placeholder="Search clients..." class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" [ngModel]="clientSearchTerm()" (ngModelChange)="clientSearchTerm.set($event)"></div>
-                  <ul role="listbox">
-                    @for (client of filteredClientsForDropdown(); track client.id) {
-                      <li (click)="selectClient(client)" class="relative cursor-pointer select-none py-2 pl-3 pr-9 text-gray-900 hover:bg-indigo-600 hover:text-white" role="option"><span class="block whitespace-normal break-words">{{ client.clientName }} ({{ client.clientCode }})</span></li>
-                    } @empty {
-                      <li class="relative cursor-default select-none py-2 px-4 text-gray-500">No clients found.</li>
-                    }
-                  </ul>
-                </div>
-              }
-            </div>
-          </div>
-          <div>
-            <label for="deliveryDate" class="block text-sm font-medium text-gray-700">Delivery Date</label>
-            <input type="date" id="deliveryDate" [ngModel]="deliveryDate()" (ngModelChange)="deliveryDate.set($event)" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-          </div>
-        </div>
-      </div>
-
-      <!-- Add Items to Order -->
-      <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
-        <h3 class="text-lg font-semibold text-gray-700">Add Items to Order</h3>
-        <p class="text-sm text-gray-500 mb-4">Use the batch scanner or enter items manually.</p>
-        <div class="flex flex-col sm:flex-row justify-center gap-3">
-          <!-- Scan Items Button -->
-          <button (click)="startBatchScan()" type="button" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h4a1 1 0 010 2H5v1.5a.5.5 0 001 0V5h1.5a.5.5 0 000-1H6V3a1 1 0 011-1h4a1 1 0 011 1v1h1.5a.5.5 0 000-1H12V3a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-2 0V5h-1.5a.5.5 0 00-1 0V6h-1v1.5a.5.5 0 001 0V7h1a1 1 0 011 1v4a1 1 0 01-1 1h-1v1.5a.5.5 0 001 0V12h1.5a.5.5 0 000-1H15v-1a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 010-2h1.5a.5.5 0 000-1H15v-1.5a.5.5 0 00-1 0V15h-1a1 1 0 01-1-1v-4a1 1 0 011-1h1V7.5a.5.5 0 00-1 0V9h-1.5a.5.5 0 000 1H12v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-1H4.5a.5.5 0 000-1H6v-1.5a.5.5 0 00-1 0V9H3a1 1 0 01-1-1V4zm14 12h1.5a.5.5 0 000-1H17v-1.5a.5.5 0 00-1 0V15H4.5a.5.5 0 000 1H6v1.5a.5.5 0 001 0V16h1.5a.5.5 0 000-1H8v-1a1 1 0 011-1h4a1 1 0 011 1v1h1.5a.5.5 0 000 1H12v1.5a.5.5 0 001 0V16h4z" clip-rule="evenodd" /></svg>
-            Scan Items
-          </button>
-          <!-- Manual Entry Button -->
-          <button (click)="startManualEntry()" type="button" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border-2 border-indigo-500 shadow-sm text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
-            Manual Entry
-          </button>
-        </div>
-      </div>
-
-      <!-- Order Items List -->
-      <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
-        <h3 class="text-lg font-semibold text-gray-700 mb-4">Order Items</h3>
-        <div class="space-y-4">
-          @if(orderItemsGroupedByDesign().length === 0) {
-            <div class="text-center py-10 border-2 border-dashed border-gray-200 rounded-lg">
-              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7l8 5 8-5"/></svg>
-              <h3 class="mt-2 text-sm font-medium text-gray-900">No designs added</h3>
-              <p class="mt-1 text-sm text-gray-500">Use the scanner or manual entry to add items to the order.</p>
-            </div>
-          }
-          @for(itemGroup of orderItemsGroupedByDesign(); track itemGroup[0].design.id) {
-            @for(item of itemGroup; track item.sleeveType; let i = $index) {
-              <div class="border border-gray-200 rounded-lg p-4 animate-fade-in-sm">
-                <div class="flex justify-between items-start">
-                  <div>
-                    <p class="font-bold text-gray-800">{{ item.design.styleNo }} - {{ item.design.color }}</p>
-                    @if (item.sleeveType) {
-                       <p class="text-sm text-gray-600 font-medium">{{ item.sleeveType }} Sleeve</p>
-                    }
-                    <p class="text-sm text-gray-500">{{ item.design.sizes[0]?.fabricType }}</p>
-                  </div>
-                  @if(i === 0) {
-                    <button (click)="removeOrderItemGroup(itemGroup)" class="text-gray-400 hover:text-red-500 transition-colors">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                  }
-                </div>
-                <div class="mt-4 pt-4 border-t">
-                  @if(item.itemSizes.length > 0) {
-                    <div class="space-y-1">
-                      @for(sizeItem of item.itemSizes; track sizeItem.size) {
-                        <div class="grid grid-cols-[4rem_6rem_1fr_auto] items-center gap-x-4 p-2 rounded-md hover:bg-gray-50 transition-colors">
-                          <span class="font-semibold text-gray-800 text-right">{{ sizeItem.size }}:</span>
-                          <input type="text" [ngModel]="sizeItem.quantity" (ngModelChange)="updateItemQuantity(item, sizeItem.size, $event)" class="block w-full text-center px-2 py-1 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                          <span class="text-gray-600 text-sm">pcs @ {{ sizeItem.price | number:'1.2-2' }}</span>
-                          <button (click)="removeItemSize(item, sizeItem.size)" class="text-gray-400 hover:text-red-500 text-xs font-semibold uppercase tracking-wider pr-2">Remove</button>
-                        </div>
-                      }
-                    </div>
-                  }
-                </div>
-              </div>
-            }
-          }
-        </div>
-      </div>
-
-      <!-- Order Summary & Actions -->
-      <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
-        <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div>
-            <h3 class="text-lg font-bold text-gray-800">Order Summary</h3>
-            <p class="text-gray-600">Total Quantity: <span class="font-semibold">{{ getTotalQuantity() }}</span></p>
-            <p class="text-gray-600">Total Price: <span class="font-semibold">&#8377; {{ getTotalPrice() | number:'1.2-2' }}</span></p>
-          </div>
-          <div class="flex gap-4">
-            <button (click)="cancel()" class="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-              Cancel
-            </button>
-            <button (click)="saveOrder()" class="px-6 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-              {{ isEditMode() ? 'Update Order' : 'Submit Order' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  }
-</div>
