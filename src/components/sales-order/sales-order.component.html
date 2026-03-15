@@ -797,25 +797,25 @@
 
             <!-- Items Table -->
             <div class="mt-4 overflow-x-auto">
-              <table class="min-w-full text-sm">
-                <thead>
-                  <tr class="border-b-2 border-black">
-                    <th class="py-2 text-left font-semibold">SNo</th>
-                    <th class="py-2 text-left font-semibold">Product</th>
-                    @for(size of printableUniqueSizes(); track size) {
-                      <th class="py-2 text-center font-semibold">{{size}}</th>
-                    }
-                    <th class="py-2 text-right font-semibold">Qty (Pcs)</th>                    
-                    <th class="py-2 text-right font-semibold">Rate (&#8377;)</th>
-                    <th class="py-2 text-right font-semibold">MRP (&#8377;)</th>
-                    <th class="py-2 text-right font-semibold">Total (&#8377;)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for(item of printableOrderItems(); track item.design.id; let i = $index) {
-                    <tr class="border-b">
-                      <td class="py-2 text-left align-top">{{ i + 1 }}</td>
-                      <td class="py-2 text-left align-top">
+                <table class="min-w-full text-sm border border-black border-collapse">
+                    <thead>
+                    <tr class="border-b-2 border-black bg-gray-50">
+                        <th class="py-2 px-2 text-left font-semibold border border-black">SNo</th>
+                        <th class="py-2 px-2 text-left font-semibold border border-black">Product</th>
+                        @for(size of printableUniqueSizes(); track size) {
+                        <th class="py-2 px-2 text-center font-semibold border border-black">{{size}}</th>
+                        }
+                        <th class="py-2 px-2 text-right font-semibold border border-black">Qty (Pcs)</th>                    
+                        <th class="py-2 px-2 text-right font-semibold border border-black">Rate (&#8377;)</th>
+                        <th class="py-2 px-2 text-right font-semibold border border-black">MRP (&#8377;)</th>
+                        <th class="py-2 px-2 text-right font-semibold border border-black">Total (&#8377;)</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @for(item of printableOrderItems(); track item.design.id; let i = $index) {
+                        <tr class="border-b border-black">
+                        <td class="py-2 px-2 text-left align-top border border-black">{{ i + 1 }}</td>
+                        <td class="py-2 px-2 text-left align-top border border-black">
                           @if (item.design) {
                             <div>{{ item.design.styleNo }}</div>
                             @if (item.design.color) {
@@ -826,21 +826,21 @@
                             }
                           }
                       </td>
-                      @for(size of printableUniqueSizes(); track size) {
-                        <td class="py-2 text-center align-top">{{ printGetItemQtyForSize(item, size) }}</td>
-                      }                      
-                      <td class="py-2 text-right align-top font-semibold">{{ printGetItemTotalQty(item) }}</td>
-                      <td class="py-2 text-right align-top">{{ printGetItemPrice(item) | number:'1.2-2' }}</td>
-                      <td class="py-2 text-right align-top">{{ printGetItemMRP(item) | number:'1.2-2' }}</td>
-                      <td class="py-2 text-right align-top font-semibold">{{ printGetItemTotalPrice(item) | number:'1.2-2' }}</td>
+                        @for(size of printableUniqueSizes(); track size) {
+                            <td class="py-2 px-2 text-center align-top border border-black">{{ printGetItemQtyForSize(item, size) }}</td>
+                        }                      
+                        <td class="py-2 px-2 text-right align-top font-semibold border border-black">{{ printGetItemTotalQty(item) }}</td>
+                        <td class="py-2 px-2 text-right align-top border border-black">{{ printGetItemPrice(item) | number:'1.2-2' }}</td>
+                        <td class="py-2 px-2 text-right align-top border border-black">{{ printGetItemMRP(item) | number:'1.2-2' }}</td>
+                        <td class="py-2 px-2 text-right align-top font-semibold border border-black">{{ printGetItemTotalPrice(item) | number:'1.2-2' }}</td>
                     </tr>
                   }
                 </tbody>
                 <tfoot>
-                  <tr class="border-t-2 border-black font-bold">
-                    <td [colSpan]="2 + printableUniqueSizes().length + 3" class="py-2 text-right">Total</td>
-                    <td class="py-2 text-right">{{ printOverallTotalQty }} Pcs</td>
-                    <td class="py-2 text-right">{{ printOverallTotalPrice | number:'1.2-2' }}</td>
+                <tr class="border-t-2 border-black font-bold bg-gray-50">
+                    <td [colSpan]="2 + printableUniqueSizes().length + 3" class="py-2 px-2 text-right border border-black">Total</td>
+                    <td class="py-2 px-2 text-right border border-black">{{ printOverallTotalQty }} Pcs
+                    <td class="py-2 px-2 text-right border border-black">{{ printOverallTotalPrice | number:'1.2-2' }}</td>
                   </tr>
                 </tfoot>
               </table>

@@ -328,19 +328,44 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.filterToDate.set('');
   }
 
-  ngOnInit() {
-    this.clientService.getClients().subscribe(clients => this.clients.set(clients));
-    this.designService.getDesigns().subscribe(designs => this.designs.set(designs));
-    this.loadSalesOrders();
-  }
+    ngOnInit() {
+        Swal.fire({ title: 'Loading data...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+        let clientsLoaded = false;
+        let designsLoaded = false;
+        let ordersLoaded = false;
+
+        const tryClose = () => {
+            if (clientsLoaded && designsLoaded && ordersLoaded) Swal.close();
+        };
+
+        this.clientService.getClients().subscribe({
+            next: clients => { this.clients.set(clients); clientsLoaded = true; tryClose(); },
+            error: () => { clientsLoaded = true; tryClose(); Swal.fire('Error', 'Failed to load clients', 'error'); }
+        });
+
+        this.designService.getDesigns().subscribe({
+            next: designs => { this.designs.set(designs); designsLoaded = true; tryClose(); },
+            error: () => { designsLoaded = true; tryClose(); Swal.fire('Error', 'Failed to load designs', 'error'); }
+        });
+
+        this.salesOrderService.getSalesOrders().subscribe({
+            next: orders => { this.salesOrders.set(orders); ordersLoaded = true; tryClose(); },
+            error: () => { ordersLoaded = true; tryClose(); Swal.fire('Error', 'Failed to load orders', 'error'); }
+        });
+    }
+
+    loadSalesOrders() {
+        Swal.fire({ title: 'Refreshing orders...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        this.salesOrderService.getSalesOrders().subscribe({
+            next: orders => { this.salesOrders.set(orders); Swal.close(); },
+            error: () => { Swal.close(); Swal.fire('Error', 'Failed to load orders', 'error'); }
+        });
+    }
 
   ngOnDestroy() {
     if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
     this.stream?.getTracks().forEach(track => track.stop());
-  }
-
-  loadSalesOrders() {
-    this.salesOrderService.getSalesOrders().subscribe(orders => this.salesOrders.set(orders));
   }
 
   switchToListView() {
@@ -1198,6 +1223,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   async confirmDelete() {
     try {
       if (!this.orderToDelete()) return;
+      Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
       await this.salesOrderService.deleteSalesOrder(this.orderToDelete()!.id);
       Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Order deleted successfully.', timer: 2000, showConfirmButton: false });
       this.orderToDelete.set(null);
