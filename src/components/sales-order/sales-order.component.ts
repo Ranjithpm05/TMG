@@ -429,11 +429,15 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   }
 
   printGetItemPrice(item: OrderItem): number {
+    return item.itemSizes?.[0]?.WSP ?? 0;
+  }
+
+  printGetItemMRP(item: OrderItem): number {
     return item.itemSizes?.[0]?.price ?? 0;
   }
 
   printGetItemTotalPrice(item: OrderItem): number {
-    return (item.itemSizes || []).reduce((sum, s) => sum + (Number(s.quantity || 0) * Number(s.price || 0)), 0);
+    return (item.itemSizes || []).reduce((sum, s) => sum + (Number(s.quantity || 0) * Number(s.WSP || 0)), 0);
   }
 
   get printOverallTotalQty(): number {
@@ -516,7 +520,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   }
 
   getOrderTotalPrice(order: SalesOrder): number {
-    return order.items.reduce((total, item) => total + item.itemSizes.reduce((itemTotal, size) => itemTotal + ((Number(size.quantity) || 0) * (Number(size.price) || 0)), 0), 0);
+    return order.items.reduce((total, item) => total + item.itemSizes.reduce((itemTotal, size) => itemTotal + ((Number(size.quantity) || 0) * (Number(size.WSP) || 0)), 0), 0);
   }
 
   // --- New Item Addition Logic ---
@@ -538,9 +542,11 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
         const existingSize = existingItem.itemSizes.find((s: OrderItemSize) => s.size === sizeVar.size);
         if (existingSize) {
           existingSize.quantity = (Number(existingSize.quantity) || 0) + quantity;
-          existingSize.price = sizeVar.WSP;
-        } else {
-          existingItem.itemSizes.push({ size: sizeVar.size, quantity: quantity, price: sizeVar.WSP });
+          existingSize.price = sizeVar.price;
+          existingSize.WSP = sizeVar.WSP;
+        } 
+        else {
+          existingItem.itemSizes.push({ size: sizeVar.size, quantity: quantity, price: sizeVar.price, WSP: sizeVar.WSP });
           existingItem.itemSizes.sort((a: OrderItemSize, b: OrderItemSize) =>
             String(a.size).localeCompare(String(b.size), undefined, { numeric: true })
           );
@@ -548,7 +554,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       } else {
         const newOrderItem: OrderItem = {
           design: design,
-          itemSizes: [{ size: sizeVar.size, quantity: quantity, price: sizeVar.WSP }]
+          itemSizes: [{ size: sizeVar.size, quantity: quantity, price: sizeVar.price, WSP: sizeVar.WSP  }]
         };
         if (isShirt) newOrderItem.sleeveType = sizeVar.sleeveType;
         itemsCopy.push(newOrderItem);

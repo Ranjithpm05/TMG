@@ -7,6 +7,7 @@ export interface OrderItemSize {
   size: string;
   quantity: number;
   price: number;
+  WSP: number;
 }
 
 export interface OrderItem {
