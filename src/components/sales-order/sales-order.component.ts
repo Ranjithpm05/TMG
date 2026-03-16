@@ -9,6 +9,7 @@ import { DesignService } from '../../services/design.service';
 import { SalesOrderService } from '../../services/sales-order.service';
 import Swal from 'sweetalert2';
 import { Timestamp } from '@angular/fire/firestore';
+import jsPDF from 'jspdf';
 
 declare const jsQR: any;
 
@@ -412,7 +413,239 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   }
 
   printInvoice(): void {
-    window.print();
+    const order  = this.orderToPrint();
+    const client = this.clientForPrint();
+    if (!order || !client) return;
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    // ── CONSTANTS ──────────────────────────────────────────────────────────
+    const PW = 210, PH = 297, ML = 10, MR = 10, CW = 190;
+    let Y = 10;
+
+    const DARK  : [number,number,number] = [44, 62, 80];
+    const GREY  : [number,number,number] = [245,245,245];
+    const LGREY : [number,number,number] = [200,200,200];
+    const WHITE : [number,number,number] = [255,255,255];
+    const BLACK : [number,number,number] = [0,0,0];
+
+    const sf = (style: string, size: number, color: [number,number,number] = BLACK) => {
+      doc.setFont('helvetica', style);
+      doc.setFontSize(size);
+      doc.setTextColor(color[0], color[1], color[2]);
+    };
+    const fr = (x: number, y: number, w: number, h: number, c: [number,number,number]) => {
+      doc.setFillColor(c[0], c[1], c[2]);
+      doc.rect(x, y, w, h, 'F');
+    };
+    const dr = (x: number, y: number, w: number, h: number, c: [number,number,number] = LGREY) => {
+      doc.setDrawColor(c[0], c[1], c[2]);
+      doc.rect(x, y, w, h, 'S');
+    };
+    const hl = (y: number, x1 = ML, x2 = PW - MR, c: [number,number,number] = LGREY, t = 0.3) => {
+      doc.setDrawColor(c[0], c[1], c[2]);
+      doc.setLineWidth(t);
+      doc.line(x1, y, x2, y);
+    };
+    const txt = (s: string, x: number, y: number, opts: any = {}) => doc.text(s, x, y, opts);
+
+    // ── 1. HEADER ──────────────────────────────────────────────────────────
+    fr(ML, Y, CW, 14, DARK);
+    sf('bold',   14, WHITE);             txt('TMG CLOTHINGS',           ML + 4,   Y + 9);
+    sf('normal',  7, [180,200,220]);     txt('Garment Order Management', ML + 4,   Y + 13.5);
+    sf('bold',    9, WHITE);             txt('SALES ORDER',              PW-MR-4,  Y + 6,  { align: 'right' });
+    sf('normal',  8, [180,200,220]);     txt(`#${order.salesNo}`,        PW-MR-4,  Y + 11, { align: 'right' });
+    Y += 18;
+
+    // ── 2. PARTY INFO ──────────────────────────────────────────────────────
+    const boxH = 26, colW = CW / 3;
+
+    // Bill To
+    fr(ML, Y, colW - 1, boxH, GREY);
+    dr(ML, Y, colW - 1, boxH);
+    sf('bold', 7.5, DARK); txt('BILL TO', ML + 3, Y + 5);
+    hl(Y + 6.5, ML + 3, ML + colW - 4);
+    sf('normal', 7, BLACK);
+    txt(client.clientName,                 ML + 3, Y + 10);
+    txt(client.billingAddress,             ML + 3, Y + 14);
+    txt(`State: ${client.state}`,          ML + 3, Y + 18);
+    txt(`Phone: ${client.mobile}`,         ML + 3, Y + 22);
+
+    // Ship To
+    const sx = ML + colW + 1;
+    fr(sx, Y, colW - 1, boxH, GREY);
+    dr(sx, Y, colW - 1, boxH);
+    sf('bold', 7.5, DARK); txt('SHIP TO', sx + 3, Y + 5);
+    hl(Y + 6.5, sx + 3, sx + colW - 4);
+    sf('normal', 7, BLACK);
+    txt(client.clientName,        sx + 3, Y + 10);
+    txt(client.billingAddress,    sx + 3, Y + 14);
+    txt(`State: ${client.state}`, sx + 3, Y + 18);
+
+    // Order Details
+    const ox = ML + colW * 2 + 2, ow = CW - colW * 2 - 2;
+    fr(ox, Y, ow, boxH, GREY);
+    dr(ox, Y, ow, boxH);
+    sf('bold', 7.5, DARK); txt('ORDER DETAILS', ox + 3, Y + 5);
+    hl(Y + 6.5, ox + 3, ox + ow - 3);
+    const details: [string, string][] = [
+      ['Sales No:',   order.salesNo],
+      ['Date:',       this.printFormattedOrderDate],
+      ['Challan No:', order.salesNo],
+    ];
+    details.forEach(([label, val], i) => {
+      sf('bold',   7, [80,80,80]);   txt(label, ox + 3,      Y + 11 + i * 5);
+      sf('normal', 7, BLACK);        txt(val,   ox + ow - 3, Y + 11 + i * 5, { align: 'right' });
+    });
+    Y += boxH + 4;
+
+    // ── 3. ITEMS TABLE ─────────────────────────────────────────────────────
+    const items = this.printableOrderItems();
+    const sizes = this.printableUniqueSizes();
+
+    interface ColDef { label: string; width: number; align: 'left'|'center'|'right'; }
+
+    const fixedRight = 10 + 16 + 16 + 18; // Qty + Rate + MRP + Total = 60mm
+    const sizeColW   = sizes.length > 0 ? Math.min(10, Math.max(6, Math.floor(60 / sizes.length))) : 8;
+    const descW      = CW - 8 - (sizes.length * sizeColW) - fixedRight;
+
+    const COLS: ColDef[] = [
+      { label: '#',        width: 8,       align: 'center' },
+      { label: 'Product',  width: descW,   align: 'left'   },
+      ...sizes.map(s => ({ label: s, width: sizeColW, align: 'center' as const })),
+      { label: 'Qty',      width: 10,      align: 'center' },
+      { label: 'Rate(Rs)', width: 16,      align: 'right'  },
+      { label: 'MRP(Rs)',  width: 16,      align: 'right'  },
+      { label: 'Total(Rs)',width: 18,      align: 'right'  },
+    ];
+
+    const HEAD_H = 8, ROW_H = 7;
+
+    // Draw header
+    fr(ML, Y, CW, HEAD_H, DARK);
+    sf('bold', 6.5, WHITE);
+    let cx = ML;
+    COLS.forEach(col => {
+      const tx2 = col.align === 'right'  ? cx + col.width - 1.5
+                : col.align === 'center' ? cx + col.width / 2
+                : cx + 1.5;
+      txt(col.label, tx2, Y + 5.2, { align: col.align === 'center' ? 'center' : col.align });
+      cx += col.width;
+    });
+    Y += HEAD_H;
+
+    // Draw item rows
+    items.forEach((item, idx) => {
+      if (Y > PH - 50) { doc.addPage(); Y = 12; }
+
+      fr(ML, Y, CW, ROW_H, idx % 2 === 0 ? WHITE : GREY);
+      hl(Y + ROW_H, ML, PW - MR, LGREY, 0.2);
+
+      const descLines: string[] = [item.design?.styleNo ?? ''];
+      if (item.design?.color)  descLines.push(item.design.color);
+      if (item.sleeveType)     descLines.push(this.printGetSleeveTypeAbbreviation(item.sleeveType));
+
+      const rowVals: string[] = [
+        String(idx + 1),
+        descLines.join('\n'),
+        ...sizes.map(s => String(this.printGetItemQtyForSize(item, s))),
+        String(this.printGetItemTotalQty(item)),
+        this.printGetItemPrice(item).toFixed(2),
+        this.printGetItemMRP(item).toFixed(2),
+        this.printGetItemTotalPrice(item).toFixed(2),
+      ];
+
+      cx = ML;
+      COLS.forEach((col, ci) => {
+        const val = rowVals[ci] ?? '';
+        if (ci === 1) {
+          const lines = val.split('\n');
+          sf('bold', 6.5, BLACK);
+          txt(lines[0], cx + 1.5, Y + 3.5);
+          lines.slice(1).forEach((ln, li) => {
+            sf('normal', 5.5, [100,100,100]);
+            txt(ln, cx + 1.5, Y + 3.5 + (li + 1) * 2.5);
+          });
+        } else {
+          sf('normal', 6.5, BLACK);
+          const tx2 = col.align === 'right'  ? cx + col.width - 1.5
+                    : col.align === 'center' ? cx + col.width / 2
+                    : cx + 1.5;
+          txt(val, tx2, Y + 4.5, { align: col.align === 'center' ? 'center' : col.align });
+        }
+        // Vertical separator
+        doc.setDrawColor(LGREY[0], LGREY[1], LGREY[2]);
+        doc.setLineWidth(0.2);
+        doc.line(cx + col.width, Y, cx + col.width, Y + ROW_H);
+        cx += col.width;
+      });
+
+      Y += ROW_H;
+    });
+
+    // Total footer row
+    fr(ML, Y, CW, ROW_H + 1, [235,235,235]);
+    hl(Y, ML, PW - MR, DARK, 0.5);
+    sf('bold', 7, DARK);
+    const labelEndX = ML + COLS.slice(0, 2 + sizes.length).reduce((s, c) => s + c.width, 0);
+    txt('TOTAL', labelEndX - 2, Y + 5, { align: 'right' });
+    const qtyX = labelEndX, qtyW = COLS[2 + sizes.length].width;
+    txt(`${this.printOverallTotalQty} Pcs`, qtyX + qtyW / 2, Y + 5, { align: 'center' });
+    txt(this.printOverallTotalPrice.toFixed(2), PW - MR - 1.5, Y + 5, { align: 'right' });
+    hl(Y + ROW_H + 1, ML, PW - MR, DARK, 0.5);
+    Y += ROW_H + 5;
+
+    // ── 4. TOTALS ──────────────────────────────────────────────────────────
+    const totW = 85, totX = PW - MR - totW;
+    sf('normal', 7.5, BLACK);
+    txt('Round Off', totX + 3, Y);
+    txt('Rs.0.00',   PW - MR - 2, Y, { align: 'right' });
+    Y += 7;
+    fr(totX, Y - 4, totW, 9, DARK);
+    sf('bold', 9, WHITE);
+    txt('NET PAYABLE',                           totX + 3,   Y + 2.5);
+    txt(`Rs.${this.printOverallTotalPrice.toFixed(2)}`, PW - MR - 2, Y + 2.5, { align: 'right' });
+    Y += 12;
+
+    // ── 5. AMOUNT IN WORDS ────────────────────────────────────────────────
+    fr(ML, Y, CW, 8, [240,244,248]);
+    dr(ML, Y, CW, 8);
+    sf('bold',   7, DARK);  txt('Amount in Words (INR):',  ML + 3,  Y + 5);
+    sf('normal', 7, BLACK); txt(this.printAmountInWords,   ML + 50, Y + 5);
+    Y += 13;
+
+    // ── 6. TERMS & SIGNATURE ──────────────────────────────────────────────
+    const termsW = 120, sigW = CW - termsW - 2, sigX = ML + termsW + 2, blkH = 30;
+
+    fr(ML,  Y, termsW, blkH, GREY); dr(ML,  Y, termsW, blkH);
+    sf('bold', 7, DARK); txt('Terms & Conditions', ML + 3, Y + 5);
+    hl(Y + 6.5, ML + 3, ML + termsW - 3);
+    [
+      "• MRP's are indicative and are subject to change.",
+      '• Goods once sold will not be taken back.',
+      '• This is a system generated order pdf, hence does not require a signature.',
+      '• Interest @24% P.A. will be charged after due date.',
+    ].forEach((t, i) => {
+      sf('normal', 6.5, [60,60,60]);
+      txt(t, ML + 3, Y + 11 + i * 4.5);
+    });
+
+    fr(sigX, Y, sigW, blkH, GREY); dr(sigX, Y, sigW, blkH);
+    sf('bold', 7, DARK); txt('For TMG CLOTHINGS', sigX + sigW / 2, Y + 5, { align: 'center' });
+    hl(Y + 6.5, sigX + 3, sigX + sigW - 3);
+    hl(Y + blkH - 7, sigX + 5, sigX + sigW - 5, [120,120,120], 0.4);
+    sf('normal', 6.5, [80,80,80]);
+    txt('Authorised Signatory', sigX + sigW / 2, Y + blkH - 3, { align: 'center' });
+    Y += blkH + 4;
+
+    // ── 7. FOOTER ─────────────────────────────────────────────────────────
+    hl(Y, ML, PW - MR, DARK, 0.5);
+    sf('normal', 6.5, [120,120,120]);
+    txt('Generated by TMG Clothings Garment Order Management System', PW / 2, Y + 4, { align: 'center' });
+    txt('Page 1 of 1', PW - MR, Y + 4, { align: 'right' });
+
+    // ── SAVE ──────────────────────────────────────────────────────────────
+    doc.save(`SalesOrder-${order.salesNo}.pdf`);
   }
 
   get printFormattedOrderDate(): string {
@@ -439,7 +672,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   }
 
 
-  printGetSleeveTypeAbbreviation(sleeveType?: 'Half' | 'Full'): string {
+  printGetSleeveTypeAbbreviation(sleeveType): string {
     if (sleeveType === 'Full') return 'F/s';
     if (sleeveType === 'Half') return 'H/s';
     return '';

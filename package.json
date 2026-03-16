@@ -19,11 +19,13 @@
     "@angular/forms": "^21.0.6",
     "@angular/platform-browser": "^21.0.0",
     "firebase": "^11.10.0",
+    "jspdf": "^4.2.0",
     "rxjs": "^7.8.2",
     "sweetalert2": "^11.26.17",
     "tailwindcss": "latest"
   },
   "devDependencies": {
+    "@types/jspdf": "^1.3.3",
     "@types/node": "^22.14.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
