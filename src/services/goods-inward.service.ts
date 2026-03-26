@@ -20,6 +20,25 @@ export class GoodsInwardService {
   private firestore = inject(Firestore);
   private grnRef = collection(this.firestore, 'goodsInward');
 
+  /**
+   * Recursively removes every key whose value is `undefined`.
+   * Firestore throws "Unsupported field value: undefined" if any
+   * field — including nested ones inside array objects — is undefined.
+   */
+  private stripUndefined<T>(obj: T): T {
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.stripUndefined(item)) as unknown as T;
+    }
+    if (obj !== null && typeof obj === 'object') {
+      return Object.fromEntries(
+        Object.entries(obj as Record<string, unknown>)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => [k, this.stripUndefined(v)])
+      ) as T;
+    }
+    return obj;
+  }
+
   // 🔹 Get all GRNs
   getGoodsInwards(): Observable<GoodsInward[]> {
     const q = query(this.grnRef, orderBy('createdAt', 'desc'));
@@ -28,8 +47,9 @@ export class GoodsInwardService {
 
   // 🔹 Create GRN
   async createGoodsInward(grn: Omit<GoodsInward, 'id'>): Promise<void> {
+    const clean = this.stripUndefined(grn);
     await addDoc(this.grnRef, {
-      ...grn,
+      ...clean,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
@@ -38,9 +58,11 @@ export class GoodsInwardService {
   // 🔹 Update GRN
   async updateGoodsInward(grn: GoodsInward): Promise<void> {
     if (!grn.id) return;
-    const grnDoc = doc(this.firestore, `goodsInward/${grn.id}`);
+    const { id, ...rest } = grn;
+    const clean = this.stripUndefined(rest);
+    const grnDoc = doc(this.firestore, `goodsInward/${id}`);
     await updateDoc(grnDoc, {
-      ...grn,
+      ...clean,
       updatedAt: serverTimestamp()
     });
   }
