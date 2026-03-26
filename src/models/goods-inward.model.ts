@@ -4,9 +4,9 @@ export interface GoodsInwardItem {
   color: string;
   group: string;
   size: string;
+  sleeveType?: string;
   barcode: string;
   fabricType: string;
-  expectedQty: number;
   receivedQty: number;
   WSP: number;
   price: number;
@@ -21,7 +21,7 @@ export interface GoodsInward {
   invoiceDate: string;
   receivedDate: string;
   items: GoodsInwardItem[];
-  status: 'Draft' | 'Received' | 'Partially Received';
+  status: 'Draft' | 'Received';
   remarks?: string;
   createdAt?: any;
   updatedAt?: any;

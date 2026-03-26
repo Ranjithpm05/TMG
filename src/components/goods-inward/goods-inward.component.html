@@ -1,6 +1,111 @@
 <div class="animate-fade-in">
 
   <!-- ================================================================ -->
+  <!-- MULTI-SIZE PICKER MODAL                                           -->
+  <!-- ================================================================ -->
+  @if (sizePicker().isActive) {
+    @let sp = sizePicker();
+    @let design = sp.design!;
+    <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] animate-fade-in">
+      <div class="bg-white rounded-xl shadow-2xl m-4 w-full max-w-md flex flex-col" style="max-height: 85vh;">
+
+        <!-- Header -->
+        <div class="p-5 border-b flex items-center justify-between">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-800">Select Sizes</h3>
+            <p class="text-sm text-gray-500 mt-0.5">
+              <span class="font-medium text-indigo-700">{{ design.styleNo }}</span>
+              @if (design.color) { <span class="text-gray-400 mx-1">·</span> {{ design.color }} }
+            </p>
+          </div>
+          <button (click)="closeSizePicker()" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- Select All row -->
+        <div class="px-5 py-3 border-b bg-gray-50 flex items-center">
+          <input type="checkbox"
+                 id="select-all-sizes"
+                 class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                 [checked]="isAllSizesSelected()"
+                 [indeterminate]="isSomeSizesSelected()"
+                 (change)="toggleAllSizes($any($event.target).checked)">
+          <label for="select-all-sizes" class="ml-3 text-sm font-semibold text-gray-700 cursor-pointer select-none">
+            Select All Sizes
+          </label>
+          <span class="ml-auto text-xs text-gray-400">
+            {{ design.sizes.length }} size(s) available
+          </span>
+        </div>
+
+        <!-- Size rows -->
+        <div class="overflow-y-auto flex-1 p-4 space-y-2">
+          @for (size of design.sizes; track size.BARCODE) {
+            @let bc = $any(size.BARCODE) + '';
+            @let checked = isSizeSelected(bc);
+            <div class="flex items-center gap-3 p-3 rounded-lg border-2 transition-all"
+                 [class.border-indigo-400]="checked"
+                 [class.bg-indigo-50]="checked"
+                 [class.border-gray-200]="!checked"
+                 [class.bg-white]="!checked">
+              <!-- Checkbox -->
+              <input type="checkbox"
+                     [id]="'sz-' + bc"
+                     class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0"
+                     [checked]="checked"
+                     (change)="toggleSize(size, $any($event.target).checked)">
+
+              <!-- Size label + barcode -->
+              <label [for]="'sz-' + bc" class="flex-1 cursor-pointer select-none min-w-0">
+                <span class="font-bold text-gray-800 text-base">{{ size.size }}</span>
+                @if (size.sleeveType) {
+                  <span class="ml-1.5 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">{{ size.sleeveType }}</span>
+                }
+                <div class="text-xs text-gray-400 font-mono truncate mt-0.5">{{ size.BARCODE }}</div>
+              </label>
+
+              <!-- WSP -->
+              <span class="text-xs text-gray-500 flex-shrink-0">₹{{ size.WSP }}</span>
+
+              <!-- Qty input — only when checked -->
+              @if (checked) {
+                <div class="flex-shrink-0 animate-fade-in-sm">
+                  <label class="sr-only">Qty</label>
+                  <input type="number" min="1"
+                         class="w-16 text-center px-2 py-1.5 border border-indigo-300 rounded-md text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                         [ngModel]="sp.selectedSizes[bc]?.qty ?? '1'"
+                         (ngModelChange)="updateSizeQty(bc, $event)">
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Footer -->
+        <div class="p-4 bg-gray-50 border-t flex items-center justify-between gap-3 rounded-b-xl">
+          <p class="text-xs text-gray-500">
+            {{ $any(sp.selectedSizes | keyvalue).length }} size(s) selected
+          </p>
+          <div class="flex gap-2">
+            <button (click)="closeSizePicker()" type="button"
+                    class="py-2 px-4 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+              Back
+            </button>
+            <button (click)="confirmSizeSelection()"
+                    [disabled]="!canConfirmSizes()"
+                    type="button"
+                    class="py-2 px-5 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
+              Add to GRN
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+
+  <!-- ================================================================ -->
   <!-- DESIGN PICKER MODAL                                               -->
   <!-- ================================================================ -->
   @if (designPickerVisible()) {
@@ -8,7 +113,7 @@
       <div class="bg-white rounded-xl shadow-2xl m-4 w-full max-w-2xl flex flex-col" style="max-height: 88vh;">
 
         <div class="p-5 border-b flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-gray-800">Select Design &amp; Size</h3>
+          <h3 class="text-lg font-semibold text-gray-800">Select Design</h3>
           <button (click)="closeDesignPicker()" class="text-gray-400 hover:text-gray-600">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
@@ -20,7 +125,7 @@
               <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
             <input type="text" placeholder="Search design number..." class="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                   [ngModel]="designSearchTerm()" (ngModelChange)="designSearchTerm.set($event)">
+                   [ngModel]="designSearchTerm()" (ngModelChange)="designSearchTerm.set($event)" autofocus>
           </div>
         </div>
 
@@ -28,7 +133,6 @@
           @for (styleNo of filteredDesignStyles(); track styleNo) {
             @let isExpanded = expandedStyleNo() === styleNo;
             <div class="border border-gray-200 rounded-lg mb-2 overflow-hidden">
-              <!-- Style header -->
               <button type="button" (click)="toggleExpandStyle(styleNo)"
                       class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-indigo-50 transition-colors"
                       [class.bg-indigo-50]="isExpanded">
@@ -38,31 +142,29 @@
 
               @if (isExpanded) {
                 <div class="border-t border-gray-100 bg-gray-50 p-3 animate-fade-in">
-                  @for (design of colorsForExpandedStyle(); track design.id) {
-                    <div class="mb-3 last:mb-0">
-                      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{{ design.color || 'No Color' }}</p>
-                      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        @for (size of design.sizes; track size.BARCODE) {
-                          <button type="button" (click)="addDesignSizeToGrn(design, size); closeDesignPicker()"
-                                  class="flex flex-col items-start p-2.5 bg-white border border-gray-200 rounded-lg hover:border-indigo-400 hover:bg-indigo-50 transition-all text-left group">
-                            <span class="font-bold text-gray-800 group-hover:text-indigo-700">{{ size.size }}</span>
-                            <span class="text-xs text-gray-500 mt-0.5">₹{{ size.WSP }} WSP</span>
-                            <span class="text-xs text-gray-400 truncate w-full">{{ size.BARCODE }}</span>
-                          </button>
-                        }
-                      </div>
-                    </div>
-                  }
+                  <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Choose a colour to select sizes →</p>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    @for (design of colorsForExpandedStyle(); track design.id) {
+                      <button type="button" (click)="openSizePicker(design)"
+                              class="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:border-indigo-400 hover:bg-indigo-50 transition-all text-left group">
+                        <div>
+                          <span class="font-semibold text-gray-800 group-hover:text-indigo-700">{{ design.color || 'No Colour' }}</span>
+                          <div class="text-xs text-gray-400 mt-0.5">{{ design.sizes.length }} size(s)</div>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 group-hover:text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                      </button>
+                    }
+                  </div>
                 </div>
               }
             </div>
           }
-          @empty {
+          @if (filteredDesignStyles().length === 0) {
             <p class="text-center text-gray-400 py-8 text-sm">No designs found.</p>
           }
         </div>
 
-        <div class="p-4 border-t bg-gray-50 flex justify-end">
+        <div class="p-4 border-t bg-gray-50 flex justify-end rounded-b-xl">
           <button (click)="closeDesignPicker()" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Close</button>
         </div>
       </div>
@@ -81,8 +183,11 @@
 
         <div class="absolute inset-0 pointer-events-none">
           <!-- Top bar -->
-          <div class="absolute top-0 left-0 right-0 h-24 bg-black bg-opacity-50 flex items-center justify-between px-4 pt-4">
-            <span class="text-white font-semibold text-lg">Scan Barcode</span>
+          <div class="absolute top-0 left-0 right-0 h-24 bg-black bg-opacity-60 flex items-center justify-between px-4 pt-4">
+            <div>
+              <span class="text-white font-semibold text-lg block">Scan Barcode</span>
+              <span class="text-gray-300 text-xs">Each scan adds qty 1 — scan again to increment</span>
+            </div>
             <div class="flex items-center gap-3">
               @if (isTorchAvailable()) {
                 <button (click)="toggleTorch()" type="button"
@@ -99,30 +204,36 @@
             </div>
           </div>
 
-          <!-- Viewfinder -->
+          <!-- Viewfinder — larger box for distance scanning -->
           <div class="absolute inset-0 flex items-center justify-center">
-            <div class="relative" style="width: min(75vw, 300px); height: min(75vw, 300px);">
-              <div class="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 rounded-tl-xl transition-colors duration-200"
+            <div class="relative" style="width: min(80vw, 360px); height: min(56vw, 250px);">
+              <!-- Animated scan line -->
+              <div class="absolute inset-x-3 h-0.5 bg-gradient-to-r from-transparent via-green-400 to-transparent"
+                   [class.opacity-0]="scanFeedback() !== 'idle'"
+                   style="top: 50%; animation: scanLine 1.8s linear infinite;"></div>
+
+              <!-- Corner brackets -->
+              <div class="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 rounded-tl-xl transition-colors duration-150"
                    [class.border-green-400]="scanFeedback() === 'success'"
                    [class.border-red-400]="scanFeedback() === 'error'"
                    [class.border-white]="scanFeedback() === 'idle'"></div>
-              <div class="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 rounded-tr-xl transition-colors duration-200"
+              <div class="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 rounded-tr-xl transition-colors duration-150"
                    [class.border-green-400]="scanFeedback() === 'success'"
                    [class.border-red-400]="scanFeedback() === 'error'"
                    [class.border-white]="scanFeedback() === 'idle'"></div>
-              <div class="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 rounded-bl-xl transition-colors duration-200"
+              <div class="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 rounded-bl-xl transition-colors duration-150"
                    [class.border-green-400]="scanFeedback() === 'success'"
                    [class.border-red-400]="scanFeedback() === 'error'"
                    [class.border-white]="scanFeedback() === 'idle'"></div>
-              <div class="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 rounded-br-xl transition-colors duration-200"
+              <div class="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 rounded-br-xl transition-colors duration-150"
                    [class.border-green-400]="scanFeedback() === 'success'"
                    [class.border-red-400]="scanFeedback() === 'error'"
                    [class.border-white]="scanFeedback() === 'idle'"></div>
             </div>
           </div>
 
-          <!-- Status pill -->
-          <div class="absolute left-0 right-0 flex justify-center" style="top: calc(50% + min(37.5vw, 150px) + 16px)">
+          <!-- Status pill (below viewfinder) -->
+          <div class="absolute left-0 right-0 flex justify-center" style="top: calc(50% + min(28vw, 125px) + 20px)">
             <span class="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
                   [class.bg-green-500]="scanFeedback() === 'success'"
                   [class.bg-red-500]="scanFeedback() === 'error'"
@@ -134,9 +245,13 @@
         </div>
       </div>
 
+      <!-- Bottom sheet -->
       <div class="bg-white rounded-t-2xl p-4 flex justify-between items-center">
-        <p class="text-sm text-gray-500">Scan each barcode to add items to the GRN.</p>
-        <button (click)="stopScan()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">Done</button>
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-600 text-white text-sm font-bold">{{ scannedCount() }}</span>
+          <span class="text-sm text-gray-600">item(s) scanned</span>
+        </div>
+        <button (click)="stopScan()" class="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">Done</button>
       </div>
     </div>
   }
@@ -147,7 +262,6 @@
   <!-- ================================================================ -->
   @if (mode() === 'list') {
     <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
-      <!-- Header -->
       <div class="flex flex-col sm:flex-row justify-between items-center gap-4 border-b pb-4 mb-6">
         <div>
           <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Goods Inward (GRN)</h2>
@@ -197,7 +311,6 @@
         </div>
       </div>
 
-      <!-- Table -->
       <div class="overflow-x-auto">
         @if (paginatedGrns().length > 0) {
           <table class="min-w-full">
@@ -207,9 +320,9 @@
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Received Date</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty Received</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Value</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lines</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value (₹)</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th class="relative px-6 py-3"><span class="sr-only">Actions</span></th>
               </tr>
@@ -227,9 +340,9 @@
                     <div class="text-xs text-gray-400">{{ grn.invoiceDate }}</div>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ grn.receivedDate }}</td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ grn.items.length }} line(s)</td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium">{{ getGrnTotalReceived(grn) }} pcs</td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">₹ {{ getGrnTotalValue(grn) | number:'1.2-2' }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ grn.items.length }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">{{ getGrnTotalReceived(grn) }} pcs</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ getGrnTotalValue(grn) | number:'1.2-2' }}</td>
                   <td class="px-6 py-4 whitespace-nowrap">
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" [class]="getStatusClass(grn.status)">{{ grn.status }}</span>
                   </td>
@@ -256,7 +369,6 @@
         }
       </div>
 
-      <!-- Pagination -->
       @if (totalPages() > 1) {
         <div class="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div class="text-sm text-gray-700">
@@ -306,46 +418,26 @@
             </div>
           </div>
 
-          <!-- Info Grid -->
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div class="bg-gray-50 p-4 rounded-lg">
-              <p class="text-xs text-gray-500 uppercase tracking-wide">Supplier</p>
-              <p class="mt-1 font-semibold text-gray-800">{{ grn.supplierName }}</p>
-            </div>
-            <div class="bg-gray-50 p-4 rounded-lg">
-              <p class="text-xs text-gray-500 uppercase tracking-wide">Invoice No</p>
-              <p class="mt-1 font-semibold text-gray-800">{{ grn.invoiceNo }}</p>
-            </div>
-            <div class="bg-gray-50 p-4 rounded-lg">
-              <p class="text-xs text-gray-500 uppercase tracking-wide">Invoice Date</p>
-              <p class="mt-1 font-semibold text-gray-800">{{ grn.invoiceDate }}</p>
-            </div>
-            <div class="bg-gray-50 p-4 rounded-lg">
-              <p class="text-xs text-gray-500 uppercase tracking-wide">Received Date</p>
-              <p class="mt-1 font-semibold text-gray-800">{{ grn.receivedDate }}</p>
-            </div>
+            <div class="bg-gray-50 p-4 rounded-lg"><p class="text-xs text-gray-500 uppercase tracking-wide">Supplier</p><p class="mt-1 font-semibold text-gray-800">{{ grn.supplierName }}</p></div>
+            <div class="bg-gray-50 p-4 rounded-lg"><p class="text-xs text-gray-500 uppercase tracking-wide">Invoice No</p><p class="mt-1 font-semibold text-gray-800">{{ grn.invoiceNo }}</p></div>
+            <div class="bg-gray-50 p-4 rounded-lg"><p class="text-xs text-gray-500 uppercase tracking-wide">Invoice Date</p><p class="mt-1 font-semibold text-gray-800">{{ grn.invoiceDate }}</p></div>
+            <div class="bg-gray-50 p-4 rounded-lg"><p class="text-xs text-gray-500 uppercase tracking-wide">Received Date</p><p class="mt-1 font-semibold text-gray-800">{{ grn.receivedDate }}</p></div>
           </div>
 
-          <!-- Summary Cards -->
-          <div class="grid grid-cols-3 gap-4 mb-6">
-            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-              <p class="text-xs text-blue-600 uppercase font-semibold">Expected</p>
-              <p class="mt-1 text-2xl font-bold text-blue-800">{{ viewTotalExpected() }}</p>
-              <p class="text-xs text-blue-500">pieces</p>
-            </div>
+          <!-- Summary cards -->
+          <div class="grid grid-cols-2 gap-4 mb-6">
             <div class="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-              <p class="text-xs text-green-600 uppercase font-semibold">Received</p>
-              <p class="mt-1 text-2xl font-bold text-green-800">{{ viewTotalReceived() }}</p>
+              <p class="text-xs text-green-600 uppercase font-semibold">Total Qty Received</p>
+              <p class="mt-1 text-3xl font-bold text-green-800">{{ viewTotalReceived() }}</p>
               <p class="text-xs text-green-500">pieces</p>
             </div>
             <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-center">
-              <p class="text-xs text-indigo-600 uppercase font-semibold">Total Value</p>
-              <p class="mt-1 text-2xl font-bold text-indigo-800">₹ {{ viewTotalValue() | number:'1.0-0' }}</p>
-              <p class="text-xs text-indigo-500">WSP basis</p>
+              <p class="text-xs text-indigo-600 uppercase font-semibold">Total Value (WSP)</p>
+              <p class="mt-1 text-3xl font-bold text-indigo-800">₹ {{ viewTotalValue() | number:'1.0-0' }}</p>
             </div>
           </div>
 
-          <!-- Items Table -->
           <div class="overflow-x-auto rounded-lg border border-gray-200">
             <table class="min-w-full text-sm">
               <thead class="bg-gray-50">
@@ -353,29 +445,18 @@
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Style / Color</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Size</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Expected</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Received</th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty Received</th>
                   <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">WSP (₹)</th>
                   <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Value (₹)</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
                 @for (item of grn.items; track item.barcode) {
-                  @let diff = item.receivedQty - item.expectedQty;
                   <tr class="hover:bg-gray-50">
-                    <td class="px-4 py-3">
-                      <div class="font-medium text-gray-800">{{ item.styleNo }}</div>
-                      <div class="text-xs text-gray-500">{{ item.color }} — {{ item.group }}</div>
-                    </td>
+                    <td class="px-4 py-3"><div class="font-medium text-gray-800">{{ item.styleNo }}</div><div class="text-xs text-gray-500">{{ item.color }}@if(item.sleeveType){<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">{{ item.sleeveType }}</span>}</div></td>
                     <td class="px-4 py-3 font-semibold text-gray-700">{{ item.size }}</td>
                     <td class="px-4 py-3 text-gray-500 font-mono text-xs">{{ item.barcode }}</td>
-                    <td class="px-4 py-3 text-right text-gray-600">{{ item.expectedQty }}</td>
-                    <td class="px-4 py-3 text-right font-semibold">
-                      <span [class.text-green-700]="diff >= 0" [class.text-red-600]="diff < 0">{{ item.receivedQty }}</span>
-                      @if (diff !== 0) {
-                        <span class="ml-1 text-xs" [class.text-green-500]="diff > 0" [class.text-red-400]="diff < 0">({{ diff > 0 ? '+' : '' }}{{ diff }})</span>
-                      }
-                    </td>
+                    <td class="px-4 py-3 text-right font-bold text-green-700">{{ item.receivedQty }}</td>
                     <td class="px-4 py-3 text-right text-gray-600">{{ item.WSP | number:'1.2-2' }}</td>
                     <td class="px-4 py-3 text-right font-semibold text-gray-800">{{ (item.receivedQty * item.WSP) | number:'1.2-2' }}</td>
                   </tr>
@@ -384,8 +465,7 @@
               <tfoot class="bg-gray-50 border-t-2 border-gray-300">
                 <tr>
                   <td colspan="3" class="px-4 py-3 font-bold text-gray-700 text-right">Total</td>
-                  <td class="px-4 py-3 text-right font-bold text-gray-800">{{ viewTotalExpected() }}</td>
-                  <td class="px-4 py-3 text-right font-bold text-green-700">{{ viewTotalReceived() }}</td>
+                  <td class="px-4 py-3 text-right font-bold text-green-700">{{ viewTotalReceived() }} pcs</td>
                   <td></td>
                   <td class="px-4 py-3 text-right font-bold text-indigo-700">₹ {{ viewTotalValue() | number:'1.2-2' }}</td>
                 </tr>
@@ -412,50 +492,37 @@
     @let grn = editableGrn();
     <div class="space-y-6">
 
-      <!-- Header -->
       <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
         <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 border-b pb-4 mb-6">
           {{ isEditMode() ? 'Edit GRN' : 'New Goods Inward (GRN)' }}
         </h2>
-
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          <!-- GRN No (read-only) -->
           <div>
             <label class="block text-sm font-medium text-gray-700">GRN Number</label>
             <input type="text" [ngModel]="grn.grnNo" disabled class="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-gray-500 text-sm cursor-not-allowed">
           </div>
-
-          <!-- Supplier -->
           <div>
             <label class="block text-sm font-medium text-gray-700">Supplier Name <span class="text-red-500">*</span></label>
             <input type="text" [ngModel]="grn.supplierName" (ngModelChange)="editableGrn.update(g => ({...g, supplierName: $event}))"
                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                   placeholder="e.g., Rajan Textiles" required>
+                   placeholder="e.g., Rajan Textiles">
           </div>
-
-          <!-- Invoice No -->
           <div>
             <label class="block text-sm font-medium text-gray-700">Invoice Number <span class="text-red-500">*</span></label>
             <input type="text" [ngModel]="grn.invoiceNo" (ngModelChange)="editableGrn.update(g => ({...g, invoiceNo: $event}))"
                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                   placeholder="e.g., INV-2025-001" required>
+                   placeholder="e.g., INV-2025-001">
           </div>
-
-          <!-- Invoice Date -->
           <div>
             <label class="block text-sm font-medium text-gray-700">Invoice Date</label>
             <input type="date" [ngModel]="grn.invoiceDate" (ngModelChange)="editableGrn.update(g => ({...g, invoiceDate: $event}))"
                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
           </div>
-
-          <!-- Received Date -->
           <div>
             <label class="block text-sm font-medium text-gray-700">Received Date</label>
             <input type="date" [ngModel]="grn.receivedDate" (ngModelChange)="editableGrn.update(g => ({...g, receivedDate: $event}))"
                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
           </div>
-
-          <!-- Remarks -->
           <div>
             <label class="block text-sm font-medium text-gray-700">Remarks</label>
             <input type="text" [ngModel]="grn.remarks" (ngModelChange)="editableGrn.update(g => ({...g, remarks: $event}))"
@@ -469,19 +536,16 @@
       <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
         <div class="flex justify-between items-center mb-5">
           <h3 class="text-lg font-semibold text-gray-700">Line Items</h3>
-          <!-- Summary pills -->
           <div class="flex gap-3">
-            <span class="px-3 py-1 bg-blue-50 border border-blue-200 rounded-full text-xs font-semibold text-blue-700">Expected: {{ totalExpected() }} pcs</span>
-            <span class="px-3 py-1 bg-green-50 border border-green-200 rounded-full text-xs font-semibold text-green-700">Received: {{ totalReceived() }} pcs</span>
+            <span class="px-3 py-1 bg-green-50 border border-green-200 rounded-full text-xs font-semibold text-green-700">{{ totalReceived() }} pcs</span>
             <span class="px-3 py-1 bg-indigo-50 border border-indigo-200 rounded-full text-xs font-semibold text-indigo-700">₹ {{ totalValue() | number:'1.0-0' }}</span>
           </div>
         </div>
 
-        <!-- Add Buttons -->
         <div class="flex flex-col sm:flex-row gap-3 mb-6">
           <button type="button" (click)="openDesignPicker()"
                   class="inline-flex items-center justify-center px-5 py-2.5 border-2 border-indigo-600 text-sm font-medium rounded-md text-indigo-700 bg-white hover:bg-indigo-50 transition-colors">
-            <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
             Select from Designs
           </button>
           <button type="button" (click)="startScan()"
@@ -491,7 +555,6 @@
           </button>
         </div>
 
-        <!-- Line Items Table -->
         @if (formItems().length > 0) {
           <div class="overflow-x-auto rounded-lg border border-gray-200">
             <table class="min-w-full text-sm">
@@ -500,40 +563,28 @@
                   <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Design</th>
                   <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Size</th>
                   <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
-                  <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase w-28">Expected Qty</th>
-                  <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase w-28">Received Qty</th>
+                  <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase w-28">Qty Received</th>
                   <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">WSP (₹)</th>
                   <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Value (₹)</th>
-                  <th class="relative px-3 py-3 w-10"></th>
+                  <th class="w-10"></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
-                @for (item of formItems(); track item.barcode; let i = $index) {
+                @for (item of formItems(); track item.barcode) {
                   <tr class="hover:bg-gray-50 animate-fade-in-sm">
-                    <td class="px-3 py-3">
-                      <div class="font-medium text-gray-800">{{ item.styleNo }}</div>
-                      <div class="text-xs text-gray-500">{{ item.color }}</div>
-                    </td>
+                    <td class="px-3 py-3"><div class="font-medium text-gray-800">{{ item.styleNo }}</div><div class="text-xs text-gray-500">{{ item.color }}@if(item.sleeveType){<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">{{ item.sleeveType }}</span>}</div></td>
                     <td class="px-3 py-3 font-semibold text-gray-700">{{ item.size }}</td>
                     <td class="px-3 py-3 text-gray-500 font-mono text-xs">{{ item.barcode }}</td>
                     <td class="px-3 py-3">
                       <input type="number" min="0"
-                             [ngModel]="item.expectedQty"
-                             (ngModelChange)="updateItemQty(item.barcode, 'expectedQty', $event)"
-                             class="block w-full text-center px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                    </td>
-                    <td class="px-3 py-3">
-                      <input type="number" min="0"
                              [ngModel]="item.receivedQty"
-                             (ngModelChange)="updateItemQty(item.barcode, 'receivedQty', $event)"
-                             class="block w-full text-center px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                             [class.border-green-400]="item.receivedQty >= item.expectedQty && item.expectedQty > 0"
-                             [class.border-orange-400]="item.receivedQty < item.expectedQty && item.receivedQty > 0">
+                             (ngModelChange)="updateItemQty(item.barcode, $event)"
+                             class="block w-full text-center px-2 py-1 border border-gray-300 rounded-md text-sm font-semibold focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                     </td>
                     <td class="px-3 py-3 text-right text-gray-600">{{ item.WSP | number:'1.2-2' }}</td>
                     <td class="px-3 py-3 text-right font-semibold text-gray-800">{{ (item.receivedQty * item.WSP) | number:'1.2-2' }}</td>
                     <td class="px-3 py-3 text-center">
-                      <button (click)="removeItem(item.barcode)" class="text-red-400 hover:text-red-600 transition-colors" title="Remove">
+                      <button (click)="removeItem(item.barcode)" class="text-red-400 hover:text-red-600">
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
                       </button>
                     </td>
@@ -543,8 +594,7 @@
               <tfoot class="bg-gray-50 border-t-2 border-gray-200">
                 <tr>
                   <td colspan="3" class="px-3 py-3 text-right text-sm font-bold text-gray-700">Totals</td>
-                  <td class="px-3 py-3 text-center text-sm font-bold text-blue-700">{{ totalExpected() }}</td>
-                  <td class="px-3 py-3 text-center text-sm font-bold text-green-700">{{ totalReceived() }}</td>
+                  <td class="px-3 py-3 text-center text-sm font-bold text-green-700">{{ totalReceived() }} pcs</td>
                   <td></td>
                   <td class="px-3 py-3 text-right text-sm font-bold text-indigo-700">{{ totalValue() | number:'1.2-2' }}</td>
                   <td></td>
@@ -562,7 +612,6 @@
         }
       </div>
 
-      <!-- Form Actions -->
       <div class="flex justify-end gap-4 pb-8">
         <button (click)="cancel()" type="button" class="py-2 px-6 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Cancel</button>
         <button (click)="saveGrn()" type="button" class="py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
