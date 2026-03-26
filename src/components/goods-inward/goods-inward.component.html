@@ -55,28 +55,22 @@
                      class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0"
                      [checked]="checked"
                      (change)="toggleSize(size, $any($event.target).checked)">
-
-              <!-- Size label + barcode -->
-              <label [for]="'sz-' + bc" class="flex-1 cursor-pointer select-none min-w-0">
-                <span class="font-bold text-gray-800 text-base">{{ size.size }}</span>
-                @if (size.sleeveType) {
-                  <span class="ml-1.5 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">{{ size.sleeveType }}</span>
-                }
-                <div class="text-xs text-gray-400 font-mono truncate mt-0.5">{{ size.BARCODE }}</div>
-              </label>
-
-              <!-- WSP -->
-              <span class="text-xs text-gray-500 flex-shrink-0">₹{{ size.WSP }}</span>
-
-              <!-- Qty input — only when checked -->
-              @if (checked) {
-                <div class="flex-shrink-0 animate-fade-in-sm">
-                  <label class="sr-only">Qty</label>
-                  <input type="number" min="1"
-                         class="w-16 text-center px-2 py-1.5 border border-indigo-300 rounded-md text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                         [ngModel]="sp.selectedSizes[bc]?.qty ?? '1'"
-                         (ngModelChange)="updateSizeQty(bc, $event)">
+              <!-- Label -->
+              <label [for]="'sz-' + bc" class="flex-1 cursor-pointer select-none">
+                <div class="flex items-center justify-between">
+                  <span class="font-semibold text-gray-800">{{ size.size }}</span>
+                  @if (size.sleeveType) {
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">{{ size.sleeveType }}</span>
+                  }
+                  <span class="text-xs text-gray-400 font-mono">{{ bc }}</span>
                 </div>
+              </label>
+              <!-- Qty input when selected -->
+              @if (checked) {
+                <input type="number" min="1"
+                       class="w-16 text-center border border-indigo-300 rounded-md text-sm py-1 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                       [ngModel]="sp.selectedSizes[bc]?.qty ?? '1'"
+                       (ngModelChange)="updateSizeQty(bc, $event)">
               }
             </div>
           }
@@ -173,6 +167,256 @@
 
 
   <!-- ================================================================ -->
+  <!-- SCAN STEP MODAL  (Barcode → Design → Color → Size → Qty)         -->
+  <!-- ================================================================ -->
+  @if (scanStepState().isActive) {
+    @let ss = scanStepState();
+    <div class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[70] animate-fade-in p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col" style="max-height: 90vh;">
+
+        <!-- Step indicator -->
+        <div class="px-6 pt-5 pb-4 border-b">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-bold text-gray-800">
+              @switch (ss.step) {
+                @case ('showDesign') { Barcode Found }
+                @case ('selectColor') { Select Colour(s) }
+                @case ('selectSize')  { Select Size(s) }
+                @case ('enterQty')    { Enter Inward Qty }
+              }
+            </h3>
+            <button (click)="closeScanStep()" class="text-gray-400 hover:text-gray-600 p-1">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <!-- Progress dots -->
+          <div class="flex gap-2">
+            @for (step of ['showDesign','selectColor','selectSize','enterQty']; track step) {
+              <div class="h-1.5 flex-1 rounded-full transition-colors"
+                   [class.bg-indigo-600]="ss.step === step || (ss.step === 'selectColor' && step === 'showDesign') || (ss.step === 'selectSize' && (step === 'showDesign' || step === 'selectColor')) || (ss.step === 'enterQty')"
+                   [class.bg-gray-200]="!(ss.step === step || (ss.step === 'selectColor' && step === 'showDesign') || (ss.step === 'selectSize' && (step === 'showDesign' || step === 'selectColor')) || (ss.step === 'enterQty'))">
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- ── STEP 1: Show Design ─────────────────────────────────────────── -->
+        @if (ss.step === 'showDesign') {
+          <div class="flex-1 flex flex-col items-center justify-center p-8 gap-5">
+            <div class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+              <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 3.5V16m0 0a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h12z"/>
+              </svg>
+            </div>
+            <div class="text-center">
+              <p class="text-sm text-gray-500 mb-1">Scanned Barcode</p>
+              <p class="font-mono text-lg font-bold text-gray-700 bg-gray-100 px-4 py-2 rounded-lg">{{ ss.scannedBarcode }}</p>
+            </div>
+            <div class="text-center">
+              <p class="text-sm text-gray-500 mb-1">Design Number Found</p>
+              <p class="text-3xl font-extrabold text-indigo-700">{{ ss.styleNo }}</p>
+              <p class="text-sm text-gray-400 mt-1">{{ ss.availableColors.length }} colour variant(s) available</p>
+            </div>
+          </div>
+          <div class="p-5 border-t bg-gray-50 rounded-b-2xl flex justify-between">
+            <button (click)="closeScanStep()" type="button"
+                    class="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-100">
+              Cancel
+            </button>
+            <button (click)="confirmScanDesign()" type="button"
+                    class="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 flex items-center gap-2">
+              Next: Select Colour
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+        }
+
+        <!-- ── STEP 2: Select Colour(s) ────────────────────────────────────── -->
+        @if (ss.step === 'selectColor') {
+          <div class="px-5 py-3 border-b bg-gray-50 flex items-center justify-between">
+            <p class="text-sm font-semibold text-gray-600">
+              Design: <span class="text-indigo-700">{{ ss.styleNo }}</span>
+            </p>
+            <div class="flex gap-2">
+              <button (click)="selectAllScanColors()" type="button"
+                      class="text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 rounded hover:bg-indigo-50">All</button>
+              <button (click)="clearAllScanColors()" type="button"
+                      class="text-xs text-gray-500 hover:text-gray-700 font-medium px-2 py-1 rounded hover:bg-gray-100">Clear</button>
+            </div>
+          </div>
+          <div class="overflow-y-auto flex-1 p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            @for (design of ss.availableColors; track design.id) {
+              @let colorSelected = isScanColorSelected(design.id!);
+              <button type="button" (click)="toggleScanColor(design)"
+                      class="flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all"
+                      [class.border-indigo-500]="colorSelected"
+                      [class.bg-indigo-50]="colorSelected"
+                      [class.border-gray-200]="!colorSelected"
+                      [class.bg-white]="!colorSelected">
+                <div class="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
+                     [class.bg-indigo-600]="colorSelected"
+                     [class.border-indigo-600]="colorSelected"
+                     [class.border-gray-300]="!colorSelected">
+                  @if (colorSelected) {
+                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                  }
+                </div>
+                <div>
+                  <p class="font-semibold text-gray-800" [class.text-indigo-700]="colorSelected">{{ design.color || 'No Colour' }}</p>
+                  <p class="text-xs text-gray-400">{{ design.sizes.length }} size(s)</p>
+                </div>
+              </button>
+            }
+          </div>
+          <div class="p-5 border-t bg-gray-50 rounded-b-2xl flex justify-between items-center">
+            <p class="text-sm text-gray-500">{{ ss.selectedColorIds.length }} colour(s) selected</p>
+            <div class="flex gap-3">
+              <button (click)="scanStepState.update(s => ({...s, step: 'showDesign'}))" type="button"
+                      class="px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-100">
+                Back
+              </button>
+              <button (click)="confirmScanColors()" type="button"
+                      [disabled]="!canConfirmScanColors()"
+                      class="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
+                Next: Select Size
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              </button>
+            </div>
+          </div>
+        }
+
+        <!-- ── STEP 3: Select Size(s) ───────────────────────────────────────── -->
+        @if (ss.step === 'selectSize') {
+          <div class="px-5 py-3 border-b bg-gray-50 flex items-center justify-between">
+            <p class="text-sm font-semibold text-gray-600">
+              <span class="text-indigo-700">{{ ss.styleNo }}</span>
+              · {{ ss.selectedColorIds.length }} colour(s)
+            </p>
+            <div class="flex gap-2">
+              <button (click)="selectAllScanSizes()" type="button"
+                      class="text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 rounded hover:bg-indigo-50">All</button>
+              <button (click)="clearAllScanSizes()" type="button"
+                      class="text-xs text-gray-500 hover:text-gray-700 font-medium px-2 py-1 rounded hover:bg-gray-100">Clear</button>
+            </div>
+          </div>
+          <div class="overflow-y-auto flex-1 p-4 flex flex-wrap gap-3 content-start">
+            @for (sizeName of scanAvailableSizes(); track sizeName) {
+              @let sizeSelected = isScanSizeSelected(sizeName);
+              <button type="button" (click)="toggleScanSize(sizeName)"
+                      class="px-5 py-3 rounded-xl border-2 font-bold text-sm transition-all min-w-[64px] text-center"
+                      [class.border-indigo-500]="sizeSelected"
+                      [class.bg-indigo-600]="sizeSelected"
+                      [class.text-white]="sizeSelected"
+                      [class.border-gray-200]="!sizeSelected"
+                      [class.bg-white]="!sizeSelected"
+                      [class.text-gray-700]="!sizeSelected">
+                {{ sizeName }}
+              </button>
+            }
+            @if (scanAvailableSizes().length === 0) {
+              <p class="text-gray-400 text-sm py-6 w-full text-center">No sizes found for selected colours.</p>
+            }
+          </div>
+          <div class="p-5 border-t bg-gray-50 rounded-b-2xl flex justify-between items-center">
+            <p class="text-sm text-gray-500">{{ ss.selectedSizes.length }} size(s) selected</p>
+            <div class="flex gap-3">
+              <button (click)="scanStepState.update(s => ({...s, step: 'selectColor'}))" type="button"
+                      class="px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-100">
+                Back
+              </button>
+              <button (click)="confirmScanSizes()" type="button"
+                      [disabled]="!canConfirmScanSizes()"
+                      class="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
+                Next: Enter Qty
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              </button>
+            </div>
+          </div>
+        }
+
+        <!-- ── STEP 4: Enter Qty ────────────────────────────────────────────── -->
+        @if (ss.step === 'enterQty') {
+          <div class="px-5 py-3 border-b bg-gray-50">
+            <p class="text-sm font-semibold text-gray-600">
+              <span class="text-indigo-700">{{ ss.styleNo }}</span>
+              · {{ ss.selectedColorIds.length }} colour(s) · {{ ss.selectedSizes.length }} size(s)
+            </p>
+          </div>
+          <div class="overflow-y-auto flex-1 p-4 space-y-2">
+            @for (entry of ss.qtyEntries; track entry.barcode) {
+              <div class="flex items-center gap-3 p-3 rounded-xl border-2 transition-all"
+                   [class.border-orange-300]="entry.isDuplicate"
+                   [class.bg-orange-50]="entry.isDuplicate"
+                   [class.border-gray-200]="!entry.isDuplicate"
+                   [class.bg-white]="!entry.isDuplicate">
+                <!-- Duplicate badge -->
+                @if (entry.isDuplicate) {
+                  <div class="flex-shrink-0">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-orange-200 text-orange-700">
+                      ⛔ Duplicate
+                    </span>
+                  </div>
+                }
+                <!-- Info -->
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-gray-800 truncate">
+                    {{ entry.design.color || 'No Colour' }}
+                    <span class="text-gray-400 mx-1">·</span>
+                    <span class="text-indigo-700">{{ entry.size.size }}</span>
+                    @if (entry.size.sleeveType) {
+                      <span class="ml-1 text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">{{ entry.size.sleeveType }}</span>
+                    }
+                  </p>
+                  <p class="text-xs text-gray-400 font-mono mt-0.5">{{ entry.barcode }}</p>
+                </div>
+                <!-- Qty input -->
+                @if (!entry.isDuplicate) {
+                  <input type="number" min="1"
+                         class="w-20 text-center border border-gray-300 rounded-lg text-sm py-2 font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none"
+                         [ngModel]="entry.qty"
+                         (ngModelChange)="updateScanEntryQty(entry.barcode, $event)"
+                         placeholder="Qty">
+                } @else {
+                  <span class="text-xs text-orange-600 font-medium flex-shrink-0">Already added</span>
+                }
+              </div>
+            }
+            @if (ss.qtyEntries.length === 0) {
+              <p class="text-center text-gray-400 text-sm py-8">No matching combinations found.</p>
+            }
+          </div>
+          <div class="p-5 border-t bg-gray-50 rounded-b-2xl flex justify-between items-center">
+            <p class="text-sm text-gray-500">
+              {{ ss.qtyEntries.length - ss.qtyEntries.length }} new
+              @let newCount = ss.qtyEntries | slice:0 ; <!-- template workaround -->
+              {{ ss.qtyEntries.length }} entr(ies)
+              @let dupCount = ss.qtyEntries.length ;
+              @if (ss.qtyEntries.length > 0) {
+                &nbsp;·&nbsp;
+                <span class="text-orange-600">{{ ss.qtyEntries.length - ss.qtyEntries.filter ? 0 : 0 }} duplicate(s) skipped</span>
+              }
+            </p>
+            <div class="flex gap-3">
+              <button (click)="scanStepState.update(s => ({...s, step: 'selectSize'}))" type="button"
+                      class="px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-100">
+                Back
+              </button>
+              <button (click)="addScanItemsToGrn()" type="button"
+                      [disabled]="!canAddScanItems()"
+                      class="px-6 py-2.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                Add to GRN
+              </button>
+            </div>
+          </div>
+        }
+
+      </div>
+    </div>
+  }
+
+
+  <!-- ================================================================ -->
   <!-- BARCODE SCANNER MODAL                                             -->
   <!-- ================================================================ -->
   @if (isScanning()) {
@@ -186,7 +430,7 @@
           <div class="absolute top-0 left-0 right-0 h-24 bg-black bg-opacity-60 flex items-center justify-between px-4 pt-4">
             <div>
               <span class="text-white font-semibold text-lg block">Scan Barcode</span>
-              <span class="text-gray-300 text-xs">Each scan adds qty 1 — scan again to increment</span>
+              <span class="text-gray-300 text-xs">Scan a barcode to begin the inward process</span>
             </div>
             <div class="flex items-center gap-3">
               @if (isTorchAvailable()) {
@@ -195,41 +439,36 @@
                         [class.bg-yellow-400]="isTorchOn()" [class.text-gray-900]="isTorchOn()"
                         [class.bg-white/20]="!isTorchOn()" [class.text-white]="!isTorchOn()">
                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
-                  {{ isTorchOn() ? 'Flash On' : 'Flash Off' }}
+                  {{ isTorchOn() ? 'On' : 'Off' }}
                 </button>
               }
-              <button (click)="stopScan()" class="text-white bg-white/20 rounded-full p-1.5 pointer-events-auto">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
             </div>
           </div>
 
-          <!-- Viewfinder — larger box for distance scanning -->
-          <div class="absolute inset-0 flex items-center justify-center">
-            <div class="relative" style="width: min(80vw, 360px); height: min(56vw, 250px);">
-              <!-- Animated scan line -->
-              <div class="absolute inset-x-3 h-0.5 bg-gradient-to-r from-transparent via-green-400 to-transparent"
-                   [class.opacity-0]="scanFeedback() !== 'idle'"
-                   style="top: 50%; animation: scanLine 1.8s linear infinite;"></div>
-
-              <!-- Corner brackets -->
-              <div class="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 rounded-tl-xl transition-colors duration-150"
-                   [class.border-green-400]="scanFeedback() === 'success'"
-                   [class.border-red-400]="scanFeedback() === 'error'"
-                   [class.border-white]="scanFeedback() === 'idle'"></div>
-              <div class="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 rounded-tr-xl transition-colors duration-150"
-                   [class.border-green-400]="scanFeedback() === 'success'"
-                   [class.border-red-400]="scanFeedback() === 'error'"
-                   [class.border-white]="scanFeedback() === 'idle'"></div>
-              <div class="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 rounded-bl-xl transition-colors duration-150"
-                   [class.border-green-400]="scanFeedback() === 'success'"
-                   [class.border-red-400]="scanFeedback() === 'error'"
-                   [class.border-white]="scanFeedback() === 'idle'"></div>
-              <div class="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 rounded-br-xl transition-colors duration-150"
-                   [class.border-green-400]="scanFeedback() === 'success'"
-                   [class.border-red-400]="scanFeedback() === 'error'"
-                   [class.border-white]="scanFeedback() === 'idle'"></div>
-            </div>
+          <!-- Viewfinder -->
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+               style="width: min(56vw, 250px); height: min(56vw, 250px);">
+            <div class="absolute inset-0 rounded-lg border-2 transition-colors duration-200"
+                 [class.border-green-400]="scanFeedback() === 'success'"
+                 [class.border-red-400]="scanFeedback() === 'error'"
+                 [class.border-white]="scanFeedback() === 'idle'"></div>
+            <!-- Corner accents -->
+            <div class="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 rounded-tl-sm"
+                 [class.border-green-400]="scanFeedback() === 'success'"
+                 [class.border-red-400]="scanFeedback() === 'error'"
+                 [class.border-white]="scanFeedback() === 'idle'"></div>
+            <div class="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 rounded-tr-sm"
+                 [class.border-green-400]="scanFeedback() === 'success'"
+                 [class.border-red-400]="scanFeedback() === 'error'"
+                 [class.border-white]="scanFeedback() === 'idle'"></div>
+            <div class="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 rounded-bl-sm"
+                 [class.border-green-400]="scanFeedback() === 'success'"
+                 [class.border-red-400]="scanFeedback() === 'error'"
+                 [class.border-white]="scanFeedback() === 'idle'"></div>
+            <div class="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 rounded-br-sm"
+                 [class.border-green-400]="scanFeedback() === 'success'"
+                 [class.border-red-400]="scanFeedback() === 'error'"
+                 [class.border-white]="scanFeedback() === 'idle'"></div>
           </div>
 
           <!-- Status pill (below viewfinder) -->
@@ -249,7 +488,7 @@
       <div class="bg-white rounded-t-2xl p-4 flex justify-between items-center">
         <div class="flex items-center gap-2">
           <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-600 text-white text-sm font-bold">{{ scannedCount() }}</span>
-          <span class="text-sm text-gray-600">item(s) scanned</span>
+          <span class="text-sm text-gray-600">item(s) processed</span>
         </div>
         <button (click)="stopScan()" class="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">Done</button>
       </div>
@@ -273,42 +512,36 @@
       </div>
 
       <!-- Date Filter -->
-      <div class="flex flex-col sm:flex-row items-start sm:items-end gap-3 mb-5 p-4 bg-gray-50 rounded-lg border border-gray-200">
-        <div class="flex items-center gap-2">
-          <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-          <span class="text-sm font-medium text-gray-700 whitespace-nowrap">Filter by Date:</span>
+      <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4 p-3 bg-gray-50 rounded-lg border">
+        <span class="text-sm font-medium text-gray-600 whitespace-nowrap">Filter by date:</span>
+        <input type="date" [ngModel]="filterFromDate()" (ngModelChange)="filterFromDate.set($event); currentPage.set(1)"
+               class="block px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
+        <span class="text-sm text-gray-400">to</span>
+        <input type="date" [ngModel]="filterToDate()" (ngModelChange)="filterToDate.set($event); currentPage.set(1)"
+               class="block px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
+        <div class="flex gap-2 ml-auto">
+          <button (click)="resetToCurrentMonth()" type="button"
+                  class="text-xs px-2 py-1.5 rounded border font-medium transition-colors"
+                  [class.bg-indigo-600]="isCurrentMonthFilter()" [class.text-white]="isCurrentMonthFilter()"
+                  [class.border-indigo-600]="isCurrentMonthFilter()"
+                  [class.bg-white]="!isCurrentMonthFilter()" [class.text-gray-600]="!isCurrentMonthFilter()"
+                  [class.border-gray-300]="!isCurrentMonthFilter()">
+            This Month
+          </button>
+          <button (click)="clearDateFilter()" type="button"
+                  class="text-xs px-2 py-1.5 rounded border border-gray-300 bg-white text-gray-600 font-medium hover:bg-gray-50">
+            All
+          </button>
         </div>
-        <div class="flex flex-wrap items-end gap-3 flex-1">
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">From</label>
-            <input type="date" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" [ngModel]="filterFromDate()" (ngModelChange)="filterFromDate.set($event)">
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">To</label>
-            <input type="date" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" [ngModel]="filterToDate()" (ngModelChange)="filterToDate.set($event)">
-          </div>
-          <div class="flex gap-2">
-            <button (click)="resetToCurrentMonth()" type="button"
-                    class="px-3 py-1.5 text-sm font-medium rounded-md border transition-colors"
-                    [class.border-indigo-500]="isCurrentMonthFilter()" [class.bg-indigo-50]="isCurrentMonthFilter()" [class.text-indigo-700]="isCurrentMonthFilter()"
-                    [class.border-gray-300]="!isCurrentMonthFilter()" [class.bg-white]="!isCurrentMonthFilter()" [class.text-gray-600]="!isCurrentMonthFilter()">
-              This Month
-            </button>
-            <button (click)="clearDateFilter()" type="button" class="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors">All</button>
-          </div>
-        </div>
-        <span class="text-xs text-gray-500 whitespace-nowrap self-end pb-1">{{ filteredGrns().length }} of {{ grns().length }} GRN(s)</span>
       </div>
 
       <!-- Search -->
-      <div class="mb-4">
-        <div class="relative rounded-md shadow-sm">
-          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
-          </div>
-          <input type="text" placeholder="Search by GRN No, supplier, invoice..." class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                 [ngModel]="searchTerm()" (ngModelChange)="onSearch($event)">
+      <div class="relative mb-4">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
         </div>
+        <input type="text" placeholder="Search by GRN No, supplier, invoice..." class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+               [ngModel]="searchTerm()" (ngModelChange)="onSearch($event)">
       </div>
 
       <div class="overflow-x-auto">
@@ -421,31 +654,18 @@
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div class="bg-gray-50 p-4 rounded-lg"><p class="text-xs text-gray-500 uppercase tracking-wide">Supplier</p><p class="mt-1 font-semibold text-gray-800">{{ grn.supplierName }}</p></div>
             <div class="bg-gray-50 p-4 rounded-lg"><p class="text-xs text-gray-500 uppercase tracking-wide">Invoice No</p><p class="mt-1 font-semibold text-gray-800">{{ grn.invoiceNo }}</p></div>
-            <div class="bg-gray-50 p-4 rounded-lg"><p class="text-xs text-gray-500 uppercase tracking-wide">Invoice Date</p><p class="mt-1 font-semibold text-gray-800">{{ grn.invoiceDate }}</p></div>
+            <div class="bg-gray-50 p-4 rounded-lg"><p class="text-xs text-gray-500 uppercase tracking-wide">Invoice Date</p><p class="mt-1 font-semibold text-gray-800">{{ grn.invoiceDate || '–' }}</p></div>
             <div class="bg-gray-50 p-4 rounded-lg"><p class="text-xs text-gray-500 uppercase tracking-wide">Received Date</p><p class="mt-1 font-semibold text-gray-800">{{ grn.receivedDate }}</p></div>
-          </div>
-
-          <!-- Summary cards -->
-          <div class="grid grid-cols-2 gap-4 mb-6">
-            <div class="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-              <p class="text-xs text-green-600 uppercase font-semibold">Total Qty Received</p>
-              <p class="mt-1 text-3xl font-bold text-green-800">{{ viewTotalReceived() }}</p>
-              <p class="text-xs text-green-500">pieces</p>
-            </div>
-            <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-center">
-              <p class="text-xs text-indigo-600 uppercase font-semibold">Total Value (WSP)</p>
-              <p class="mt-1 text-3xl font-bold text-indigo-800">₹ {{ viewTotalValue() | number:'1.0-0' }}</p>
-            </div>
           </div>
 
           <div class="overflow-x-auto rounded-lg border border-gray-200">
             <table class="min-w-full text-sm">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Style / Color</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Design</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Size</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barcode</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty Received</th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
                   <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">WSP (₹)</th>
                   <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Value (₹)</th>
                 </tr>
@@ -579,24 +799,24 @@
                       <input type="number" min="0"
                              [ngModel]="item.receivedQty"
                              (ngModelChange)="updateItemQty(item.barcode, $event)"
-                             class="block w-full text-center px-2 py-1 border border-gray-300 rounded-md text-sm font-semibold focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                             class="w-full text-center border border-gray-300 rounded-md text-sm py-1.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                     </td>
                     <td class="px-3 py-3 text-right text-gray-600">{{ item.WSP | number:'1.2-2' }}</td>
                     <td class="px-3 py-3 text-right font-semibold text-gray-800">{{ (item.receivedQty * item.WSP) | number:'1.2-2' }}</td>
-                    <td class="px-3 py-3 text-center">
-                      <button (click)="removeItem(item.barcode)" class="text-red-400 hover:text-red-600">
-                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
+                    <td class="px-3 py-3">
+                      <button (click)="removeItem(item.barcode)" type="button" class="text-red-400 hover:text-red-600 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                       </button>
                     </td>
                   </tr>
                 }
               </tbody>
-              <tfoot class="bg-gray-50 border-t-2 border-gray-200">
+              <tfoot class="bg-gray-50 border-t-2 border-gray-300">
                 <tr>
-                  <td colspan="3" class="px-3 py-3 text-right text-sm font-bold text-gray-700">Totals</td>
-                  <td class="px-3 py-3 text-center text-sm font-bold text-green-700">{{ totalReceived() }} pcs</td>
+                  <td colspan="3" class="px-3 py-3 text-right font-bold text-gray-700">Total</td>
+                  <td class="px-3 py-3 text-center font-bold text-green-700">{{ totalReceived() }} pcs</td>
                   <td></td>
-                  <td class="px-3 py-3 text-right text-sm font-bold text-indigo-700">{{ totalValue() | number:'1.2-2' }}</td>
+                  <td class="px-3 py-3 text-right font-bold text-indigo-700">₹ {{ totalValue() | number:'1.2-2' }}</td>
                   <td></td>
                 </tr>
               </tfoot>
@@ -604,20 +824,26 @@
           </div>
         } @else {
           <div class="text-center py-10 border-2 border-dashed border-gray-200 rounded-lg">
-            <svg class="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+            <svg class="mx-auto h-10 w-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 3.5V16m0 0a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h12z"/>
             </svg>
-            <p class="mt-2 text-sm text-gray-500">No items added yet. Use the buttons above to add items.</p>
+            <p class="mt-2 text-sm text-gray-400">Scan a barcode or select designs to add items.</p>
           </div>
         }
       </div>
 
-      <div class="flex justify-end gap-4 pb-8">
-        <button (click)="cancel()" type="button" class="py-2 px-6 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Cancel</button>
-        <button (click)="saveGrn()" type="button" class="py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+      <!-- Footer Actions -->
+      <div class="bg-white shadow-lg rounded-xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <button type="button" (click)="cancel()"
+                class="w-full sm:w-auto px-6 py-2.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+          Cancel
+        </button>
+        <button type="button" (click)="saveGrn()"
+                class="w-full sm:w-auto px-8 py-2.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm">
           {{ isEditMode() ? 'Update GRN' : 'Save GRN' }}
         </button>
       </div>
+
     </div>
   }
 

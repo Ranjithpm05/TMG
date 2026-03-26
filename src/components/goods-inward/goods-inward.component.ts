@@ -23,6 +23,39 @@ type SizePickerState = {
 };
 const EMPTY_SIZE_PICKER: SizePickerState = { isActive: false, design: null, selectedSizes: {} };
 
+// ── Scan Step State (new step-by-step scan flow) ──────────────────────────────
+type ScanStep = 'showDesign' | 'selectColor' | 'selectSize' | 'enterQty';
+
+type QtyEntry = {
+  design: Design;
+  size: SizePrice;
+  barcode: string;
+  qty: string;
+  isDuplicate: boolean;
+};
+
+type ScanStepState = {
+  isActive: boolean;
+  step: ScanStep;
+  scannedBarcode: string;
+  styleNo: string;
+  availableColors: Design[];
+  selectedColorIds: string[];
+  selectedSizes: string[];
+  qtyEntries: QtyEntry[];
+};
+
+const EMPTY_SCAN_STEP: ScanStepState = {
+  isActive: false,
+  step: 'showDesign',
+  scannedBarcode: '',
+  styleNo: '',
+  availableColors: [],
+  selectedColorIds: [],
+  selectedSizes: [],
+  qtyEntries: []
+};
+
 const EMPTY_GRN: Omit<GoodsInward, 'id'> = {
   grnNo: '',
   supplierName: '',
@@ -199,6 +232,7 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     this.editableGrn.update(grn => {
       const existing = grn.items.find(i => i.barcode === barcode);
       if (existing) {
+        // Duplicate barcode: update qty instead of blocking (manual picker path)
         return {
           ...grn,
           items: grn.items.map(i =>
@@ -300,6 +334,7 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     this.viewGrn.set(null);
     this.designPickerVisible.set(false);
     this.sizePicker.set(EMPTY_SIZE_PICKER);
+    this.scanStepState.set(EMPTY_SCAN_STEP);
     this.stopScan();
   }
 
@@ -310,6 +345,170 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
   openDesignPicker()  { this.designSearchTerm.set(''); this.expandedStyleNo.set(null); this.designPickerVisible.set(true); }
   closeDesignPicker() { this.designPickerVisible.set(false); this.expandedStyleNo.set(null); }
   toggleExpandStyle(styleNo: string) { this.expandedStyleNo.update(s => s === styleNo ? null : styleNo); }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // SCAN STEP FLOW  —  Barcode → Design → Color → Size → Qty
+  // ═══════════════════════════════════════════════════════════════════════════════
+  scanStepState = signal<ScanStepState>(EMPTY_SCAN_STEP);
+
+  // ── Computed helpers for scan step ───────────────────────────────────────────
+  scanAvailableSizes = computed(() => {
+    const { selectedColorIds, availableColors } = this.scanStepState();
+    const selectedDesigns = availableColors.filter(d => selectedColorIds.includes(d.id!));
+    const sizeSet = new Set<string>();
+    selectedDesigns.forEach(d => d.sizes.forEach(s => sizeSet.add(s.size)));
+    return [...sizeSet].sort((a, b) => {
+      const order = ['XS','S','M','L','XL','XXL','XXXL','2XL','3XL','4XL','5XL','6XL','Free'];
+      const ia = order.indexOf(a), ib = order.indexOf(b);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+  });
+
+  canConfirmScanColors = computed(() => this.scanStepState().selectedColorIds.length > 0);
+  canConfirmScanSizes  = computed(() => this.scanStepState().selectedSizes.length > 0);
+  canAddScanItems      = computed(() =>
+    this.scanStepState().qtyEntries.some(e => !e.isDuplicate && parseInt(e.qty, 10) > 0)
+  );
+
+  isScanColorSelected(designId: string): boolean {
+    return this.scanStepState().selectedColorIds.includes(designId);
+  }
+
+  isScanSizeSelected(size: string): boolean {
+    return this.scanStepState().selectedSizes.includes(size);
+  }
+
+  // ── Step navigation ───────────────────────────────────────────────────────────
+  closeScanStep() {
+    this.scanStepState.set(EMPTY_SCAN_STEP);
+    // Resume camera scanning
+    this.startScan();
+  }
+
+  confirmScanDesign() {
+    this.scanStepState.update(s => ({ ...s, step: 'selectColor' }));
+  }
+
+  toggleScanColor(design: Design) {
+    this.scanStepState.update(s => {
+      const already = s.selectedColorIds.includes(design.id!);
+      const selectedColorIds = already
+        ? s.selectedColorIds.filter(id => id !== design.id)
+        : [...s.selectedColorIds, design.id!];
+      return { ...s, selectedColorIds };
+    });
+  }
+
+  selectAllScanColors() {
+    this.scanStepState.update(s => ({
+      ...s, selectedColorIds: s.availableColors.map(d => d.id!)
+    }));
+  }
+
+  clearAllScanColors() {
+    this.scanStepState.update(s => ({ ...s, selectedColorIds: [] }));
+  }
+
+  confirmScanColors() {
+    this.scanStepState.update(s => ({ ...s, step: 'selectSize', selectedSizes: [] }));
+  }
+
+  toggleScanSize(size: string) {
+    this.scanStepState.update(s => {
+      const already = s.selectedSizes.includes(size);
+      const selectedSizes = already
+        ? s.selectedSizes.filter(sz => sz !== size)
+        : [...s.selectedSizes, size];
+      return { ...s, selectedSizes };
+    });
+  }
+
+  selectAllScanSizes() {
+    const allSizes = this.scanAvailableSizes();
+    this.scanStepState.update(s => ({ ...s, selectedSizes: [...allSizes] }));
+  }
+
+  clearAllScanSizes() {
+    this.scanStepState.update(s => ({ ...s, selectedSizes: [] }));
+  }
+
+  confirmScanSizes() {
+    const state = this.scanStepState();
+    const existingBarcodes = new Set(this.editableGrn().items.map(i => i.barcode));
+
+    const selectedDesigns = state.availableColors.filter(d =>
+      state.selectedColorIds.includes(d.id!)
+    );
+
+    const entries: QtyEntry[] = [];
+    for (const design of selectedDesigns) {
+      for (const sizeName of state.selectedSizes) {
+        const sizeObj = design.sizes.find(s => s.size === sizeName);
+        if (sizeObj) {
+          const barcode = String(sizeObj.BARCODE);
+          entries.push({
+            design,
+            size: sizeObj,
+            barcode,
+            qty: '1',
+            isDuplicate: existingBarcodes.has(barcode)
+          });
+        }
+      }
+    }
+
+    this.scanStepState.update(s => ({ ...s, step: 'enterQty', qtyEntries: entries }));
+  }
+
+  updateScanEntryQty(barcode: string, qty: string) {
+    this.scanStepState.update(s => ({
+      ...s,
+      qtyEntries: s.qtyEntries.map(e =>
+        e.barcode === barcode ? { ...e, qty } : e
+      )
+    }));
+  }
+
+  addScanItemsToGrn() {
+    const { qtyEntries } = this.scanStepState();
+    let added = 0;
+
+    for (const entry of qtyEntries) {
+      if (entry.isDuplicate) continue;
+      const parsedQty = Math.max(0, parseInt(entry.qty, 10) || 0);
+      if (parsedQty === 0) continue;
+      // Use direct insert (no duplicate merge) for scan flow
+      const barcode = entry.barcode;
+      this.editableGrn.update(grn => {
+        if (grn.items.some(i => i.barcode === barcode)) return grn; // safety check
+        const newItem: GoodsInwardItem = {
+          designId:    entry.design.id ?? '',
+          styleNo:     entry.design.styleNo,
+          color:       entry.design.color ?? '',
+          group:       entry.design.group ?? '',
+          size:        entry.size.size,
+          sleeveType:  entry.size.sleeveType ?? undefined,
+          barcode,
+          fabricType:  entry.size.fabricType ?? '',
+          receivedQty: parsedQty,
+          WSP:         entry.size.WSP,
+          price:       entry.size.price
+        };
+        return { ...grn, items: [...grn.items, newItem] };
+      });
+      added++;
+    }
+
+    this.scanStepState.set(EMPTY_SCAN_STEP);
+
+    if (added > 0) {
+      // Resume scanner for next scan
+      this.startScan();
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════════
   // BARCODE SCANNER  —  high-performance multi-pass engine
@@ -356,32 +555,21 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
       }
       try {
         this.stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            width:  { ideal: 3840, min: 1280 },  // request 4K → falls back gracefully
-            height: { ideal: 2160, min: 720 },
-          } as any
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
         });
+        const video = this.videoElement.nativeElement;
+        video.srcObject = this.stream;
+        await video.play();
 
+        // Torch detection
         const track = this.stream.getVideoTracks()[0];
-        if (track) {
-          // max resolution + continuous focus/exposure
-          const caps = track.getCapabilities() as any;
-          const adv: any = {};
-          if (caps.focusMode?.includes('continuous'))      adv.focusMode      = 'continuous';
-          if (caps.exposureMode?.includes('continuous'))   adv.exposureMode   = 'continuous';
-          if (caps.whiteBalanceMode?.includes('continuous')) adv.whiteBalanceMode = 'continuous';
-          if (Object.keys(adv).length) await track.applyConstraints({ advanced: [adv] } as any).catch(() => {});
+        this.torchTrack = track;
+        const caps: any = track.getCapabilities?.() ?? {};
+        this.isTorchAvailable.set(!!caps.torch);
 
-          if (caps.torch) { this.isTorchAvailable.set(true); this.torchTrack = track; }
-        }
-
-        this.videoElement.nativeElement.srcObject = this.stream;
-        await this.videoElement.nativeElement.play();
-        this.lastTickTime = 0;
-        this.animFrameId  = requestAnimationFrame(() => this.tick());
-      } catch {
-        Swal.fire({ icon: 'error', title: 'Camera Error', text: 'Could not access camera.' });
+        this.tick();
+      } catch (err) {
+        Swal.fire({ icon: 'error', title: 'Camera Error', text: 'Cannot access camera.' });
         this.isScanning.set(false);
       }
     }, 50);
@@ -456,63 +644,27 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     r = jsQR(raw2.data, size2, size2, { inversionAttempts: 'attemptBoth' });
     if (r?.data) return r.data;
 
-    // Pass 3 — same crop, contrast-stretched greyscale
-    const stretched = this.stretchContrast(raw2);
-    cc2d.putImageData(stretched, 0, 0);
-    const raw3 = cc2d.getImageData(0, 0, size2, size2);
-    r = jsQR(raw3.data, size2, size2, { inversionAttempts: 'attemptBoth' });
-    if (r?.data) return r.data;
-
-    // Pass 4 — tighter centre crop 40%, 960 px, contrast-stretched
+    // Pass 3 — adaptive threshold on crop
     const cc3 = this.cropCanvas2!;
-    const crop4 = 0.40;
-    const cx4 = vw * (1 - crop4) / 2, cy4 = vh * (1 - crop4) / 2;
-    const cw4 = vw * crop4,           ch4 = vh * crop4;
-    const size4 = 960;
-    this.resizeCanvas(cc3, size4, size4);
-    const c4ctx = cc3.getContext('2d', { willReadFrequently: true })!;
-    c4ctx.drawImage(video, cx4, cy4, cw4, ch4, 0, 0, size4, size4);
-    const raw4 = c4ctx.getImageData(0, 0, size4, size4);
-    const stretched4 = this.stretchContrast(raw4);
-    c4ctx.putImageData(stretched4, 0, 0);
-    r = jsQR(c4ctx.getImageData(0, 0, size4, size4).data, size4, size4, { inversionAttempts: 'attemptBoth' });
-    if (r?.data) return r.data;
-
-    // Pass 5 — adaptive threshold on centre crop 60% for dark/blurry codes
-    cc2d.putImageData(raw2, 0, 0);
-    const adaptiveData = this.adaptiveThreshold(raw2, 15, 10);
-    r = jsQR(adaptiveData.data, size2, size2, { inversionAttempts: 'attemptBoth' });
+    this.resizeCanvas(cc3, size2, size2);
+    const cc3d = cc3.getContext('2d', { willReadFrequently: true })!;
+    const thresh = this.adaptiveThreshold(raw2, 21, 5);
+    cc3d.putImageData(thresh, 0, 0);
+    const raw3 = cc3d.getImageData(0, 0, size2, size2);
+    r = jsQR(raw3.data, size2, size2, { inversionAttempts: 'attemptBoth' });
     if (r?.data) return r.data;
 
     return null;
   }
 
-  private resizeCanvas(canvas: HTMLCanvasElement, w: number, h: number) {
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-  }
-
-  /** Global contrast stretch (min-max normalisation → greyscale) */
-  private stretchContrast(imageData: ImageData): ImageData {
-    const src = imageData.data;
-    const out = new Uint8ClampedArray(src.length);
-    let minL = 255, maxL = 0;
-    for (let i = 0; i < src.length; i += 4) {
-      const l = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2];
-      if (l < minL) minL = l;
-      if (l > maxL) maxL = l;
-    }
-    const range = maxL - minL || 1, scale = 255 / range;
-    for (let i = 0; i < src.length; i += 4) {
-      const l = Math.round((0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2] - minL) * scale);
-      out[i] = out[i + 1] = out[i + 2] = l;
-      out[i + 3] = 255;
-    }
-    return new ImageData(out, imageData.width, imageData.height);
+  private resizeCanvas(c: HTMLCanvasElement, w: number, h: number) {
+    if (c.width !== w)  c.width  = w;
+    if (c.height !== h) c.height = h;
   }
 
   /**
-   * Local adaptive thresholding — compares each pixel luminance against the
-   * mean of its neighbourhood.  Handles uneven lighting much better than a
+   * Adaptive (local) threshold — converts greyscale to binary per-pixel.
+   * Handles uneven lighting much better than a
    * global threshold, so it recovers codes that are partially in shadow.
    * blockSize must be odd; c is a constant subtracted from the mean.
    */
@@ -561,12 +713,23 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Direct add (scanner always adds qty 1 per scan; tap same code multiple times)
-    this._addOrUpdateItem(found.design, found.size, 1);
-    this.scannedCount.update(n => n + 1);
-    this.scanFeedback.set('success');
-    this.scannerMessage.set(`✓ ${found.design.styleNo} · ${found.size.size}`);
-    setTimeout(() => { this.scanFeedback.set('idle'); this.scannerMessage.set('Align barcode within the frame'); }, 600);
+    // ── Open step-by-step flow instead of direct add ──────────────────────────
+    const styleNo        = found.design.styleNo;
+    const availableColors = this.designs().filter(d => d.styleNo === styleNo);
+
+    // Pause scanner while user fills in the step dialog
+    this.stopScan();
+
+    this.scanStepState.set({
+      isActive:         true,
+      step:             'showDesign',
+      scannedBarcode:   barcode.trim(),
+      styleNo,
+      availableColors,
+      selectedColorIds: [],
+      selectedSizes:    [],
+      qtyEntries:       []
+    });
   }
 
   // ── Save / Delete ─────────────────────────────────────────────────────────────
@@ -576,62 +739,32 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     if (!grn.invoiceNo.trim())    { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please enter the invoice number.' }); return; }
     if (grn.items.length === 0)   { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please add at least one item.' }); return; }
 
-    const hasQty = grn.items.some(i => (Number(i.receivedQty) || 0) > 0);
-    const status: GoodsInward['status'] = hasQty ? 'Received' : 'Draft';
-    const payload = { ...(grn as any), status } as Omit<GoodsInward, 'id'>;
-
     try {
-      Swal.fire({ title: this.isEditMode() ? 'Updating GRN...' : 'Saving GRN...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      if (this.isEditMode()) {
-        await this.grnService.updateGoodsInward(payload as GoodsInward);
+      Swal.fire({ title: 'Saving GRN...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      if ('id' in grn) {
+        await this.grnService.updateGoodsInward(grn as GoodsInward);
       } else {
-        await this.grnService.createGoodsInward(payload);
+        await this.grnService.createGoodsInward(grn as Omit<GoodsInward, 'id'>);
       }
-      await Swal.fire({ icon: 'success', title: 'Saved!', text: 'GRN saved successfully.', timer: 2000, showConfirmButton: false });
-      this.refreshGrns();
+      Swal.fire({ icon: 'success', title: 'Saved!', timer: 1500, showConfirmButton: false });
       this.cancel();
-    } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err?.message ?? 'Failed to save GRN.' });
+    } catch {
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to save GRN.' });
     }
   }
 
   async deleteGrn(grn: GoodsInward) {
     const result = await Swal.fire({
-      title: 'Are you sure?', text: `Delete GRN "${grn.grnNo}"?`, icon: 'warning',
-      showCancelButton: true, confirmButtonColor: '#dc2626', cancelButtonColor: '#6b7280',
-      confirmButtonText: 'Yes, delete it', cancelButtonText: 'Cancel'
+      icon: 'warning', title: 'Delete GRN?',
+      text: `This will permanently delete ${grn.grnNo}.`,
+      showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Delete'
     });
     if (!result.isConfirmed) return;
     try {
-      Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      await this.grnService.deleteGoodsInward(grn.id!);
-      await Swal.fire({ icon: 'success', title: 'Deleted!', timer: 2000, showConfirmButton: false });
-      this.refreshGrns();
-    } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err?.message ?? 'Failed to delete GRN.' });
+      await this.grnService.deleteGoodsInward(grn.id);
+      Swal.fire({ icon: 'success', title: 'Deleted', timer: 1200, showConfirmButton: false });
+    } catch {
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to delete GRN.' });
     }
   }
-
-  private refreshGrns() {
-    this.grnService.getGoodsInwards().subscribe({ next: g => this.grns.set(g) });
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────────
-  getStatusClass(status: string): string {
-    return status === 'Received' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600';
-  }
-  getGrnTotalReceived(grn: GoodsInward): number {
-    return grn.items.reduce((s, i) => s + (Number(i.receivedQty) || 0), 0);
-  }
-  getGrnTotalValue(grn: GoodsInward): number {
-    return grn.items.reduce((s, i) => s + ((Number(i.receivedQty) || 0) * (Number(i.WSP) || 0)), 0);
-  }
-  formatDate(raw: any): string {
-    if (!raw) return '';
-    try {
-      const d = raw?.toDate ? raw.toDate() : new Date(raw);
-      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-    } catch { return ''; }
-  }
-  trackByBarcode(_: number, item: GoodsInwardItem) { return item.barcode; }
 }
