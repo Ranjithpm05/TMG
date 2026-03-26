@@ -23,27 +23,19 @@ type SizePickerState = {
 const EMPTY_SIZE_PICKER: SizePickerState = { isActive: false, design: null, selectedSizes: {} };
 
 // ── Batch-scan types ──────────────────────────────────────────────────────────
-/** One scanned barcode collected during the live camera session */
 type ScannedEntry = {
-  barcode:   string;
-  styleNo:   string;
-  resolvedAt: number; // timestamp for display order
+  barcode:    string;
+  styleNo:    string;
+  resolvedAt: number;
 };
 
-/** One group in the review modal – one group per unique styleNo */
 type ReviewGroup = {
   styleNo:          string;
-  /** All colour-variant designs available for this style */
   allColors:        Design[];
-  /** IDs of colours the user has selected */
   selectedColorIds: string[];
-  /** All sizes available across selected colours */
   availableSizes:   string[];
-  /** Sizes the user has selected */
   selectedSizes:    string[];
-  /** Single inward qty applied to every colour×size combo */
   qty:              string;
-  /** Which raw barcodes triggered this group */
   sourceBarcodes:   string[];
 };
 
@@ -102,8 +94,8 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     const term   = this.searchTerm().toLowerCase();
     const from   = this.filterFromDate();
     const to     = this.filterToDate();
-    const fromMs = from ? new Date(from).setHours(0,0,0,0)       : -Infinity;
-    const toMs   = to   ? new Date(to).setHours(23,59,59,999)    :  Infinity;
+    const fromMs = from ? new Date(from).setHours(0,0,0,0)    : -Infinity;
+    const toMs   = to   ? new Date(to).setHours(23,59,59,999) :  Infinity;
     return this.grns().filter(g => {
       const raw: any = g.createdAt;
       let d: Date;
@@ -133,10 +125,11 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
 
   filteredDesignStyles = computed(() => {
     const term = this.designSearchTerm().toLowerCase();
-    const all  = [...new Set(this.designs().map(d => d.styleNo))].sort((a,b) =>
+    const all  = [...new Set(this.designs().map(d => d.styleNo))].sort((a, b) =>
       String(a).localeCompare(String(b), undefined, { numeric: true }));
     return term ? all.filter(s => s.toLowerCase().includes(term)) : all;
   });
+
   colorsForExpandedStyle = computed(() => {
     const s = this.expandedStyleNo();
     return s ? this.designs().filter(d => d.styleNo === s) : [];
@@ -152,6 +145,7 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     const d = this.sizePicker().design;
     return d ? d.sizes.every(s => String(s.BARCODE) in this.sizePicker().selectedSizes) : false;
   });
+
   isSomeSizesSelected = computed(() => {
     const d = this.sizePicker().design;
     if (!d) return false;
@@ -170,22 +164,29 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
       return { ...s, selectedSizes: copy };
     });
   }
+
   toggleAllSizes(checked: boolean) {
     const design = this.sizePicker().design;
     if (!design) return;
     this.sizePicker.update(s => {
       const copy: SizePickerState['selectedSizes'] = {};
-      if (checked) design.sizes.forEach(sz => { const bc = String(sz.BARCODE); copy[bc] = s.selectedSizes[bc] ?? { size: sz, qty: '1' }; });
+      if (checked) design.sizes.forEach(sz => {
+        const bc = String(sz.BARCODE);
+        copy[bc] = s.selectedSizes[bc] ?? { size: sz, qty: '1' };
+      });
       return { ...s, selectedSizes: copy };
     });
   }
+
   updateSizeQty(barcode: string, qty: string) {
     this.sizePicker.update(s => {
       if (!(barcode in s.selectedSizes)) return s;
       return { ...s, selectedSizes: { ...s.selectedSizes, [barcode]: { ...s.selectedSizes[barcode], qty } } };
     });
   }
+
   canConfirmSizes = computed(() => Object.keys(this.sizePicker().selectedSizes).length > 0);
+
   confirmSizeSelection() {
     const { design, selectedSizes } = this.sizePicker();
     if (!design) return;
@@ -205,45 +206,42 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
       if (existing) {
         return { ...grn, items: grn.items.map(i => i.barcode === barcode ? { ...i, receivedQty: i.receivedQty + qty } : i) };
       }
-      return { ...grn, items: [...grn.items, {
-        designId: design.id ?? '', styleNo: design.styleNo, color: design.color ?? '',
-        group: design.group ?? '', size: size.size, sleeveType: size.sleeveType ?? undefined,
-        barcode, fabricType: size.fabricType ?? '', receivedQty: qty, WSP: size.WSP, price: size.price
-      }] };
+      return {
+        ...grn, items: [...grn.items, {
+          designId: design.id ?? '', styleNo: design.styleNo, color: design.color ?? '',
+          group: design.group ?? '', size: size.size, sleeveType: size.sleeveType ?? undefined,
+          barcode, fabricType: size.fabricType ?? '', receivedQty: qty, WSP: size.WSP, price: size.price
+        }]
+      };
     });
   }
+
   removeItem(barcode: string) {
     this.editableGrn.update(grn => ({ ...grn, items: grn.items.filter(i => i.barcode !== barcode) }));
   }
+
   updateItemQty(barcode: string, value: string) {
     this.editableGrn.update(grn => ({
-      ...grn, items: grn.items.map(i => i.barcode === barcode ? { ...i, receivedQty: Math.max(0, parseInt(value, 10) || 0) } : i)
+      ...grn, items: grn.items.map(i => i.barcode === barcode
+        ? { ...i, receivedQty: Math.max(0, parseInt(value, 10) || 0) } : i)
     }));
   }
 
-  formItems     = computed(() => this.editableGrn().items ?? []);
-  totalReceived = computed(() => this.formItems().reduce((s, i) => s + (Number(i.receivedQty) || 0), 0));
-  totalValue    = computed(() => this.formItems().reduce((s, i) => s + ((Number(i.receivedQty) || 0) * (Number(i.WSP) || 0)), 0));
+  formItems         = computed(() => this.editableGrn().items ?? []);
+  totalReceived     = computed(() => this.formItems().reduce((s, i) => s + (Number(i.receivedQty) || 0), 0));
+  totalValue        = computed(() => this.formItems().reduce((s, i) => s + ((Number(i.receivedQty) || 0) * (Number(i.WSP) || 0)), 0));
   viewTotalReceived = computed(() => (this.viewGrn()?.items ?? []).reduce((s, i) => s + (Number(i.receivedQty) || 0), 0));
   viewTotalValue    = computed(() => (this.viewGrn()?.items ?? []).reduce((s, i) => s + ((Number(i.receivedQty) || 0) * (Number(i.WSP) || 0)), 0));
 
   // ═══════════════════════════════════════════════════════════════════════════════
   // BATCH SCAN FLOW
   // ═══════════════════════════════════════════════════════════════════════════════
-
-  /** All barcodes collected in this scan session (live camera phase) */
-  sessionScanned = signal<ScannedEntry[]>([]);
-
-  /** Set of barcodes already scanned this session (fast dedup) */
+  sessionScanned    = signal<ScannedEntry[]>([]);
   private sessionBarcodeSet = new Set<string>();
+  batchReview       = signal<BatchReviewState>(EMPTY_BATCH_REVIEW);
+  hasSessionScans   = computed(() => this.sessionScanned().length > 0);
+  reviewGroupCount  = computed(() => this.batchReview().groups.length);
 
-  /** Review state shown after camera is closed */
-  batchReview = signal<BatchReviewState>(EMPTY_BATCH_REVIEW);
-
-  hasSessionScans  = computed(() => this.sessionScanned().length > 0);
-  reviewGroupCount = computed(() => this.batchReview().groups.length);
-
-  // ── Review helpers ────────────────────────────────────────────────────────────
   private sortSizes(sizes: string[]): string[] {
     return [...sizes].sort((a, b) => {
       const ia = SIZE_ORDER.indexOf(a), ib = SIZE_ORDER.indexOf(b);
@@ -263,31 +261,25 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
   openBatchReview() {
     const entries = this.sessionScanned();
     if (!entries.length) return;
-
-    // Group by styleNo
     const styleMap = new Map<string, ScannedEntry[]>();
     for (const e of entries) {
       if (!styleMap.has(e.styleNo)) styleMap.set(e.styleNo, []);
       styleMap.get(e.styleNo)!.push(e);
     }
-
     const groups: ReviewGroup[] = [];
     for (const [styleNo, ents] of styleMap) {
       const allColors = this.designs().filter(d => d.styleNo === styleNo);
       const group: ReviewGroup = {
-        styleNo,
-        allColors,
-        selectedColorIds: allColors.map(d => d.id!), // default: all colours selected
-        availableSizes:   [],
-        selectedSizes:    [],
-        qty:              '1',
-        sourceBarcodes:   ents.map(e => e.barcode)
+        styleNo, allColors,
+        selectedColorIds: allColors.map(d => d.id!),
+        availableSizes: [], selectedSizes: [],
+        qty: '1',
+        sourceBarcodes: ents.map(e => e.barcode)
       };
       group.availableSizes = this.buildAvailableSizes(group);
-      group.selectedSizes  = [...group.availableSizes]; // default: all sizes selected
+      group.selectedSizes  = [...group.availableSizes];
       groups.push(group);
     }
-
     this.stopScan();
     this.batchReview.set({ isActive: true, groups });
   }
@@ -301,11 +293,9 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
   removeScannedBarcode(barcode: string) {
     this.sessionScanned.update(list => list.filter(e => e.barcode !== barcode));
     this.sessionBarcodeSet.delete(barcode);
-    // Also remove the group if it was the only source
-    if (!this.sessionScanned().length) { this.stopScan(); }
+    if (!this.sessionScanned().length) this.stopScan();
   }
 
-  // Review group mutations
   toggleReviewColor(groupIdx: number, designId: string) {
     this.batchReview.update(state => {
       const groups = state.groups.map((g, i) => {
@@ -316,8 +306,7 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
           : [...g.selectedColorIds, designId];
         const updated = { ...g, selectedColorIds };
         updated.availableSizes = this.buildAvailableSizes(updated);
-        // remove sizes that are no longer available
-        updated.selectedSizes = updated.selectedSizes.filter(s => updated.availableSizes.includes(s));
+        updated.selectedSizes  = updated.selectedSizes.filter(s => updated.availableSizes.includes(s));
         return updated;
       });
       return { ...state, groups };
@@ -393,12 +382,10 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     const { groups } = this.batchReview();
     const existingBarcodes = new Set(this.editableGrn().items.map(i => i.barcode));
     let added = 0, skipped = 0;
-
     for (const g of groups) {
       if (!this.canConfirmReviewGroup(g)) continue;
       const qty = Math.max(1, parseInt(g.qty, 10) || 1);
       const selectedDesigns = g.allColors.filter(d => g.selectedColorIds.includes(d.id!));
-
       for (const design of selectedDesigns) {
         for (const sizeName of g.selectedSizes) {
           const sizeObj = design.sizes.find(s => s.size === sizeName);
@@ -418,13 +405,12 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
         }
       }
     }
-
     this.closeBatchReview();
     if (skipped > 0) Swal.fire({ icon: 'info', title: 'Done', text: `${added} item(s) added. ${skipped} duplicate barcode(s) skipped.`, timer: 2500, showConfirmButton: false });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════
-  // BARCODE SCANNER  —  ultra-performance multi-pass engine
+  // BARCODE SCANNER  —  ultra-performance multi-pass engine  (v2)
   // ═══════════════════════════════════════════════════════════════════════════════
   isScanning     = signal(false);
   scanFeedback   = signal<'idle' | 'success' | 'error' | 'duplicate'>('idle');
@@ -435,23 +421,45 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
   private lastScanTime  = 0;
   private lastTickTime  = 0;
 
-  // ── Tuning knobs (optimised for distance + speed) ─────────────────────────────
-  private readonly TICK_INTERVAL = 25;   // 40 fps processing
+  // Tuning knobs
+  private readonly TICK_INTERVAL = 20;   // 50 fps processing budget
   private readonly SCAN_DEBOUNCE = 350;  // ms between same-barcode accepts
 
-  // ── Offscreen canvases (allocated once) ───────────────────────────────────────
+  // Offscreen canvases (allocated once, reused every frame)
   private fullCanvas:  HTMLCanvasElement | null = null;
   private cropCanvas:  HTMLCanvasElement | null = null;
   private cropCanvas2: HTMLCanvasElement | null = null;
   private cropCanvas3: HTMLCanvasElement | null = null;
+
+  // Native BarcodeDetector (Chrome/Android hardware path)
+  private barcodeDetector: any = null;
+  private detectorBusy = false;
+
+  // Frame dedup — tiny 16×16 sample to detect identical frames
+  private lastFrameHash = 0;
+  private dedupCanvas: HTMLCanvasElement | null = null;
+
+  // Cached barcode → design lookup (rebuilt only when designs change)
+  private barcodeMapCache: Map<string, { design: Design; size: SizePrice }> | null = null;
+  private barcodeMapVersion = 0;
 
   private torchTrack: MediaStreamTrack | null = null;
   isTorchAvailable = signal(false);
   isTorchOn        = signal(false);
   private torchEnabled = false;
 
+  private getBarcodeMap(): Map<string, { design: Design; size: SizePrice }> {
+    const designs = this.designs();
+    if (!this.barcodeMapCache || this.barcodeMapVersion !== designs.length) {
+      const map = new Map<string, { design: Design; size: SizePrice }>();
+      designs.forEach(d => d.sizes.forEach(s => map.set(String(s.BARCODE), { design: d, size: s })));
+      this.barcodeMapCache   = map;
+      this.barcodeMapVersion = designs.length;
+    }
+    return this.barcodeMapCache!;
+  }
+
   async startScan() {
-    // Reset session only if starting fresh (not resuming)
     this.isScanning.set(true);
     this.scanFeedback.set('idle');
     this.scannerMessage.set('Point camera at a barcode');
@@ -460,6 +468,18 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     this.cropCanvas  = document.createElement('canvas');
     this.cropCanvas2 = document.createElement('canvas');
     this.cropCanvas3 = document.createElement('canvas');
+    this.dedupCanvas = document.createElement('canvas');
+    this.dedupCanvas.width = this.dedupCanvas.height = 16;
+
+    if ('BarcodeDetector' in window) {
+      try {
+        this.barcodeDetector = new (window as any).BarcodeDetector({
+          formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'data_matrix']
+        });
+      } catch { this.barcodeDetector = null; }
+    }
+
+    this.getBarcodeMap(); // pre-warm cache
 
     setTimeout(async () => {
       if (!this.videoElement || !navigator.mediaDevices?.getUserMedia) {
@@ -468,7 +488,6 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
         return;
       }
       try {
-        // Request maximum resolution for long-range decode
         this.stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'environment',
@@ -477,21 +496,16 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
             advanced: [{ focusMode: 'continuous' } as any]
           }
         });
-
         const video = this.videoElement.nativeElement;
         video.srcObject = this.stream;
         await video.play();
 
-        // Torch detection
         const track = this.stream.getVideoTracks()[0];
         this.torchTrack = track;
         const caps: any = track.getCapabilities?.() ?? {};
         this.isTorchAvailable.set(!!caps.torch);
 
-        // Try to set high frame rate if supported
-        try {
-          await track.applyConstraints({ frameRate: { ideal: 60, min: 30 } } as any);
-        } catch { /* ignore */ }
+        try { await track.applyConstraints({ frameRate: { ideal: 60, min: 30 } } as any); } catch { /* ignore */ }
 
         this.tick();
       } catch {
@@ -507,13 +521,17 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
       this.torchTrack.applyConstraints({ advanced: [{ torch: false } as any] }).catch(() => {});
     }
     this.stream?.getTracks().forEach(t => t.stop());
-    this.stream       = null;
-    this.fullCanvas   = null;
-    this.cropCanvas   = null;
-    this.cropCanvas2  = null;
-    this.cropCanvas3  = null;
-    this.torchTrack   = null;
-    this.torchEnabled = false;
+    this.stream          = null;
+    this.fullCanvas      = null;
+    this.cropCanvas      = null;
+    this.cropCanvas2     = null;
+    this.cropCanvas3     = null;
+    this.dedupCanvas     = null;
+    this.torchTrack      = null;
+    this.torchEnabled    = false;
+    this.barcodeDetector = null;
+    this.detectorBusy    = false;
+    this.lastFrameHash   = 0;
     this.isScanning.set(false);
     this.isTorchOn.set(false);
     this.isTorchAvailable.set(false);
@@ -545,21 +563,50 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     const vw = video.videoWidth, vh = video.videoHeight;
     if (!vw || !vh) return;
 
+    // Async native BarcodeDetector (fire-and-forget)
+    if (this.barcodeDetector && !this.detectorBusy) {
+      this.detectorBusy = true;
+      this.barcodeDetector.detect(video)
+        .then((codes: any[]) => {
+          this.detectorBusy = false;
+          if (codes.length > 0) this.handleScanResult(codes[0].rawValue);
+        })
+        .catch(() => { this.detectorBusy = false; });
+    }
+
+    // Frame dedup: skip if sensor hasn't moved
+    if (this.isFrameDuplicate(video, vw, vh)) return;
+
+    // jsQR multi-pass fallback
     const result = this.tryDecode(video, vw, vh);
     if (result) this.handleScanResult(result);
   }
 
+  private isFrameDuplicate(video: HTMLVideoElement, vw: number, vh: number): boolean {
+    const dc  = this.dedupCanvas!;
+    const dct = dc.getContext('2d', { willReadFrequently: true })!;
+    dct.drawImage(video, vw * 0.25, vh * 0.25, vw * 0.5, vh * 0.5, 0, 0, 16, 16);
+    const { data } = dct.getImageData(0, 0, 16, 16);
+    let hash = 0;
+    for (let i = 0; i < data.length; i += 16) hash = ((hash * 31) + data[i]) >>> 0;
+    if (hash === this.lastFrameHash) return true;
+    this.lastFrameHash = hash;
+    return false;
+  }
+
   /**
-   * Multi-pass decode engine — 6 passes ordered by speed:
-   * 1. Full frame native (finds distant barcodes on high-res sensors)
-   * 2. Full frame contrast-boosted
-   * 3. Centre crop 75%, scaled to 1024px (detail for medium distance)
-   * 4. Centre crop 75%, adaptive threshold (shadow recovery)
-   * 5. Centre crop 50% (tight zoom — very close / small labels)
-   * 6. Centre crop 50%, adaptive threshold
+   * Multi-pass decode — crop-first ordering for maximum hit rate:
+   *  Pass 1-4   Centre 75% crop  (raw → boost → unsharp → SAT threshold)
+   *  Pass 5-6   Full frame       (raw → boost)
+   *  Pass 7-8   Centre 50% crop  (raw → SAT threshold)
+   *  Pass 9     Centre 40% crop  (raw)
    */
   private tryDecode(video: HTMLVideoElement, vw: number, vh: number): string | null {
-    // ── Pass 1: full frame, capped at 1920 wide ──────────────────────────────
+    // Passes 1-4: viewfinder area first (highest probability)
+    const r75 = this.cropDecode(video, vw, vh, 0.75, 1024, this.cropCanvas!);
+    if (r75) return r75;
+
+    // Passes 5-6: full frame (distant labels)
     const scale1 = Math.min(1, 1920 / Math.max(vw, 1));
     const fw = Math.round(vw * scale1), fh = Math.round(vh * scale1);
     const fc = this.fullCanvas!;
@@ -569,39 +616,35 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     const imgFull = fctx.getImageData(0, 0, fw, fh);
     let r = jsQR(imgFull.data, fw, fh, { inversionAttempts: 'attemptBoth' });
     if (r?.data) return r.data;
-
-    // ── Pass 2: full frame, contrast boosted ──────────────────────────────────
-    const boosted = this.contrastBoost(imgFull, 1.5, 20);
-    r = jsQR(boosted.data, fw, fh, { inversionAttempts: 'attemptBoth' });
+    const boostedFull = this.contrastBoost(imgFull, 1.5, 20);
+    r = jsQR(boostedFull.data, fw, fh, { inversionAttempts: 'attemptBoth' });
     if (r?.data) return r.data;
 
-    // ── Pass 3 & 4: centre crop 75% → 1024px ─────────────────────────────────
-    const r75 = this.cropDecode(video, vw, vh, 0.75, 1024, this.cropCanvas!);
-    if (r75) return r75;
-
-    // ── Pass 5 & 6: centre crop 50% → 900px (tight zoom) ─────────────────────
+    // Passes 7-8: tight 50% crop
     const r50 = this.cropDecode(video, vw, vh, 0.50, 900, this.cropCanvas2!);
     if (r50) return r50;
 
-    // ── Pass 7: 40% super-tight crop (very close labels) ─────────────────────
+    // Pass 9: super-tight 40%
     const r40 = this.cropDecode(video, vw, vh, 0.40, 800, this.cropCanvas3!);
     if (r40) return r40;
 
     return null;
   }
 
-  /** Crop + decode with raw and adaptive-threshold passes */
-  private cropDecode(video: HTMLVideoElement, vw: number, vh: number, ratio: number, outSize: number, canvas: HTMLCanvasElement): string | null {
-    const cx = vw * (1 - ratio) / 2;
-    const cy = vh * (1 - ratio) / 2;
-    const cw = vw * ratio;
-    const ch = vh * ratio;
+  private cropDecode(
+    video: HTMLVideoElement,
+    vw: number, vh: number,
+    ratio: number, outSize: number,
+    canvas: HTMLCanvasElement
+  ): string | null {
+    const cx = vw * (1 - ratio) / 2, cy = vh * (1 - ratio) / 2;
+    const cw = vw * ratio,           ch = vh * ratio;
     this.setSize(canvas, outSize, outSize);
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
     ctx.drawImage(video, cx, cy, cw, ch, 0, 0, outSize, outSize);
     const raw = ctx.getImageData(0, 0, outSize, outSize);
 
-    // Pass A — raw crop
+    // Pass A — raw
     let r = jsQR(raw.data, outSize, outSize, { inversionAttempts: 'attemptBoth' });
     if (r?.data) return r.data;
 
@@ -610,15 +653,19 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     r = jsQR(boosted.data, outSize, outSize, { inversionAttempts: 'attemptBoth' });
     if (r?.data) return r.data;
 
-    // Pass C — adaptive threshold (shadow / uneven light)
-    const thresh = this.adaptiveThreshold(raw, 25, 8);
+    // Pass C — unsharp mask (recovers blurry / out-of-focus codes)
+    const sharpened = this.unsharpMask(raw, 1.5, 0.08);
+    r = jsQR(sharpened.data, outSize, outSize, { inversionAttempts: 'attemptBoth' });
+    if (r?.data) return r.data;
+
+    // Pass D — SAT adaptive threshold (O(n) — handles shadows / uneven light)
+    const thresh = this.satAdaptiveThreshold(raw, 31, 8);
     r = jsQR(thresh.data, outSize, outSize, { inversionAttempts: 'attemptBoth' });
     if (r?.data) return r.data;
 
     return null;
   }
 
-  /** Boost contrast: multiply luminance deviation, then shift brightness */
   private contrastBoost(src: ImageData, factor: number, brightness: number): ImageData {
     const d = new Uint8ClampedArray(src.data);
     for (let i = 0; i < d.length; i += 4) {
@@ -629,59 +676,92 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     return new ImageData(d, src.width, src.height);
   }
 
-  /** Local adaptive threshold — recovers barcodes in shadow / uneven light */
-  private adaptiveThreshold(src: ImageData, blockSize: number, c: number): ImageData {
+  private unsharpMask(src: ImageData, sharpenAmount: number, threshold: number): ImageData {
     const { width, height, data } = src;
     const out  = new Uint8ClampedArray(data.length);
-    const half = Math.floor(blockSize / 2);
+    const luma = new Float32Array(width * height);
+    for (let i = 0; i < width * height; i++) {
+      const p = i * 4;
+      luma[i] = 0.299 * data[p] + 0.587 * data[p+1] + 0.114 * data[p+2];
+    }
+    const blur = new Float32Array(width * height);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         let sum = 0, cnt = 0;
-        for (let ky = -half; ky <= half; ky++) {
-          for (let kx = -half; kx <= half; kx++) {
-            const nx = Math.min(width-1,  Math.max(0, x+kx));
-            const ny = Math.min(height-1, Math.max(0, y+ky));
-            const i  = (ny*width+nx)*4;
-            sum += 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
-            cnt++;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = Math.min(width - 1, Math.max(0, x + dx));
+            const ny = Math.min(height - 1, Math.max(0, y + dy));
+            sum += luma[ny * width + nx]; cnt++;
           }
         }
-        const mean  = sum / cnt;
-        const idx   = (y*width+x)*4;
-        const lum   = 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
-        const pixel = lum < mean - c ? 0 : 255;
-        out[idx] = out[idx+1] = out[idx+2] = pixel; out[idx+3] = 255;
+        blur[y * width + x] = sum / cnt;
+      }
+    }
+    for (let i = 0; i < width * height; i++) {
+      const p    = i * 4;
+      const diff = luma[i] - blur[i];
+      const boost = Math.abs(diff) > threshold * 255 ? sharpenAmount : 0;
+      const v = Math.min(255, Math.max(0, luma[i] + diff * boost));
+      out[p] = out[p+1] = out[p+2] = v; out[p+3] = 255;
+    }
+    return new ImageData(out, width, height);
+  }
+
+  private satAdaptiveThreshold(src: ImageData, blockSize: number, c: number): ImageData {
+    const { width, height, data } = src;
+    const half = Math.floor(blockSize / 2);
+    const gray = new Float32Array(width * height);
+    for (let i = 0; i < width * height; i++) {
+      const p = i * 4;
+      gray[i] = 0.299 * data[p] + 0.587 * data[p+1] + 0.114 * data[p+2];
+    }
+    const sat = new Float64Array((width + 1) * (height + 1));
+    for (let y = 1; y <= height; y++) {
+      for (let x = 1; x <= width; x++) {
+        sat[y * (width+1) + x] =
+          gray[(y-1) * width + (x-1)]
+          + sat[(y-1) * (width+1) + x]
+          + sat[y * (width+1) + (x-1)]
+          - sat[(y-1) * (width+1) + (x-1)];
+      }
+    }
+    const out = new Uint8ClampedArray(data.length);
+    for (let y = 0; y < height; y++) {
+      const r1 = Math.max(0, y - half), r2 = Math.min(height - 1, y + half) + 1;
+      for (let x = 0; x < width; x++) {
+        const c1  = Math.max(0, x - half), c2 = Math.min(width - 1, x + half) + 1;
+        const cnt = (r2 - r1) * (c2 - c1);
+        const sum = sat[r2 * (width+1) + c2] - sat[r1 * (width+1) + c2]
+                  - sat[r2 * (width+1) + c1] + sat[r1 * (width+1) + c1];
+        const pixel = gray[y * width + x] < (sum / cnt) - c ? 0 : 255;
+        const p = (y * width + x) * 4;
+        out[p] = out[p+1] = out[p+2] = pixel; out[p+3] = 255;
       }
     }
     return new ImageData(out, width, height);
   }
 
   private setSize(c: HTMLCanvasElement, w: number, h: number) {
-    if (c.width !== w)  c.width  = w;
+    if (c.width  !== w) c.width  = w;
     if (c.height !== h) c.height = h;
   }
 
   private handleScanResult(barcode: string) {
     const now = Date.now();
     if (now - this.lastScanTime < this.SCAN_DEBOUNCE) return;
-
     const bc = barcode.trim();
 
-    // Already scanned this session → flash duplicate
     if (this.sessionBarcodeSet.has(bc)) {
-      if (now - this.lastScanTime < 1500) return; // throttle duplicate flash
+      if (now - this.lastScanTime < 1500) return;
       this.lastScanTime = now;
       this.scanFeedback.set('duplicate');
-      this.scannerMessage.set(`↩ Already scanned`);
+      this.scannerMessage.set('↩ Already scanned');
       setTimeout(() => { this.scanFeedback.set('idle'); this.scannerMessage.set('Point camera at a barcode'); }, 1000);
       return;
     }
 
-    // Resolve barcode → design
-    const lookup = new Map<string, { design: Design; size: SizePrice }>();
-    this.designs().forEach(d => d.sizes.forEach(s => lookup.set(String(s.BARCODE), { design: d, size: s })));
-    const found = lookup.get(bc);
-
+    const found = this.getBarcodeMap().get(bc);
     if (!found) {
       this.lastScanTime = now;
       this.scanFeedback.set('error');
@@ -692,41 +772,76 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
 
     this.lastScanTime = now;
     this.sessionBarcodeSet.add(bc);
-    this.sessionScanned.update(list => [...list, { barcode: bc, styleNo: found.design.styleNo, resolvedAt: now }]);
-
+    this.sessionScanned.update(list => [
+      ...list, { barcode: bc, styleNo: found.design.styleNo, resolvedAt: now }
+    ]);
     this.scanFeedback.set('success');
-    this.scannerMessage.set(`✓ ${found.design.styleNo}`);
-    setTimeout(() => { this.scanFeedback.set('idle'); this.scannerMessage.set('Point camera at a barcode'); }, 700);
+    this.scannerMessage.set(`✓ ${found.design.styleNo} — ${found.size.size}`);
+    setTimeout(() => { this.scanFeedback.set('idle'); this.scannerMessage.set('Point camera at a barcode'); }, 900);
   }
 
-  // ── Date helpers ─────────────────────────────────────────────────────────────
+  // ── Date helpers ──────────────────────────────────────────────────────────────
   private currentMonthStart(): string {
     const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
   }
+
   private currentMonthEnd(): string {
-    const d = new Date();
-    const last = new Date(d.getFullYear(), d.getMonth()+1, 0);
-    return `${last.getFullYear()}-${String(last.getMonth()+1).padStart(2,'0')}-${String(last.getDate()).padStart(2,'0')}`;
+    const d    = new Date();
+    const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
   }
-  isCurrentMonthFilter = computed(() => this.filterFromDate() === this.currentMonthStart() && this.filterToDate() === this.currentMonthEnd());
-  resetToCurrentMonth() { this.filterFromDate.set(this.currentMonthStart()); this.filterToDate.set(this.currentMonthEnd()); }
-  clearDateFilter()     { this.filterFromDate.set(''); this.filterToDate.set(''); }
+
+  isCurrentMonthFilter = computed(() =>
+    this.filterFromDate() === this.currentMonthStart() &&
+    this.filterToDate()   === this.currentMonthEnd()
+  );
+
+  resetToCurrentMonth() {
+    this.filterFromDate.set(this.currentMonthStart());
+    this.filterToDate.set(this.currentMonthEnd());
+    this.currentPage.set(1);
+  }
+
+  clearDateFilter() {
+    this.filterFromDate.set('');
+    this.filterToDate.set('');
+    this.currentPage.set(1);
+  }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────────
   ngOnInit() {
     Swal.fire({ title: 'Loading data...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     let dLoaded = false, gLoaded = false;
     const tryClose = () => { if (dLoaded && gLoaded) Swal.close(); };
-    this.designService.getDesigns().subscribe({ next: d => { this.designs.set(d); dLoaded = true; tryClose(); }, error: () => { dLoaded = true; tryClose(); } });
-    this.grnService.getGoodsInwards().subscribe({ next: g => { this.grns.set(g); gLoaded = true; tryClose(); }, error: () => { gLoaded = true; tryClose(); Swal.fire('Error','Failed to load GRNs','error'); } });
+    this.designService.getDesigns().subscribe({
+      next:  d  => { this.designs.set(d); dLoaded = true; tryClose(); },
+      error: () => { dLoaded = true; tryClose(); Swal.fire('Error', 'Failed to load designs', 'error'); }
+    });
+    this.grnService.getGoodsInwards().subscribe({
+      next:  g  => { this.grns.set(g); gLoaded = true; tryClose(); },
+      error: () => { gLoaded = true; tryClose(); Swal.fire('Error', 'Failed to load GRNs', 'error'); }
+    });
   }
+
   ngOnDestroy() { this.stopScan(); }
 
   // ── Navigation ────────────────────────────────────────────────────────────────
-  showAddForm()  { this.editableGrn.set({ ...JSON.parse(JSON.stringify(EMPTY_GRN)), grnNo: `GRN-${Date.now()}` }); this.mode.set('form'); }
-  showEditForm(grn: GoodsInward) { this.editableGrn.set(JSON.parse(JSON.stringify(grn))); this.mode.set('form'); }
-  showViewMode(grn: GoodsInward) { this.viewGrn.set(grn); this.mode.set('view'); }
+  showAddForm() {
+    this.editableGrn.set({ ...JSON.parse(JSON.stringify(EMPTY_GRN)), grnNo: `GRN-${Date.now()}` });
+    this.mode.set('form');
+  }
+
+  showEditForm(grn: GoodsInward) {
+    this.editableGrn.set(JSON.parse(JSON.stringify(grn)));
+    this.mode.set('form');
+  }
+
+  showViewMode(grn: GoodsInward) {
+    this.viewGrn.set(grn);
+    this.mode.set('view');
+  }
+
   cancel() {
     this.mode.set('list');
     this.editableGrn.set(JSON.parse(JSON.stringify(EMPTY_GRN)));
@@ -748,9 +863,9 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     if (!grn.invoiceNo.trim())    { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please enter the invoice number.' }); return; }
     if (grn.items.length === 0)   { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please add at least one item.' }); return; }
 
-    const hasQty    = grn.items.some(i => (Number(i.receivedQty)||0) > 0);
+    const hasQty  = grn.items.some(i => (Number(i.receivedQty) || 0) > 0);
     const status: GoodsInward['status'] = hasQty ? 'Received' : 'Draft';
-    const payload   = { ...(grn as any), status } as Omit<GoodsInward,'id'>;
+    const payload = { ...(grn as any), status } as Omit<GoodsInward, 'id'>;
 
     try {
       Swal.fire({ title: this.isEditMode() ? 'Updating GRN…' : 'Saving GRN…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
@@ -765,7 +880,11 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
   }
 
   async deleteGrn(grn: GoodsInward) {
-    const r = await Swal.fire({ title: 'Delete GRN?', text: `"${grn.grnNo}" will be permanently deleted.`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626', confirmButtonText: 'Yes, delete' });
+    const r = await Swal.fire({
+      title: 'Delete GRN?', text: `"${grn.grnNo}" will be permanently deleted.`,
+      icon: 'warning', showCancelButton: true,
+      confirmButtonColor: '#dc2626', confirmButtonText: 'Yes, delete'
+    });
     if (!r.isConfirmed) return;
     try {
       Swal.fire({ title: 'Deleting…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
@@ -777,16 +896,28 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     }
   }
 
-  private refreshGrns() { this.grnService.getGoodsInwards().subscribe({ next: g => this.grns.set(g) }); }
+  private refreshGrns() {
+    this.grnService.getGoodsInwards().subscribe({ next: g => this.grns.set(g) });
+  }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────────
+  // ── Display helpers ───────────────────────────────────────────────────────────
   getStatusClass(status: string): string {
     return status === 'Received' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600';
   }
-  getGrnTotalReceived(grn: GoodsInward): number { return grn.items.reduce((s,i) => s+(Number(i.receivedQty)||0),0); }
-  getGrnTotalValue(grn: GoodsInward):    number { return grn.items.reduce((s,i) => s+((Number(i.receivedQty)||0)*(Number(i.WSP)||0)),0); }
+
+  getGrnTotalReceived(grn: GoodsInward): number {
+    return grn.items.reduce((s, i) => s + (Number(i.receivedQty) || 0), 0);
+  }
+
+  getGrnTotalValue(grn: GoodsInward): number {
+    return grn.items.reduce((s, i) => s + ((Number(i.receivedQty) || 0) * (Number(i.WSP) || 0)), 0);
+  }
+
   formatDate(raw: any): string {
     if (!raw) return '';
-    try { const d = raw?.toDate ? raw.toDate() : new Date(raw); return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); } catch { return ''; }
+    try {
+      const d = raw?.toDate ? raw.toDate() : new Date(raw);
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch { return ''; }
   }
 }
