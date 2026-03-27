@@ -8,8 +8,9 @@ import { UserManagementComponent } from './components/user-management/user-manag
 import { GoodsInwardComponent } from './components/goods-inward/goods-inward.component';
 import { AuthService } from './services/auth.service';
 import { AppScreen } from './models/user-group.model';
+import { InventoryComponent } from './components/inventory/inventory.component';
 
-type View = 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward';
+type View = 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward' | 'inventory';
 
 @Component({
   selector: 'app-root',
@@ -24,6 +25,7 @@ type View = 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward';
     LoginComponent,
     UserManagementComponent,
     GoodsInwardComponent,
+    InventoryComponent,
   ],
 })
 export class AppComponent {
@@ -41,6 +43,7 @@ export class AppComponent {
         else if (this.canView('designs')) this.setView('designs');
         else if (this.canView('goodsInward')) this.setView('goodsInward');
         else if (this.canView('users')) this.setView('users');
+        else if (this.canView('inventory')) this.setView('inventory');
       }
     });
   }

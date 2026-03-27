@@ -44,7 +44,7 @@
           <p class="text-xs text-gray-500">{{$any(sp.selectedSizes | keyvalue).length}} selected</p>
           <div class="flex gap-2">
             <button (click)="closeSizePicker()" type="button" class="py-2 px-4 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Back</button>
-            <button (click)="confirmSizeSelection()" [disabled]="!canConfirmSizes()" type="button" class="py-2 px-5 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">Add to GRN</button>
+            <button (click)="confirmSizeSelection()" [disabled]="!canConfirmSizes()" type="button" class="py-2 px-5 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">Add to Inward</button>
           </div>
         </div>
       </div>
@@ -174,7 +174,7 @@
                               class="px-4 py-2 rounded-xl border-2 font-bold text-sm transition-all min-w-[52px] text-center"
                               [class.border-indigo-500]="szSel" [class.bg-indigo-600]="szSel" [class.text-white]="szSel"
                               [class.border-gray-200]="!szSel" [class.bg-white]="!szSel" [class.text-gray-700]="!szSel">
-                        {{sizeName}}
+                        {{sizeKeyLabel(sizeName)}}
                       </button>
                     }
                   </div>
@@ -189,7 +189,7 @@
                       <div class="divide-y divide-gray-100">
                         @for (sizeName of group.selectedSizes; track sizeName) {
                           <div class="flex items-center justify-between px-3 py-2">
-                            <span class="text-sm font-bold text-indigo-700 min-w-[52px]">{{sizeName}}</span>
+                            <span class="text-sm font-bold text-indigo-700 min-w-[52px]">{{sizeKeyLabel(sizeName)}}</span>
                             <div class="flex items-center gap-2">
                               <button type="button"
                                       (click)="updateReviewSizeQty(gi, sizeName, String(Math.max(1, (+(group.sizeQtys[sizeName]||'1')) - 1)))"
@@ -236,7 +236,7 @@
                   [disabled]="!canAddAllReviewGroups()"
                   class="px-7 py-2.5 bg-green-600 text-white rounded-xl text-sm font-bold hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-            Add to GRN
+            Add to Inward
           </button>
         </div>
       </div>
@@ -366,10 +366,10 @@
     <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
       <div class="flex flex-col sm:flex-row justify-between items-center gap-4 border-b pb-4 mb-6">
         <div>
-          <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Goods Inward (GRN)</h2>
+          <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Goods Inward </h2>
           <p class="text-sm text-gray-500 mt-1">Track received stock from suppliers</p>
         </div>
-        <button (click)="showAddForm()" class="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">+ New GRN</button>
+        <button (click)="showAddForm()" class="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">+ New Inward</button>
       </div>
 
       <!-- Date Filter -->
@@ -386,7 +386,7 @@
 
       <div class="relative mb-4">
         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg></div>
-        <input type="text" placeholder="Search GRN No, supplier, invoice…" class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500" [ngModel]="searchTerm()" (ngModelChange)="onSearch($event)">
+        <input type="text" placeholder="Search Inward No, supplier, invoice…" class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500" [ngModel]="searchTerm()" (ngModelChange)="onSearch($event)">
       </div>
 
       <div class="overflow-x-auto">
@@ -394,7 +394,7 @@
           <table class="min-w-full">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GRN No</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Inward No</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Received</th>
@@ -428,8 +428,8 @@
         } @else {
           <div class="text-center py-10 border-2 border-dashed border-gray-200 rounded-lg">
             <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-            <h3 class="mt-2 text-sm font-medium text-gray-900">No GRNs found</h3>
-            <p class="mt-1 text-sm text-gray-500">@if(searchTerm()||filterFromDate()){Try adjusting your filters.}@else{Get started by creating a new GRN.}</p>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No Inward found</h3>
+            <p class="mt-1 text-sm text-gray-500">@if(searchTerm()||filterFromDate()){Try adjusting your filters.}@else{Get started by creating a new Inward.}</p>
           </div>
         }
       </div>
@@ -504,10 +504,10 @@
     @let grn = editableGrn();
     <div class="space-y-6">
       <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
-        <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 border-b pb-4 mb-6">{{isEditMode()?'Edit GRN':'New Goods Inward (GRN)'}}</h2>
+        <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 border-b pb-4 mb-6">{{isEditMode()?'Edit Inward':'New Goods Inward (GRN)'}}</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          <div><label class="block text-sm font-medium text-gray-700">GRN Number</label><input type="text" [ngModel]="grn.grnNo" disabled class="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-gray-500 text-sm cursor-not-allowed"></div>
-          <div><label class="block text-sm font-medium text-gray-700">Supplier Name <span class="text-red-500">*</span></label><input type="text" [ngModel]="grn.supplierName" (ngModelChange)="editableGrn.update(g=>({...g,supplierName:$event}))" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g., Rajan Textiles"></div>
+          <div><label class="block text-sm font-medium text-gray-700">Inward Number</label><input type="text" [ngModel]="grn.grnNo" disabled class="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-gray-500 text-sm cursor-not-allowed"></div>
+          <div><label class="block text-sm font-medium text-gray-700">Supplier Name <span class="text-red-500">*</span></label><input type="text" [ngModel]="grn.supplierName" (ngModelChange)="editableGrn.update(g=>({...g,supplierName:$event}))" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g., Regent Creation Pvt.Ltd"></div>
           <div><label class="block text-sm font-medium text-gray-700">Invoice Number <span class="text-red-500">*</span></label><input type="text" [ngModel]="grn.invoiceNo" (ngModelChange)="editableGrn.update(g=>({...g,invoiceNo:$event}))" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g., INV-2025-001"></div>
           <div><label class="block text-sm font-medium text-gray-700">Invoice Date</label><input type="date" [ngModel]="grn.invoiceDate" (ngModelChange)="editableGrn.update(g=>({...g,invoiceDate:$event}))" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div>
           <div><label class="block text-sm font-medium text-gray-700">Received Date</label><input type="date" [ngModel]="grn.receivedDate" (ngModelChange)="editableGrn.update(g=>({...g,receivedDate:$event}))" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div>
@@ -569,7 +569,7 @@
       <!-- Footer Actions -->
       <div class="bg-white shadow-lg rounded-xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
         <button type="button" (click)="cancel()" class="w-full sm:w-auto px-6 py-2.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">Cancel</button>
-        <button type="button" (click)="saveGrn()" class="w-full sm:w-auto px-8 py-2.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm">{{isEditMode()?'Update GRN':'Save GRN'}}</button>
+        <button type="button" (click)="saveGrn()" class="w-full sm:w-auto px-8 py-2.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm">{{isEditMode()?'Update Inward':'Save Inward'}}</button>
       </div>
     </div>
   }

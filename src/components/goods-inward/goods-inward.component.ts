@@ -9,6 +9,7 @@ import { GoodsInward, GoodsInwardItem } from '../../models/goods-inward.model';
 import { DesignService } from '../../services/design.service';
 import { GoodsInwardService } from '../../services/goods-inward.service';
 import Swal from 'sweetalert2';
+import { InventoryService } from '../../services/inventory.service';
 
 declare const jsQR: any;
 
@@ -69,6 +70,7 @@ const SIZE_ORDER = ['XS','S','M','L','XL','XXL','XXXL','2XL','3XL','4XL','5XL','
 export class GoodsInwardComponent implements OnInit, OnDestroy {
   private designService = inject(DesignService);
   private grnService    = inject(GoodsInwardService);
+  private inventoryService = inject(InventoryService);
 
   @ViewChild('video')  videoElement?: ElementRef<HTMLVideoElement>;
   @ViewChild('canvas') canvasElement?: ElementRef<HTMLCanvasElement>;
@@ -251,12 +253,30 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     });
   }
 
-  private buildAvailableSizes(group: ReviewGroup): string[] {
-    const selected = group.allColors.filter(d => group.selectedColorIds.includes(d.id!));
-    const s = new Set<string>();
-    selected.forEach(d => d.sizes.forEach(sz => s.add(sz.size)));
-    return this.sortSizes([...s]);
-  }
+    private buildAvailableSizes(group: ReviewGroup): string[] {
+        const selected = group.allColors.filter(d => group.selectedColorIds.includes(d.id!));
+        const s = new Set<string>();
+        selected.forEach(d => d.sizes.forEach(sz => {
+            const key = sz.sleeveType ? `${sz.size}|${sz.sleeveType}` : sz.size;
+            s.add(key);
+        }));
+        return this.sortSizeKeys([...s]);
+    }
+
+    private sortSizeKeys(keys: string[]): string[] {
+        return [...keys].sort((a, b) => {
+            const sa = a.split('|')[0], sb = b.split('|')[0];
+            const ia = SIZE_ORDER.indexOf(sa), ib = SIZE_ORDER.indexOf(sb);
+            if (ia !== -1 && ib !== -1) { if (ia !== ib) return ia - ib; return a.localeCompare(b); }
+            if (ia !== -1) return -1; if (ib !== -1) return 1;
+            return a.localeCompare(b, undefined, { numeric: true });
+        });
+    }
+
+    sizeKeyLabel(key: string): string {
+        const [size, sleeve] = key.split('|');
+        return sleeve ? `${size} (${sleeve})` : size;
+    }
 
   openBatchReview() {
     const entries = this.sessionScanned();
@@ -408,23 +428,27 @@ getTotalPcsForGroup(g: ReviewGroup): number {
       if (!this.canConfirmReviewGroup(g)) continue;
         const selectedDesigns = g.allColors.filter(d => g.selectedColorIds.includes(d.id!));
         for (const design of selectedDesigns) {
-        for (const sizeName of g.selectedSizes) {
-            const qty = Math.max(1, parseInt(g.sizeQtys[sizeName], 10) || 1);
-            const sizeObj = design.sizes.find(s => s.size === sizeName);
-          if (!sizeObj) continue;
-          const barcode = String(sizeObj.BARCODE);
-          if (existingBarcodes.has(barcode)) { skipped++; continue; }
-          this.editableGrn.update(grn => ({
-            ...grn, items: [...grn.items, {
-              designId: design.id ?? '', styleNo: design.styleNo, color: design.color ?? '',
-              group: design.group ?? '', size: sizeObj.size, sleeveType: sizeObj.sleeveType ?? undefined,
-              barcode, fabricType: sizeObj.fabricType ?? '', receivedQty: qty,
-              WSP: sizeObj.WSP, price: sizeObj.price
-            }]
-          }));
-          existingBarcodes.add(barcode);
-          added++;
-        }
+            for (const sizeKey of g.selectedSizes) {
+            const qty = Math.max(1, parseInt(g.sizeQtys[sizeKey], 10) || 1);
+            const [sizeName, sleeveType] = sizeKey.split('|');
+            const matchingSizes = design.sizes.filter(s =>
+                s.size === sizeName && (!sleeveType || s.sleeveType === sleeveType)
+            );
+            for (const sizeObj of matchingSizes) {
+            const barcode = String(sizeObj.BARCODE);
+            if (existingBarcodes.has(barcode)) { skipped++; continue; }
+            this.editableGrn.update(grn => ({
+                ...grn, items: [...grn.items, {
+                designId: design.id ?? '', styleNo: design.styleNo, color: design.color ?? '',
+                group: design.group ?? '', size: sizeObj.size, sleeveType: sizeObj.sleeveType ?? undefined,
+                barcode, fabricType: sizeObj.fabricType ?? '', receivedQty: qty,
+                WSP: sizeObj.WSP, price: sizeObj.price
+                }]
+            }));
+            existingBarcodes.add(barcode);
+            added++;
+            } // end matchingSizes loop
+            }
       }
     }
     this.closeBatchReview();
@@ -893,9 +917,12 @@ getTotalPcsForGroup(g: ReviewGroup): number {
       Swal.fire({ title: this.isEditMode() ? 'Updating GRN…' : 'Saving GRN…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
       if (this.isEditMode()) await this.grnService.updateGoodsInward(payload as GoodsInward);
       else                   await this.grnService.createGoodsInward(payload);
-      await Swal.fire({ icon: 'success', title: 'Saved!', timer: 2000, showConfirmButton: false });
-      this.refreshGrns();
-      this.cancel();
+        if (status === 'Received') {
+            await this.inventoryService.upsertFromGrn(payload.items, payload.grnNo);
+        }
+        await Swal.fire({ icon: 'success', title: 'Saved!', timer: 2000, showConfirmButton: false });
+        this.refreshGrns();
+        this.cancel();
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Error', text: err?.message ?? 'Failed to save GRN.' });
     }

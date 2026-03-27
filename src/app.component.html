@@ -54,14 +54,25 @@
         }
 
         @if(canView('users')) {
-        <button (click)="setView('users')"
-          class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
-          [class.bg-gray-900]="currentView() === 'users'">
-          <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.084-1.28-.24-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.084-1.28.24-1.857m10.514-6.32a4 4 0 10-5.028 0m5.028 0a4 4 0 11-5.028 0M7 11a4 4 0 100-8 4 4 0 000 8z"/>
-          </svg>
-          User Management
-        </button>
+            <button (click)="setView('users')"
+            class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
+            [class.bg-gray-900]="currentView() === 'users'">
+            <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.084-1.28-.24-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.084-1.28.24-1.857m10.514-6.32a4 4 0 10-5.028 0m5.028 0a4 4 0 11-5.028 0M7 11a4 4 0 100-8 4 4 0 000 8z"/>
+            </svg>
+            User Management
+            </button>
+        }
+
+        @if(canView('inventory')) {
+            <button (click)="setView('inventory')"
+            class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
+            [class.bg-gray-900]="currentView() === 'inventory'">
+            <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+            </svg>
+                Inventory
+            </button>
         }
 
       </div>
@@ -114,6 +125,7 @@
             @if(canView('designs'))    { <button (click)="setView('designs')"     [class]="currentView() === 'designs'     ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">Design Master</button> }
             @if(canView('goodsInward')){ <button (click)="setView('goodsInward')" [class]="currentView() === 'goodsInward' ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">Goods Inward</button> }
             @if(canView('users'))      { <button (click)="setView('users')"       [class]="currentView() === 'users'       ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">User Management</button> }
+            @if(canView('inventory'))      { <button (click)="setView('inventory')"       [class]="currentView() === 'inventory'       ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">inventory</button> }
           </nav>
         </div>
         <div class="flex-shrink-0 flex bg-gray-700 p-4">
@@ -138,6 +150,7 @@
           @case ('designs')     { <app-design-master></app-design-master> }
           @case ('goodsInward') { <app-goods-inward></app-goods-inward> }
           @case ('users')       { <app-user-management></app-user-management> }
+          @case ('inventory') { <app-inventory></app-inventory> }
         }
       </div>
     </main>
