@@ -569,7 +569,22 @@
       <!-- Footer Actions -->
       <div class="bg-white shadow-lg rounded-xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
         <button type="button" (click)="cancel()" class="w-full sm:w-auto px-6 py-2.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">Cancel</button>
-        <button type="button" (click)="saveGrn()" class="w-full sm:w-auto px-8 py-2.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm">{{isEditMode()?'Update Inward':'Save Inward'}}</button>
+        <button type="button" (click)="saveGrn()"
+                [disabled]="isSaving()"
+                class="w-full sm:w-auto px-8 py-2.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-w-[150px] transition-all">
+        @if (isSaving()) {
+            <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <span>{{isEditMode() ? 'Updating…' : 'Saving…'}}</span>
+        } @else {
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span>{{isEditMode() ? 'Update Inward' : 'Save Inward'}}</span>
+        }
+        </button>
       </div>
     </div>
   }

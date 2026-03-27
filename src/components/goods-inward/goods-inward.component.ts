@@ -241,6 +241,7 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
   sessionScanned    = signal<ScannedEntry[]>([]);
   private sessionBarcodeSet = new Set<string>();
   batchReview       = signal<BatchReviewState>(EMPTY_BATCH_REVIEW);
+  isSaving = signal(false);
   hasSessionScans   = computed(() => this.sessionScanned().length > 0);
   reviewGroupCount  = computed(() => this.batchReview().groups.length);
 
@@ -902,31 +903,33 @@ getTotalPcsForGroup(g: ReviewGroup): number {
   changePage(p: number)          { if (p >= 1 && p <= this.totalPages()) this.currentPage.set(p); }
   onItemsPerPageChange(e: Event) { this.itemsPerPage.set(Number((e.target as HTMLSelectElement).value)); this.currentPage.set(1); }
 
-  // ── Save / Delete ─────────────────────────────────────────────────────────────
-  async saveGrn() {
-    const grn = this.editableGrn();
-    if (!grn.supplierName.trim()) { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please enter the supplier name.' }); return; }
-    if (!grn.invoiceNo.trim())    { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please enter the invoice number.' }); return; }
-    if (grn.items.length === 0)   { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please add at least one item.' }); return; }
+    // ── Save / Delete ─────────────────────────────────────────────────────────────
+    async saveGrn() {
+        const grn = this.editableGrn();
+        if (!grn.supplierName.trim()) { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please enter the supplier name.' }); return; }
+        if (!grn.invoiceNo.trim())    { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please enter the invoice number.' }); return; }
+        if (grn.items.length === 0)   { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please add at least one item.' }); return; }
 
-    const hasQty  = grn.items.some(i => (Number(i.receivedQty) || 0) > 0);
-    const status: GoodsInward['status'] = hasQty ? 'Received' : 'Draft';
-    const payload = { ...(grn as any), status } as Omit<GoodsInward, 'id'>;
+        const hasQty  = grn.items.some(i => (Number(i.receivedQty) || 0) > 0);
+        const status: GoodsInward['status'] = hasQty ? 'Received' : 'Draft';
+        const payload = { ...(grn as any), status } as Omit<GoodsInward, 'id'>;
 
-    try {
-      Swal.fire({ title: this.isEditMode() ? 'Updating GRN…' : 'Saving GRN…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      if (this.isEditMode()) await this.grnService.updateGoodsInward(payload as GoodsInward);
-      else                   await this.grnService.createGoodsInward(payload);
+        this.isSaving.set(true);
+        try {
+        if (this.isEditMode()) await this.grnService.updateGoodsInward(payload as GoodsInward);
+        else                   await this.grnService.createGoodsInward(payload);
         if (status === 'Received') {
             await this.inventoryService.upsertFromGrn(payload.items, payload.grnNo);
         }
-        await Swal.fire({ icon: 'success', title: 'Saved!', timer: 2000, showConfirmButton: false });
+        await Swal.fire({ icon: 'success', title: 'Saved!', text: `GRN saved as "${status}".`, timer: 2000, showConfirmButton: false });
         this.refreshGrns();
         this.cancel();
-    } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Error', text: err?.message ?? 'Failed to save GRN.' });
+        } catch (err: any) {
+        Swal.fire({ icon: 'error', title: 'Save Failed', text: err?.message ?? 'Failed to save GRN.' });
+        } finally {
+        this.isSaving.set(false);
+        }
     }
-  }
 
   async deleteGrn(grn: GoodsInward) {
     const r = await Swal.fire({
