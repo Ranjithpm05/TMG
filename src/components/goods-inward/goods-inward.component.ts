@@ -35,7 +35,7 @@ type ReviewGroup = {
   selectedColorIds: string[];
   availableSizes:   string[];
   selectedSizes:    string[];
-  qty:              string;
+  sizeQtys:         Record<string, string>;   
   sourceBarcodes:   string[];
 };
 
@@ -273,11 +273,12 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
         styleNo, allColors,
         selectedColorIds: allColors.map(d => d.id!),
         availableSizes: [], selectedSizes: [],
-        qty: '1',
+        sizeQtys: {},
         sourceBarcodes: ents.map(e => e.barcode)
-      };
-      group.availableSizes = this.buildAvailableSizes(group);
-      group.selectedSizes  = [...group.availableSizes];
+        };
+        group.availableSizes = this.buildAvailableSizes(group);
+        group.selectedSizes  = [...group.availableSizes];
+        group.availableSizes.forEach(s => group.sizeQtys[s] = '1');
       groups.push(group);
     }
     this.stopScan();
@@ -306,7 +307,10 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
           : [...g.selectedColorIds, designId];
         const updated = { ...g, selectedColorIds };
         updated.availableSizes = this.buildAvailableSizes(updated);
-        updated.selectedSizes  = updated.selectedSizes.filter(s => updated.availableSizes.includes(s));
+       updated.selectedSizes  = updated.selectedSizes.filter(s => updated.availableSizes.includes(s));
+        const sizeQtys: Record<string, string> = {};
+        updated.selectedSizes.forEach(s => sizeQtys[s] = g.sizeQtys[s] ?? '1');
+        updated.sizeQtys = sizeQtys;
         return updated;
       });
       return { ...state, groups };
@@ -320,6 +324,9 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
         const updated = { ...g, selectedColorIds: g.allColors.map(d => d.id!) };
         updated.availableSizes = this.buildAvailableSizes(updated);
         updated.selectedSizes  = [...updated.availableSizes];
+        const sizeQtys: Record<string, string> = {};
+        updated.selectedSizes.forEach(s => sizeQtys[s] = g.sizeQtys[s] ?? '1');
+        updated.sizeQtys = sizeQtys;
         return updated;
       });
       return { ...state, groups };
@@ -329,7 +336,7 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
   clearAllReviewColors(groupIdx: number) {
     this.batchReview.update(state => {
       const groups = state.groups.map((g, i) =>
-        i !== groupIdx ? g : { ...g, selectedColorIds: [], availableSizes: [], selectedSizes: [] }
+        i !== groupIdx ? g : { ...g, selectedColorIds: [], availableSizes: [], selectedSizes: [], sizeQtys: {} }
       );
       return { ...state, groups };
     });
@@ -341,7 +348,9 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
         if (i !== groupIdx) return g;
         const already = g.selectedSizes.includes(sizeName);
         const selectedSizes = already ? g.selectedSizes.filter(s => s !== sizeName) : [...g.selectedSizes, sizeName];
-        return { ...g, selectedSizes };
+        const sizeQtys = { ...g.sizeQtys };
+        if (already) { delete sizeQtys[sizeName]; } else if (!sizeQtys[sizeName]) { sizeQtys[sizeName] = '1'; }
+        return { ...g, selectedSizes, sizeQtys };
       });
       return { ...state, groups };
     });
@@ -350,7 +359,11 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
   selectAllReviewSizes(groupIdx: number) {
     this.batchReview.update(state => {
       const groups = state.groups.map((g, i) =>
-        i !== groupIdx ? g : { ...g, selectedSizes: [...g.availableSizes] }
+        i !== groupIdx ? g : (() => {
+        const sizeQtys = { ...g.sizeQtys };
+        g.availableSizes.forEach(s => { if (!sizeQtys[s]) sizeQtys[s] = '1'; });
+        return { ...g, selectedSizes: [...g.availableSizes], sizeQtys };
+        })()
       );
       return { ...state, groups };
     });
@@ -358,21 +371,30 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
 
   clearAllReviewSizes(groupIdx: number) {
     this.batchReview.update(state => {
-      const groups = state.groups.map((g, i) => i !== groupIdx ? g : { ...g, selectedSizes: [] });
+      const groups = state.groups.map((g, i) => i !== groupIdx ? g : { ...g, selectedSizes: [], sizeQtys: {} });
       return { ...state, groups };
     });
   }
 
-  updateReviewQty(groupIdx: number, qty: string) {
-    this.batchReview.update(state => {
-      const groups = state.groups.map((g, i) => i !== groupIdx ? g : { ...g, qty });
-      return { ...state, groups };
-    });
-  }
+  updateReviewSizeQty(groupIdx: number, sizeName: string, qty: string) {
+  this.batchReview.update(state => {
+    const groups = state.groups.map((g, i) =>
+      i !== groupIdx ? g : { ...g, sizeQtys: { ...g.sizeQtys, [sizeName]: qty } }
+    );
+    return { ...state, groups };
+  });
+}
 
-  canConfirmReviewGroup(g: ReviewGroup): boolean {
-    return g.selectedColorIds.length > 0 && g.selectedSizes.length > 0 && (parseInt(g.qty, 10) || 0) > 0;
-  }
+getTotalPcsForGroup(g: ReviewGroup): number {
+  return g.selectedColorIds.length *
+    g.selectedSizes.reduce((sum, s) => sum + (parseInt(g.sizeQtys[s], 10) || 0), 0);
+}
+
+ canConfirmReviewGroup(g: ReviewGroup): boolean {
+  return g.selectedColorIds.length > 0 &&
+    g.selectedSizes.length > 0 &&
+    g.selectedSizes.some(s => (parseInt(g.sizeQtys[s], 10) || 0) > 0);
+}
 
   canAddAllReviewGroups = computed(() =>
     this.batchReview().groups.some(g => this.canConfirmReviewGroup(g))
@@ -384,11 +406,11 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     let added = 0, skipped = 0;
     for (const g of groups) {
       if (!this.canConfirmReviewGroup(g)) continue;
-      const qty = Math.max(1, parseInt(g.qty, 10) || 1);
-      const selectedDesigns = g.allColors.filter(d => g.selectedColorIds.includes(d.id!));
-      for (const design of selectedDesigns) {
+        const selectedDesigns = g.allColors.filter(d => g.selectedColorIds.includes(d.id!));
+        for (const design of selectedDesigns) {
         for (const sizeName of g.selectedSizes) {
-          const sizeObj = design.sizes.find(s => s.size === sizeName);
+            const qty = Math.max(1, parseInt(g.sizeQtys[sizeName], 10) || 1);
+            const sizeObj = design.sizes.find(s => s.size === sizeName);
           if (!sizeObj) continue;
           const barcode = String(sizeObj.BARCODE);
           if (existingBarcodes.has(barcode)) { skipped++; continue; }
