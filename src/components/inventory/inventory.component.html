@@ -32,80 +32,114 @@
     </div>
 
     <!-- Table -->
-    @if (paginatedInventory().length > 0) {
-      <div class="overflow-x-auto rounded-lg border border-gray-200">
-        <table class="min-w-full text-sm">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Style / Color</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Barcode</th>
-              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Received</th>
-              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">WSP (₹)</th>
-              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Value (₹)</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last GRN</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-100">
-            @for (item of paginatedInventory(); track item.barcode) {
-              <tr class="hover:bg-gray-50">
-                <td class="px-4 py-3">
-                  <div class="font-semibold text-gray-800">{{item.styleNo}}</div>
-                  <div class="text-xs text-gray-500">{{item.color}}
-                    @if (item.sleeveType) {
-                      <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">{{item.sleeveType}}</span>
-                    }
-                  </div>
-                </td>
-                <td class="px-4 py-3 font-medium text-gray-700">{{item.size}}</td>
-                <td class="px-4 py-3 font-mono text-xs text-gray-600">{{item.barcode}}</td>
-                <td class="px-4 py-3 text-right text-gray-600">{{item.totalReceived}}</td>
-                <td class="px-4 py-3 text-right">
-                  <span class="font-bold px-2 py-1 rounded-full text-xs"
-                        [class.bg-green-100]="(item.currentStock||0) > 0"
-                        [class.text-green-800]="(item.currentStock||0) > 0"
-                        [class.bg-red-100]="(item.currentStock||0) === 0"
-                        [class.text-red-700]="(item.currentStock||0) === 0">
-                    {{item.currentStock}}
-                  </span>
-                </td>
-                <td class="px-4 py-3 text-right text-gray-700">{{item.WSP | number:'1.2-2'}}</td>
-                <td class="px-4 py-3 text-right font-medium text-gray-800">
-                  {{((item.currentStock||0) * (item.WSP||0)) | number:'1.2-2'}}
-                </td>
-                <td class="px-4 py-3 text-xs text-gray-500">{{item.lastGrnNo || '–'}}</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Pagination -->
-      @if (totalPages() > 1) {
-        <div class="mt-4 flex items-center justify-between">
-          <p class="text-sm text-gray-500">
-            Showing {{(currentPage()-1)*itemsPerPage()+1}}–{{[currentPage()*itemsPerPage(), filteredInventory().length] | min}} of {{filteredInventory().length}} items
-          </p>
-          <div class="flex gap-1">
-            <button (click)="changePage(currentPage()-1)" [disabled]="currentPage()===1"
-                    class="px-3 py-1 border rounded text-sm disabled:opacity-40">←</button>
-            <span class="px-3 py-1 text-sm">{{currentPage()}} / {{totalPages()}}</span>
-            <button (click)="changePage(currentPage()+1)" [disabled]="currentPage()===totalPages()"
-                    class="px-3 py-1 border rounded text-sm disabled:opacity-40">→</button>
-          </div>
+        @if (isLoading()) {
+        <!-- Loading skeleton -->
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+            <table class="min-w-full text-sm">
+            <thead class="bg-gray-50">
+                <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Style / Color</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Barcode</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Received</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">WSP (₹)</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Value (₹)</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last GRN</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-100">
+                @for (row of [1,2,3,4,5,6,7,8]; track row) {
+                <tr>
+                    <td class="px-4 py-3"><div class="h-3 bg-gray-200 rounded animate-pulse w-28 mb-1"></div><div class="h-2 bg-gray-100 rounded animate-pulse w-16"></div></td>
+                    <td class="px-4 py-3"><div class="h-3 bg-gray-200 rounded animate-pulse w-8"></div></td>
+                    <td class="px-4 py-3"><div class="h-3 bg-gray-200 rounded animate-pulse w-24"></div></td>
+                    <td class="px-4 py-3 text-right"><div class="h-3 bg-gray-200 rounded animate-pulse w-8 ml-auto"></div></td>
+                    <td class="px-4 py-3 text-right"><div class="h-5 bg-gray-200 rounded-full animate-pulse w-10 ml-auto"></div></td>
+                    <td class="px-4 py-3 text-right"><div class="h-3 bg-gray-200 rounded animate-pulse w-14 ml-auto"></div></td>
+                    <td class="px-4 py-3 text-right"><div class="h-3 bg-gray-200 rounded animate-pulse w-16 ml-auto"></div></td>
+                    <td class="px-4 py-3"><div class="h-3 bg-gray-200 rounded animate-pulse w-20"></div></td>
+                </tr>
+                }
+            </tbody>
+            </table>
         </div>
-      }
-    } @else {
-      <div class="text-center py-16 border-2 border-dashed border-gray-200 rounded-lg">
-        <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-        </svg>
-        <p class="mt-2 text-gray-500 text-sm">
-          @if (searchTerm()) { No items match your search. }
-          @else { Inventory is empty. Save a GRN as "Received" to populate stock. }
-        </p>
-      </div>
-    }
+
+        } @else if (paginatedInventory().length > 0) {
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+            <table class="min-w-full text-sm">
+            <thead class="bg-gray-50">
+                <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Style / Color</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Barcode</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Received</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">WSP (₹)</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Value (₹)</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last GRN</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-100">
+                @for (item of paginatedInventory(); track item.barcode) {
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3">
+                    <div class="font-semibold text-gray-800">{{item.styleNo}}</div>
+                    <div class="text-xs text-gray-500">{{item.color}}
+                        @if (item.sleeveType) {
+                        <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">{{item.sleeveType}}</span>
+                        }
+                    </div>
+                    </td>
+                    <td class="px-4 py-3 font-medium text-gray-700">{{item.size}}</td>
+                    <td class="px-4 py-3 font-mono text-xs text-gray-600">{{item.barcode}}</td>
+                    <td class="px-4 py-3 text-right text-gray-600">{{item.totalReceived}}</td>
+                    <td class="px-4 py-3 text-right">
+                    <span class="font-bold px-2 py-1 rounded-full text-xs"
+                            [class.bg-green-100]="(item.currentStock||0) > 0"
+                            [class.text-green-800]="(item.currentStock||0) > 0"
+                            [class.bg-red-100]="(item.currentStock||0) === 0"
+                            [class.text-red-700]="(item.currentStock||0) === 0">
+                        {{item.currentStock}}
+                    </span>
+                    </td>
+                    <td class="px-4 py-3 text-right text-gray-700">{{item.WSP | number:'1.2-2'}}</td>
+                    <td class="px-4 py-3 text-right font-medium text-gray-800">
+                    {{((item.currentStock||0) * (item.WSP||0)) | number:'1.2-2'}}
+                    </td>
+                    <td class="px-4 py-3 text-xs text-gray-500">{{item.lastGrnNo || '–'}}</td>
+                </tr>
+                }
+            </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination — FIXED: no | min pipe -->
+        @if (totalPages() > 1) {
+            <div class="mt-4 flex items-center justify-between">
+            <p class="text-sm text-gray-500">
+                Showing {{(currentPage()-1)*itemsPerPage()+1}}–{{currentPage()*itemsPerPage() < filteredInventory().length ? currentPage()*itemsPerPage() : filteredInventory().length}} of {{filteredInventory().length}} items
+            </p>
+            <div class="flex gap-1">
+                <button (click)="changePage(currentPage()-1)" [disabled]="currentPage()===1"
+                        class="px-3 py-1 border rounded text-sm disabled:opacity-40">←</button>
+                <span class="px-3 py-1 text-sm">{{currentPage()}} / {{totalPages()}}</span>
+                <button (click)="changePage(currentPage()+1)" [disabled]="currentPage()===totalPages()"
+                        class="px-3 py-1 border rounded text-sm disabled:opacity-40">→</button>
+            </div>
+            </div>
+        }
+
+        } @else {
+        <div class="text-center py-16 border-2 border-dashed border-gray-200 rounded-lg">
+            <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+            </svg>
+            <p class="mt-2 text-gray-500 text-sm">
+            @if (searchTerm()) { No items match your search. }
+            @else { Inventory is empty. Save a GRN as "Received" to populate stock. }
+            </p>
+        </div>
+        }
   </div>
 </div>

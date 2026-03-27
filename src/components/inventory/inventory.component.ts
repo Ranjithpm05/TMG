@@ -15,6 +15,7 @@ export class InventoryComponent implements OnInit {
   private inventoryService = inject(InventoryService);
 
   inventory   = signal<InventoryItem[]>([]);
+  isLoading = signal(true);
   searchTerm  = signal('');
   currentPage = signal(1);
   itemsPerPage = signal(20);
@@ -48,9 +49,13 @@ export class InventoryComponent implements OnInit {
     this.filteredInventory().reduce((s, i) => s + ((Number(i.currentStock) || 0) * (Number(i.WSP) || 0)), 0)
   );
 
-  ngOnInit() {
-    this.inventoryService.getInventory().subscribe(items => this.inventory.set(items));
-  }
+    ngOnInit() {
+    this.isLoading.set(true);
+        this.inventoryService.getInventory().subscribe({
+            next:  items => { this.inventory.set(items); this.isLoading.set(false); },
+            error: ()    => { this.isLoading.set(false); }
+        });
+    }
 
   onSearch(term: string) { this.searchTerm.set(term); this.currentPage.set(1); }
   changePage(p: number)  { if (p >= 1 && p <= this.totalPages()) this.currentPage.set(p); }
