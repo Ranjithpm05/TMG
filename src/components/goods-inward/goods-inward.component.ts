@@ -54,7 +54,7 @@ const EMPTY_GRN: Omit<GoodsInward, 'id'> = {
   invoiceDate: '',
   receivedDate: new Date().toISOString().split('T')[0],
   items: [],
-  status: 'Draft',
+  status: 'Pending',
   remarks: ''
 };
 
@@ -910,24 +910,21 @@ getTotalPcsForGroup(g: ReviewGroup): number {
         if (!grn.invoiceNo.trim())    { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please enter the invoice number.' }); return; }
         if (grn.items.length === 0)   { Swal.fire({ icon: 'warning', title: 'Validation', text: 'Please add at least one item.' }); return; }
 
-        const hasQty  = grn.items.some(i => (Number(i.receivedQty) || 0) > 0);
-        const status: GoodsInward['status'] = hasQty ? 'Received' : 'Draft';
-        const payload = { ...(grn as any), status } as Omit<GoodsInward, 'id'>;
+        const payload = { ...(grn as any), status: 'Pending' as const } as Omit<GoodsInward, 'id'>;
 
         this.isSaving.set(true);
         try {
-        if (this.isEditMode()) await this.grnService.updateGoodsInward(payload as GoodsInward);
-        else                   await this.grnService.createGoodsInward(payload);
-        if (status === 'Received') {
-            await this.inventoryService.upsertFromGrn(payload.items, payload.grnNo);
-        }
-        await Swal.fire({ icon: 'success', title: 'Saved!', text: `GRN saved as "${status}".`, timer: 2000, showConfirmButton: false });
-        this.refreshGrns();
-        this.cancel();
-        } catch (err: any) {
-        Swal.fire({ icon: 'error', title: 'Save Failed', text: err?.message ?? 'Failed to save GRN.' });
-        } finally {
-        this.isSaving.set(false);
+            if (this.isEditMode()) await this.grnService.updateGoodsInward(payload as GoodsInward);
+            else                   await this.grnService.createGoodsInward(payload);
+            await Swal.fire({ icon: 'success', title: 'Submitted!', text: 'GRN saved as "Pending" — awaiting Manager approval.', timer: 2500, showConfirmButton: false });
+            this.refreshGrns();
+            this.cancel();
+        } 
+        catch (err: any) {
+            Swal.fire({ icon: 'error', title: 'Save Failed', text: err?.message ?? 'Failed to save GRN.' });
+        } 
+        finally {
+            this.isSaving.set(false);
         }
     }
 
@@ -954,7 +951,9 @@ getTotalPcsForGroup(g: ReviewGroup): number {
 
   // ── Display helpers ───────────────────────────────────────────────────────────
   getStatusClass(status: string): string {
-    return status === 'Received' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600';
+    if (status === 'Approved') return 'bg-green-100 text-green-800';
+    if (status === 'Pending')  return 'bg-yellow-100 text-yellow-800';
+    return 'bg-gray-100 text-gray-600';
   }
 
   getGrnTotalReceived(grn: GoodsInward): number {
@@ -971,5 +970,143 @@ getTotalPcsForGroup(g: ReviewGroup): number {
       const d = raw?.toDate ? raw.toDate() : new Date(raw);
       return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     } catch { return ''; }
+  }
+
+  isApproving = signal(false);
+
+  async approveGrn(grn: GoodsInward) {
+    const confirm = await Swal.fire({
+      title: 'Approve this GRN?',
+      text: `${grn.grnNo} — ${grn.items.length} line(s), ${this.getGrnTotalReceived(grn)} pcs will be added to inventory.`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#16a34a',
+      confirmButtonText: 'Yes, Approve',
+      cancelButtonText: 'Cancel'
+    });
+    if (!confirm.isConfirmed) return;
+
+    this.isApproving.set(true);
+    try {
+      const approved: GoodsInward = { ...grn, status: 'Approved', approvedAt: new Date().toISOString() };
+      await this.grnService.updateGoodsInward(approved);
+      await this.inventoryService.upsertFromGrn(grn.items, grn.grnNo);
+      this.viewGrn.set(approved);
+      this.refreshGrns();
+      await Swal.fire({ icon: 'success', title: 'Approved!', text: 'Inventory has been updated.', timer: 2000, showConfirmButton: false });
+    } catch (err: any) {
+      Swal.fire({ icon: 'error', title: 'Approval Failed', text: err?.message ?? 'Failed to approve GRN.' });
+    } finally {
+      this.isApproving.set(false);
+    }
+  }
+
+  // ── Preview table helpers ────────────────────────────────────────────────────
+  getPreviewStyles(grn: GoodsInward): string[] {
+    return [...new Set(grn.items.map(i => i.styleNo))];
+  }
+
+  getPreviewSizes(grn: GoodsInward): string[] {
+    const allSizes = grn.items.map(i => i.size);
+    const unique = [...new Set(allSizes)];
+    return unique.sort((a, b) => {
+      const ia = SIZE_ORDER.indexOf(a), ib = SIZE_ORDER.indexOf(b);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+  }
+
+  getPreviewRows(grn: GoodsInward): Array<{
+    label: string; subLabel: string; items: GoodsInwardItem[];
+    total: number; WSP: number; MRP: number; value: number;
+  }> {
+    const styleMap = new Map<string, GoodsInwardItem[]>();
+    for (const item of grn.items) {
+      const key = `${item.styleNo}||${item.color}||${item.sleeveType ?? ''}`;
+      if (!styleMap.has(key)) styleMap.set(key, []);
+      styleMap.get(key)!.push(item);
+    }
+    return [...styleMap.entries()].map(([key, items]) => {
+      const [styleNo, color, sleeve] = key.split('||');
+      const total = items.reduce((s, i) => s + (Number(i.receivedQty) || 0), 0);
+      const wsp   = items[0]?.WSP ?? 0;
+      const mrp   = items[0]?.price ?? 0;
+      return { label: styleNo, subLabel: [color, sleeve].filter(Boolean).join(' · '), items, total, WSP: wsp, MRP: mrp, value: total * wsp };
+    });
+  }
+
+  getQtyForSize(row: { items: GoodsInwardItem[] }, size: string): number {
+    return row.items.filter(i => i.size === size).reduce((s, i) => s + (Number(i.receivedQty) || 0), 0);
+  }
+
+  downloadGrnPdf(grn: GoodsInward) {
+    const sizes = this.getPreviewSizes(grn);
+    const rows  = this.getPreviewRows(grn);
+    const totalQty   = rows.reduce((s, r) => s + r.total, 0);
+    const totalValue = rows.reduce((s, r) => s + r.value, 0);
+
+    const sizeHeaders = sizes.map(s => `<th style="padding:6px 10px;border:1px solid #ccc;text-align:center">${s}</th>`).join('');
+    const bodyRows = rows.map((row, i) => {
+      const sizeCells = sizes.map(s => {
+        const q = this.getQtyForSize(row, s);
+        return `<td style="padding:6px 10px;border:1px solid #ccc;text-align:center">${q > 0 ? q : '-'}</td>`;
+      }).join('');
+      return `<tr style="background:${i%2===0?'#fff':'#f9f9f9'}">
+        <td style="padding:6px 10px;border:1px solid #ccc;text-align:center">${i+1}</td>
+        <td style="padding:6px 10px;border:1px solid #ccc"><strong>${row.label}</strong><br><small style="color:#666">${row.subLabel}</small></td>
+        ${sizeCells}
+        <td style="padding:6px 10px;border:1px solid #ccc;text-align:center"><strong>${row.total}</strong></td>
+        <td style="padding:6px 10px;border:1px solid #ccc;text-align:right">${row.WSP.toFixed(2)}</td>
+        <td style="padding:6px 10px;border:1px solid #ccc;text-align:right">${row.MRP.toFixed(2)}</td>
+        <td style="padding:6px 10px;border:1px solid #ccc;text-align:right"><strong>${row.value.toFixed(2)}</strong></td>
+      </tr>`;
+    }).join('');
+
+    const html = `
+      <html><head><title>${grn.grnNo}</title>
+      <style>body{font-family:Arial,sans-serif;font-size:12px;margin:20px}
+      h2{color:#1e293b}table{border-collapse:collapse;width:100%}
+      th{background:#1e293b;color:#fff;padding:8px 10px;border:1px solid #ccc}
+      tfoot td{background:#f1f5f9;font-weight:bold}
+      .info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+      .info-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px}
+      .info-label{font-size:10px;color:#64748b;text-transform:uppercase}
+      .info-value{font-size:13px;font-weight:600;color:#1e293b;margin-top:2px}
+      .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600}
+      .badge-pending{background:#fef3c7;color:#92400e}
+      .badge-approved{background:#d1fae5;color:#065f46}
+      </style></head>
+      <body>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1e293b;padding-bottom:10px;margin-bottom:12px">
+          <div><h2 style="margin:0">${grn.grnNo}</h2><p style="margin:2px 0;color:#64748b;font-size:11px">Goods Inward Report</p></div>
+          <span class="badge badge-${grn.status.toLowerCase()}">${grn.status}</span>
+        </div>
+        <div class="info-grid">
+          <div class="info-box"><div class="info-label">Supplier</div><div class="info-value">${grn.supplierName}</div></div>
+          <div class="info-box"><div class="info-label">Invoice No</div><div class="info-value">${grn.invoiceNo}</div></div>
+          <div class="info-box"><div class="info-label">Invoice Date</div><div class="info-value">${grn.invoiceDate || '–'}</div></div>
+          <div class="info-box"><div class="info-label">Received Date</div><div class="info-value">${grn.receivedDate}</div></div>
+        </div>
+        <table>
+          <thead><tr>
+            <th style="width:40px">#</th>
+            <th style="text-align:left">Product</th>
+            ${sizeHeaders}
+            <th>Qty</th><th>Rate(Rs)</th><th>MRP(Rs)</th><th>Total(Rs)</th>
+          </tr></thead>
+          <tbody>${bodyRows}</tbody>
+          <tfoot><tr>
+            <td colspan="${2 + sizes.length}" style="padding:8px 10px;border:1px solid #ccc;text-align:right">Total</td>
+            <td style="padding:8px 10px;border:1px solid #ccc;text-align:center">${totalQty}</td>
+            <td style="border:1px solid #ccc"></td><td style="border:1px solid #ccc"></td>
+            <td style="padding:8px 10px;border:1px solid #ccc;text-align:right">₹${totalValue.toFixed(2)}</td>
+          </tr></tfoot>
+        </table>
+        ${grn.remarks ? `<div style="margin-top:14px;padding:8px 12px;background:#fefce8;border:1px solid #fde68a;border-radius:6px"><strong>Remarks:</strong> ${grn.remarks}</div>` : ''}
+        <p style="margin-top:20px;color:#94a3b8;font-size:10px;text-align:right">Generated on ${new Date().toLocaleString('en-IN')}</p>
+      </body></html>`;
+
+    const win = window.open('', '_blank', 'width=1000,height=700');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
   }
 }

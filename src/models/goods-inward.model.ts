@@ -21,7 +21,9 @@ export interface GoodsInward {
   invoiceDate: string;
   receivedDate: string;
   items: GoodsInwardItem[];
-  status: 'Draft' | 'Received';
+  status: 'Pending' | 'Approved';
+  approvedBy?: string;
+  approvedAt?: any;
   remarks?: string;
   createdAt?: any;
   updatedAt?: any;
