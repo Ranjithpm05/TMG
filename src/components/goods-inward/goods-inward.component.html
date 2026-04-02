@@ -192,15 +192,15 @@
                             <span class="text-sm font-bold text-indigo-700 min-w-[52px]">{{sizeKeyLabel(sizeName)}}</span>
                             <div class="flex items-center gap-2">
                               <button type="button"
-                                      (click)="updateReviewSizeQty(gi, sizeName, String(Math.max(1, (+(group.sizeQtys[sizeName]||'1')) - 1)))"
-                                      class="w-7 h-7 rounded-full border-2 border-gray-300 flex items-center justify-center text-sm font-bold text-gray-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors">−</button>
-                              <input type="number" min="1"
-                                     class="w-16 text-center border-2 border-gray-300 rounded-lg text-sm font-bold py-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none"
-                                     [ngModel]="group.sizeQtys[sizeName] ?? '1'"
-                                     (ngModelChange)="updateReviewSizeQty(gi, sizeName, $event)">
-                              <button type="button"
-                                      (click)="updateReviewSizeQty(gi, sizeName, String((+(group.sizeQtys[sizeName]||'1')) + 1))"
-                                      class="w-7 h-7 rounded-full border-2 border-gray-300 flex items-center justify-center text-sm font-bold text-gray-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors">+</button>
+                                        (click)="decrementSizeQty(gi, sizeName, group.sizeQtys[sizeName] ?? '1')"
+                                        class="w-7 h-7 rounded-full border-2 border-gray-300 flex items-center justify-center text-sm font-bold text-gray-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors">−</button>
+                                <input type="number" min="1"
+                                    class="w-16 text-center border-2 border-gray-300 rounded-lg text-sm font-bold py-1 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none"
+                                    [ngModel]="group.sizeQtys[sizeName] ?? '1'"
+                                    (ngModelChange)="updateReviewSizeQty(gi, sizeName, $event)">
+                                <button type="button"
+                                        (click)="incrementSizeQty(gi, sizeName, group.sizeQtys[sizeName] ?? '1')"
+                                        class="w-7 h-7 rounded-full border-2 border-gray-300 flex items-center justify-center text-sm font-bold text-gray-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors">+</button>
                             </div>
                           </div>
                         }

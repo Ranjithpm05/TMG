@@ -659,6 +659,16 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     });
   }
 
+  incrementSizeQty(groupIdx: number, sizeName: string, current: string) {
+    const next = (parseInt(current, 10) || 0) + 1;
+    this.updateReviewSizeQty(groupIdx, sizeName, String(next));
+  }
+
+  decrementSizeQty(groupIdx: number, sizeName: string, current: string) {
+    const next = Math.max(1, (parseInt(current, 10) || 1) - 1);
+    this.updateReviewSizeQty(groupIdx, sizeName, String(next));
+  }
+
   getTotalPcsForGroup(g: ReviewGroup): number {
     return g.selectedColorIds.length *
       g.selectedSizes.reduce((sum, s) => sum + (parseInt(g.sizeQtys[s], 10) || 0), 0);
