@@ -9,8 +9,9 @@ import { GoodsInwardComponent } from './components/goods-inward/goods-inward.com
 import { AuthService } from './services/auth.service';
 import { AppScreen } from './models/user-group.model';
 import { InventoryComponent } from './components/inventory/inventory.component';
+import { PickListComponent } from './components/pick-list/pick-list.component';
 
-type View = 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward' | 'inventory';
+type View = 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward' | 'inventory' | 'pickList';
 
 @Component({
   selector: 'app-root',
@@ -26,6 +27,7 @@ type View = 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward' | 'invento
     UserManagementComponent,
     GoodsInwardComponent,
     InventoryComponent,
+    PickListComponent,
   ],
 })
 export class AppComponent {

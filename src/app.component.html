@@ -75,6 +75,16 @@
             </button>
         }
 
+        @if(canView('pickList')) {
+            <button (click)="setView('pickList')" [class.bg-gray-900]="currentView() === 'pickList'"
+                    class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors">
+                <svg class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                </svg>
+                Pick List
+            </button>
+        }
+
       </div>
       <div>
         <button (click)="logout()"
@@ -126,6 +136,7 @@
             @if(canView('goodsInward')){ <button (click)="setView('goodsInward')" [class]="currentView() === 'goodsInward' ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">Goods Inward</button> }
             @if(canView('users'))      { <button (click)="setView('users')"       [class]="currentView() === 'users'       ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">User Management</button> }
             @if(canView('inventory'))      { <button (click)="setView('inventory')"       [class]="currentView() === 'inventory'       ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">inventory</button> }
+            @if(canView('pickList'))      { <button (click)="setView('pickList')"       [class]="currentView() === 'pickList'       ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">Pick List</button> }
           </nav>
         </div>
         <div class="flex-shrink-0 flex bg-gray-700 p-4">
@@ -151,6 +162,7 @@
           @case ('goodsInward') { <app-goods-inward></app-goods-inward> }
           @case ('users')       { <app-user-management></app-user-management> }
           @case ('inventory') { <app-inventory></app-inventory> }
+          @case ('pickList') { <app-pick-list></app-pick-list> }
         }
       </div>
     </main>
