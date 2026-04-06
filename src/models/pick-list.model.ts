@@ -16,7 +16,7 @@ export interface PickListLineItem {
   stockAvailable:   number;
   pickQty:          number;
   selected:         boolean;
-  status:           'available' | 'partial' | 'out_of_stock' | 'fulfilled';
+   status: 'available' | 'partial' | 'out_of_stock' | 'pending' | 'fulfilled';
 }
 
 // ── Persisted line ────────────────────────────────────────────────────────────
@@ -32,6 +32,7 @@ export interface PickListLine {
   orderedQty:   number;
   pickedQty:    number;
   balanceQty:   number;
+  pendingQty?:  number;
 }
 
 // ── Pick List document ────────────────────────────────────────────────────────

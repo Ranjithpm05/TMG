@@ -88,6 +88,22 @@ export class PickListComponent implements OnInit {
   totalOrderedQty = computed(() => this.activePickLines().reduce((s, l) => s + l.orderedQty, 0));
   totalPickQty    = computed(() => this.activePickLines().reduce((s, l) => s + (l.pickQty || 0), 0));
   totalBalanceQty = computed(() => this.activePickLines().reduce((s, l) => s + Math.max(0, l.balanceQty - (l.pickQty || 0)), 0));
+  
+    totalPendingQty = computed(() =>
+    this.activePickLines()
+        .filter(l => l.status === 'pending' || l.status === 'out_of_stock')
+        .reduce((s, l) => s + l.balanceQty, 0)
+    );
+
+    totalPickableQty = computed(() =>
+    this.activePickLines()
+        .filter(l => l.status !== 'pending' && l.status !== 'out_of_stock' && l.status !== 'fulfilled')
+        .reduce((s, l) => s + l.balanceQty, 0)
+    );
+
+    pendingLineCount = computed(() =>
+    this.activePickLines().filter(l => l.status === 'pending' || l.status === 'out_of_stock').length
+    );
   hasAnyPickable  = computed(() => this.activePickLines().some(l => l.pickQty > 0));
   allFulfilled    = computed(() => this.activePickLines().every(l => l.balanceQty <= 0));
   selectedItemCount = computed(() => this.activePickLines().filter(l => l.selected).length);
@@ -185,20 +201,31 @@ export class PickListComponent implements OnInit {
   }
 
   getLineStatus(stock: number, balance: number): PickListLineItem['status'] {
-    if (balance <= 0)     return 'fulfilled';
-    if (stock <= 0)       return 'out_of_stock';
-    if (stock >= balance) return 'available';
-    return 'partial';
-  }
+        if (balance <= 0)     return 'fulfilled';
+        if (stock >= 0)       return 'pending';
+        if (stock >= balance) return 'available';
+        return 'partial';
+    }
 
-  statusBadge(s: PickListLineItem['status']): string {
-    return { available:'bg-green-100 text-green-800', partial:'bg-yellow-100 text-yellow-800',
-             out_of_stock:'bg-red-100 text-red-700', fulfilled:'bg-blue-100 text-blue-700' }[s] ?? '';
-  }
+    statusBadge(s: PickListLineItem['status']): string {
+        return {
+            available:    'bg-green-100 text-green-800',
+            partial:      'bg-yellow-100 text-yellow-800',
+            out_of_stock: 'bg-red-100 text-red-700',
+            pending:      'bg-orange-100 text-orange-700',
+            fulfilled:    'bg-blue-100 text-blue-700',
+        }[s] ?? '';
+    }
 
-  statusLabel(s: PickListLineItem['status']): string {
-    return { available:'In Stock', partial:'Partial', out_of_stock:'No Stock', fulfilled:'Done' }[s] ?? '';
-  }
+    statusLabel(s: PickListLineItem['status']): string {
+        return {
+            available:    'In Stock',
+            partial:      'Partial Stock',
+            out_of_stock: 'No Stock',
+            pending:      'Pending',
+            fulfilled:    'Fulfilled',
+        }[s] ?? '';
+    }
 
   orderPickBadge(id: string): string {
     const s = this.getPickStatusForOrder(id);
@@ -325,18 +352,22 @@ export class PickListComponent implements OnInit {
           const ordQty  = Number(sz.quantity) || 0;
           const picked  = this.getAlreadyPickedQty(order.id, item.design.styleNo, item.design.color ?? '', sz.size, item.sleeveType);
           const balance = Math.max(0, ordQty - picked);
-          if (balance <= 0) continue;
-          const stock = this.getStockForLine(item.design.styleNo, item.design.color ?? '', sz.size, item.sleeveType);
-          lines.push({
-            salesOrderId: order.id, salesNo: order.salesNo,
-            clientId: order.clientId, clientName: this.getClientName(order.clientId),
-            designId: item.design.id ?? '', styleNo: item.design.styleNo,
-            color: item.design.color ?? '', group: item.design.group ?? '',
-            size: sz.size, sleeveType: item.sleeveType,
-            orderedQty: ordQty, alreadyPickedQty: picked, balanceQty: balance,
-            stockAvailable: stock, pickQty: Math.min(balance, stock),
-            selected: true, status: this.getLineStatus(stock, balance),
-          });
+           if (balance <= 0) continue; // skip fully fulfilled lines only
+            const stock = this.getStockForLine(item.design.styleNo, item.design.color ?? '', sz.size, item.sleeveType);
+            const lineStatus = this.getLineStatus(stock, balance);
+            lines.push({
+                salesOrderId: order.id, salesNo: order.salesNo,
+                clientId: order.clientId, clientName: this.getClientName(order.clientId),
+                designId: item.design.id ?? '', styleNo: item.design.styleNo,
+                color: item.design.color ?? '', group: item.design.group ?? '',
+                size: sz.size, sleeveType: item.sleeveType,
+                orderedQty: ordQty, alreadyPickedQty: picked, balanceQty: balance,
+                stockAvailable: stock,
+                // Pending/no-stock items get pickQty=0 and are non-editable
+                pickQty: lineStatus === 'pending' || lineStatus === 'out_of_stock' ? 0 : Math.min(balance, stock),
+                selected: lineStatus !== 'pending' && lineStatus !== 'out_of_stock',
+                status: lineStatus,
+            });
         }
       }
     }
@@ -355,6 +386,7 @@ export class PickListComponent implements OnInit {
 
   // ── Pick qty controls ─────────────────────────────────────────────────────────
   setPickQty(line: PickListLineItem, value: string | number) {
+     if (line.status === 'pending' || line.status === 'out_of_stock') return;
     const raw = typeof value === 'string' ? parseInt(value, 10) : Number(value);
     const qty = isNaN(raw) ? 0 : Math.max(0, Math.min(raw, Math.min(line.balanceQty, line.stockAvailable)));
     this.activePickLines.update(ls => ls.map(l =>
@@ -372,7 +404,13 @@ export class PickListComponent implements OnInit {
     this.setPickQty(line, Math.max(0, line.pickQty - 1));
   }
 
-  setAllToMax() { this.activePickLines.update(l => l.map(x => ({ ...x, pickQty: Math.min(x.balanceQty, x.stockAvailable) }))); }
+  setAllToMax() {
+    this.activePickLines.update(l => l.map(x =>
+      x.status === 'pending' || x.status === 'out_of_stock'
+        ? x
+        : { ...x, pickQty: Math.min(x.balanceQty, x.stockAvailable) }
+    ));
+  }
   clearAll()    { this.activePickLines.update(l => l.map(x => ({ ...x, pickQty: 0 }))); }
 
   // ── Confirm ───────────────────────────────────────────────────────────────────
@@ -386,11 +424,25 @@ export class PickListComponent implements OnInit {
 
     const type   = this.pickType();
     const orders = this.selectedOrders();
-    const res    = await Swal.fire({
+     const pendingQty = this.totalPendingQty();
+    const res = await Swal.fire({
       title: 'Confirm Pick List?',
-      html:  `<p>Type: <strong>${this.plTypeLabel(type)}</strong> &nbsp;·&nbsp; <strong>${this.totalPickQty()} pcs</strong></p>
-              <p style="color:#64748b;font-size:13px">Orders: ${orders.map(o=>o.salesNo).join(', ')}</p>
-              <p style="color:#64748b;font-size:12px;margin-top:4px">Inventory will be reduced after confirmation.</p>`,
+      html:  `<div style="text-align:left;font-size:13px">
+                <p><strong>Type:</strong> ${this.plTypeLabel(type)} &nbsp;·&nbsp; Orders: ${orders.map(o=>o.salesNo).join(', ')}</p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0">
+                  <div style="background:#d1fae5;border-radius:8px;padding:8px 12px;text-align:center">
+                    <div style="font-size:11px;color:#065f46;font-weight:600;text-transform:uppercase">Picking Now</div>
+                    <div style="font-size:20px;font-weight:700;color:#16a34a">${this.totalPickQty()} pcs</div>
+                  </div>
+                  ${pendingQty > 0 ? `<div style="background:#ffedd5;border-radius:8px;padding:8px 12px;text-align:center">
+                    <div style="font-size:11px;color:#c2410c;font-weight:600;text-transform:uppercase">Pending (No Stock)</div>
+                    <div style="font-size:20px;font-weight:700;color:#ea580c">${pendingQty} pcs</div>
+                  </div>` : ''}
+                </div>
+                <p style="color:#64748b;font-size:11px;margin-top:4px">
+                  Stock will be deducted for picked items. Pending items will be saved and can be picked when stock arrives.
+                </p>
+              </div>`,
       icon: 'question', showCancelButton: true,
       confirmButtonColor: '#16a34a', confirmButtonText: 'Yes, Confirm Pick',
     });
@@ -402,16 +454,24 @@ export class PickListComponent implements OnInit {
         pickingLines.map(l => ({ styleNo: l.styleNo, color: l.color, size: l.size, sleeveType: l.sleeveType, qty: l.pickQty }))
       );
 
-      const mergedLines: PickListLine[] = lines.map(l => ({
-        salesOrderId: l.salesOrderId, salesNo: l.salesNo,
-        designId: l.designId, styleNo: l.styleNo, color: l.color, group: l.group,
-        size: l.size, sleeveType: l.sleeveType,
-        orderedQty: l.orderedQty,
-        pickedQty:  l.alreadyPickedQty + l.pickQty,
-        balanceQty: Math.max(0, l.orderedQty - (l.alreadyPickedQty + l.pickQty)),
-      }));
+      const mergedLines: PickListLine[] = lines.map(l => {
+        const newPickedQty  = l.alreadyPickedQty + l.pickQty;
+        const newBalanceQty = Math.max(0, l.orderedQty - newPickedQty);
+        return {
+          salesOrderId: l.salesOrderId, salesNo: l.salesNo,
+          designId: l.designId, styleNo: l.styleNo, color: l.color, group: l.group,
+          size: l.size, sleeveType: l.sleeveType,
+          orderedQty:  l.orderedQty,
+          pickedQty:   newPickedQty,
+          balanceQty:  newBalanceQty,
+          // Track pending separately
+          pendingQty:  l.status === 'pending' || l.status === 'out_of_stock' ? l.balanceQty : 0,
+        } as PickListLine;
+      });
 
-      const allDone  = mergedLines.every(l => l.balanceQty === 0);
+      // All done only when every line (including pending) has zero balance
+      const allDone = mergedLines.every(l => l.balanceQty === 0);
+      const hasPending = lines.some(l => l.status === 'pending' || l.status === 'out_of_stock');
       const plStatus: PickList['status'] = allDone ? 'Completed' : 'Partial';
       const existing = this.existingPickList();
       const primaryO = orders[0];
@@ -436,11 +496,15 @@ export class PickListComponent implements OnInit {
         }
       }
 
+      const pendingAfter = mergedLines.reduce((s, l: any) => s + (l.pendingQty || 0), 0);
       await Swal.fire({
-        icon: 'success',
+        icon:  'success',
         title: allDone ? '✓ Pick Complete!' : '✓ Pick Saved',
-        text:  allDone ? `All ${this.totalPickQty()} pcs picked.` : `${this.totalPickQty()} pcs picked. ${this.totalBalanceQty()} remaining.`,
-        timer: 2500, showConfirmButton: false,
+        html:  allDone
+          ? `<p>All <strong>${this.totalPickQty()} pcs</strong> picked successfully.</p>`
+          : `<p><strong>${this.totalPickQty()} pcs</strong> picked.</p>
+             ${pendingAfter > 0 ? `<p style="color:#ea580c;margin-top:6px">⚠ <strong>${pendingAfter} pcs</strong> pending — stock not available. Generate a new pick list when stock arrives.</p>` : ''}`,
+        timer: 3000, showConfirmButton: false,
       });
       this.cancel();
     } catch (err: any) {
@@ -586,5 +650,12 @@ export class PickListComponent implements OnInit {
 
     getPickListForOrder(orderId: string): PickList | null {
         return this.pickLists().find(pl => (pl.salesOrderIds ?? [(pl as any).salesOrderId ?? '']).includes(orderId)) ?? null;
+    }
+
+    getOrderPendingQty(orderId: string): number {
+    return this.pickLists()
+        .filter(pl => (pl.salesOrderIds ?? [(pl as any).salesOrderId ?? '']).includes(orderId))
+        .flatMap(pl => pl.items.filter(i => (i.salesOrderId ?? '') === orderId))
+        .reduce((s, i) => s + ((i as any).pendingQty || 0), 0);
     }
 }

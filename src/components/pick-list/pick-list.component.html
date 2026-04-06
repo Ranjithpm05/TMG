@@ -476,6 +476,11 @@
                     <span class="px-2 py-0.5 rounded-full text-xs font-semibold" [class]="statusBadge(lStatus)">
                       {{statusLabel(lStatus)}}
                     </span>
+                    @if (getOrderPendingQty(order.id) > 0) {
+                    <div class="text-xs text-orange-600 font-medium mt-0.5">
+                        ⚠ {{getOrderPendingQty(order.id)}} pcs pending stock
+                    </div>
+                    }
                   </td>
                 </tr>
               }
@@ -562,6 +567,13 @@
             <p class="text-2xl font-bold text-green-700 mt-1">{{activePickLines().length}}</p>
             <p class="text-xs text-green-400">rows</p>
           </div>
+          @if (totalPendingQty() > 0) {
+            <div class="bg-orange-50 rounded-xl p-4 text-center border border-orange-200">
+                <p class="text-xs text-orange-600 font-semibold uppercase">Pending</p>
+                <p class="text-2xl font-bold text-orange-700 mt-1">{{totalPendingQty()}}</p>
+                <p class="text-xs text-orange-400">no stock</p>
+            </div>
+        }
         </div>
       </div>
 
@@ -573,6 +585,7 @@
           <span class="px-2 py-0.5 rounded-full font-semibold bg-yellow-100 text-yellow-800">Partial</span>
           <span class="px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-700">No Stock</span>
           <span class="px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">Done</span>
+          <span class="px-2 py-0.5 rounded-full font-semibold bg-orange-100 text-orange-700">Pending</span>
         </div>
         <div class="flex gap-2">
           <button (click)="setAllToMax()" class="text-xs px-3 py-1.5 border border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-50 font-semibold transition-colors">Set All Max</button>
@@ -620,6 +633,11 @@
                           <span class="px-1.5 py-0.5 rounded text-xs font-semibold" [class]="statusBadge(line.status)">
                             {{statusLabel(line.status)}}
                           </span>
+                            @if (getOrderPendingQty(order.id) > 0) {
+                            <div class="text-xs text-orange-600 font-medium mt-0.5">
+                                ⚠ {{getOrderPendingQty(order.id)}} pcs pending stock
+                            </div>
+                            }
                         </div>
                         <div class="text-center text-xs text-gray-500 mb-1.5 leading-4">
                           <span [class.text-green-600]="line.stockAvailable > 0" [class.text-red-500]="line.stockAvailable === 0" class="font-semibold">
@@ -637,8 +655,15 @@
                           </div>
                         } @else if (line.balanceQty === 0) {
                           <div class="text-center"><span class="text-xs font-bold text-blue-600">✓ Done</span></div>
+                        } @else if (line.status === 'pending' || line.status === 'out_of_stock') {
+                            <div class="text-center">
+                                <span class="inline-flex flex-col items-center gap-0.5">
+                                <span class="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700">Pending</span>
+                                <span class="text-xs text-gray-400">Bal: {{line.balanceQty}}</span>
+                                </span>
+                            </div>
                         } @else {
-                          <div class="text-center"><span class="text-xs text-red-400">No Stock</span></div>
+                            <div class="text-center"><span class="text-xs text-gray-300">—</span></div>
                         }
                       </td>
                     } @else {
@@ -670,8 +695,13 @@
           @if (allFulfilled()) {
             <span class="text-blue-700 font-semibold">✓ All items already fulfilled.</span>
           } @else {
-            Picking <strong class="text-indigo-700 mx-1">{{totalPickQty()}} pcs</strong> ·
-            <span [class.text-red-600]="totalBalanceQty() > 0" [class.text-green-600]="totalBalanceQty() === 0">{{totalBalanceQty()}} pcs remaining</span>
+           Picking <strong class="text-indigo-700 mx-1">{{totalPickQty()}} pcs</strong>
+            @if (totalPendingQty() > 0) {
+            · <span class="text-orange-600 font-semibold">{{totalPendingQty()}} pcs pending (no stock)</span>
+            }
+            @if (totalBalanceQty() - totalPendingQty() > 0) {
+            · <span class="text-amber-600">{{totalBalanceQty() - totalPendingQty()}} pcs partial balance</span>
+            }
           }
         </div>
         <div class="flex gap-3">
