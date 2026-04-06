@@ -17,9 +17,12 @@ export class PickListService {
     return collectionData(q, { idField: 'id' }) as Observable<PickList[]>;
   }
 
-  getPickListBySalesOrder(salesOrderId: string): Promise<PickList | null> {
-    return getDocs(query(this.plRef, where('salesOrderId', '==', salesOrderId)))
-      .then(snap => snap.empty ? null : ({ id: snap.docs[0].id, ...snap.docs[0].data() } as PickList));
+  /** Get all pick lists that include a given sales order ID */
+  async getPickListsForOrder(salesOrderId: string): Promise<PickList[]> {
+    const snap = await getDocs(
+      query(this.plRef, where('salesOrderIds', 'array-contains', salesOrderId))
+    );
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as PickList));
   }
 
   async createPickList(pl: Omit<PickList, 'id'>): Promise<string> {
@@ -40,29 +43,27 @@ export class PickListService {
     });
   }
 
-  /** Deducts stock from inventory for each picked item */
-  async deductStock(pickedItems: { styleNo: string; color: string; size: string; sleeveType?: string; qty: number }[]): Promise<void> {
+  /** Deducts currentStock from inventory for confirmed pick items */
+  async deductStock(
+    pickedItems: { styleNo: string; color: string; size: string; sleeveType?: string; qty: number }[]
+  ): Promise<void> {
     for (const item of pickedItems) {
       if (item.qty <= 0) continue;
-      // Match by styleNo + color + size (+ sleeveType if present)
-      let q = query(
+      const snap = await getDocs(query(
         this.invRef,
         where('styleNo', '==', item.styleNo),
         where('color',   '==', item.color),
         where('size',    '==', item.size)
-      );
-      const snap = await getDocs(q);
+      ));
       for (const docSnap of snap.docs) {
         const data = docSnap.data() as any;
-        // If sleeveType is specified, match it; otherwise take whatever we find
         if (item.sleeveType && data.sleeveType && data.sleeveType !== item.sleeveType) continue;
-        const current = Number(data.currentStock) || 0;
-        const newStock = Math.max(0, current - item.qty);
+        const newStock = Math.max(0, (Number(data.currentStock) || 0) - item.qty);
         await updateDoc(doc(this.firestore, `inventory/${docSnap.id}`), {
           currentStock: newStock,
           updatedAt:    serverTimestamp()
         });
-        break; // matched
+        break;
       }
     }
   }
