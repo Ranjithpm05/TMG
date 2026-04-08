@@ -116,10 +116,13 @@ export class PickListComponent implements OnInit, OnDestroy {
     });
   });
 
+  visiblePickLists = computed(() => this.pickLists().filter((pickList) => this.isDisplayablePickList(pickList)));
+  effectivePickedLists = computed(() => this.visiblePickLists().filter((pickList) => !pickList.legacyPickingPending));
+
   filteredPickLists = computed(() => {
     const type = this.plTypeFilter();
     const term = this.searchTerm().toLowerCase();
-    return this.pickLists().filter((pickList) => {
+    return this.visiblePickLists().filter((pickList) => {
       const matchesType = type === 'all' || pickList.type === type;
       const matchesTerm = !term
         || pickList.pickListNo.toLowerCase().includes(term)
@@ -227,7 +230,7 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   getPickedQtyForOrder(orderId: string): number {
-    return this.pickLists().reduce((sum, pickList) => {
+    return this.effectivePickedLists().reduce((sum, pickList) => {
       const summary = pickList.orderSummaries?.find((entry) => entry.salesOrderId === orderId);
       if (summary) return sum + summary.pickedQty;
       return sum + (pickList.items ?? []).filter((item) => item.salesOrderId === orderId).reduce((itemSum, item) => itemSum + (item.pickedQty || 0), 0);
@@ -235,7 +238,7 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   getOrderPendingQty(orderId: string): number {
-    return this.pickLists().reduce((sum, pickList) => {
+    return this.effectivePickedLists().reduce((sum, pickList) => {
       const summary = pickList.orderSummaries?.find((entry) => entry.salesOrderId === orderId);
       if (summary) return sum + summary.pendingQty;
       return sum + (pickList.items ?? []).filter((item) => item.salesOrderId === orderId).reduce((itemSum, item) => itemSum + (item.pendingQty || 0), 0);
@@ -248,18 +251,20 @@ export class PickListComponent implements OnInit, OnDestroy {
     const total = this.getOrderTotalQty(order);
     const picked = this.getPickedQtyForOrder(orderId);
     const pending = this.getOrderPendingQty(orderId);
-    const hasPickList = this.pickLists().some((pickList) => pickList.salesOrderIds.includes(orderId));
+    const hasPickList = this.visiblePickLists().some((pickList) => pickList.salesOrderIds.includes(orderId));
     if (total > 0 && picked >= total) return 'completed';
     if (hasPickList || picked > 0 || pending > 0) return 'partial';
     return 'not_started';
   }
 
   getPickListForOrder(orderId: string): PickList | null {
-    return this.pickLists().find((pickList) => pickList.salesOrderIds.includes(orderId)) ?? null;
+    return this.visiblePickLists().find((pickList) => pickList.salesOrderIds.includes(orderId)) ?? null;
   }
 
   getOpenPickListForOrder(orderId: string): PickList | null {
-    return this.pickLists().find((pickList) => pickList.salesOrderIds.includes(orderId) && pickList.status !== 'Completed') ?? null;
+    return this.visiblePickLists().find((pickList) =>
+      pickList.salesOrderIds.includes(orderId) && (pickList.status !== 'Completed' || !!pickList.legacyPickingPending)
+    ) ?? null;
   }
 
   getOrderRemainingQty(orderId: string): number {
@@ -276,17 +281,27 @@ export class PickListComponent implements OnInit, OnDestroy {
     return !!pickList && (pickList.totalRequiredQty ?? 0) > 0 && pickList.status !== 'Pending';
   }
 
+  canStartPicking(pickList: PickList | null | undefined): boolean {
+    return !!pickList && (this.hasPickableQty(pickList) || !!pickList.legacyPickingPending) && pickList.status !== 'Pending';
+  }
+
   getGenerateActionLabel(orderId: string): string {
-    return this.pickLists().some((pickList) => pickList.salesOrderIds.includes(orderId)) ? 'Generate Balance' : 'Generate';
+    return this.visiblePickLists().some((pickList) => pickList.salesOrderIds.includes(orderId)) ? 'Generate Balance' : 'Generate';
   }
 
   getPickActionLabel(pickList: PickList | null | undefined): string {
     if (!pickList) return 'Start Picking';
+    if (pickList.legacyPickingPending) return 'Start Picking';
     return (pickList.totalPickedQty ?? 0) > 0 ? 'Continue Picking' : 'Start Picking';
   }
 
+  isDisplayablePickList(pickList: PickList | null | undefined): boolean {
+    if (!pickList) return false;
+    return !!pickList.legacyPickingPending || (pickList.totalRequiredQty ?? 0) > 0 || (pickList.totalPickedQty ?? 0) > 0;
+  }
+
   getAlreadyPickedQty(orderId: string, styleNo: string, color: string, size: string, sleeveType?: string): number {
-    return this.pickLists()
+    return this.effectivePickedLists()
       .flatMap((pickList) => pickList.items ?? [])
       .filter((line) =>
         line.salesOrderId === orderId
@@ -427,9 +442,23 @@ export class PickListComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const scannableLines = selectedLines.filter((line) => line.requiredQty > 0 && !!line.inventoryId && !!line.barcode);
+    const skippedLines = selectedLines.filter((line) => !scannableLines.includes(line));
+    if (!scannableLines.length) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'No Scannable Items',
+        text: 'Pick List was not created because all selected items are out of stock or missing a barcode.',
+      });
+      return;
+    }
+
     const type = this.pickType();
-    const primaryOrder = orders[0];
-    const clientIds = [...new Set(orders.map((order) => order.clientId))];
+    const includedOrderIds = [...new Set(scannableLines.map((line) => line.salesOrderId))];
+    const includedOrders = orders.filter((order) => includedOrderIds.includes(order.id));
+    const includedSalesNos = [...new Set(scannableLines.map((line) => line.salesNo))];
+    const primaryOrder = includedOrders[0];
+    const clientIds = [...new Set(includedOrders.map((order) => order.clientId))];
     const clientId = type === 'direct' ? primaryOrder.clientId : clientIds.length === 1 ? clientIds[0] : 'multi';
     const clientName = type === 'direct'
       ? this.getClientName(primaryOrder.clientId)
@@ -437,7 +466,7 @@ export class PickListComponent implements OnInit, OnDestroy {
         ? this.getClientName(clientIds[0])
         : 'Multiple Clients';
 
-    const liveLines: PickListLine[] = selectedLines.map((line, index) => ({
+    const liveLines: PickListLine[] = scannableLines.map((line, index) => ({
       lineId: line.lineId,
       salesOrderId: line.salesOrderId,
       salesNo: line.salesNo,
@@ -461,10 +490,10 @@ export class PickListComponent implements OnInit, OnDestroy {
       sortOrder: index,
     }));
 
-    const totals = this.draftTotals();
+    const requiredQty = scannableLines.reduce((sum, line) => sum + line.requiredQty, 0);
     const result = await Swal.fire({
       title: 'Generate Pick List?',
-      html: `<div style="text-align:left;font-size:13px"><p><strong>Type:</strong> ${this.plTypeLabel(type)}</p><p><strong>Orders:</strong> ${orders.map((order) => order.salesNo).join(', ')}</p><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px"><div style="background:#eef2ff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#4338ca;font-weight:700;text-transform:uppercase">Ready To Pick</div><div style="font-size:24px;font-weight:700;color:#4338ca">${totals.required}</div></div><div style="background:#ffedd5;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#c2410c;font-weight:700;text-transform:uppercase">Pending Stock</div><div style="font-size:24px;font-weight:700;color:#ea580c">${totals.pending}</div></div><div style="background:#ecfdf5;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#047857;font-weight:700;text-transform:uppercase">Lines</div><div style="font-size:24px;font-weight:700;color:#047857">${selectedLines.length}</div></div></div></div>`,
+      html: `<div style="text-align:left;font-size:13px"><p><strong>Type:</strong> ${this.plTypeLabel(type)}</p><p><strong>Orders:</strong> ${includedSalesNos.join(', ')}</p><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px"><div style="background:#eef2ff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#4338ca;font-weight:700;text-transform:uppercase">Ready To Pick</div><div style="font-size:24px;font-weight:700;color:#4338ca">${requiredQty}</div></div><div style="background:#ffedd5;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#c2410c;font-weight:700;text-transform:uppercase">Skipped Lines</div><div style="font-size:24px;font-weight:700;color:#ea580c">${skippedLines.length}</div></div><div style="background:#ecfdf5;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#047857;font-weight:700;text-transform:uppercase">Scannable Lines</div><div style="font-size:24px;font-weight:700;color:#047857">${scannableLines.length}</div></div></div><p style="margin-top:10px;color:#64748b">${skippedLines.length > 0 ? 'Out-of-stock or barcode-missing items will not be generated.' : 'All selected items are ready for scanning.'}</p></div>`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Generate',
@@ -478,8 +507,8 @@ export class PickListComponent implements OnInit, OnDestroy {
       const pickListId = await this.pickListService.createGeneratedPickList({
         pickListNo: `PL-${Date.now()}`,
         type,
-        salesOrderIds: orders.map((order) => order.id),
-        salesNos: orders.map((order) => order.salesNo),
+        salesOrderIds: includedOrders.map((order) => order.id),
+        salesNos: includedSalesNos,
         clientId,
         clientName,
         lines: liveLines,
@@ -516,7 +545,9 @@ export class PickListComponent implements OnInit, OnDestroy {
       const nextStep = await Swal.fire({
         icon: 'success',
         title: 'Pick List Generated',
-        text: 'You can start scanning now or review the Pick List first.',
+        text: skippedLines.length > 0
+          ? `You can start scanning now. ${skippedLines.length} unavailable line(s) were skipped.`
+          : 'You can start scanning now or review the Pick List first.',
         showCancelButton: true,
         confirmButtonText: 'Start Picking Now',
         cancelButtonText: 'Review Pick List',
@@ -531,7 +562,10 @@ export class PickListComponent implements OnInit, OnDestroy {
 
       await this.openView(createdPickList);
     } catch (error: any) {
-      await Swal.fire({ icon: 'error', title: 'Generation Failed', text: error?.message ?? 'Unable to generate Pick List.' });
+      const message = error?.message === 'no_scannable_lines'
+        ? 'Pick List was not created because no stock-backed barcode items were available.'
+        : error?.message ?? 'Unable to generate Pick List.';
+      await Swal.fire({ icon: 'error', title: 'Generation Failed', text: message });
     } finally {
       this.isSaving.set(false);
     }
@@ -630,7 +664,21 @@ export class PickListComponent implements OnInit, OnDestroy {
     if (!pickList.id) return;
 
     await this.stopLivePicking({ keepMode: true });
-    await this.pickListService.ensureLegacyPickListLines(pickList);
+    if (pickList.legacyPickingPending) {
+      const confirmResume = await Swal.fire({
+        icon: 'question',
+        title: 'Enable Scan Picking?',
+        text: 'This Pick List looks like an older completed record. The scan flow will be reopened without deducting stock again.',
+        showCancelButton: true,
+        confirmButtonText: 'Enable Scan Picking',
+        confirmButtonColor: '#16a34a',
+      });
+      if (!confirmResume.isConfirmed) return;
+      await this.pickListService.prepareLegacyPickListForPicking(pickList.id);
+    } else {
+      await this.pickListService.ensureLegacyPickListLines(pickList);
+    }
+
     const freshPickList = await this.pickListService.getPickListByIdOnce(pickList.id);
     if (!freshPickList) {
       await Swal.fire({ icon: 'error', title: 'Not Found', text: 'The selected Pick List could not be loaded.' });

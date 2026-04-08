@@ -84,6 +84,8 @@ export interface PickList {
   pickableLineCount?: number;
   completedLineCount?: number;
   orderSummaries?: PickListOrderSummary[];
+  inventoryReserved?: boolean;
+  legacyPickingPending?: boolean;
   items: PickListLine[];
   remarks?: string;
   createdAt?: any;

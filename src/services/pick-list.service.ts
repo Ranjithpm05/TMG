@@ -96,19 +96,28 @@ export class PickListService {
   }): Promise<string> {
     const normalizedLines = input.lines
       .map((line, index) => this.normalizeLine({ ...line, sortOrder: line.sortOrder ?? index }))
+      .filter((line) => line.requiredQty > 0 && !!line.inventoryId && !!line.barcode && line.status !== 'blocked' && line.status !== 'pending_stock')
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+    if (!normalizedLines.length) {
+      throw new Error('no_scannable_lines');
+    }
 
     const summary = this.buildSummary(normalizedLines);
     const pickListDoc = doc(this.plRef);
     const batch = writeBatch(this.firestore);
+    const salesOrderIds = [...new Set(normalizedLines.map((line) => line.salesOrderId))];
+    const salesNos = [...new Set(normalizedLines.map((line) => line.salesNo))];
 
     batch.set(pickListDoc, this.stripUndefined({
       pickListNo: input.pickListNo,
       type: input.type,
-      salesOrderIds: input.salesOrderIds,
-      salesNos: input.salesNos,
+      salesOrderIds,
+      salesNos,
       clientId: input.clientId,
       clientName: input.clientName,
+      inventoryReserved: false,
+      legacyPickingPending: false,
       remarks: input.remarks,
       status: summary.status,
       totalRequiredQty: summary.totalRequiredQty,
@@ -191,6 +200,82 @@ export class PickListService {
     await this.recalculatePickListStatus(pickList.id);
 
     return this.getPickListLinesOnce(pickList.id);
+  }
+
+  async prepareLegacyPickListForPicking(pickListId: string): Promise<PickList | null> {
+    const pickList = await this.getPickListByIdOnce(pickListId);
+    if (!pickList?.id) return pickList;
+
+    const sourceItems = Array.isArray(pickList.items) ? pickList.items : [];
+    if (!sourceItems.length) return pickList;
+
+    const resetLines: PickListLine[] = [];
+    for (let index = 0; index < sourceItems.length; index += 1) {
+      const source = this.normalizeLine({ ...sourceItems[index], lineId: sourceItems[index]?.lineId ?? `legacy-${index + 1}` });
+      const inventory = await this.findInventoryMatch(source.styleNo, source.color, source.size, source.sleeveType);
+      const requiredQty = Math.max(0, Number(source.requiredQty) || Number(source.pickedQty) || Math.max(0, source.orderedQty - (source.pendingQty || 0)));
+      const pendingQty = Math.max(0, Number(source.pendingQty) || 0);
+      const isReady = requiredQty > 0 && !!inventory?.id && !!inventory?.barcode;
+      const status: PickListLine['status'] = isReady ? 'ready' : requiredQty > 0 ? 'blocked' : 'pending_stock';
+
+      resetLines.push(this.normalizeLine({
+        ...source,
+        lineId: source.lineId || `legacy-${index + 1}`,
+        inventoryId: inventory?.id,
+        barcode: inventory?.barcode,
+        requiredQty,
+        pickedQty: 0,
+        remainingQty: requiredQty,
+        balanceQty: requiredQty + pendingQty,
+        pendingQty,
+        status,
+        claimedByUserId: undefined,
+        claimedByUsername: undefined,
+        claimExpiresAt: undefined,
+        completedAt: undefined,
+        completedByUserId: undefined,
+        completedByUsername: undefined,
+        sortOrder: source.sortOrder ?? index,
+      }));
+    }
+
+    const summary = this.buildSummary(resetLines);
+    const batch = writeBatch(this.firestore);
+    for (const line of resetLines) {
+      batch.set(this.lineDoc(pickListId, line.lineId), this.stripUndefined({
+        ...line,
+        updatedAt: serverTimestamp(),
+      }));
+    }
+
+    batch.update(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
+      status: summary.status,
+      totalRequiredQty: summary.totalRequiredQty,
+      totalPickedQty: 0,
+      totalPendingQty: summary.totalPendingQty,
+      pickableLineCount: summary.pickableLineCount,
+      completedLineCount: 0,
+      orderSummaries: summary.orderSummaries.map((entry) => ({ ...entry, pickedQty: 0 })),
+      items: summary.items.map((line) => ({
+        ...line,
+        pickedQty: 0,
+        remainingQty: line.requiredQty,
+        balanceQty: line.requiredQty + (line.pendingQty || 0),
+        status: line.requiredQty > 0 && line.inventoryId && line.barcode ? 'ready' : line.status,
+        claimedByUserId: undefined,
+        claimedByUsername: undefined,
+        claimExpiresAt: undefined,
+        completedAt: undefined,
+        completedByUserId: undefined,
+        completedByUsername: undefined,
+      })),
+      inventoryReserved: true,
+      legacyPickingPending: false,
+      updatedAt: serverTimestamp(),
+    }));
+
+    await batch.commit();
+    return this.getPickListByIdOnce(pickListId);
   }
 
   async claimNextLine(
@@ -357,6 +442,7 @@ export class PickListService {
       const pickList = this.normalizePickList({ id: pickListSnap.id, ...pickListSnap.data() });
       const now = Date.now();
       const claimActive = this.isClaimActive(liveLine, now);
+      const inventoryReserved = !!pickList.inventoryReserved;
 
       if (currentLineId && liveLine.lineId !== currentLineId) throw new Error('barcode_mismatch');
       if (trimmedBarcode !== String(liveLine.barcode ?? '').trim()) throw new Error('barcode_mismatch');
@@ -374,7 +460,7 @@ export class PickListService {
 
       const inventory = inventorySnap.data() as any;
       const currentStock = Number(inventory.currentStock) || 0;
-      if (currentStock <= 0) throw new Error('stock_exhausted');
+      if (!inventoryReserved && currentStock <= 0) throw new Error('stock_exhausted');
 
       const nextPickedQty = liveLine.pickedQty + 1;
       if (nextPickedQty > liveLine.requiredQty) throw new Error('line_completed');
@@ -409,10 +495,12 @@ export class PickListService {
         updatedAt: serverTimestamp(),
       }));
 
-      transaction.update(inventoryRef, {
-        currentStock: currentStock - 1,
-        updatedAt: serverTimestamp(),
-      });
+      if (!inventoryReserved) {
+        transaction.update(inventoryRef, {
+          currentStock: currentStock - 1,
+          updatedAt: serverTimestamp(),
+        });
+      }
 
       const nextTotalPickedQty = Math.min((pickList.totalPickedQty || 0) + 1, pickList.totalRequiredQty || 0);
       const nextCompletedLineCount = (pickList.completedLineCount || 0) + (lineCompleted ? 1 : 0);
@@ -576,6 +664,11 @@ export class PickListService {
     const orderSummaries = Array.isArray(raw?.orderSummaries)
       ? raw.orderSummaries.map((summary: any) => this.normalizeOrderSummary(summary))
       : [];
+    const legacyPickingPending = raw?.inventoryReserved !== true
+      && Array.isArray(raw?.items)
+      && raw.items.some((line: any) => (Number(line?.pickedQty) || 0) > 0)
+      && raw.items.every((line: any) => !line?.completedAt && !line?.completedByUserId)
+      && raw?.status === 'Completed';
 
     const fallbackSummary = orderSummaries.length
       ? {
@@ -604,6 +697,8 @@ export class PickListService {
       pickableLineCount: Number(raw?.pickableLineCount) || this.countPickableLines(items),
       completedLineCount: Number(raw?.completedLineCount) || this.countCompletedPickableLines(items),
       orderSummaries: orderSummaries.length ? orderSummaries : this.buildOrderSummaries(items),
+      inventoryReserved: raw?.inventoryReserved === true,
+      legacyPickingPending,
       items,
       remarks: raw?.remarks ?? '',
       createdAt: raw?.createdAt,
