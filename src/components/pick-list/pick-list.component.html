@@ -1,64 +1,38 @@
 <div class="animate-fade-in">
-
-  <!-- ================================================================ -->
-  <!-- LIST VIEW                                                          -->
-  <!-- ================================================================ -->
   @if (mode() === 'list') {
     <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
-
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4 mb-5">
         <div>
           <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Pick List</h2>
-          <p class="text-sm text-gray-500 mt-1">Direct · Combined · Item-wise picking</p>
+          <p class="text-sm text-gray-500 mt-1">Generate a pick list, then continue picking from the Sales Orders or Pick Lists tab.</p>
         </div>
-        <button (click)="startNewPickList()"
-                class="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow transition-colors">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-          </svg>
+        <button (click)="startNewPickList()" class="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
           New Pick List
         </button>
       </div>
 
-      <!-- Tabs -->
       <div class="flex border-b border-gray-200 mb-5">
-        <button (click)="listTab.set('orders')"
-                class="px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors"
-                [class.border-indigo-600]="listTab()==='orders'" [class.text-indigo-700]="listTab()==='orders'"
-                [class.border-transparent]="listTab()!=='orders'" [class.text-gray-500]="listTab()!=='orders'">
-          Sales Orders
-        </button>
-        <button (click)="listTab.set('picklists')"
-                class="px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors"
-                [class.border-indigo-600]="listTab()==='picklists'" [class.text-indigo-700]="listTab()==='picklists'"
-                [class.border-transparent]="listTab()!=='picklists'" [class.text-gray-500]="listTab()!=='picklists'">
-          Pick Lists ({{pickLists().length}})
-        </button>
+        <button (click)="listTab.set('orders')" class="px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors" [class.border-indigo-600]="listTab()==='orders'" [class.text-indigo-700]="listTab()==='orders'" [class.border-transparent]="listTab()!=='orders'" [class.text-gray-500]="listTab()!=='orders'">Sales Orders</button>
+        <button (click)="listTab.set('picklists')" class="px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors" [class.border-indigo-600]="listTab()==='picklists'" [class.text-indigo-700]="listTab()==='picklists'" [class.border-transparent]="listTab()!=='picklists'" [class.text-gray-500]="listTab()!=='picklists'">Pick Lists ({{pickLists().length}})</button>
       </div>
 
-      <!-- Filters -->
       <div class="flex flex-col sm:flex-row gap-3 mb-5">
         <div class="relative flex-1">
           <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
-            </svg>
+            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/></svg>
           </div>
-          <input type="text" placeholder="Search…"
-                 class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                 [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event)">
+          <input type="text" placeholder="Search..." class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event)">
         </div>
         @if (listTab() === 'orders') {
-          <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
+          <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
             <option value="all">All Statuses</option>
             <option value="Pending">Pending</option>
             <option value="Confirmed">Confirmed</option>
             <option value="Shipped">Shipped</option>
           </select>
         } @else {
-          <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  [ngModel]="plTypeFilter()" (ngModelChange)="plTypeFilter.set($event)">
+          <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" [ngModel]="plTypeFilter()" (ngModelChange)="plTypeFilter.set($event)">
             <option value="all">All Types</option>
             <option value="direct">Direct</option>
             <option value="combined">Combined</option>
@@ -73,689 +47,442 @@
             <div class="h-14 bg-gray-100 rounded-lg animate-pulse"></div>
           }
         </div>
-
       } @else if (listTab() === 'orders') {
-        @if (filteredOrders().length > 0) {
-          <div class="overflow-x-auto rounded-lg border border-gray-200">
-            <table class="min-w-full text-sm">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sales Order</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Client</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Delivery</th>
-                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Ordered</th>
-                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Picked</th>
-                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Balance</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100 bg-white">
-                @for (order of filteredOrders(); track order.id) {
-                  @let ordQty    = getOrderTotalQty(order);
-                  @let pickedQty = getPickedQtyForOrder(order.id);
-                  @let balQty    = ordQty - pickedQty;
-                  @let pickSt    = getPickStatusForOrder(order.id);
-                  @let pendQty   = getOrderPendingQty(order.id);
-                  <tr class="hover:bg-gray-50 transition-colors">
-                    <td class="px-4 py-3">
-                      <div class="font-semibold text-gray-800">{{order.salesNo}}</div>
-                      <div class="text-xs text-gray-400">{{formatDate(order.createdAt)}}</div>
-                    </td>
-                    <td class="px-4 py-3 text-gray-700 font-medium">{{getClientName(order.clientId)}}</td>
-                    <td class="px-4 py-3 text-gray-600 text-sm">{{order.deliveryDate}}</td>
-                    <td class="px-4 py-3 text-center font-semibold text-gray-700">{{ordQty}}</td>
-                    <td class="px-4 py-3 text-center font-bold text-green-700">{{pickedQty}}</td>
-                    <td class="px-4 py-3 text-center font-bold" [class.text-red-600]="balQty>0" [class.text-gray-400]="balQty===0">{{balQty}}</td>
-                    <td class="px-4 py-3">
-                      <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="orderPickBadge(order.id)">
-                        {{orderPickLabel(order.id)}}
-                      </span>
-                      @if (pendQty > 0) {
-                        <div class="text-xs text-orange-600 font-medium mt-0.5">⚠ {{pendQty}} pcs pending</div>
-                      }
-                    </td>
-                    <td class="px-4 py-3">
-                      <div class="flex items-center justify-end gap-2">
-                        @if (pickSt !== 'completed') {
-                          <button (click)="openDirectPick(order)"
-                                  class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-                            </svg>
-                            {{pickSt === 'partial' ? 'Continue' : 'Direct Pick'}}
-                          </button>
-                        }
-                        @let orderPl = getPickListForOrder(order.id);
-                        @if (orderPl) {
-                          <button (click)="printSavedPickList(orderPl)"
-                                  class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors" title="Print">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-                            </svg>
-                            Print
-                          </button>
-                        }
-                      </div>
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        } @else {
-          <div class="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
-            <svg class="mx-auto h-10 w-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2"/>
-            </svg>
-            <p class="mt-2 text-gray-500 text-sm">No orders found.</p>
-          </div>
-        }
-
-      } @else {
-        <!-- Pick Lists tab -->
-        @if (filteredPickLists().length > 0) {
-          <div class="overflow-x-auto rounded-lg border border-gray-200">
-            <table class="min-w-full text-sm">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Pick List No</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Orders</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Client</th>
-                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Picked</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100 bg-white">
-                @for (pl of filteredPickLists(); track pl.id) {
-                  <tr class="hover:bg-gray-50 transition-colors">
-                    <td class="px-4 py-3">
-                      <div class="font-semibold text-gray-800">{{pl.pickListNo}}</div>
-                      <div class="text-xs text-gray-400">{{formatDate(pl.createdAt)}}</div>
-                    </td>
-                    <td class="px-4 py-3">
-                      <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="plTypeBadge(pl.type)">
-                        {{plTypeLabel(pl.type)}}
-                      </span>
-                    </td>
-                    <td class="px-4 py-3 text-gray-700 text-xs">{{(pl.salesNos ?? []).join(', ')}}</td>
-                    <td class="px-4 py-3 text-gray-600 text-sm">{{pl.clientName}}</td>
-                    <td class="px-4 py-3 text-center font-bold text-indigo-700">
-                      {{pl.items.reduce((s,i) => s+(i.pickedQty||0), 0)}}
-                    </td>
-                    <td class="px-4 py-3">
-                      <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold"
-                            [class.bg-green-100]="pl.status==='Completed'"  [class.text-green-800]="pl.status==='Completed'"
-                            [class.bg-yellow-100]="pl.status==='Partial'"   [class.text-yellow-800]="pl.status==='Partial'"
-                            [class.bg-orange-100]="pl.status==='Pending'"   [class.text-orange-700]="pl.status==='Pending'"
-                            [class.bg-gray-100]="pl.status==='Draft'"       [class.text-gray-600]="pl.status==='Draft'">
-                        {{pl.status}}
-                      </span>
-                    </td>
-                    <td class="px-4 py-3">
-                      <div class="flex items-center justify-end gap-2">
-                        <button (click)="openView(pl)"
-                                class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">View</button>
-                        <button (click)="printSavedPickList(pl)"
-                                class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-                          </svg>
-                          Print
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        } @else {
-          <div class="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
-            <p class="text-gray-500 text-sm">No pick lists found.</p>
-          </div>
-        }
-      }
-    </div>
-  }
-
-  <!-- ================================================================ -->
-  <!-- SELECT TYPE                                                        -->
-  <!-- ================================================================ -->
-  @else if (mode() === 'select-type') {
-    <div class="max-w-3xl mx-auto animate-fade-in">
-      <div class="bg-white shadow-lg rounded-xl p-8">
-        <div class="flex items-center justify-between border-b pb-4 mb-7">
-          <div>
-            <h2 class="text-2xl font-bold text-gray-800">New Pick List</h2>
-            <p class="text-sm text-gray-500 mt-1">Select the type of pick list to generate</p>
-          </div>
-          <button (click)="cancel()" class="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </button>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <button (click)="selectType('direct')"
-                  class="group flex flex-col items-center p-7 border-2 border-gray-200 rounded-2xl hover:border-indigo-400 hover:bg-indigo-50 transition-all text-center">
-            <div class="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center mb-4 group-hover:bg-indigo-200">
-              <svg class="w-7 h-7 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-              </svg>
-            </div>
-            <h3 class="text-base font-bold text-gray-800 mb-1">Direct Pick</h3>
-            <p class="text-xs text-gray-500 leading-relaxed">One Sales Order → One Pick List</p>
-            <div class="mt-4 text-xs font-semibold text-indigo-600">Select → Pick →</div>
-          </button>
-
-          <button (click)="selectType('combined')"
-                  class="group flex flex-col items-center p-7 border-2 border-gray-200 rounded-2xl hover:border-purple-400 hover:bg-purple-50 transition-all text-center">
-            <div class="w-14 h-14 rounded-full bg-purple-100 flex items-center justify-center mb-4 group-hover:bg-purple-200">
-              <svg class="w-7 h-7 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-              </svg>
-            </div>
-            <h3 class="text-base font-bold text-gray-800 mb-1">Combined Pick</h3>
-            <p class="text-xs text-gray-500 leading-relaxed">Multiple Orders → One Pick List</p>
-            <div class="mt-4 text-xs font-semibold text-purple-600">Select Orders → Pick →</div>
-          </button>
-
-          <button (click)="selectType('itemwise')"
-                  class="group flex flex-col items-center p-7 border-2 border-gray-200 rounded-2xl hover:border-teal-400 hover:bg-teal-50 transition-all text-center">
-            <div class="w-14 h-14 rounded-full bg-teal-100 flex items-center justify-center mb-4 group-hover:bg-teal-200">
-              <svg class="w-7 h-7 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-              </svg>
-            </div>
-            <h3 class="text-base font-bold text-gray-800 mb-1">Item-wise Pick</h3>
-            <p class="text-xs text-gray-500 leading-relaxed">Same items across orders grouped by SKU</p>
-            <div class="mt-4 text-xs font-semibold text-teal-600">Select Orders → Filter Items → Pick →</div>
-          </button>
-        </div>
-      </div>
-    </div>
-  }
-
-  <!-- ================================================================ -->
-  <!-- SELECT ORDERS                                                      -->
-  <!-- ================================================================ -->
-  @else if (mode() === 'select-orders') {
-    @let type = pickType();
-    <div class="space-y-5 animate-fade-in">
-      <div class="bg-white shadow-lg rounded-xl p-6">
-        <div class="flex items-center justify-between border-b pb-4 mb-5">
-          <div>
-            <div class="flex items-center gap-3">
-              <h2 class="text-xl font-bold text-gray-800">Select Sales Orders</h2>
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="plTypeBadge(type)">{{plTypeLabel(type)}}</span>
-            </div>
-            <p class="text-sm text-gray-500 mt-1">
-              @if (type === 'direct') { Select one order for a direct pick list. }
-              @else if (type === 'combined') { Select multiple orders to combine. }
-              @else { Select orders to consolidate items across them. }
-            </p>
-          </div>
-          <div class="flex gap-2">
-            <button (click)="mode.set('select-type')" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">← Back</button>
-            <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-          </div>
-        </div>
-
-        <div class="relative mb-4 max-w-md">
-          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
-            </svg>
-          </div>
-          <input type="text" placeholder="Search order no or client…"
-                 class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                 [ngModel]="orderSearchTerm()" (ngModelChange)="orderSearchTerm.set($event)">
-        </div>
-
-        <div class="space-y-2 max-h-96 overflow-y-auto pr-1">
-          @for (order of filteredOrdersForSelection(); track order.id) {
-            @let ordQty    = getOrderTotalQty(order);
-            @let pickedQty = getPickedQtyForOrder(order.id);
-            @let balQty    = ordQty - pickedQty;
-            @let isSelected = isOrderSelected(order.id);
-            <label [for]="'ord-'+order.id"
-                   class="flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all"
-                   [class.border-indigo-400]="isSelected" [class.bg-indigo-50]="isSelected"
-                   [class.border-gray-200]="!isSelected">
-              <input type="checkbox" [id]="'ord-'+order.id" [checked]="isSelected"
-                     (change)="toggleOrderSelection(order.id)"
-                     class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500">
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span class="font-bold text-gray-800">{{order.salesNo}}</span>
-                  <span class="text-gray-500 text-sm">{{getClientName(order.clientId)}}</span>
-                  <span class="px-2 py-0.5 rounded-full text-xs font-semibold" [class]="orderPickBadge(order.id)">{{orderPickLabel(order.id)}}</span>
-                </div>
-                <div class="text-xs text-gray-500 mt-0.5">
-                  Delivery: {{order.deliveryDate}} · Ordered: {{ordQty}} pcs · Balance: {{balQty}} pcs
-                </div>
-              </div>
-              @if (isSelected) {
-                <svg class="w-5 h-5 text-indigo-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                </svg>
-              }
-            </label>
-          }
-        </div>
-
-        <div class="mt-5 pt-4 border-t flex items-center justify-between">
-          <div class="text-sm text-gray-600">
-            <strong>{{selectedOrderIds().size}}</strong> order(s) selected
-          </div>
-          <button (click)="proceedFromOrderSelection()"
-                  [disabled]="!canProceed()"
-                  class="inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-colors">
-            @if (type === 'itemwise') { Select Items → } @else { Review & Pick → }
-          </button>
-        </div>
-      </div>
-    </div>
-  }
-
-  <!-- ================================================================ -->
-  <!-- SELECT ITEMS (item-wise)                                           -->
-  <!-- ================================================================ -->
-  @else if (mode() === 'select-items') {
-    <div class="space-y-5 animate-fade-in">
-      <div class="bg-white shadow-lg rounded-xl p-6">
-        <div class="flex items-center justify-between border-b pb-4 mb-5">
-          <div>
-            <div class="flex items-center gap-3">
-              <h2 class="text-xl font-bold text-gray-800">Select Items to Pick</h2>
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-800">Item-wise</span>
-            </div>
-            <p class="text-sm text-gray-500 mt-1">{{selectedOrderIds().size}} order(s) · Choose which items to include</p>
-          </div>
-          <div class="flex gap-2">
-            <button (click)="mode.set('select-orders')" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">← Back</button>
-            <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-          </div>
-        </div>
-
-        <div class="flex gap-2 mb-4">
-          <button (click)="selectAllItems()" class="text-xs px-3 py-1.5 border border-teal-300 text-teal-700 rounded-lg hover:bg-teal-50 font-semibold">Select All</button>
-          <button (click)="clearItemSelection()" class="text-xs px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">Clear</button>
-          <span class="ml-2 text-sm text-gray-500 flex items-center">{{selectedItemCount()}} of {{activePickLines().length}} selected</span>
-        </div>
-
         <div class="overflow-x-auto rounded-lg border border-gray-200">
           <table class="min-w-full text-sm">
             <thead class="bg-gray-50">
               <tr>
-                <th class="w-10 px-4 py-3"></th>
-                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">SKU</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Size</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Total Balance</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Stock</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sales Order</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Client</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Ordered</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Picked</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Pending</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 bg-white">
-              @for (group of candidateGroups(); track group.key) {
-                @let lStatus = group.totalStock > 0 ? (group.totalStock >= group.totalBalance ? 'available' : 'partial') : 'pending';
-                <tr class="hover:bg-gray-50 cursor-pointer" [class.bg-teal-50]="group.allSelected"
-                    (click)="toggleItemSelection(group.key)">
-                  <td class="px-4 py-3 text-center">
-                    <input type="checkbox" [checked]="group.allSelected" class="w-4 h-4 text-teal-600 rounded"
-                           (click)="$event.stopPropagation()" (change)="toggleItemSelection(group.key)">
+              @for (order of filteredOrders(); track order.id) {
+                @let openPickList = getOpenPickListForOrder(order.id);
+                @let latestPickList = getPickListForOrder(order.id);
+                <tr class="hover:bg-gray-50 transition-colors">
+                  <td class="px-4 py-3">
+                    <div class="font-semibold text-gray-800">{{order.salesNo}}</div>
+                    <div class="text-xs text-gray-400">{{formatDate(order.createdAt)}}</div>
+                  </td>
+                  <td class="px-4 py-3 text-gray-700 font-medium">{{getClientName(order.clientId)}}</td>
+                  <td class="px-4 py-3 text-center font-semibold text-gray-700">{{getOrderTotalQty(order)}}</td>
+                  <td class="px-4 py-3 text-center font-bold text-green-700">{{getPickedQtyForOrder(order.id)}}</td>
+                  <td class="px-4 py-3 text-center font-bold text-orange-600">{{getOrderPendingQty(order.id)}}</td>
+                  <td class="px-4 py-3">
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="orderPickBadge(order.id)">{{orderPickLabel(order.id)}}</span>
+                    @if (openPickList) {
+                      <div class="text-xs text-indigo-600 font-medium mt-1">{{openPickList.pickListNo}} is active</div>
+                    }
                   </td>
                   <td class="px-4 py-3">
-                    <div class="font-semibold text-gray-800">{{group.styleNo}}</div>
-                    <div class="text-xs text-gray-500">{{group.color}}{{group.sleeve ? ' · ' + group.sleeve : ''}}</div>
-                  </td>
-                  <td class="px-4 py-3 text-center font-bold text-gray-700">{{group.size}}</td>
-                  <td class="px-4 py-3 text-center font-bold" [class.text-red-600]="group.totalBalance > 0" [class.text-gray-400]="group.totalBalance === 0">{{group.totalBalance}}</td>
-                  <td class="px-4 py-3 text-center font-semibold" [class.text-green-600]="group.totalStock > 0" [class.text-red-500]="group.totalStock === 0">{{group.totalStock}}</td>
-                  <td class="px-4 py-3 text-center">
-                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold" [class]="statusBadge(lStatus)">{{statusLabel(lStatus)}}</span>
+                    <div class="flex items-center justify-end gap-2 flex-wrap">
+                      @if (openPickList && hasPickableQty(openPickList)) {
+                        <button (click)="startPicking(openPickList)" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors">{{getPickActionLabel(openPickList)}}</button>
+                      }
+                      @if (canGenerateOrder(order.id)) {
+                        <button (click)="openDirectGenerate(order)" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors">{{getGenerateActionLabel(order.id)}}</button>
+                      }
+                      @if (openPickList) {
+                        <button (click)="openView(openPickList)" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">View Pick List</button>
+                      } @else if (latestPickList) {
+                        <button (click)="openView(latestPickList)" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">View Last Pick List</button>
+                      }
+                      @if (latestPickList) {
+                        <button (click)="printSavedPickList(latestPickList)" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">Print</button>
+                      }
+                    </div>
                   </td>
                 </tr>
               }
             </tbody>
           </table>
         </div>
-
-        <div class="mt-5 pt-4 border-t flex justify-between items-center">
-          <div class="text-sm text-gray-500"><span class="font-semibold text-teal-700">{{selectedItemCount()}}</span> item(s) selected</div>
-          <button (click)="proceedFromItemSelection()"
-                  [disabled]="selectedItemCount() === 0"
-                  class="inline-flex items-center gap-2 px-6 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-colors">
-            Review & Pick →
-          </button>
-        </div>
-      </div>
-    </div>
-  }
-
-  <!-- ================================================================ -->
-  <!-- PICK VIEW                                                          -->
-  <!-- ================================================================ -->
-  @else if (mode() === 'pick') {
-    @let type   = pickType();
-    @let groups = pickGroups();
-    @let sizes  = uniqueSizesForPick();
-    @let orders = selectedOrders();
-
-    <div class="space-y-5 animate-fade-in">
-
-      <!-- Header -->
-      <div class="bg-white shadow-lg rounded-xl p-6">
-        <div class="flex flex-col sm:flex-row justify-between items-start gap-4 border-b pb-4 mb-5">
-          <div>
-            <div class="flex items-center gap-3 flex-wrap">
-              <h2 class="text-xl font-bold text-gray-800">Confirm Pick Quantities</h2>
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="plTypeBadge(type)">{{plTypeLabel(type)}}</span>
-            </div>
-            <p class="text-sm text-gray-500 mt-1">
-              {{orders.length}} order(s):
-              @for (o of orders; track o.id) { <span class="font-medium text-gray-700">{{o.salesNo}}</span>@if (!$last){<span>, </span>} }
-            </p>
-          </div>
-          <div class="flex gap-2">
-            <button (click)="printActivePickList()"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-              </svg>
-              Print
-            </button>
-            <button (click)="cancel()"
-                    class="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-              </svg>
-              Back
-            </button>
-          </div>
-        </div>
-
-        <!-- Summary strip -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" [class.sm:grid-cols-5]="totalPendingQty() > 0">
-          <div class="bg-gray-50 rounded-xl p-4 text-center border border-gray-200">
-            <p class="text-xs text-gray-500 font-semibold uppercase">Ordered</p>
-            <p class="text-2xl font-bold text-gray-800 mt-1">{{totalOrderedQty()}}</p>
-            <p class="text-xs text-gray-400">pcs</p>
-          </div>
-          <div class="bg-indigo-50 rounded-xl p-4 text-center border border-indigo-200">
-            <p class="text-xs text-indigo-600 font-semibold uppercase">Picking Now</p>
-            <p class="text-2xl font-bold text-indigo-700 mt-1">{{totalPickQty()}}</p>
-            <p class="text-xs text-indigo-400">pcs</p>
-          </div>
-          <div class="bg-amber-50 rounded-xl p-4 text-center border border-amber-200">
-            <p class="text-xs text-amber-600 font-semibold uppercase">Balance After</p>
-            <p class="text-2xl font-bold text-amber-700 mt-1">{{totalBalanceQty()}}</p>
-            <p class="text-xs text-amber-400">pcs</p>
-          </div>
-          @if (totalPendingQty() > 0) {
-            <div class="bg-orange-50 rounded-xl p-4 text-center border border-orange-200">
-              <p class="text-xs text-orange-600 font-semibold uppercase">Pending</p>
-              <p class="text-2xl font-bold text-orange-700 mt-1">{{totalPendingQty()}}</p>
-              <p class="text-xs text-orange-400">no stock</p>
-            </div>
-          }
-          <div class="bg-green-50 rounded-xl p-4 text-center border border-green-200">
-            <p class="text-xs text-green-600 font-semibold uppercase">Line Items</p>
-            <p class="text-2xl font-bold text-green-700 mt-1">{{activePickLines().length}}</p>
-            <p class="text-xs text-green-400">rows</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Legend + bulk actions -->
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-1">
-        <div class="flex flex-wrap gap-2 items-center text-xs">
-          <span class="text-gray-500 font-medium">Stock:</span>
-          <span class="px-2 py-0.5 rounded-full font-semibold bg-green-100 text-green-800">In Stock</span>
-          <span class="px-2 py-0.5 rounded-full font-semibold bg-yellow-100 text-yellow-800">Partial Stock</span>
-          <span class="px-2 py-0.5 rounded-full font-semibold bg-orange-100 text-orange-700">Pending</span>
-          <span class="px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">Done</span>
-        </div>
-        <div class="flex gap-2">
-          <button (click)="setAllToMax()" class="text-xs px-3 py-1.5 border border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-50 font-semibold transition-colors">Set All Max</button>
-          <button (click)="clearAll()"    class="text-xs px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">Clear All</button>
-        </div>
-      </div>
-
-      <!-- Matrix table -->
-      <div class="bg-white shadow-lg rounded-xl overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="min-w-full text-sm border-collapse">
-            <thead>
-              <tr class="bg-gray-800 text-white">
-                <th class="px-3 py-3 text-left text-xs font-semibold w-8">#</th>
-                <th class="px-4 py-3 text-left text-xs font-semibold min-w-[160px]">Product</th>
-                @if (type !== 'direct') {
-                  <th class="px-3 py-3 text-left text-xs font-semibold min-w-[90px]">Order</th>
-                }
-                @for (sz of sizes; track sz) {
-                  <th class="px-2 py-3 text-center text-xs font-semibold min-w-[110px]">{{sz}}</th>
-                }
-                <th class="px-4 py-3 text-center text-xs font-semibold">Row Total</th>
+      } @else {
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Pick List No</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Orders</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Required</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Picked</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              @for (group of groups; track group.key; let gi = $index) {
-                <tr class="border-b border-gray-100" [class.bg-white]="gi%2===0" [class.bg-gray-50]="gi%2!==0">
-                  <td class="px-3 py-4 text-gray-400 text-xs">{{gi+1}}</td>
-                  <td class="px-4 py-4">
-                    <div class="font-bold text-gray-800">{{group.styleNo}}</div>
-                    <div class="text-xs text-gray-500 mt-0.5">{{group.color}}{{group.sleeve ? ' · ' + group.sleeve : ''}}</div>
+            <tbody class="divide-y divide-gray-100 bg-white">
+              @for (pl of filteredPickLists(); track pl.id) {
+                <tr class="hover:bg-gray-50 transition-colors">
+                  <td class="px-4 py-3">
+                    <div class="font-semibold text-gray-800">{{pl.pickListNo}}</div>
+                    <div class="text-xs text-gray-400">{{formatDate(pl.createdAt)}}</div>
                   </td>
-                  @if (type !== 'direct') {
-                    <td class="px-3 py-4">
-                      @for (l of group.lines; track l.salesOrderId) {
-                        <div class="text-xs text-indigo-600 font-medium">{{l.salesNo}}</div>
+                  <td class="px-4 py-3"><span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="plTypeBadge(pl.type)">{{plTypeLabel(pl.type)}}</span></td>
+                  <td class="px-4 py-3 text-gray-700 text-xs">{{(pl.salesNos ?? []).join(', ')}}</td>
+                  <td class="px-4 py-3 text-center font-semibold text-gray-700">{{pl.totalRequiredQty ?? 0}}</td>
+                  <td class="px-4 py-3 text-center font-bold text-indigo-700">{{pl.totalPickedQty ?? 0}}</td>
+                  <td class="px-4 py-3">
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class.bg-green-100]="pl.status==='Completed'" [class.text-green-800]="pl.status==='Completed'" [class.bg-yellow-100]="pl.status==='Partial'" [class.text-yellow-800]="pl.status==='Partial'" [class.bg-orange-100]="pl.status==='Pending'" [class.text-orange-700]="pl.status==='Pending'" [class.bg-gray-100]="pl.status==='Draft'" [class.text-gray-600]="pl.status==='Draft'">{{pl.status}}</span>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center justify-end gap-2">
+                      @if (pl.status !== 'Completed' && hasPickableQty(pl)) {
+                        <button (click)="startPicking(pl)" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors">{{getPickActionLabel(pl)}}</button>
                       }
-                    </td>
-                  }
-                  @for (sz of sizes; track sz) {
-                    @let line = getLineForSize(group.lines, sz);
-                    @if (line) {
-                      <!-- ═══ UNIFIED CELL — no shared info-div ═══ -->
-                      <td class="px-2 py-2 border-l border-gray-100 align-middle">
-
-                        @if (line.status === 'fulfilled' || line.balanceQty === 0) {
-                          <!-- ✓ Fully picked -->
-                          <div class="text-center py-2">
-                            <span class="text-xs font-bold text-blue-600">✓ Done</span>
-                          </div>
-
-                        } @else if (line.status === 'pending' || line.status === 'out_of_stock' || line.stockAvailable === 0) {
-                          <!-- ⏳ Pending — no stock -->
-                          <div class="text-center py-1 space-y-0.5">
-                            <span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700">Pending</span>
-                            <div class="text-xs text-gray-500">Ord: <strong>{{line.orderedQty}}</strong></div>
-                            <div class="text-xs font-bold text-orange-600">Bal: {{line.balanceQty}}</div>
-                            <div class="text-xs text-red-400">No Stock</div>
-                          </div>
-
-                        } @else {
-                          <!-- 📦 Has stock — stepper -->
-                          <div class="space-y-1 py-1">
-                            <div class="flex justify-center">
-                              <span class="px-1.5 py-0.5 rounded text-xs font-semibold" [class]="statusBadge(line.status)">
-                                {{statusLabel(line.status)}}
-                              </span>
-                            </div>
-                            <div class="text-center text-xs leading-4">
-                              <span class="font-semibold text-green-600">Stk:{{line.stockAvailable}}</span>
-                              <span class="text-gray-400"> | </span>
-                              <span class="font-semibold text-amber-600">Bal:{{line.balanceQty}}</span>
-                            </div>
-                            <div class="flex items-center justify-center gap-1">
-                              <button type="button" (click)="decrementPickQty(line)"
-                                      class="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center font-bold text-gray-600 hover:border-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">−</button>
-                              <input type="number" min="0" [max]="line.balanceQty"
-                                     class="w-12 text-center border border-gray-300 rounded text-sm font-bold py-0.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                                     [ngModel]="line.pickQty"
-                                     (ngModelChange)="setPickQty(line, $event)">
-                              <button type="button" (click)="incrementPickQty(line)"
-                                      class="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center font-bold text-gray-600 hover:border-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">+</button>
-                            </div>
-                          </div>
-                        }
-
-                      </td>
-                    } @else {
-                      <td class="px-2 py-2 text-center text-gray-200 border-l border-gray-100 text-sm">—</td>
-                    }
-                  }
-                  <td class="px-4 py-4 text-center border-l border-gray-200">
-                    <span class="text-xl font-bold text-indigo-700">{{getGroupPickTotal(group.lines)}}</span>
+                      <button (click)="openView(pl)" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">View</button>
+                      <button (click)="printSavedPickList(pl)" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">Print</button>
+                    </div>
                   </td>
                 </tr>
               }
             </tbody>
-            <tfoot>
-              <tr class="bg-gray-800 text-white">
-                <td [attr.colspan]="type !== 'direct' ? 3 : 2" class="px-4 py-3 font-bold text-right text-sm">Total</td>
-                @for (sz of sizes; track sz) {
-                  <td class="px-2 py-3 text-center font-bold text-lg">{{getSizeTotal(sz)}}</td>
-                }
-                <td class="px-4 py-3 text-center font-bold text-xl text-green-300">{{totalPickQty()}}</td>
+          </table>
+        </div>
+      }
+    </div>
+  }
+
+  @else if (mode() === 'select-type') {
+    <div class="max-w-3xl mx-auto bg-white shadow-lg rounded-xl p-8">
+      <div class="flex items-center justify-between border-b pb-4 mb-6">
+        <div>
+          <h2 class="text-2xl font-bold text-gray-800">New Pick List</h2>
+          <p class="text-sm text-gray-500 mt-1">Choose how the Pick List should be generated.</p>
+        </div>
+        <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <button (click)="selectType('direct')" class="p-6 border-2 border-gray-200 rounded-2xl hover:border-indigo-400 hover:bg-indigo-50 text-center transition-all"><div class="text-lg font-bold text-gray-800">Direct Pick</div><div class="text-xs text-gray-500 mt-1">One order to one Pick List</div></button>
+        <button (click)="selectType('combined')" class="p-6 border-2 border-gray-200 rounded-2xl hover:border-purple-400 hover:bg-purple-50 text-center transition-all"><div class="text-lg font-bold text-gray-800">Combined Pick</div><div class="text-xs text-gray-500 mt-1">Multiple orders in one Pick List</div></button>
+        <button (click)="selectType('itemwise')" class="p-6 border-2 border-gray-200 rounded-2xl hover:border-teal-400 hover:bg-teal-50 text-center transition-all"><div class="text-lg font-bold text-gray-800">Item-wise Pick</div><div class="text-xs text-gray-500 mt-1">Select SKU groups across orders</div></button>
+      </div>
+    </div>
+  }
+
+  @else if (mode() === 'select-orders') {
+    <div class="bg-white shadow-lg rounded-xl p-6 space-y-5">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4">
+        <div>
+          <div class="flex items-center gap-3">
+            <h2 class="text-xl font-bold text-gray-800">Select Sales Orders</h2>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="plTypeBadge(pickType())">{{plTypeLabel(pickType())}}</span>
+          </div>
+          <p class="text-sm text-gray-500 mt-1">Orders with an active Pick List are locked until that Pick List is completed.</p>
+        </div>
+        <div class="flex gap-2">
+          <button (click)="mode.set('select-type')" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Back</button>
+          <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+        </div>
+      </div>
+
+      <input type="text" placeholder="Search orders..." class="w-full max-w-md border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" [ngModel]="orderSearchTerm()" (ngModelChange)="orderSearchTerm.set($event)">
+
+      <div class="overflow-x-auto rounded-lg border border-gray-200">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Select</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sales Order</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Client</th>
+              <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Ordered</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Availability</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 bg-white">
+            @for (order of filteredOrdersForSelection(); track order.id) {
+              @let openPickList = getOpenPickListForOrder(order.id);
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3"><input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" [checked]="isOrderSelected(order.id)" [disabled]="!!openPickList" (change)="toggleOrderSelection(order.id)"></td>
+                <td class="px-4 py-3"><div class="font-semibold text-gray-800">{{order.salesNo}}</div><div class="text-xs text-gray-400">{{formatDate(order.createdAt)}}</div></td>
+                <td class="px-4 py-3 text-gray-700">{{getClientName(order.clientId)}}</td>
+                <td class="px-4 py-3 text-center font-semibold text-gray-700">{{getOrderTotalQty(order)}}</td>
+                <td class="px-4 py-3">@if (openPickList) { <span class="text-xs font-medium text-orange-700">Active Pick List: {{openPickList.pickListNo}}</span> } @else { <span class="text-xs font-medium text-green-700">Ready to generate</span> }</td>
               </tr>
-            </tfoot>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex justify-end">
+        <button (click)="proceedFromOrderSelection()" [disabled]="selectedOrderIds().size===0" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-colors">Continue</button>
+      </div>
+    </div>
+  }
+
+  @else if (mode() === 'select-items') {
+    <div class="bg-white shadow-lg rounded-xl p-6 space-y-5">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4">
+        <div>
+          <h2 class="text-xl font-bold text-gray-800">Select Item Groups</h2>
+          <p class="text-sm text-gray-500 mt-1">Pick the SKU groups that should be included in this item-wise Pick List.</p>
+        </div>
+        <div class="flex gap-2">
+          <button (click)="mode.set('select-orders')" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Back</button>
+          <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+        </div>
+      </div>
+
+      <div class="flex gap-2">
+        <button (click)="selectAllItems()" class="px-3 py-1.5 border border-indigo-300 text-indigo-700 rounded-lg text-xs font-semibold hover:bg-indigo-50">Select All</button>
+        <button (click)="clearItemSelection()" class="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg text-xs hover:bg-gray-50">Clear</button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        @for (group of candidateGroups(); track group.key) {
+          <button (click)="toggleItemSelection(group.key)" class="text-left border rounded-2xl p-5 transition-all" [class.border-indigo-500]="group.selected" [class.bg-indigo-50]="group.selected" [class.border-gray-200]="!group.selected" [class.bg-white]="!group.selected">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="font-bold text-gray-800">{{group.styleNo}}</div>
+                <div class="text-sm text-gray-500">{{group.color}} · {{group.size}}{{group.sleeveType ? ' · ' + group.sleeveType : ''}}</div>
+                <div class="text-xs text-gray-400 mt-1">{{group.salesNos.join(', ')}}</div>
+              </div>
+              <input type="checkbox" [checked]="group.selected" class="w-4 h-4 mt-1 pointer-events-none">
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-4">
+              <div class="bg-white/80 rounded-xl border p-3"><div class="text-xs text-gray-500 uppercase font-semibold">Required</div><div class="text-xl font-bold text-indigo-700 mt-1">{{group.requiredQty}}</div></div>
+              <div class="bg-white/80 rounded-xl border p-3"><div class="text-xs text-gray-500 uppercase font-semibold">Pending</div><div class="text-xl font-bold text-orange-600 mt-1">{{group.pendingQty}}</div></div>
+            </div>
+          </button>
+        }
+      </div>
+
+      <div class="flex justify-end">
+        <button (click)="proceedFromItemSelection()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-colors">Continue to Preview</button>
+      </div>
+    </div>
+  }
+
+  @else if (mode() === 'preview') {
+    <div class="space-y-5">
+      <div class="bg-white shadow-lg rounded-xl p-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4 mb-5">
+          <div>
+            <div class="flex items-center gap-3">
+              <h2 class="text-xl font-bold text-gray-800">Pick List Preview</h2>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="plTypeBadge(pickType())">{{plTypeLabel(pickType())}}</span>
+            </div>
+            <p class="text-sm text-gray-500 mt-1">Generating this Pick List will not deduct stock. Live scanning happens later.</p>
+          </div>
+          <div class="flex gap-2">
+            <button (click)="printActivePickList()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Print</button>
+            <button (click)="mode.set(pickType()==='itemwise' ? 'select-items' : 'select-orders')" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Back</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="bg-gray-50 rounded-xl p-4 text-center border border-gray-200"><p class="text-xs text-gray-500 font-semibold uppercase">Ordered</p><p class="text-2xl font-bold text-gray-800 mt-1">{{draftTotals().ordered}}</p></div>
+          <div class="bg-indigo-50 rounded-xl p-4 text-center border border-indigo-200"><p class="text-xs text-indigo-600 font-semibold uppercase">Ready To Pick</p><p class="text-2xl font-bold text-indigo-700 mt-1">{{draftTotals().required}}</p></div>
+          <div class="bg-orange-50 rounded-xl p-4 text-center border border-orange-200"><p class="text-xs text-orange-600 font-semibold uppercase">Pending Stock</p><p class="text-2xl font-bold text-orange-700 mt-1">{{draftTotals().pending}}</p></div>
+          <div class="bg-green-50 rounded-xl p-4 text-center border border-green-200"><p class="text-xs text-green-600 font-semibold uppercase">Lines</p><p class="text-2xl font-bold text-green-700 mt-1">{{draftTotals().readyLines}}</p></div>
+        </div>
+      </div>
+
+      <div class="bg-white shadow-lg rounded-xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-800 text-white">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-semibold">Order</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold">Product</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold">Ordered</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold">Already Picked</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold">Ready Qty</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold">Pending Qty</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold">Barcode</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white">
+              @for (line of draftLines(); track line.lineId) {
+                @if (pickType() !== 'itemwise' || line.selected) {
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-xs font-medium text-indigo-600">{{line.salesNo}}</td>
+                    <td class="px-4 py-3"><div class="font-semibold text-gray-800">{{line.styleNo}}</div><div class="text-xs text-gray-500">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</div></td>
+                    <td class="px-4 py-3 text-center">{{line.orderedQty}}</td>
+                    <td class="px-4 py-3 text-center">{{line.alreadyPickedQty}}</td>
+                    <td class="px-4 py-3 text-center font-bold text-indigo-700">{{line.requiredQty}}</td>
+                    <td class="px-4 py-3 text-center font-bold text-orange-600">{{line.pendingQty}}</td>
+                    <td class="px-4 py-3 text-center font-mono text-xs text-gray-500">{{line.barcode || '-'}}</td>
+                  </tr>
+                }
+              }
+            </tbody>
           </table>
         </div>
       </div>
 
-      <!-- Confirm footer -->
-      <div class="bg-white shadow-lg rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 sticky bottom-0">
-        <div class="text-sm text-gray-600">
-          @if (allFulfilled()) {
-            <span class="text-blue-700 font-semibold">✓ All items fulfilled.</span>
-          } @else if (allPending()) {
-            <span class="text-orange-600 font-semibold">⚠ All {{totalPendingQty()}} pcs pending — no stock available. Save to track.</span>
-          } @else {
-            Picking <strong class="text-indigo-700 mx-1">{{totalPickQty()}} pcs</strong>
-            @if (totalPendingQty() > 0) {
-              · <span class="text-orange-600 font-semibold">{{totalPendingQty()}} pcs pending (no stock)</span>
-            }
-          }
-        </div>
+      <div class="bg-white shadow-lg rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="text-sm text-gray-600">Generated Pick Lists begin with zero live-picked quantity. After saving, you can start picking immediately or review the Pick List first.</div>
         <div class="flex gap-3">
           <button (click)="cancel()" class="px-5 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors">Cancel</button>
-          <button (click)="confirmPick()"
-                  [disabled]="isConfirming() || allFulfilled()"
-                  class="px-7 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-2 min-w-[200px] justify-center">
-            @if (isConfirming()) {
-              <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-              </svg>
-              Confirming…
-            } @else if (allPending()) {
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
-              </svg>
-              Save as Pending
-            } @else {
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-              </svg>
-              Confirm Pick ({{totalPickQty()}} pcs)
-            }
-          </button>
+          <button (click)="generatePickList()" [disabled]="isSaving()" class="px-7 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-colors min-w-[200px]">{{isSaving() ? 'Generating...' : 'Generate Pick List'}}</button>
         </div>
       </div>
     </div>
   }
 
-  <!-- ================================================================ -->
-  <!-- VIEW SAVED PICK LIST                                               -->
-  <!-- ================================================================ -->
+  @else if (mode() === 'live-pick') {
+    @let pickList = livePickList();
+    @let currentLine = currentAssignedLine();
+    @if (pickList) {
+      <div class="space-y-5">
+        <div class="bg-white shadow-lg rounded-xl p-6">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4 mb-5">
+            <div>
+              <div class="flex items-center gap-3 flex-wrap">
+                <h2 class="text-2xl font-bold text-gray-800">{{pickList.pickListNo}}</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="plTypeBadge(pickList.type)">{{plTypeLabel(pickList.type)}}</span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class.bg-green-100]="pickList.status==='Completed'" [class.text-green-800]="pickList.status==='Completed'" [class.bg-yellow-100]="pickList.status==='Partial'" [class.text-yellow-800]="pickList.status==='Partial'" [class.bg-orange-100]="pickList.status==='Pending'" [class.text-orange-700]="pickList.status==='Pending'" [class.bg-gray-100]="pickList.status==='Draft'" [class.text-gray-600]="pickList.status==='Draft'">{{pickList.status}}</span>
+              </div>
+              <p class="text-sm text-gray-500 mt-1">{{(pickList.salesNos ?? []).join(', ')}} · {{pickList.clientName}}</p>
+            </div>
+            <div class="flex gap-2">
+              <button (click)="toggleCamera()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">{{isCameraOpen() ? 'Stop Camera' : 'Open Camera'}}</button>
+              <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Close</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div class="bg-gray-50 rounded-xl p-4 text-center border"><p class="text-xs text-gray-500 uppercase font-semibold">Required</p><p class="text-2xl font-bold text-gray-800 mt-1">{{liveProgress().totalRequiredQty}}</p></div>
+            <div class="bg-indigo-50 rounded-xl p-4 text-center border border-indigo-200"><p class="text-xs text-indigo-600 uppercase font-semibold">Picked</p><p class="text-2xl font-bold text-indigo-700 mt-1">{{liveProgress().totalPickedQty}}</p></div>
+            <div class="bg-green-50 rounded-xl p-4 text-center border border-green-200"><p class="text-xs text-green-600 uppercase font-semibold">Completed Lines</p><p class="text-2xl font-bold text-green-700 mt-1">{{liveProgress().completedLineCount}}</p></div>
+            <div class="bg-orange-50 rounded-xl p-4 text-center border border-orange-200"><p class="text-xs text-orange-600 uppercase font-semibold">Pending Stock</p><p class="text-2xl font-bold text-orange-700 mt-1">{{liveProgress().totalPendingQty}}</p></div>
+            <div class="bg-slate-50 rounded-xl p-4 text-center border"><p class="text-xs text-slate-600 uppercase font-semibold">Open Lines</p><p class="text-2xl font-bold text-slate-700 mt-1">{{liveProgress().pickableLineCount - liveProgress().completedLineCount}}</p></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-[380px,1fr] gap-5">
+          <div class="space-y-5">
+            <div class="bg-white shadow-lg rounded-xl p-5">
+              <div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold text-gray-800">Current Assigned Item</h3><span class="text-xs font-medium text-gray-500">{{currentUser()?.username}}</span></div>
+              @if (currentLine) {
+                <div class="space-y-3">
+                  <div><div class="text-xl font-bold text-gray-800">{{currentLine.styleNo}}</div><div class="text-sm text-gray-500">{{currentLine.color}} · {{currentLine.size}}{{currentLine.sleeveType ? ' · ' + currentLine.sleeveType : ''}}</div></div>
+                  <div class="grid grid-cols-3 gap-3">
+                    <div class="rounded-xl border bg-gray-50 p-3 text-center"><div class="text-xs text-gray-500 uppercase font-semibold">Required</div><div class="text-xl font-bold text-gray-800 mt-1">{{currentLine.requiredQty}}</div></div>
+                    <div class="rounded-xl border bg-indigo-50 p-3 text-center"><div class="text-xs text-indigo-600 uppercase font-semibold">Picked</div><div class="text-xl font-bold text-indigo-700 mt-1">{{currentLine.pickedQty}}</div></div>
+                    <div class="rounded-xl border bg-amber-50 p-3 text-center"><div class="text-xs text-amber-600 uppercase font-semibold">Remaining</div><div class="text-xl font-bold text-amber-700 mt-1">{{currentLine.remainingQty}}</div></div>
+                  </div>
+                  <div class="rounded-xl border bg-slate-50 p-3"><div class="text-xs text-slate-500 uppercase font-semibold mb-1">Barcode</div><div class="font-mono text-sm text-slate-700 break-all">{{currentLine.barcode || '-'}}</div></div>
+                </div>
+              } @else {
+                <div class="rounded-xl border border-dashed border-gray-300 p-5 text-sm text-gray-500">No item is currently assigned to you. The next available line will be claimed automatically when it becomes free.</div>
+              }
+            </div>
+
+            <div class="bg-white shadow-lg rounded-xl p-5">
+              <h3 class="text-lg font-bold text-gray-800 mb-3">Scan</h3>
+              <div class="space-y-3">
+                <input #scanInput type="text" placeholder="Scan or type barcode" class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" [ngModel]="manualScanValue()" (ngModelChange)="onManualScanChange($event)" (keyup.enter)="submitCurrentInput()">
+                <div class="rounded-xl px-4 py-3 text-sm font-medium" [class.bg-green-50]="scanFeedback()==='success'" [class.text-green-700]="scanFeedback()==='success'" [class.bg-red-50]="scanFeedback()==='error'" [class.text-red-700]="scanFeedback()==='error'" [class.bg-gray-50]="scanFeedback()==='idle'" [class.text-gray-600]="scanFeedback()==='idle'">{{scannerMessage()}}</div>
+              </div>
+            </div>
+
+            @if (isCameraOpen()) {
+              <div class="bg-white shadow-lg rounded-xl p-4">
+                <div class="aspect-[4/3] rounded-xl overflow-hidden bg-black"><video #cameraVideo class="w-full h-full object-cover" playsinline autoplay muted></video></div>
+                <p class="text-xs text-gray-500 mt-3 text-center">Point the camera at the assigned item's QR or barcode.</p>
+              </div>
+            }
+          </div>
+
+          <div class="bg-white shadow-lg rounded-xl overflow-hidden">
+            <div class="px-5 py-4 border-b border-gray-200">
+              <h3 class="text-lg font-bold text-gray-800">Live Line Status</h3>
+              <p class="text-sm text-gray-500 mt-1">Users can work on different lines at the same time. Claims expire automatically if a session goes idle.</p>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-sm">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Product</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Order</th>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Required</th>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Picked</th>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Remaining</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Claim</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 bg-white">
+                  @for (line of liveLines(); track line.lineId) {
+                    <tr class="hover:bg-gray-50" [class.bg-indigo-50]="currentLineId() === line.lineId">
+                      <td class="px-4 py-3"><div class="font-semibold text-gray-800">{{line.styleNo}}</div><div class="text-xs text-gray-500">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</div></td>
+                      <td class="px-4 py-3 text-xs font-medium text-indigo-600">{{line.salesNo}}</td>
+                      <td class="px-4 py-3 text-center">{{line.requiredQty}}</td>
+                      <td class="px-4 py-3 text-center font-bold text-indigo-700">{{line.pickedQty}}</td>
+                      <td class="px-4 py-3 text-center font-bold" [class.text-orange-600]="line.remainingQty > 0" [class.text-gray-400]="line.remainingQty === 0">{{line.remainingQty}}</td>
+                      <td class="px-4 py-3"><span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="liveLineStatusBadge(line)">{{liveLineStatusLabel(line)}}</span></td>
+                      <td class="px-4 py-3 text-xs">@if (line.claimedByUsername && line.remainingQty > 0 && line.status !== 'completed') { <span [class.text-indigo-700]="line.claimedByUserId===currentUser()?.id" [class.text-slate-600]="line.claimedByUserId!==currentUser()?.id">{{line.claimedByUserId===currentUser()?.id ? 'Assigned to you' : 'Assigned to ' + line.claimedByUsername}}</span> } @else { <span class="text-gray-400">Unclaimed</span> }</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+  }
+
   @else if (mode() === 'view') {
     @let pl = viewPickList();
     @if (pl) {
-      <div class="bg-white shadow-lg rounded-xl p-6 animate-fade-in">
+      <div class="bg-white shadow-lg rounded-xl p-6">
         <div class="flex flex-col sm:flex-row justify-between items-start gap-4 border-b pb-4 mb-5">
           <div>
             <div class="flex items-center gap-3 flex-wrap">
               <h2 class="text-2xl font-bold text-gray-800">{{pl.pickListNo}}</h2>
               <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="plTypeBadge(pl.type)">{{plTypeLabel(pl.type)}}</span>
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold"
-                    [class.bg-green-100]="pl.status==='Completed'"  [class.text-green-800]="pl.status==='Completed'"
-                    [class.bg-yellow-100]="pl.status==='Partial'"   [class.text-yellow-800]="pl.status==='Partial'"
-                    [class.bg-orange-100]="pl.status==='Pending'"   [class.text-orange-700]="pl.status==='Pending'">
-                {{pl.status}}
-              </span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class.bg-green-100]="pl.status==='Completed'" [class.text-green-800]="pl.status==='Completed'" [class.bg-yellow-100]="pl.status==='Partial'" [class.text-yellow-800]="pl.status==='Partial'" [class.bg-orange-100]="pl.status==='Pending'" [class.text-orange-700]="pl.status==='Pending'" [class.bg-gray-100]="pl.status==='Draft'" [class.text-gray-600]="pl.status==='Draft'">{{pl.status}}</span>
             </div>
             <p class="text-sm text-gray-500 mt-1">{{(pl.salesNos ?? []).join(', ')}} · {{pl.clientName}} · {{formatDate(pl.createdAt)}}</p>
           </div>
           <div class="flex gap-2">
-            <button (click)="printSavedPickList(pl)"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-              </svg>
-              Print
-            </button>
-            <button (click)="cancel()"
-                    class="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-              </svg>
-              Back
-            </button>
+            @if (pl.status !== 'Completed' && hasPickableQty(pl)) {
+              <button (click)="startPicking(pl)" class="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">{{getPickActionLabel(pl)}}</button>
+            }
+            <button (click)="printSavedPickList(pl)" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Print</button>
+            <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Back</button>
           </div>
         </div>
 
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-          <div class="bg-gray-50 p-4 rounded-xl border text-center">
-            <p class="text-xs text-gray-500 uppercase font-semibold">Ordered</p>
-            <p class="text-xl font-bold text-gray-800 mt-1">{{pl.items.reduce((s,i)=>s+(i.orderedQty||0),0)}}</p>
-          </div>
-          <div class="bg-green-50 p-4 rounded-xl border border-green-200 text-center">
-            <p class="text-xs text-green-600 uppercase font-semibold">Picked</p>
-            <p class="text-xl font-bold text-green-700 mt-1">{{pl.items.reduce((s,i)=>s+(i.pickedQty||0),0)}}</p>
-          </div>
-          <div class="bg-amber-50 p-4 rounded-xl border border-amber-200 text-center">
-            <p class="text-xs text-amber-600 uppercase font-semibold">Balance</p>
-            <p class="text-xl font-bold text-amber-700 mt-1">{{pl.items.reduce((s,i)=>s+(i.balanceQty||0),0)}}</p>
-          </div>
-          <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-200 text-center">
-            <p class="text-xs text-indigo-600 uppercase font-semibold">Line Items</p>
-            <p class="text-xl font-bold text-indigo-700 mt-1">{{pl.items.length}}</p>
-          </div>
+          <div class="bg-gray-50 p-4 rounded-xl border text-center"><p class="text-xs text-gray-500 uppercase font-semibold">Required</p><p class="text-xl font-bold text-gray-800 mt-1">{{pl.totalRequiredQty ?? 0}}</p></div>
+          <div class="bg-green-50 p-4 rounded-xl border border-green-200 text-center"><p class="text-xs text-green-600 uppercase font-semibold">Picked</p><p class="text-xl font-bold text-green-700 mt-1">{{pl.totalPickedQty ?? 0}}</p></div>
+          <div class="bg-amber-50 p-4 rounded-xl border border-amber-200 text-center"><p class="text-xs text-amber-600 uppercase font-semibold">Pending Stock</p><p class="text-xl font-bold text-amber-700 mt-1">{{pl.totalPendingQty ?? 0}}</p></div>
+          <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-200 text-center"><p class="text-xs text-indigo-600 uppercase font-semibold">Completed Lines</p><p class="text-xl font-bold text-indigo-700 mt-1">{{pl.completedLineCount ?? 0}}</p></div>
         </div>
 
         <div class="overflow-x-auto rounded-lg border border-gray-200">
           <table class="min-w-full text-sm">
             <thead class="bg-gray-800 text-white">
               <tr>
-                <th class="px-4 py-3 text-left text-xs font-semibold">#</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold">Product</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold">Order</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold">Size</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold">Ordered</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold">Required</th>
                 <th class="px-4 py-3 text-center text-xs font-semibold">Picked</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold">Balance</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold">Remaining</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold">Pending</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold">Status</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 bg-white">
-              @for (item of pl.items; track item.salesOrderId+item.styleNo+item.size; let i = $index) {
+              @for (line of viewDisplayLines(); track line.lineId) {
                 <tr class="hover:bg-gray-50">
-                  <td class="px-4 py-3 text-gray-400 text-xs">{{i+1}}</td>
-                  <td class="px-4 py-3">
-                    <div class="font-semibold text-gray-800">{{item.styleNo}}</div>
-                    <div class="text-xs text-gray-500">{{item.color}}{{item.sleeveType ? ' · ' + item.sleeveType : ''}}</div>
-                  </td>
-                  <td class="px-4 py-3 text-xs text-indigo-600 font-medium">{{item.salesNo}}</td>
-                  <td class="px-4 py-3 text-center font-semibold text-gray-700">{{item.size}}</td>
-                  <td class="px-4 py-3 text-center text-gray-600">{{item.orderedQty}}</td>
-                  <td class="px-4 py-3 text-center font-bold text-green-700">{{item.pickedQty}}</td>
-                  <td class="px-4 py-3 text-center font-bold" [class.text-red-600]="item.balanceQty>0" [class.text-gray-400]="item.balanceQty===0">
-                    {{item.balanceQty}}
-                  </td>
+                  <td class="px-4 py-3"><div class="font-semibold text-gray-800">{{line.styleNo}}</div><div class="text-xs text-gray-500">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</div></td>
+                  <td class="px-4 py-3 text-xs font-medium text-indigo-600">{{line.salesNo}}</td>
+                  <td class="px-4 py-3 text-center">{{line.requiredQty}}</td>
+                  <td class="px-4 py-3 text-center font-bold text-green-700">{{line.pickedQty}}</td>
+                  <td class="px-4 py-3 text-center font-bold" [class.text-orange-600]="line.remainingQty > 0" [class.text-gray-400]="line.remainingQty === 0">{{line.remainingQty}}</td>
+                  <td class="px-4 py-3 text-center font-bold text-orange-600">{{line.pendingQty || 0}}</td>
+                  <td class="px-4 py-3"><span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="liveLineStatusBadge(line)">{{liveLineStatusLabel(line)}}</span></td>
                 </tr>
               }
             </tbody>
@@ -764,5 +491,4 @@
       </div>
     }
   }
-
 </div>

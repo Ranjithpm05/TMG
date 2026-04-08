@@ -1,57 +1,104 @@
-// ── Runtime line item (pick session only — not persisted) ───────────────────
+export type PickListDraftLineStatus = 'ready' | 'pending_stock' | 'blocked';
+export type PickListLineStatus = 'pending_stock' | 'ready' | 'in_progress' | 'completed' | 'blocked';
+
 export interface PickListLineItem {
-  salesOrderId:     string;
-  salesNo:          string;
-  clientId:         string;
-  clientName:       string;
-  designId:         string;
-  styleNo:          string;
-  color:            string;
-  group:            string;
-  size:             string;  // always stored as String
-  sleeveType?:      string;
-  orderedQty:       number;
-  alreadyPickedQty: number;
-  balanceQty:       number;
-  stockAvailable:   number;
-  pickQty:          number;
-  selected:         boolean;
-  status:           'available' | 'partial' | 'out_of_stock' | 'pending' | 'fulfilled';
-}
-
-// ── Persisted pick list line ──────────────────────────────────────────────────
-export interface PickListLine {
+  lineId: string;
   salesOrderId: string;
-  salesNo:      string;
-  designId:     string;
-  styleNo:      string;
-  color:        string;
-  group:        string;
-  size:         string;
-  sleeveType?:  string;
-  orderedQty:   number;
-  pickedQty:    number;
-  balanceQty:   number;
-  pendingQty?:  number;  // qty with no stock — awaiting future pick
+  salesNo: string;
+  clientId: string;
+  clientName: string;
+  designId: string;
+  styleNo: string;
+  color: string;
+  group: string;
+  size: string;
+  sleeveType?: string;
+  orderedQty: number;
+  alreadyPickedQty: number;
+  balanceQty: number;
+  stockAvailable: number;
+  requiredQty: number;
+  pendingQty: number;
+  barcode?: string;
+  inventoryId?: string;
+  selected: boolean;
+  status: PickListDraftLineStatus;
 }
 
-// ── Pick List types ───────────────────────────────────────────────────────────
+export interface PickListOrderSummary {
+  salesOrderId: string;
+  salesNo: string;
+  clientId: string;
+  clientName: string;
+  requiredQty: number;
+  pickedQty: number;
+  pendingQty: number;
+}
+
+export interface PickListLine {
+  lineId: string;
+  salesOrderId: string;
+  salesNo: string;
+  clientId?: string;
+  clientName?: string;
+  designId: string;
+  styleNo: string;
+  color: string;
+  group: string;
+  size: string;
+  sleeveType?: string;
+  barcode?: string;
+  inventoryId?: string;
+  orderedQty: number;
+  requiredQty: number;
+  pickedQty: number;
+  remainingQty: number;
+  balanceQty: number;
+  pendingQty?: number;
+  status: PickListLineStatus;
+  claimedByUserId?: string;
+  claimedByUsername?: string;
+  claimExpiresAt?: number;
+  completedAt?: number;
+  completedByUserId?: string;
+  completedByUsername?: string;
+  sortOrder?: number;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
 export type PickListType = 'direct' | 'combined' | 'itemwise';
 
 export interface PickList {
-  id?:           string;
-  pickListNo:    string;
-  type:          PickListType;
-  salesOrderIds: string[];          // always array — use (pl.salesOrderIds ?? [(pl as any).salesOrderId]) for old docs
-  salesNos:      string[];
-  clientId:      string;
-  clientName:    string;
-  status:        'Draft' | 'Pending' | 'Partial' | 'Completed';
-  // Pending  = saved but zero stock — all items awaiting stock
-  // Partial  = some picked, some balance remaining
-  // Completed = all items fully picked
-  items:         PickListLine[];
-  remarks?:      string;
-  createdAt?:    any;
-  updatedAt?:    any;
+  id?: string;
+  pickListNo: string;
+  type: PickListType;
+  salesOrderIds: string[];
+  salesNos: string[];
+  clientId: string;
+  clientName: string;
+  status: 'Draft' | 'Pending' | 'Partial' | 'Completed';
+  totalRequiredQty?: number;
+  totalPickedQty?: number;
+  totalPendingQty?: number;
+  pickableLineCount?: number;
+  completedLineCount?: number;
+  orderSummaries?: PickListOrderSummary[];
+  items: PickListLine[];
+  remarks?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface PickListClaimUser {
+  id: string;
+  username: string;
+}
+
+export interface PickListScanResult {
+  line: PickListLine;
+  lineCompleted: boolean;
+  pickListCompleted: boolean;
+  orderCompleted: boolean;
+  salesOrderId: string;
 }
