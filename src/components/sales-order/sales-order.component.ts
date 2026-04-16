@@ -165,7 +165,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     if (!term) return this.clients();
     return this.clients().filter(c =>
       c.clientName.toLowerCase().includes(term) ||
-      c.clientCode.toLowerCase().includes(term)
+      c.clientCode?.toLowerCase().includes(term)
     );
   });
 
