@@ -86,6 +86,13 @@ export class AuthService {
     if (!this.isAuthenticated() || !this.currentUserGroup()) {
       return false;
     }
+
+    if (screen === 'packingList') {
+      return this.currentUserGroup()?.permissions.packingList
+        ?? this.currentUserGroup()?.permissions.pickList
+        ?? false;
+    }
+
     return this.currentUserGroup()?.permissions[screen] ?? false;
   }
 

@@ -10,12 +10,13 @@ import { AuthService } from './services/auth.service';
 import { AppScreen } from './models/user-group.model';
 import { InventoryComponent } from './components/inventory/inventory.component';
 import { PickListComponent } from './components/pick-list/pick-list.component';
+import { PackingListComponent } from './components/packing-list/packing-list.component';
 
-type View = 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward' | 'inventory' | 'pickList';
+type View = 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList';
 type ViewHistoryState = { view: View };
 
 const VIEW_STORAGE_KEY = 'gom.activeView';
-const VIEW_SEQUENCE: View[] = ['sales', 'clients', 'designs', 'goodsInward', 'users', 'inventory', 'pickList'];
+const VIEW_SEQUENCE: View[] = ['sales', 'clients', 'designs', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList'];
 
 @Component({
   selector: 'app-root',
@@ -32,6 +33,7 @@ const VIEW_SEQUENCE: View[] = ['sales', 'clients', 'designs', 'goodsInward', 'us
     GoodsInwardComponent,
     InventoryComponent,
     PickListComponent,
+    PackingListComponent,
   ],
 })
 export class AppComponent {
