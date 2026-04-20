@@ -10,35 +10,52 @@ import { PackingListService } from '../../services/packing-list.service';
 import { AuthService } from '../../services/auth.service';
 import type { SalesOrder } from '../../models/sales-order.model';
 import type { GoodsInward } from '../../models/goods-inward.model';
-import type { PickList } from '../../models/pick-list.model';
-import type { PackingList } from '../../models/packing-list.model';
 
 interface SummaryCard {
+  id: 'inventory' | 'lowStock' | 'pendingSales' | 'pickPack';
   label: string;
   value: string;
   detail: string;
   accent: string;
+  iconBg: string;
 }
 
-interface TrendPoint {
-  dateKey: string;
+interface InventorySummaryTile {
   label: string;
-  orders: number;
-  received: number;
-  packed: number;
+  value: string;
+  tone: string;
 }
 
-interface ProgressRow {
+interface InventoryCategoryRow {
   label: string;
-  valueLabel: string;
-  percent: number;
-  detail: string;
+  value: number;
   barClass: string;
 }
 
-interface RankedRow {
+interface LowStockRow {
+  name: string;
+  detail: string;
+  stock: number;
+}
+
+interface SalesOrderRow {
+  id: string;
+  customer: string;
+  status: string;
+  badgeClass: string;
+}
+
+interface PickPackPanel {
+  title: string;
+  value: string;
+  subtitle: string;
+  detail: string;
+  accent: string;
+}
+
+interface MiniStatCard {
   label: string;
-  value: number;
+  value: string;
   detail: string;
 }
 
@@ -66,6 +83,17 @@ export class DashboardComponent {
   private readonly packingLists = toSignal(this.packingListService.getPackingLists(), { initialValue: [] });
 
   readonly currentUser = computed(() => this.authService.currentUser());
+  readonly currentUserName = computed(() => this.currentUser()?.username || 'Warehouse User');
+  readonly currentUserEmail = computed(() => this.currentUser()?.email || 'textile@workspace.local');
+  readonly currentUserInitials = computed(() => {
+    const username = this.currentUserName().trim();
+    if (!username) return 'TU';
+    return username
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('');
+  });
 
   readonly startDate = signal(this.formatDateInput(this.shiftDays(new Date(), -29)));
   readonly endDate = signal(this.formatDateInput(new Date()));
@@ -107,24 +135,19 @@ export class DashboardComponent {
     this.packingLists().filter((packingList) => this.isWithinRange(this.parseUnknownDate(packingList.createdAt)))
   );
 
-  readonly totalOrderQty = computed(() =>
-    this.filteredSalesOrders().reduce(
-      (sum, order) =>
-        sum + (order.items ?? []).reduce(
-          (itemTotal, item) =>
-            itemTotal + (item.itemSizes ?? []).reduce((sizeTotal, size) => sizeTotal + (Number(size.quantity) || 0), 0),
-          0
-        ),
-      0
-    )
+  readonly currentInventoryUnits = computed(() =>
+    this.inventory().reduce((sum, item) => sum + (Number(item.currentStock) || 0), 0)
   );
 
-  readonly totalReceivedQty = computed(() =>
-    this.filteredGoodsInwards().reduce(
-      (sum, goodsInward) =>
-        sum + (goodsInward.items ?? []).reduce((itemTotal, item) => itemTotal + (Number(item.receivedQty) || 0), 0),
-      0
-    )
+  readonly lowStockCount = computed(() =>
+    this.inventory().filter((item) => {
+      const stock = Number(item.currentStock) || 0;
+      return stock > 0 && stock <= 10;
+    }).length
+  );
+
+  readonly outOfStockCount = computed(() =>
+    this.inventory().filter((item) => (Number(item.currentStock) || 0) <= 0).length
   );
 
   readonly totalPickedQty = computed(() =>
@@ -135,201 +158,159 @@ export class DashboardComponent {
     this.filteredPackingLists().reduce((sum, packingList) => sum + (Number(packingList.totalPackedQty) || 0), 0)
   );
 
-  readonly activeClientsInRange = computed(() =>
-    new Set(this.filteredSalesOrders().map((order) => order.clientId).filter(Boolean)).size
-  );
-
-  readonly currentInventoryUnits = computed(() =>
-    this.inventory().reduce((sum, item) => sum + (Number(item.currentStock) || 0), 0)
-  );
-
-  readonly lowStockCount = computed(() =>
-    this.inventory().filter((item) => (Number(item.currentStock) || 0) > 0 && (Number(item.currentStock) || 0) <= 10).length
-  );
-
-  readonly outOfStockCount = computed(() =>
-    this.inventory().filter((item) => (Number(item.currentStock) || 0) <= 0).length
-  );
-
-  readonly shippedOrders = computed(() =>
-    this.filteredSalesOrders().filter((order) => order.status === 'Shipped').length
-  );
-
   readonly summaryCards = computed<SummaryCard[]>(() => [
     {
-      label: 'Orders',
-      value: this.formatNumber(this.filteredSalesOrders().length),
-      detail: `${this.totalOrderQty()} pcs in selected range`,
-      accent: 'from-sky-500 via-cyan-400 to-teal-300',
-    },
-    {
-      label: 'Received Qty',
-      value: this.formatNumber(this.totalReceivedQty()),
-      detail: `${this.filteredGoodsInwards().length} GRNs loaded`,
-      accent: 'from-emerald-500 via-green-400 to-lime-300',
-    },
-    {
-      label: 'Picked Qty',
-      value: this.formatNumber(this.totalPickedQty()),
-      detail: `${this.filteredPickLists().length} pick lists in range`,
-      accent: 'from-amber-500 via-orange-400 to-yellow-300',
-    },
-    {
-      label: 'Packed Qty',
-      value: this.formatNumber(this.totalPackedQty()),
-      detail: `${this.filteredPackingLists().length} packing lists in range`,
-      accent: 'from-rose-500 via-orange-400 to-pink-300',
-    },
-    {
-      label: 'Active Clients',
-      value: this.formatNumber(this.activeClientsInRange()),
-      detail: `Default view loads last 30 days`,
-      accent: 'from-violet-500 via-fuchsia-400 to-pink-300',
-    },
-    {
-      label: 'Live Inventory',
+      id: 'inventory',
+      label: 'Total Inventory',
       value: this.formatNumber(this.currentInventoryUnits()),
-      detail: `${this.lowStockCount()} low stock, ${this.outOfStockCount()} out of stock`,
-      accent: 'from-slate-700 via-slate-500 to-slate-300',
+      detail: 'Items available in the warehouse',
+      accent: 'from-sky-500 to-blue-600',
+      iconBg: 'bg-sky-100 text-sky-700',
+    },
+    {
+      id: 'lowStock',
+      label: 'Low Stock Alerts',
+      value: this.formatNumber(this.lowStockCount()),
+      detail: 'Items below the stock threshold',
+      accent: 'from-rose-500 to-orange-500',
+      iconBg: 'bg-rose-100 text-rose-700',
+    },
+    {
+      id: 'pendingSales',
+      label: 'Pending Sales Orders',
+      value: this.formatNumber(this.pendingSalesOrders()),
+      detail: 'Orders waiting for dispatch',
+      accent: 'from-amber-500 to-orange-400',
+      iconBg: 'bg-amber-100 text-amber-700',
+    },
+    {
+      id: 'pickPack',
+      label: 'Orders to Pick & Pack',
+      value: this.formatNumber(this.openPickPackOrders()),
+      detail: 'Open fulfilment work items',
+      accent: 'from-emerald-500 to-green-500',
+      iconBg: 'bg-emerald-100 text-emerald-700',
     },
   ]);
 
-  readonly trendSeries = computed<TrendPoint[]>(() => {
-    const { start, end } = this.dateRange();
-    const buckets = new Map<string, TrendPoint>();
+  readonly inventorySummaryTiles = computed<InventorySummaryTile[]>(() => [
+    {
+      label: 'In Stock',
+      value: `${this.formatNumber(this.currentInventoryUnits())} items`,
+      tone: 'text-sky-700',
+    },
+    {
+      label: 'Reserved',
+      value: `${this.formatNumber(this.reservedInventoryQty())} items`,
+      tone: 'text-indigo-700',
+    },
+    {
+      label: 'On Order',
+      value: `${this.formatNumber(this.pendingInboundQty())} items`,
+      tone: 'text-amber-700',
+    },
+    {
+      label: 'Out of Stock',
+      value: `${this.formatNumber(this.outOfStockCount())} items`,
+      tone: 'text-rose-700',
+    },
+  ]);
 
-    for (let cursor = new Date(start); cursor <= end; cursor = this.shiftDays(cursor, 1)) {
-      const dateKey = this.formatDateInput(cursor);
-      buckets.set(dateKey, {
-        dateKey,
-        label: this.formatShortDay(cursor),
-        orders: 0,
-        received: 0,
-        packed: 0,
-      });
-    }
-
-    for (const order of this.filteredSalesOrders()) {
-      const date = this.getSalesOrderDate(order);
-      if (!date) continue;
-      const bucket = buckets.get(this.formatDateInput(date));
-      if (bucket) {
-        bucket.orders += (order.items ?? []).reduce(
-          (itemTotal, item) =>
-            itemTotal + (item.itemSizes ?? []).reduce((sizeTotal, size) => sizeTotal + (Number(size.quantity) || 0), 0),
-          0
-        );
-      }
-    }
-
-    for (const goodsInward of this.filteredGoodsInwards()) {
-      const date = this.getGoodsInwardDate(goodsInward);
-      if (!date) continue;
-      const bucket = buckets.get(this.formatDateInput(date));
-      if (bucket) {
-        bucket.received += (goodsInward.items ?? []).reduce(
-          (itemTotal, item) => itemTotal + (Number(item.receivedQty) || 0),
-          0
-        );
-      }
-    }
-
-    for (const packingList of this.filteredPackingLists()) {
-      const date = this.parseUnknownDate(packingList.createdAt);
-      if (!date) continue;
-      const bucket = buckets.get(this.formatDateInput(date));
-      if (bucket) {
-        bucket.packed += Number(packingList.totalPackedQty) || 0;
-      }
-    }
-
-    return [...buckets.values()];
-  });
-
-  readonly trendMax = computed(() => {
-    const values = this.trendSeries().flatMap((point) => [point.orders, point.received, point.packed]);
-    return Math.max(1, ...values);
-  });
-
-  readonly progressRows = computed<ProgressRow[]>(() => {
-    const shipped = this.shippedOrders();
-    const orders = this.filteredSalesOrders().length;
-    const picked = this.totalPickedQty();
-    const pickRequired = this.filteredPickLists().reduce((sum, item) => sum + (Number(item.totalRequiredQty) || 0), 0);
-    const packed = this.totalPackedQty();
-    const packRequired = this.filteredPackingLists().reduce((sum, item) => sum + (Number(item.totalRequiredQty) || 0), 0);
-
-    return [
-      {
-        label: 'Order Shipment',
-        valueLabel: `${shipped}/${orders || 0}`,
-        percent: this.toPercent(shipped, orders),
-        detail: `${orders - shipped > 0 ? orders - shipped : 0} orders still open`,
-        barClass: 'from-sky-500 to-cyan-300',
-      },
-      {
-        label: 'Picking Completion',
-        valueLabel: `${this.formatNumber(picked)}/${this.formatNumber(pickRequired)}`,
-        percent: this.toPercent(picked, pickRequired),
-        detail: `${this.filteredPickLists().length} filtered pick lists`,
-        barClass: 'from-amber-500 to-yellow-300',
-      },
-      {
-        label: 'Packing Completion',
-        valueLabel: `${this.formatNumber(packed)}/${this.formatNumber(packRequired)}`,
-        percent: this.toPercent(packed, packRequired),
-        detail: `${this.filteredPackingLists().length} filtered packing lists`,
-        barClass: 'from-rose-500 to-orange-300',
-      },
+  readonly inventoryCategoryRows = computed<InventoryCategoryRow[]>(() => {
+    const palette = [
+      'from-sky-500 to-blue-600',
+      'from-emerald-500 to-green-600',
+      'from-amber-500 to-orange-500',
+      'from-rose-500 to-red-500',
+      'from-violet-500 to-fuchsia-500',
     ];
-  });
+    const groups = new Map<string, number>();
 
-  readonly topClients = computed<RankedRow[]>(() => {
-    const totals = new Map<string, { qty: number; orders: number }>();
-
-    for (const order of this.filteredSalesOrders()) {
-      const clientId = order.clientId || 'unknown';
-      const current = totals.get(clientId) ?? { qty: 0, orders: 0 };
-      const qty = (order.items ?? []).reduce(
-        (itemTotal, item) =>
-          itemTotal + (item.itemSizes ?? []).reduce((sizeTotal, size) => sizeTotal + (Number(size.quantity) || 0), 0),
-        0
-      );
-      current.qty += qty;
-      current.orders += 1;
-      totals.set(clientId, current);
+    for (const item of this.inventory()) {
+      const label = String(item.group || 'Other').trim() || 'Other';
+      groups.set(label, (groups.get(label) ?? 0) + (Number(item.currentStock) || 0));
     }
 
-    return [...totals.entries()]
-      .map(([clientId, total]) => ({
-        label: this.clientNameMap().get(clientId) ?? (clientId === 'unknown' ? 'Unmapped Client' : clientId),
-        value: total.qty,
-        detail: `${total.orders} orders`,
+    return [...groups.entries()]
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 5)
+      .map(([label, value], index) => ({
+        label,
+        value,
+        barClass: palette[index % palette.length],
+      }));
+  });
+
+  readonly inventoryCategoryMax = computed(() =>
+    Math.max(1, ...this.inventoryCategoryRows().map((item) => item.value))
+  );
+
+  readonly lowStockRows = computed<LowStockRow[]>(() =>
+    this.inventory()
+      .filter((item) => {
+        const stock = Number(item.currentStock) || 0;
+        return stock > 0 && stock <= 10;
+      })
+      .sort((left, right) => (Number(left.currentStock) || 0) - (Number(right.currentStock) || 0))
+      .slice(0, 5)
+      .map((item) => ({
+        name: [item.styleNo, item.color].filter(Boolean).join(' - ') || item.barcode || 'Unnamed Item',
+        detail: [item.group, item.size].filter(Boolean).join(' • '),
+        stock: Number(item.currentStock) || 0,
       }))
-      .sort((left, right) => right.value - left.value)
-      .slice(0, 5);
-  });
+  );
 
-  readonly topClientMax = computed(() => Math.max(1, ...this.topClients().map((item) => item.value)));
+  readonly recentSalesOrders = computed<SalesOrderRow[]>(() =>
+    [...this.filteredSalesOrders()]
+      .sort((left, right) => {
+        const leftTime = this.getSalesOrderDate(left)?.getTime() ?? 0;
+        const rightTime = this.getSalesOrderDate(right)?.getTime() ?? 0;
+        return rightTime - leftTime;
+      })
+      .slice(0, 5)
+      .map((order) => ({
+        id: order.salesNo || order.id,
+        customer: this.clientNameMap().get(order.clientId) ?? order.clientId ?? 'Unknown Customer',
+        status: order.status,
+        badgeClass: this.salesOrderBadgeClass(order.status),
+      }))
+  );
 
-  readonly stockMix = computed(() => {
-    const totalSkus = this.inventory().length || 1;
-    const out = this.outOfStockCount();
-    const low = this.lowStockCount();
-    const healthy = Math.max(0, totalSkus - out - low);
+  readonly pickPackPanels = computed<PickPackPanel[]>(() => [
+    {
+      title: 'Orders to Pick',
+      value: this.formatNumber(this.filteredPickLists().filter((item) => item.status !== 'Completed').length),
+      subtitle: 'In Progress',
+      detail: `${this.formatNumber(this.pickCreatedToday())} pick lists created today`,
+      accent: 'from-sky-700 via-blue-600 to-cyan-500',
+    },
+    {
+      title: 'Orders to Pack',
+      value: this.formatNumber(this.filteredPackingLists().filter((item) => item.status !== 'Completed').length),
+      subtitle: 'In Progress',
+      detail: `${this.formatNumber(this.packCreatedToday())} packing lists created today`,
+      accent: 'from-indigo-700 via-blue-700 to-sky-500',
+    },
+  ]);
 
-    return [
-      { label: 'Healthy', value: healthy, percent: Math.round((healthy / totalSkus) * 100), color: 'bg-emerald-400' },
-      { label: 'Low', value: low, percent: Math.round((low / totalSkus) * 100), color: 'bg-amber-400' },
-      { label: 'Out', value: out, percent: Math.round((out / totalSkus) * 100), color: 'bg-rose-400' },
-    ];
-  });
-
-  readonly filteredStats = computed(() => [
-    { label: 'Sales Orders', value: this.filteredSalesOrders().length },
-    { label: 'GRNs', value: this.filteredGoodsInwards().length },
-    { label: 'Pick Lists', value: this.filteredPickLists().length },
-    { label: 'Packing Lists', value: this.filteredPackingLists().length },
+  readonly miniStatCards = computed<MiniStatCard[]>(() => [
+    {
+      label: 'Picking In Progress',
+      value: this.formatNumber(
+        this.filteredPickLists().filter((item) => item.status === 'Partial' || item.status === 'Draft').length
+      ),
+      detail: 'Active pick lists',
+    },
+    {
+      label: 'Orders Packed Today',
+      value: this.formatNumber(this.packedQtyToday()),
+      detail: 'Packed quantity today',
+    },
+    {
+      label: 'Shipments Out Today',
+      value: this.formatNumber(this.shipmentsOutToday()),
+      detail: 'Shipped orders today',
+    },
   ]);
 
   readonly rangeLabel = computed(() => {
@@ -356,20 +337,73 @@ export class DashboardComponent {
     this.setPreset(30);
   }
 
-  barHeight(value: number): number {
-    return Math.max(6, Math.round((value / this.trendMax()) * 100));
-  }
-
-  matrixCellHeight(value: number): number {
-    return Math.max(6, Math.round((value / this.trendMax()) * 34));
-  }
-
   rowWidth(value: number, total: number): number {
-    return Math.max(6, Math.round((value / Math.max(1, total)) * 100));
+    return Math.max(8, Math.round((value / Math.max(1, total)) * 100));
+  }
+
+  salesOrderBadgeClass(status: string): string {
+    switch (status) {
+      case 'Shipped':
+        return 'bg-emerald-500 text-white';
+      case 'Confirmed':
+      case 'Processing':
+        return 'bg-sky-500 text-white';
+      case 'Pending':
+      default:
+        return 'bg-amber-500 text-white';
+    }
   }
 
   trackByLabel(_index: number, item: { label: string }): string {
     return item.label;
+  }
+
+  private pendingSalesOrders(): number {
+    return this.filteredSalesOrders().filter((order) => order.status !== 'Shipped').length;
+  }
+
+  private openPickPackOrders(): number {
+    const openPick = this.filteredPickLists().filter((item) => item.status !== 'Completed').length;
+    const openPack = this.filteredPackingLists().filter((item) => item.status !== 'Completed').length;
+    return openPick + openPack;
+  }
+
+  private reservedInventoryQty(): number {
+    return this.filteredPickLists().reduce(
+      (sum, pickList) =>
+        sum + (pickList.items ?? []).reduce((itemTotal, item) => itemTotal + (Number(item.remainingQty) || 0), 0),
+      0
+    );
+  }
+
+  private pendingInboundQty(): number {
+    return this.filteredGoodsInwards()
+      .filter((goodsInward) => goodsInward.status === 'Pending')
+      .reduce(
+        (sum, goodsInward) =>
+          sum + (goodsInward.items ?? []).reduce((itemTotal, item) => itemTotal + (Number(item.receivedQty) || 0), 0),
+        0
+      );
+  }
+
+  private pickCreatedToday(): number {
+    return this.filteredPickLists().filter((item) => this.isToday(this.parseUnknownDate(item.createdAt))).length;
+  }
+
+  private packCreatedToday(): number {
+    return this.filteredPackingLists().filter((item) => this.isToday(this.parseUnknownDate(item.createdAt))).length;
+  }
+
+  private packedQtyToday(): number {
+    return this.filteredPackingLists()
+      .filter((item) => this.isToday(this.parseUnknownDate(item.createdAt)))
+      .reduce((sum, item) => sum + (Number(item.totalPackedQty) || 0), 0);
+  }
+
+  private shipmentsOutToday(): number {
+    return this.filteredSalesOrders().filter((order) => {
+      return order.status === 'Shipped' && this.isToday(this.getSalesOrderDate(order));
+    }).length;
   }
 
   private getSalesOrderDate(order: SalesOrder): Date | null {
@@ -389,6 +423,16 @@ export class DashboardComponent {
     }
     const { start, end } = this.dateRange();
     return value >= start && value <= end;
+  }
+
+  private isToday(date: Date | null): boolean {
+    if (!date) {
+      return false;
+    }
+    const today = new Date();
+    return date.getFullYear() === today.getFullYear()
+      && date.getMonth() === today.getMonth()
+      && date.getDate() === today.getDate();
   }
 
   private parseUnknownDate(value: unknown): Date | null {
@@ -456,19 +500,8 @@ export class DashboardComponent {
     return `${year}-${month}-${day}`;
   }
 
-  private formatShortDay(date: Date): string {
-    return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short' }).format(date);
-  }
-
   private formatLongDate(date: Date): string {
     return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(date);
-  }
-
-  private toPercent(value: number, total: number): number {
-    if (!total || total <= 0) {
-      return 0;
-    }
-    return Math.max(0, Math.min(100, Math.round((value / total) * 100)));
   }
 
   private formatNumber(value: number): string {

@@ -1,228 +1,236 @@
-<section class="space-y-6">
-  <div class="overflow-hidden rounded-[2rem] border border-stone-200/80 bg-white shadow-[0_24px_80px_-54px_rgba(28,25,23,0.18)]">
-    <div class="grid gap-6 p-5 sm:p-6 xl:grid-cols-[minmax(0,1.35fr)_360px] xl:p-8">
-      <div class="space-y-6">
-        <div class="space-y-3">
-          <p class="text-xs font-semibold uppercase tracking-[0.32em] text-amber-700">Textile Dashboard</p>
-          <h1 class="text-3xl font-black tracking-tight text-stone-950 sm:text-4xl">
-            Clean production visibility for your garment workflow
-          </h1>
-          <p class="max-w-2xl text-sm leading-7 text-stone-500 sm:text-base">
-            Monitor orders, inward stock, picking, packing, and inventory from one calm, easy-to-read dashboard designed for mobile, tablet, and desktop.
-          </p>
+<section class="space-y-5">
+  <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_24px_70px_-52px_rgba(15,23,42,0.28)]">
+    <div class="relative overflow-hidden">
+      <img src="/src/assets/tailor_workshop.jpg" alt="Textile header" class="h-24 w-full object-cover sm:h-28">
+      <div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.88),rgba(30,64,175,0.62),rgba(15,23,42,0.3))]"></div>
+
+      <div class="absolute inset-0 flex items-center justify-between gap-3 px-4 sm:px-6">
+        <div class="flex min-w-0 items-center gap-3">
+          <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
+            <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 7h12M6 12h12M6 17h12M4 7h.01M4 12h.01M4 17h.01"/>
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <p class="truncate text-lg font-black text-white sm:text-2xl">Textile Warehouse Dashboard</p>
+            <p class="truncate text-xs font-medium uppercase tracking-[0.18em] text-sky-100/80">Inventory and fulfilment overview</p>
+          </div>
         </div>
 
-        <div class="rounded-[1.75rem] border border-stone-200 bg-[linear-gradient(135deg,#fafaf9,#f5f5f4)] p-4 sm:p-5">
-          <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-stone-500">Selected Range</p>
-              <p class="mt-2 text-xl font-bold text-stone-950">{{ rangeLabel() }}</p>
-              <p class="mt-1 text-sm text-stone-500">Default dashboard view loads the most recent 30 days.</p>
+        <div class="flex items-center gap-2 sm:gap-3">
+          <button type="button" class="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+            </svg>
+            <span class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-rose-500"></span>
+          </button>
+          <button type="button" class="hidden h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur sm:flex">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7V5a4 4 0 118 0v2m-9 4h10m-11 8h12a1 1 0 001-1V10a1 1 0 00-1-1H6a1 1 0 00-1 1v8a1 1 0 001 1z"/>
+            </svg>
+          </button>
+          <div class="flex items-center gap-2 rounded-full bg-white/15 px-2 py-1.5 text-white backdrop-blur sm:px-3">
+            <div class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-black text-slate-800">
+              {{ currentUserInitials() }}
             </div>
-
-            <div class="grid gap-3 sm:grid-cols-2 xl:min-w-[520px] xl:grid-cols-[auto_auto_1fr_1fr_auto] xl:items-end">
-              <div class="flex gap-2 sm:col-span-2 xl:col-span-1">
-                <button type="button" (click)="setPreset(7)" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-700 transition hover:bg-stone-50">
-                  7D
-                </button>
-                <button type="button" (click)="setPreset(30)" class="rounded-2xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-stone-800">
-                  30D
-                </button>
-                <button type="button" (click)="setPreset(90)" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-700 transition hover:bg-stone-50">
-                  90D
-                </button>
-              </div>
-
-              <label class="space-y-2">
-                <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">Start Date</span>
-                <input
-                  type="date"
-                  [value]="startDate()"
-                  (input)="updateStartDate($any($event.target).value)"
-                  class="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-medium text-stone-800 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
-                >
-              </label>
-
-              <label class="space-y-2">
-                <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">End Date</span>
-                <input
-                  type="date"
-                  [value]="endDate()"
-                  (input)="updateEndDate($any($event.target).value)"
-                  class="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-medium text-stone-800 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
-                >
-              </label>
-
-              <button type="button" (click)="resetRange()" class="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-700 transition hover:bg-stone-50">
-                Reset
-              </button>
+            <div class="hidden min-w-0 sm:block">
+              <p class="truncate text-sm font-bold">{{ currentUserName() }}</p>
+              <p class="truncate text-[11px] text-slate-200">{{ currentUserEmail() }}</p>
             </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <aside class="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-        <div class="rounded-[1.6rem] border border-stone-200 bg-stone-950 px-5 py-5 text-white">
-          <p class="text-xs uppercase tracking-[0.24em] text-stone-400">Workspace</p>
-          <p class="mt-3 text-2xl font-black">{{ currentUser()?.username || 'Operator' }}</p>
-          <p class="mt-1 text-sm text-stone-300">{{ currentUser()?.email || 'Production workspace active' }}</p>
-        </div>
-
-        <div class="rounded-[1.6rem] border border-stone-200 bg-white p-4">
-          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Loaded Records</p>
-          <div class="mt-4 grid grid-cols-2 gap-3">
-            @for (item of filteredStats(); track trackByLabel($index, item)) {
-              <div class="rounded-2xl bg-stone-50 px-4 py-3">
-                <p class="text-[11px] uppercase tracking-[0.16em] text-stone-500">{{ item.label }}</p>
-                <p class="mt-1 text-xl font-black text-stone-950">{{ item.value }}</p>
+    <div class="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4 sm:p-6">
+      @for (card of summaryCards(); track card.label) {
+        <article class="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]">
+          <div class="flex items-start gap-3">
+            <div class="flex h-12 w-12 items-center justify-center rounded-2xl" [class]="card.iconBg">
+              @switch (card.id) {
+                @case ('inventory') {
+                  <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7l9-4 9 4m-18 0l9 4m-9-4v10l9 4m0-10l9-4m-9 4v10"/>
+                  </svg>
+                }
+                @case ('lowStock') {
+                  <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v4m0 4h.01M4.93 19h14.14c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.2 16c-.77 1.33.19 3 1.73 3z"/>
+                  </svg>
+                }
+                @case ('pendingSales') {
+                  <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                  </svg>
+                }
+                @default {
+                  <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.586-2.586a2 2 0 010 2.828l-7.172 7.172a4 4 0 01-5.656 0L3.172 13.9a2 2 0 010-2.828l7.172-7.172a4 4 0 015.656 0l4.586 4.586z"/>
+                  </svg>
+                }
+              }
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-slate-600">{{ card.label }}</p>
+              <div class="mt-1 flex items-baseline gap-2">
+                <p class="text-4xl font-black text-slate-950">{{ card.value }}</p>
               </div>
-            }
+              <p class="mt-2 text-sm text-slate-500">{{ card.detail }}</p>
+            </div>
           </div>
-        </div>
-      </aside>
+        </article>
+      }
     </div>
   </div>
 
-  <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-    @for (card of summaryCards(); track trackByLabel($index, card)) {
-      <article class="rounded-[1.6rem] border border-stone-200/80 bg-white p-5 shadow-[0_18px_60px_-46px_rgba(28,25,23,0.14)]">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">{{ card.label }}</p>
-            <p class="mt-3 text-4xl font-black text-stone-950">{{ card.value }}</p>
-          </div>
-          <div class="h-11 w-11 rounded-2xl bg-gradient-to-br opacity-90" [class]="card.accent"></div>
-        </div>
-        <p class="mt-4 text-sm leading-6 text-stone-500">{{ card.detail }}</p>
-      </article>
-    }
-  </div>
-
-  <div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.9fr)]">
-    <article class="rounded-[1.9rem] border border-stone-200/80 bg-white p-5 shadow-[0_18px_60px_-46px_rgba(28,25,23,0.14)] sm:p-6">
-      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+  <div class="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,1fr)]">
+    <article class="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.2)] sm:p-6">
+      <div class="flex items-center justify-between gap-3">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Daily Activity</p>
-          <h2 class="mt-1 text-2xl font-black text-stone-950">Orders, received, and packed volume</h2>
-        </div>
-        <div class="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
-          <span class="inline-flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-sky-500"></span>Orders</span>
-          <span class="inline-flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>Received</span>
-          <span class="inline-flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-rose-500"></span>Packed</span>
+          <p class="text-xl font-black text-slate-950">Inventory Overview</p>
+          <p class="mt-1 text-sm text-slate-500">{{ rangeLabel() }}</p>
         </div>
       </div>
 
-      <div class="mt-6 overflow-x-auto pb-2">
-        <div class="min-w-[760px] rounded-[1.6rem] bg-stone-50 p-5">
-          <div class="flex h-72 items-end gap-3">
-            @for (point of trendSeries(); track point.dateKey) {
-              <div class="flex min-w-0 flex-1 flex-col items-center gap-3">
-                <div class="flex h-full items-end gap-1.5">
-                  <span class="w-2 rounded-full bg-sky-500 sm:w-3" [style.height.%]="barHeight(point.orders)"></span>
-                  <span class="w-2 rounded-full bg-emerald-500 sm:w-3" [style.height.%]="barHeight(point.received)"></span>
-                  <span class="w-2 rounded-full bg-rose-500 sm:w-3" [style.height.%]="barHeight(point.packed)"></span>
-                </div>
-                <span class="text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-400 sm:text-[11px]">{{ point.label }}</span>
-              </div>
-            }
-          </div>
-        </div>
-      </div>
-    </article>
-
-    <article class="rounded-[1.9rem] border border-stone-200/80 bg-white p-5 shadow-[0_18px_60px_-46px_rgba(28,25,23,0.14)] sm:p-6">
-      <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Progress</p>
-      <h2 class="mt-1 text-2xl font-black text-stone-950">Workflow completion</h2>
-
-      <div class="mt-6 space-y-5">
-        @for (row of progressRows(); track trackByLabel($index, row)) {
-          <div class="space-y-2">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <p class="text-sm font-bold text-stone-950">{{ row.label }}</p>
-                <p class="text-xs text-stone-500">{{ row.detail }}</p>
-              </div>
-              <div class="text-right">
-                <p class="text-lg font-black text-stone-950">{{ row.percent }}%</p>
-                <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-400">{{ row.valueLabel }}</p>
-              </div>
-            </div>
-            <div class="h-3 overflow-hidden rounded-full bg-stone-100">
-              <div class="h-full rounded-full bg-gradient-to-r" [class]="row.barClass" [style.width.%]="row.percent"></div>
-            </div>
+      <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        @for (tile of inventorySummaryTiles(); track tile.label) {
+          <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{{ tile.label }}</p>
+            <p class="mt-2 text-lg font-black" [class]="tile.tone">{{ tile.value }}</p>
           </div>
         }
       </div>
 
-      <div class="mt-6 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-        <div class="rounded-[1.3rem] bg-stone-50 p-4">
-          <p class="text-xs uppercase tracking-[0.16em] text-stone-500">Ordered</p>
-          <p class="mt-2 text-2xl font-black text-stone-950">{{ totalOrderQty() }}</p>
-        </div>
-        <div class="rounded-[1.3rem] bg-stone-50 p-4">
-          <p class="text-xs uppercase tracking-[0.16em] text-stone-500">Picked</p>
-          <p class="mt-2 text-2xl font-black text-stone-950">{{ totalPickedQty() }}</p>
-        </div>
-        <div class="rounded-[1.3rem] bg-stone-50 p-4">
-          <p class="text-xs uppercase tracking-[0.16em] text-stone-500">Packed</p>
-          <p class="mt-2 text-2xl font-black text-stone-950">{{ totalPackedQty() }}</p>
+      <div class="mt-6 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 sm:p-5">
+        <div class="flex min-h-[220px] items-end justify-between gap-3">
+          @for (item of inventoryCategoryRows(); track item.label) {
+            <div class="flex min-w-0 flex-1 flex-col items-center gap-3">
+              <div class="flex h-40 w-full items-end justify-center rounded-2xl bg-white px-2 py-3">
+                <div
+                  class="w-full max-w-[56px] rounded-t-2xl bg-gradient-to-t shadow-sm"
+                  [class]="item.barClass"
+                  [style.height.%]="rowWidth(item.value, inventoryCategoryMax())">
+                </div>
+              </div>
+              <div class="text-center">
+                <p class="truncate text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{{ item.label }}</p>
+                <p class="mt-1 text-sm font-black text-slate-950">{{ item.value }}</p>
+              </div>
+            </div>
+          }
         </div>
       </div>
     </article>
-  </div>
 
-  <div class="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-    <article class="rounded-[1.9rem] border border-stone-200/80 bg-white p-5 shadow-[0_18px_60px_-46px_rgba(28,25,23,0.14)] sm:p-6">
-      <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Top Clients</p>
-      <h2 class="mt-1 text-2xl font-black text-stone-950">Order quantity by customer</h2>
+    <article class="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.2)] sm:p-6">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <p class="text-xl font-black text-slate-950">Low Stock Items</p>
+          <p class="mt-1 text-sm text-slate-500">Items that need replenishment soon</p>
+        </div>
+        <button type="button" class="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+          All Items
+        </button>
+      </div>
 
-      <div class="mt-6 space-y-4">
-        @if (topClients().length) {
-          @for (client of topClients(); track trackByLabel($index, client)) {
-            <div class="rounded-[1.4rem] bg-stone-50 p-4">
-              <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0">
-                  <p class="truncate text-sm font-black text-stone-950">{{ client.label }}</p>
-                  <p class="mt-1 text-xs text-stone-500">{{ client.detail }}</p>
-                </div>
-                <p class="text-lg font-black text-stone-950">{{ client.value }}</p>
+      <div class="mt-5 space-y-3">
+        @if (lowStockRows().length) {
+          @for (item of lowStockRows(); track item.name) {
+            <div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div class="min-w-0">
+                <p class="truncate text-base font-bold text-slate-950">{{ item.name }}</p>
+                <p class="mt-1 text-sm text-slate-500">{{ item.detail || 'Low stock item' }}</p>
               </div>
-              <div class="mt-3 h-3 overflow-hidden rounded-full bg-stone-200">
-                <div class="h-full rounded-full bg-gradient-to-r from-sky-500 via-cyan-400 to-teal-300" [style.width.%]="rowWidth(client.value, topClientMax())"></div>
+              <div class="flex items-center justify-between gap-3 sm:justify-end">
+                <p class="text-base font-black text-slate-950">{{ item.stock }} <span class="text-sm font-medium text-slate-500">In Stock</span></p>
+                <button type="button" class="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600">
+                  Reorder
+                </button>
               </div>
             </div>
           }
         } @else {
-          <div class="rounded-[1.4rem] bg-stone-50 p-6 text-sm text-stone-500">
-            No sales order data is available in the selected range.
+          <div class="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+            No low stock items found in the current inventory snapshot.
+          </div>
+        }
+      </div>
+    </article>
+  </div>
+
+  <div class="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,1fr)]">
+    <article class="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.2)] sm:p-6">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <p class="text-xl font-black text-slate-950">Sales Orders</p>
+          <p class="mt-1 text-sm text-slate-500">Recent orders in the selected period</p>
+        </div>
+      </div>
+
+      <div class="mt-5 overflow-hidden rounded-[1.4rem] border border-slate-200">
+        <div class="hidden grid-cols-[1fr_1.6fr_1fr] bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 sm:grid">
+          <span>Order ID</span>
+          <span>Customer</span>
+          <span>Status</span>
+        </div>
+
+        @if (recentSalesOrders().length) {
+          @for (order of recentSalesOrders(); track order.id) {
+            <div class="border-t border-slate-200 px-4 py-4 first:border-t-0">
+              <div class="grid gap-3 sm:grid-cols-[1fr_1.6fr_1fr] sm:items-center">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 sm:hidden">Order ID</p>
+                  <p class="text-base font-black text-slate-950">{{ order.id }}</p>
+                </div>
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 sm:hidden">Customer</p>
+                  <p class="text-sm font-semibold text-slate-700">{{ order.customer }}</p>
+                </div>
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 sm:hidden">Status</p>
+                  <span class="inline-flex rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-[0.12em]" [class]="order.badgeClass">
+                    {{ order.status }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          }
+        } @else {
+          <div class="px-4 py-6 text-sm text-slate-500">
+            No sales orders found for the selected date range.
           </div>
         }
       </div>
     </article>
 
-    <article class="rounded-[1.9rem] border border-stone-200/80 bg-white p-5 shadow-[0_18px_60px_-46px_rgba(28,25,23,0.14)] sm:p-6">
-      <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Inventory Health</p>
-      <h2 class="mt-1 text-2xl font-black text-stone-950">SKU stock split</h2>
-
-      <div class="mt-6 overflow-hidden rounded-full bg-stone-100 p-1">
-        <div class="flex h-6 overflow-hidden rounded-full">
-          @for (item of stockMix(); track trackByLabel($index, item)) {
-            <div [class]="item.color" [style.width.%]="item.percent"></div>
-          }
+    <article class="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.2)] sm:p-6">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <p class="text-xl font-black text-slate-950">Picking & Packing Status</p>
+          <p class="mt-1 text-sm text-slate-500">Monitor fulfilment progress at a glance</p>
         </div>
       </div>
 
-      <div class="mt-5 grid gap-3">
-        @for (item of stockMix(); track trackByLabel($index, item)) {
-          <div class="flex items-center justify-between rounded-[1.3rem] bg-stone-50 px-4 py-4">
-            <div class="flex items-center gap-3">
-              <span class="h-3.5 w-3.5 rounded-full" [class]="item.color"></span>
-              <div>
-                <p class="text-sm font-black text-stone-950">{{ item.label }}</p>
-                <p class="text-xs text-stone-500">{{ item.percent }}% of total SKUs</p>
-              </div>
+      <div class="mt-5 grid gap-4 lg:grid-cols-2">
+        @for (panel of pickPackPanels(); track panel.title) {
+          <div class="relative overflow-hidden rounded-[1.5rem] bg-gradient-to-br p-5 text-white shadow-sm" [class]="panel.accent">
+            <div class="absolute -right-4 -bottom-4 h-24 w-24 rounded-full bg-white/10"></div>
+            <div class="relative">
+              <p class="text-sm font-semibold text-white/85">{{ panel.title }}</p>
+              <p class="mt-3 text-4xl font-black">{{ panel.value }}</p>
+              <p class="mt-1 text-sm font-medium text-white/90">{{ panel.subtitle }}</p>
+              <p class="mt-3 text-sm text-white/80">{{ panel.detail }}</p>
             </div>
-            <p class="text-2xl font-black text-stone-950">{{ item.value }}</p>
+          </div>
+        }
+      </div>
+
+      <div class="mt-5 grid gap-3 sm:grid-cols-3">
+        @for (card of miniStatCards(); track card.label) {
+          <div class="rounded-[1.35rem] border border-slate-200 bg-slate-50 px-4 py-4">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{{ card.label }}</p>
+            <p class="mt-2 text-3xl font-black text-slate-950">{{ card.value }}</p>
+            <p class="mt-1 text-sm text-slate-500">{{ card.detail }}</p>
           </div>
         }
       </div>
