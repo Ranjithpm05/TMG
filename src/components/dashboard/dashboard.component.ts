@@ -95,11 +95,12 @@ export class DashboardComponent {
       .join('');
   });
 
-  readonly startDate = signal(this.formatDateInput(this.shiftDays(new Date(), -29)));
+  // Default to current month start → today
+  readonly startDate = signal(this.currentMonthStart());
   readonly endDate = signal(this.formatDateInput(new Date()));
 
   readonly dateRange = computed(() => {
-    const rawStart = this.parseInputDate(this.startDate()) ?? this.shiftDays(new Date(), -29);
+    const rawStart = this.parseInputDate(this.startDate()) ?? this.parseInputDate(this.currentMonthStart())!;
     const rawEnd = this.parseInputDate(this.endDate()) ?? new Date();
     const start = rawStart <= rawEnd ? rawStart : rawEnd;
     const end = rawEnd >= rawStart ? rawEnd : rawStart;
@@ -108,6 +109,11 @@ export class DashboardComponent {
       end: this.endOfDay(end),
     };
   });
+
+  readonly isCurrentMonthFilter = computed(() =>
+    this.startDate() === this.currentMonthStart() &&
+    this.endDate() === this.formatDateInput(new Date())
+  );
 
   readonly clientNameMap = computed(() => {
     const map = new Map<string, string>();
@@ -231,18 +237,18 @@ export class DashboardComponent {
       groups.set(label, (groups.get(label) ?? 0) + (Number(item.currentStock) || 0));
     }
 
-    return [...groups.entries()]
-      .sort((left, right) => right[1] - left[1])
+    return Array.from(groups.entries())
+      .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
-      .map(([label, value], index) => ({
+      .map(([label, value], i) => ({
         label,
         value,
-        barClass: palette[index % palette.length],
+        barClass: palette[i % palette.length],
       }));
   });
 
   readonly inventoryCategoryMax = computed(() =>
-    Math.max(1, ...this.inventoryCategoryRows().map((item) => item.value))
+    Math.max(1, ...this.inventoryCategoryRows().map((r) => r.value))
   );
 
   readonly lowStockRows = computed<LowStockRow[]>(() =>
@@ -251,51 +257,52 @@ export class DashboardComponent {
         const stock = Number(item.currentStock) || 0;
         return stock > 0 && stock <= 10;
       })
-      .sort((left, right) => (Number(left.currentStock) || 0) - (Number(right.currentStock) || 0))
-      .slice(0, 5)
+      .sort((a, b) => (Number(a.currentStock) || 0) - (Number(b.currentStock) || 0))
+      .slice(0, 6)
       .map((item) => ({
-        name: [item.styleNo, item.color].filter(Boolean).join(' - ') || item.barcode || 'Unnamed Item',
-        detail: [item.group, item.size].filter(Boolean).join(' • '),
+        name: item.styleNo || 'Unknown',
+        detail: [item.color, item.size].filter(Boolean).join(' · '),
         stock: Number(item.currentStock) || 0,
       }))
   );
 
   readonly recentSalesOrders = computed<SalesOrderRow[]>(() =>
-    [...this.filteredSalesOrders()]
-      .sort((left, right) => {
-        const leftTime = this.getSalesOrderDate(left)?.getTime() ?? 0;
-        const rightTime = this.getSalesOrderDate(right)?.getTime() ?? 0;
-        return rightTime - leftTime;
+    this.filteredSalesOrders()
+      .slice()
+      .sort((a, b) => {
+        const da = this.getSalesOrderDate(a)?.getTime() ?? 0;
+        const db = this.getSalesOrderDate(b)?.getTime() ?? 0;
+        return db - da;
       })
-      .slice(0, 5)
+      .slice(0, 8)
       .map((order) => ({
-        id: order.salesNo || order.id,
-        customer: this.clientNameMap().get(order.clientId) ?? order.clientId ?? 'Unknown Customer',
-        status: order.status,
-        badgeClass: this.salesOrderBadgeClass(order.status),
+        id: (order as SalesOrder & { salesNo?: string }).salesNo ?? order.id ?? '—',
+        customer: this.clientNameMap().get(order.clientId) ?? order.clientId ?? '—',
+        status: order.status ?? 'Pending',
+        badgeClass: this.salesOrderBadgeClass(order.status ?? 'Pending'),
       }))
   );
 
   readonly pickPackPanels = computed<PickPackPanel[]>(() => [
     {
-      title: 'Orders to Pick',
-      value: this.formatNumber(this.filteredPickLists().filter((item) => item.status !== 'Completed').length),
-      subtitle: 'In Progress',
-      detail: `${this.formatNumber(this.pickCreatedToday())} pick lists created today`,
-      accent: 'from-sky-700 via-blue-600 to-cyan-500',
+      title: 'Total Picked',
+      value: this.formatNumber(this.totalPickedQty()),
+      subtitle: 'Units picked in period',
+      detail: `${this.filteredPickLists().filter((p) => p.status === 'Completed').length} pick lists completed`,
+      accent: 'from-indigo-500 to-violet-600',
     },
     {
-      title: 'Orders to Pack',
-      value: this.formatNumber(this.filteredPackingLists().filter((item) => item.status !== 'Completed').length),
-      subtitle: 'In Progress',
-      detail: `${this.formatNumber(this.packCreatedToday())} packing lists created today`,
-      accent: 'from-indigo-700 via-blue-700 to-sky-500',
+      title: 'Total Packed',
+      value: this.formatNumber(this.totalPackedQty()),
+      subtitle: 'Units packed in period',
+      detail: `${this.filteredPackingLists().filter((p) => p.status === 'Completed').length} packing lists completed`,
+      accent: 'from-emerald-500 to-teal-600',
     },
   ]);
 
   readonly miniStatCards = computed<MiniStatCard[]>(() => [
     {
-      label: 'Picking In Progress',
+      label: 'Open Pick Lists',
       value: this.formatNumber(
         this.filteredPickLists().filter((item) => item.status === 'Partial' || item.status === 'Draft').length
       ),
@@ -315,15 +322,10 @@ export class DashboardComponent {
 
   readonly rangeLabel = computed(() => {
     const { start, end } = this.dateRange();
-    return `${this.formatLongDate(start)} - ${this.formatLongDate(end)}`;
+    return `${this.formatLongDate(start)} – ${this.formatLongDate(end)}`;
   });
 
-  setPreset(days: number): void {
-    const end = new Date();
-    const start = this.shiftDays(end, -(days - 1));
-    this.startDate.set(this.formatDateInput(start));
-    this.endDate.set(this.formatDateInput(end));
-  }
+  // ── Date filter methods ──────────────────────────────────────────────
 
   updateStartDate(value: string): void {
     this.startDate.set(value);
@@ -333,8 +335,16 @@ export class DashboardComponent {
     this.endDate.set(value);
   }
 
-  resetRange(): void {
-    this.setPreset(30);
+  resetToCurrentMonth(): void {
+    this.startDate.set(this.currentMonthStart());
+    this.endDate.set(this.formatDateInput(new Date()));
+  }
+
+  setPreset(days: number): void {
+    const end = new Date();
+    const start = this.shiftDays(end, -(days - 1));
+    this.startDate.set(this.formatDateInput(start));
+    this.endDate.set(this.formatDateInput(end));
   }
 
   rowWidth(value: number, total: number): number {
@@ -357,6 +367,8 @@ export class DashboardComponent {
   trackByLabel(_index: number, item: { label: string }): string {
     return item.label;
   }
+
+  // ── Private helpers ──────────────────────────────────────────────────
 
   private pendingSalesOrders(): number {
     return this.filteredSalesOrders().filter((order) => order.status !== 'Shipped').length;
@@ -412,33 +424,31 @@ export class DashboardComponent {
   }
 
   private getGoodsInwardDate(goodsInward: GoodsInward): Date | null {
-    return this.parseUnknownDate(goodsInward.receivedDate)
-      ?? this.parseUnknownDate(goodsInward.invoiceDate)
-      ?? this.parseUnknownDate(goodsInward.createdAt);
+    return (
+      this.parseUnknownDate(goodsInward.receivedDate) ??
+      this.parseUnknownDate(goodsInward.invoiceDate) ??
+      this.parseUnknownDate(goodsInward.createdAt)
+    );
   }
 
   private isWithinRange(value: Date | null): boolean {
-    if (!value) {
-      return false;
-    }
+    if (!value) return false;
     const { start, end } = this.dateRange();
     return value >= start && value <= end;
   }
 
   private isToday(date: Date | null): boolean {
-    if (!date) {
-      return false;
-    }
+    if (!date) return false;
     const today = new Date();
-    return date.getFullYear() === today.getFullYear()
-      && date.getMonth() === today.getMonth()
-      && date.getDate() === today.getDate();
+    return (
+      date.getFullYear() === today.getFullYear() &&
+      date.getMonth() === today.getMonth() &&
+      date.getDate() === today.getDate()
+    );
   }
 
   private parseUnknownDate(value: unknown): Date | null {
-    if (!value) {
-      return null;
-    }
+    if (!value) return null;
 
     if (value instanceof Date) {
       return Number.isNaN(value.getTime()) ? null : value;
@@ -456,12 +466,10 @@ export class DashboardComponent {
 
     if (typeof value === 'object') {
       const candidate = value as { toDate?: () => Date; seconds?: number };
-
       if (typeof candidate.toDate === 'function') {
         const parsed = candidate.toDate();
         return Number.isNaN(parsed.getTime()) ? null : parsed;
       }
-
       if (typeof candidate.seconds === 'number') {
         const parsed = new Date(candidate.seconds * 1000);
         return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -472,9 +480,7 @@ export class DashboardComponent {
   }
 
   private parseInputDate(value: string): Date | null {
-    if (!value) {
-      return null;
-    }
+    if (!value) return null;
     const parsed = new Date(`${value}T00:00:00`);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
@@ -493,10 +499,15 @@ export class DashboardComponent {
     return shifted;
   }
 
+  private currentMonthStart(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  }
+
   private formatDateInput(date: Date): string {
     const year = date.getFullYear();
-    const month = `${date.getMonth() + 1}`.padStart(2, '0');
-    const day = `${date.getDate()}`.padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
 

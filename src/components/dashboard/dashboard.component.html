@@ -1,47 +1,70 @@
 <section class="space-y-5">
   <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_24px_70px_-52px_rgba(15,23,42,0.28)]">
+
+    <!-- Hero Banner -->
     <div class="relative overflow-hidden">
       <img src="/src/assets/tailor_workshop.jpg" alt="Textile header" class="h-24 w-full object-cover sm:h-28">
       <div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.88),rgba(30,64,175,0.62),rgba(15,23,42,0.3))]"></div>
 
       <div class="absolute inset-0 flex items-center justify-between gap-3 px-4 sm:px-6">
         <div class="flex min-w-0 items-center gap-3">
-          <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
-            <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 7h12M6 12h12M6 17h12M4 7h.01M4 12h.01M4 17h.01"/>
-            </svg>
-          </div>
-          <div class="min-w-0">
-            <p class="truncate text-lg font-black text-white sm:text-2xl">Textile Warehouse Dashboard</p>
-            <p class="truncate text-xs font-medium uppercase tracking-[0.18em] text-sky-100/80">Inventory and fulfilment overview</p>
-          </div>
+            <div class="min-w-0">
+                <p class="truncate text-lg font-black text-white sm:text-2xl">Textile Warehouse Dashboard</p>
+                <p class="truncate text-xs font-medium uppercase tracking-[0.18em] text-sky-100/80">Inventory and fulfilment overview</p>
+            </div>
         </div>
 
-        <div class="flex items-center gap-2 sm:gap-3">
-          <button type="button" class="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur">
-            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-            </svg>
-            <span class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-rose-500"></span>
-          </button>
-          <button type="button" class="hidden h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur sm:flex">
-            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7V5a4 4 0 118 0v2m-9 4h10m-11 8h12a1 1 0 001-1V10a1 1 0 00-1-1H6a1 1 0 00-1 1v8a1 1 0 001 1z"/>
-            </svg>
-          </button>
-          <div class="flex items-center gap-2 rounded-full bg-white/15 px-2 py-1.5 text-white backdrop-blur sm:px-3">
-            <div class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-black text-slate-800">
-              {{ currentUserInitials() }}
-            </div>
-            <div class="hidden min-w-0 sm:block">
-              <p class="truncate text-sm font-bold">{{ currentUserName() }}</p>
-              <p class="truncate text-[11px] text-slate-200">{{ currentUserEmail() }}</p>
-            </div>
+        <!-- User avatar only (notification & lock icons removed) -->
+        <div class="flex items-center gap-2 rounded-full bg-white/15 px-2 py-1.5 text-white backdrop-blur sm:px-3">
+          <div class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-black text-slate-800">
+            {{ currentUserInitials() }}
+          </div>
+          <div class="hidden min-w-0 sm:block">
+            <p class="truncate text-sm font-bold">{{ currentUserName() }}</p>
+            <p class="truncate text-[11px] text-slate-200">{{ currentUserEmail() }}</p>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Date Filter Bar -->
+    <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3 sm:px-6">
+      <svg class="h-4 w-4 flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+      <span class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Date Range</span>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <input
+          type="date"
+          class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+          [value]="startDate()"
+          (change)="updateStartDate(($event.target)['value'])">
+        <span class="text-xs text-slate-400">to</span>
+        <input
+          type="date"
+          class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+          [value]="endDate()"
+          (change)="updateEndDate(($event.target)['value'])">
+      </div>
+
+      <button
+        type="button"
+        (click)="resetToCurrentMonth()"
+        class="rounded-xl border px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] transition-colors"
+        [class.border-sky-500]="isCurrentMonthFilter()"
+        [class.bg-sky-50]="isCurrentMonthFilter()"
+        [class.text-sky-700]="isCurrentMonthFilter()"
+        [class.border-slate-200]="!isCurrentMonthFilter()"
+        [class.bg-white]="!isCurrentMonthFilter()"
+        [class.text-slate-500]="!isCurrentMonthFilter()">
+        This Month
+      </button>
+
+      <span class="ml-auto text-xs text-slate-400">{{ rangeLabel() }}</span>
+    </div>
+
+    <!-- Summary Cards -->
     <div class="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4 sm:p-6">
       @for (card of summaryCards(); track card.label) {
         <article class="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]">
@@ -83,6 +106,7 @@
     </div>
   </div>
 
+  <!-- Inventory & Low Stock row -->
   <div class="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,1fr)]">
     <article class="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.2)] sm:p-6">
       <div class="flex items-center justify-between gap-3">
@@ -123,41 +147,40 @@
     </article>
 
     <article class="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.2)] sm:p-6">
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <p class="text-xl font-black text-slate-950">Low Stock Items</p>
-          <p class="mt-1 text-sm text-slate-500">Items that need replenishment soon</p>
-        </div>
-        <button type="button" class="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-          All Items
-        </button>
-      </div>
+      <p class="text-xl font-black text-slate-950">Low Stock Items</p>
+      <p class="mt-1 text-sm text-slate-500">Items approaching zero</p>
 
       <div class="mt-5 space-y-3">
         @if (lowStockRows().length) {
-          @for (item of lowStockRows(); track item.name) {
-            <div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          @for (row of lowStockRows(); track row.name) {
+            <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div class="min-w-0">
-                <p class="truncate text-base font-bold text-slate-950">{{ item.name }}</p>
-                <p class="mt-1 text-sm text-slate-500">{{ item.detail || 'Low stock item' }}</p>
+                <p class="truncate text-sm font-bold text-slate-950">{{ row.name }}</p>
+                <p class="truncate text-xs text-slate-500">{{ row.detail }}</p>
               </div>
-              <div class="flex items-center justify-between gap-3 sm:justify-end">
-                <p class="text-base font-black text-slate-950">{{ item.stock }} <span class="text-sm font-medium text-slate-500">In Stock</span></p>
-                <button type="button" class="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600">
-                  Reorder
-                </button>
-              </div>
+              <span
+                class="flex-shrink-0 rounded-xl px-3 py-1.5 text-xs font-black"
+                [class.bg-rose-100]="row.stock <= 5"
+                [class.text-rose-700]="row.stock <= 5"
+                [class.bg-amber-100]="row.stock > 5"
+                [class.text-amber-700]="row.stock > 5">
+                {{ row.stock }} left
+              </span>
             </div>
           }
         } @else {
-          <div class="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-            No low stock items found in the current inventory snapshot.
+          <div class="flex flex-col items-center justify-center py-10 text-center">
+            <svg class="h-10 w-10 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <p class="mt-3 text-sm font-semibold text-slate-500">All stock levels healthy</p>
           </div>
         }
       </div>
     </article>
   </div>
 
+  <!-- Sales Orders & Pick/Pack row -->
   <div class="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,1fr)]">
     <article class="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.2)] sm:p-6">
       <div class="flex items-center justify-between gap-3">
