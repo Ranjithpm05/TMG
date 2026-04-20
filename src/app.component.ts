@@ -11,12 +11,13 @@ import { AppScreen } from './models/user-group.model';
 import { InventoryComponent } from './components/inventory/inventory.component';
 import { PickListComponent } from './components/pick-list/pick-list.component';
 import { PackingListComponent } from './components/packing-list/packing-list.component';
+import { DashboardComponent } from './components/dashboard/dashboard.component';
 
-type View = 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList';
+type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList';
 type ViewHistoryState = { view: View };
 
 const VIEW_STORAGE_KEY = 'gom.activeView';
-const VIEW_SEQUENCE: View[] = ['sales', 'clients', 'designs', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList'];
+const VIEW_SEQUENCE: View[] = ['dashboard', 'sales', 'clients', 'designs', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList'];
 
 @Component({
   selector: 'app-root',
@@ -34,13 +35,14 @@ const VIEW_SEQUENCE: View[] = ['sales', 'clients', 'designs', 'goodsInward', 'us
     InventoryComponent,
     PickListComponent,
     PackingListComponent,
+    DashboardComponent,
   ],
 })
 export class AppComponent {
   private authService = inject(AuthService);
 
   isAuthenticated = computed(() => this.authService.isAuthenticated());
-  currentView = signal<View>('sales');
+  currentView = signal<View>('dashboard');
   isSidebarOpen = signal(false);
 
   constructor() {
@@ -67,7 +69,7 @@ export class AppComponent {
       }
 
       const activeView = this.currentView();
-      if (this.canView(activeView)) {
+      if (this.canAccessView(activeView)) {
         return;
       }
 
@@ -83,7 +85,7 @@ export class AppComponent {
   }
 
   setView(view: View) {
-    if (!this.canView(view)) {
+    if (!this.canAccessView(view)) {
       return;
     }
 
@@ -102,6 +104,10 @@ export class AppComponent {
 
   canView(screen: AppScreen): boolean {
     return this.authService.hasAccess(screen);
+  }
+
+  canAccessView(view: View): boolean {
+    return view === 'dashboard' ? this.isAuthenticated() : this.canView(view);
   }
 
   @HostListener('window:popstate', ['$event'])
@@ -146,12 +152,12 @@ export class AppComponent {
   }
 
   private resolveAccessibleView(preferredView: View | null): View | null {
-    if (preferredView && this.canView(preferredView)) {
+    if (preferredView && this.canAccessView(preferredView)) {
       return preferredView;
     }
 
     for (const view of VIEW_SEQUENCE) {
-      if (this.canView(view)) {
+      if (this.canAccessView(view)) {
         return view;
       }
     }
@@ -160,7 +166,7 @@ export class AppComponent {
   }
 
   private resetToLoggedOutState(): void {
-    this.currentView.set('sales');
+    this.currentView.set('dashboard');
     this.isSidebarOpen.set(false);
     this.clearStoredView();
     this.clearHistoryState();

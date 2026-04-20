@@ -1,18 +1,29 @@
 @if (isAuthenticated()) {
-<div class="flex h-screen bg-gray-100 font-sans">
+<div class="flex min-h-screen bg-[radial-gradient(circle_at_top,_#f8fafc,_#e2e8f0_55%,_#dbeafe)] font-sans text-slate-900">
   <!-- Static sidebar for desktop -->
-  <aside class="hidden md:flex flex-col w-64 bg-gray-800 text-white shadow-xl">
-    <div class="flex items-center justify-start h-20 shadow-md px-4">
-      <img src="/src/assets/logo.jpeg" alt="Company Logo" width="50" height="50" class="rounded-full">
-      <span class="ml-3 text-2xl font-bold">TMG Clothings</span>
+  <aside class="hidden md:flex md:w-72 lg:w-80 flex-col border-r border-slate-200/70 bg-slate-950 text-white shadow-2xl">
+    <div class="flex items-center justify-start gap-3 px-6 py-6">
+      <img src="/src/assets/logo.jpeg" alt="Company Logo" width="52" height="52" class="rounded-2xl ring-2 ring-white/20">
+      <div>
+        <p class="text-xs uppercase tracking-[0.28em] text-slate-400">Production OS</p>
+        <span class="text-2xl font-black">TMG Clothings</span>
+      </div>
     </div>
-    <nav class="flex-1 flex flex-col justify-between px-2 py-4">
+    <nav class="flex-1 flex flex-col justify-between px-4 pb-5">
       <div class="space-y-2">
+        <button (click)="setView('dashboard')"
+          class="w-full flex items-center px-4 py-3 text-slate-200 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
+          [class.bg-white/12]="currentView() === 'dashboard'">
+          <svg class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 13h8V3H3v10zm10 8h8V11h-8v10zM3 21h8v-6H3v6zm10-10h8V3h-8v8z"/>
+          </svg>
+          Dashboard
+        </button>
 
         @if(canView('sales')) {
         <button (click)="setView('sales')"
-          class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
-          [class.bg-gray-900]="currentView() === 'sales'">
+          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
+          [class.bg-white/12]="currentView() === 'sales'">
           <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
           </svg>
@@ -22,8 +33,8 @@
 
         @if(canView('clients')) {
         <button (click)="setView('clients')"
-          class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
-          [class.bg-gray-900]="currentView() === 'clients'">
+          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
+          [class.bg-white/12]="currentView() === 'clients'">
           <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197m0 0A5.975 5.975 0 0112 13a5.975 5.975 0 013 1.803M15 21a9 9 0 00-3-5.647M12 13a9 9 0 00-3 5.647"/>
           </svg>
@@ -33,8 +44,8 @@
 
         @if(canView('designs')) {
         <button (click)="setView('designs')"
-          class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
-          [class.bg-gray-900]="currentView() === 'designs'">
+          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
+          [class.bg-white/12]="currentView() === 'designs'">
           <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
           </svg>
@@ -44,8 +55,8 @@
 
         @if(canView('goodsInward')) {
         <button (click)="setView('goodsInward')"
-          class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
-          [class.bg-gray-900]="currentView() === 'goodsInward'">
+          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
+          [class.bg-white/12]="currentView() === 'goodsInward'">
           <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
           </svg>
@@ -55,8 +66,8 @@
 
         @if(canView('users')) {
             <button (click)="setView('users')"
-            class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
-            [class.bg-gray-900]="currentView() === 'users'">
+            class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
+            [class.bg-white/12]="currentView() === 'users'">
             <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.084-1.28-.24-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.084-1.28.24-1.857m10.514-6.32a4 4 0 10-5.028 0m5.028 0a4 4 0 11-5.028 0M7 11a4 4 0 100-8 4 4 0 000 8z"/>
             </svg>
@@ -66,8 +77,8 @@
 
         @if(canView('inventory')) {
             <button (click)="setView('inventory')"
-            class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors"
-            [class.bg-gray-900]="currentView() === 'inventory'">
+            class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
+            [class.bg-white/12]="currentView() === 'inventory'">
             <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
             </svg>
@@ -76,8 +87,8 @@
         }
 
         @if(canView('pickList')) {
-            <button (click)="setView('pickList')" [class.bg-gray-900]="currentView() === 'pickList'"
-                    class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors">
+            <button (click)="setView('pickList')" [class.bg-white/12]="currentView() === 'pickList'"
+                    class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors">
                 <svg class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                 </svg>
@@ -86,8 +97,8 @@
         }
 
         @if(canView('packingList')) {
-            <button (click)="setView('packingList')" [class.bg-gray-900]="currentView() === 'packingList'"
-                    class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors">
+            <button (click)="setView('packingList')" [class.bg-white/12]="currentView() === 'packingList'"
+                    class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors">
                 <svg class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M8 9l8 4"/>
                 </svg>
@@ -98,7 +109,7 @@
       </div>
       <div>
         <button (click)="logout()"
-          class="w-full flex items-center px-4 py-2 text-gray-300 rounded-lg hover:bg-red-700 hover:text-white transition-colors">
+          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-rose-500 hover:text-white transition-colors">
           <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
           </svg>
@@ -110,10 +121,10 @@
 
   <!-- Content area -->
   <div class="flex-1 flex flex-col overflow-hidden">
-    <header class="flex md:hidden justify-between items-center bg-white p-4 shadow-md">
+    <header class="flex md:hidden justify-between items-center border-b border-slate-200/70 bg-white/90 p-4 backdrop-blur">
       <div class="flex items-center">
-        <img src="/src/assets/logo.jpeg" alt="Company Logo" width="40" height="40" class="rounded-full">
-        <span class="ml-3 text-xl font-bold">TMG Clothings</span>
+        <img src="/src/assets/logo.jpeg" alt="Company Logo" width="40" height="40" class="rounded-xl">
+        <span class="ml-3 text-xl font-black">TMG Clothings</span>
       </div>
       <button (click)="toggleSidebar()" class="text-gray-500 focus:outline-none focus:text-gray-700">
         <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -126,7 +137,7 @@
     @if (isSidebarOpen()) {
     <div class="fixed inset-0 flex z-40 md:hidden" role="dialog" aria-modal="true">
       <div class="fixed inset-0 bg-gray-600 bg-opacity-75" (click)="toggleSidebar()"></div>
-      <div class="relative flex-1 flex flex-col max-w-xs w-full bg-gray-800 text-white">
+      <div class="relative flex-1 flex flex-col max-w-xs w-full bg-slate-950 text-white">
         <div class="absolute top-0 right-0 -mr-12 pt-2">
           <button type="button" class="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white" (click)="toggleSidebar()">
             <svg class="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -136,21 +147,22 @@
         </div>
         <div class="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
           <div class="flex-shrink-0 flex items-center px-4">
-            <img src="/src/assets/logo.jpeg" alt="Company Logo" width="40" height="40" class="rounded-full">
-            <span class="ml-3 text-xl font-bold">TMG Clothings</span>
+            <img src="/src/assets/logo.jpeg" alt="Company Logo" width="40" height="40" class="rounded-xl">
+            <span class="ml-3 text-xl font-black">TMG Clothings</span>
           </div>
           <nav class="mt-5 px-2 space-y-1">
-            @if(canView('sales'))      { <button (click)="setView('sales')"       [class]="currentView() === 'sales'       ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">Sales Order</button> }
-            @if(canView('clients'))    { <button (click)="setView('clients')"     [class]="currentView() === 'clients'     ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">Client Master</button> }
-            @if(canView('designs'))    { <button (click)="setView('designs')"     [class]="currentView() === 'designs'     ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">Design Master</button> }
-            @if(canView('goodsInward')){ <button (click)="setView('goodsInward')" [class]="currentView() === 'goodsInward' ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">Goods Inward</button> }
-            @if(canView('users'))      { <button (click)="setView('users')"       [class]="currentView() === 'users'       ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">User Management</button> }
-            @if(canView('inventory'))      { <button (click)="setView('inventory')"       [class]="currentView() === 'inventory'       ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">inventory</button> }
-            @if(canView('pickList'))      { <button (click)="setView('pickList')"       [class]="currentView() === 'pickList'       ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">Pick List</button> }
-            @if(canView('packingList'))   { <button (click)="setView('packingList')"    [class]="currentView() === 'packingList'    ? 'bg-gray-900' : 'hover:bg-gray-700'" class="w-full group flex items-center px-2 py-2 text-base font-medium rounded-md text-white">Packing List</button> }
+            <button (click)="setView('dashboard')" [class]="currentView() === 'dashboard' ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Dashboard</button>
+            @if(canView('sales'))      { <button (click)="setView('sales')"       [class]="currentView() === 'sales'       ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Sales Order</button> }
+            @if(canView('clients'))    { <button (click)="setView('clients')"     [class]="currentView() === 'clients'     ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Client Master</button> }
+            @if(canView('designs'))    { <button (click)="setView('designs')"     [class]="currentView() === 'designs'     ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Design Master</button> }
+            @if(canView('goodsInward')){ <button (click)="setView('goodsInward')" [class]="currentView() === 'goodsInward' ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Goods Inward</button> }
+            @if(canView('users'))      { <button (click)="setView('users')"       [class]="currentView() === 'users'       ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">User Management</button> }
+            @if(canView('inventory'))  { <button (click)="setView('inventory')"   [class]="currentView() === 'inventory'   ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Inventory</button> }
+            @if(canView('pickList'))   { <button (click)="setView('pickList')"    [class]="currentView() === 'pickList'    ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Pick List</button> }
+            @if(canView('packingList')){ <button (click)="setView('packingList')" [class]="currentView() === 'packingList' ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Packing List</button> }
           </nav>
         </div>
-        <div class="flex-shrink-0 flex bg-gray-700 p-4">
+        <div class="flex-shrink-0 flex bg-white/6 p-4">
           <button (click)="logout()" class="w-full flex-shrink-0 group block">
             <div class="flex items-center">
               <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,6 +179,7 @@
     <main class="flex-1 overflow-y-auto">
       <div class="p-4 sm:p-6 md:p-8">
         @switch (currentView()) {
+          @case ('dashboard')   { <app-dashboard></app-dashboard> }
           @case ('sales')       { <app-sales-order></app-sales-order> }
           @case ('clients')     { <app-client-master></app-client-master> }
           @case ('designs')     { <app-design-master></app-design-master> }

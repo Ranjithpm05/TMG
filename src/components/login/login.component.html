@@ -1,40 +1,40 @@
-<div class="min-h-screen bg-gray-100 flex flex-col md:flex-row">
+<div class="min-h-screen bg-[radial-gradient(circle_at_top,_#fff7ed,_#f8fafc_35%,_#e2e8f0)] flex flex-col md:flex-row">
 
   <!-- Left side: Image and Branding -->
   <div
-    class="relative md:w-1/2 flex flex-col justify-center items-center text-white bg-indigo-900 overflow-hidden min-h-[300px] md:min-h-screen">
+    class="relative md:w-1/2 flex flex-col justify-center items-center text-white bg-slate-950 overflow-hidden min-h-[320px] md:min-h-screen">
     <!-- Background Image with Overlay -->
     <div class="absolute inset-0 z-0">
       <img src="/src/assets/tailor_workshop.jpg" alt="A tailor's workshop" class="w-full h-full object-cover">
-      <div class="absolute inset-0 bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 opacity-75"></div>
+      <div class="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 opacity-80"></div>
     </div>
 
     <!-- Content -->
     <div class="relative z-10 text-center p-8 animate-fade-in">
-      <div class="inline-block bg-white/20 p-4 rounded-full mb-6 backdrop-blur-sm">
+      <div class="inline-block bg-white/12 p-4 rounded-[1.5rem] mb-6 backdrop-blur-sm border border-white/20">
         <svg class="h-12 w-12 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
           stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
             d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
         </svg>
       </div>
-      <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight">TMG Clothings</h1>
-      <p class="mt-4 text-lg text-indigo-200">The future of order management is here.</p>
+      <h1 class="text-4xl md:text-5xl font-black tracking-tight">TMG Clothings</h1>
+      <p class="mt-4 text-lg text-sky-100">Responsive garment operations, from order capture to final packing.</p>
     </div>
 
     <!-- Decorative shape for mobile view transition -->
     <div
-      class="absolute bottom-0 left-0 w-full h-16 bg-gray-100 [clip-path:polygon(0_100%,100%_100%,100%_0)] md:hidden">
+      class="absolute bottom-0 left-0 w-full h-16 bg-slate-50 [clip-path:polygon(0_100%,100%_100%,100%_0)] md:hidden">
     </div>
   </div>
 
   <!-- Right side: Login Form -->
-  <div class="w-full md:w-1/2 flex justify-center items-center p-8 sm:p-12 bg-gray-50">
-    <div class="w-full max-w-md bg-white p-8 sm:p-10 rounded-2xl shadow-xl">
+  <div class="w-full md:w-1/2 flex justify-center items-center p-6 sm:p-10 lg:p-14 bg-transparent">
+    <div class="w-full max-w-md rounded-[2rem] border border-white/70 bg-white/80 p-8 shadow-[0_40px_100px_-55px_rgba(15,23,42,0.5)] backdrop-blur-md sm:p-10">
       <div class="text-center mb-8">
-        <img src="/src/assets/logo.jpeg" alt="Company Logo" width="60" height="60" class="rounded-full mx-auto mb-3">
-        <h2 class="text-3xl font-bold text-gray-800">Welcome Back</h2>
-        <p class="text-gray-500 mt-1">Please sign in to continue.</p>
+        <img src="/src/assets/logo.jpeg" alt="Company Logo" width="64" height="64" class="rounded-[1.25rem] mx-auto mb-4 shadow-lg">
+        <h2 class="text-3xl font-black text-slate-900">Welcome Back</h2>
+        <p class="text-slate-500 mt-2">Sign in and you’ll land directly on the live operations dashboard.</p>
       </div>
 
       <form class="space-y-5" (ngSubmit)="login()" #loginForm="ngForm">
@@ -48,7 +48,7 @@
               </svg>
             </div>
             <input id="username" name="username" type="text" required
-              class="appearance-none block w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-300 rounded-md text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500 sm:text-sm"
+              class="appearance-none block w-full pl-10 pr-3 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 sm:text-sm"
               [ngModel]="username()" (ngModelChange)="username.set($event)" placeholder="Username">
           </div>
         </div>
@@ -65,7 +65,7 @@
               </svg>
             </div>
             <input id="password" name="password" [type]="showPassword() ? 'text' : 'password'" required
-              class="appearance-none block w-full pl-10 pr-10 py-3 bg-gray-50 border border-gray-300 rounded-md text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500 sm:text-sm"
+              class="appearance-none block w-full pl-10 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 sm:text-sm"
               [ngModel]="password()" (ngModelChange)="password.set($event)" placeholder="Password">
             <button type="button" (click)="togglePasswordVisibility()"
               class="absolute inset-y-0 right-0 pr-3 flex items-center text-sm leading-5 text-gray-500 hover:text-gray-700">
@@ -88,14 +88,14 @@
 
         <div class="flex items-center justify-end">
           <div class="text-sm">
-            <a href="#" class="font-medium text-violet-600 hover:text-violet-500">
+            <a href="#" class="font-medium text-sky-700 hover:text-sky-600">
               Forgot your password?
             </a>
           </div>
         </div>
 
         @if(loginError()) {
-        <div class="rounded-md bg-red-50 p-4">
+        <div class="rounded-2xl bg-rose-50 p-4">
           <div class="flex">
             <div class="flex-shrink-0">
               <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
@@ -114,7 +114,7 @@
 
         <div>
           <button type="submit"
-            class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-lg">
+            class="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-2xl shadow-sm text-sm font-semibold text-slate-950 bg-gradient-to-r from-amber-300 via-orange-300 to-rose-300 hover:from-amber-200 hover:via-orange-200 hover:to-rose-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-400 transition-all duration-300 ease-in-out transform hover:-translate-y-0.5 hover:shadow-lg">
             Sign In
           </button>
         </div>
