@@ -22,6 +22,7 @@ import {
   PackingCartonEntry,
   PackingList,
   PackingListLine,
+  PackingMode,
   PackingPartSummary,
   PackingScanResult,
 } from '../models/packing-list.model';
@@ -67,6 +68,11 @@ export class PackingListService {
     return first ? this.normalizePackingList({ id: first.id, ...first.data() }) : null;
   }
 
+  async getPackingListsByPickListIdOnce(pickListId: string): Promise<PackingList[]> {
+    const snap = await getDocs(query(this.packingRef, where('pickListId', '==', pickListId)));
+    return snap.docs.map((docSnap) => this.normalizePackingList({ id: docSnap.id, ...docSnap.data() }));
+  }
+
   async createGeneratedPackingList(input: {
     packingListNo: string;
     pickListId: string;
@@ -75,6 +81,7 @@ export class PackingListService {
     salesNos: string[];
     clientId: string;
     clientName: string;
+    packingMode: PackingMode;
     remarks?: string;
     lines: PickListLine[];
   }): Promise<string> {
@@ -95,6 +102,7 @@ export class PackingListService {
       salesNos: [...new Set(input.salesNos)],
       clientId: input.clientId,
       clientName: input.clientName,
+      packingMode: input.packingMode,
       remarks: input.remarks,
       status: summary.status,
       totalRequiredQty: summary.totalRequiredQty,
@@ -131,20 +139,12 @@ export class PackingListService {
     const trimmedBarcode = barcode.trim();
     const normalizedQty = Math.max(0, Math.floor(Number(qty) || 0));
 
-    if (!trimmedCartonNo) {
-      throw new Error('carton_required');
-    }
-    if (!trimmedBarcode) {
-      throw new Error('barcode_not_found');
-    }
-    if (normalizedQty <= 0) {
-      throw new Error('qty_invalid');
-    }
+    if (!trimmedCartonNo) throw new Error('carton_required');
+    if (!trimmedBarcode) throw new Error('barcode_not_found');
+    if (normalizedQty <= 0) throw new Error('qty_invalid');
 
     const line = await this.resolveScannableLine(packingListId, trimmedBarcode);
-    if (!line) {
-      throw new Error('barcode_not_found');
-    }
+    if (!line) throw new Error('barcode_not_found');
 
     return runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(packingListId, line.lineId);
@@ -178,9 +178,7 @@ export class PackingListService {
       });
 
       const updatedItems = (packingList.items ?? []).map((item) =>
-        item.lineId === updatedLine.lineId
-          ? updatedLine
-          : this.normalizeLine(item)
+        item.lineId === updatedLine.lineId ? updatedLine : this.normalizeLine(item)
       );
 
       const { cartons, carton } = this.upsertCartons(packingList.cartons ?? [], updatedLine, trimmedCartonNo, normalizedQty, now);
@@ -245,15 +243,59 @@ export class PackingListService {
     });
   }
 
+  private async resolveScannableLine(packingListId: string, barcode: string): Promise<PackingListLine | null> {
+    const snap = await getDocs(
+      query(this.linesCollection(packingListId), where('barcode', '==', barcode), limit(2))
+    );
+    if (snap.empty) return null;
+    const lines = snap.docs
+      .map((docSnap) => this.normalizeLine({ lineId: docSnap.id, ...docSnap.data() }))
+      .filter((line) => line.remainingQty > 0)
+      .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0));
+
+    return lines[0] ?? null;
+  }
+
+  private buildSummary(lines: PackingListLine[], cartons: PackingCarton[]) {
+    const normalizedLines = lines.map((line) => this.normalizeLine(line)).filter((line) => line.requiredQty > 0);
+    const normalizedCartons = cartons.map((carton) => this.normalizeCarton(carton));
+    const totalRequiredQty = normalizedLines.reduce((sum, line) => sum + line.requiredQty, 0);
+    const totalPackedQty = normalizedLines.reduce((sum, line) => sum + Math.min(line.packedQty, line.requiredQty), 0);
+    const lineCount = normalizedLines.length;
+    const completedLineCount = normalizedLines.filter((line) => line.remainingQty <= 0).length;
+    const cartonCount = normalizedCartons.length;
+    const partSummaries = this.buildPartSummaries(normalizedLines);
+
+    return {
+      totalRequiredQty,
+      totalPackedQty,
+      lineCount,
+      completedLineCount,
+      cartonCount,
+      partSummaries,
+      status: this.computePackingListStatus(totalRequiredQty, totalPackedQty, lineCount, completedLineCount),
+    };
+  }
+
+  private buildPartSummaries(lines: PackingListLine[]): PackingPartSummary[] {
+    const map = new Map<string, PackingPartSummary>();
+    for (const line of lines) {
+      const key = line.partName || 'General';
+      const existing = map.get(key) ?? { partName: key, requiredQty: 0, packedQty: 0 };
+      existing.requiredQty += line.requiredQty;
+      existing.packedQty += Math.min(line.packedQty, line.requiredQty);
+      map.set(key, existing);
+    }
+    return [...map.values()].sort((left, right) => left.partName.localeCompare(right.partName, undefined, { numeric: true }));
+  }
+
   private buildPackableLines(lines: PickListLine[]): PackingListLine[] {
     const aggregated = new Map<string, PackingListLine>();
 
     for (const source of lines) {
       const pickedQty = Math.max(0, Math.min(Number(source.pickedQty) || 0, Number(source.requiredQty) || Number(source.pickedQty) || 0));
       const barcode = String(source.barcode ?? '').trim();
-      if (!barcode || pickedQty <= 0) {
-        continue;
-      }
+      if (!barcode || pickedQty <= 0) continue;
 
       const styleNo = String(source.styleNo ?? '').trim();
       const color = String(source.color ?? '').trim();
@@ -291,79 +333,18 @@ export class PackingListService {
       }
 
       const existing = aggregated.get(key)!;
-      aggregated.set(key, this.normalizeLine({
-        ...existing,
-        salesOrderIds: [...new Set([...existing.salesOrderIds, salesOrderId].filter(Boolean))],
-        salesNos: [...new Set([...existing.salesNos, salesNo].filter(Boolean))],
-        pickedQty: existing.pickedQty + pickedQty,
-        requiredQty: existing.requiredQty + pickedQty,
-        remainingQty: existing.remainingQty + pickedQty,
-        sortOrder: Math.min(existing.sortOrder ?? Number.MAX_SAFE_INTEGER, Number(source.sortOrder) || Number.MAX_SAFE_INTEGER),
-      }));
+      existing.requiredQty += pickedQty;
+      existing.remainingQty += pickedQty;
+      if (salesOrderId && !existing.salesOrderIds.includes(salesOrderId)) {
+        existing.salesOrderIds.push(salesOrderId);
+      }
+      if (salesNo && !existing.salesNos.includes(salesNo)) {
+        existing.salesNos.push(salesNo);
+      }
+      aggregated.set(key, existing);
     }
 
-    return [...aggregated.values()]
-      .sort((left, right) => {
-        const sortOrderCompare = (left.sortOrder ?? 0) - (right.sortOrder ?? 0);
-        if (sortOrderCompare !== 0) return sortOrderCompare;
-        const partCompare = left.partName.localeCompare(right.partName, undefined, { numeric: true });
-        if (partCompare !== 0) return partCompare;
-        const styleCompare = left.styleNo.localeCompare(right.styleNo, undefined, { numeric: true });
-        if (styleCompare !== 0) return styleCompare;
-        const colorCompare = left.color.localeCompare(right.color, undefined, { numeric: true });
-        if (colorCompare !== 0) return colorCompare;
-        return left.size.localeCompare(right.size, undefined, { numeric: true });
-      })
-      .map((line, index) => this.normalizeLine({ ...line, sortOrder: index }));
-  }
-
-  private async resolveScannableLine(packingListId: string, barcode: string): Promise<PackingListLine | null> {
-    const snap = await getDocs(query(this.linesCollection(packingListId), where('barcode', '==', barcode), limit(5)));
-    if (snap.empty) {
-      return null;
-    }
-
-    const lines = snap.docs
-      .map((docSnap) => this.normalizeLine({ lineId: docSnap.id, ...docSnap.data() }))
-      .filter((line) => line.remainingQty > 0 && line.status !== 'completed')
-      .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0));
-
-    return lines[0] ?? null;
-  }
-
-  private buildSummary(lines: PackingListLine[], cartons: PackingCarton[]) {
-    const normalizedLines = lines.map((line) => this.normalizeLine(line)).filter((line) => line.requiredQty > 0);
-    const normalizedCartons = cartons.map((carton) => this.normalizeCarton(carton));
-    const totalRequiredQty = normalizedLines.reduce((sum, line) => sum + line.requiredQty, 0);
-    const totalPackedQty = normalizedLines.reduce((sum, line) => sum + Math.min(line.packedQty, line.requiredQty), 0);
-    const lineCount = normalizedLines.length;
-    const completedLineCount = normalizedLines.filter((line) => line.remainingQty <= 0).length;
-    const cartonCount = normalizedCartons.length;
-    const partSummaries = this.buildPartSummaries(normalizedLines);
-
-    return {
-      totalRequiredQty,
-      totalPackedQty,
-      lineCount,
-      completedLineCount,
-      cartonCount,
-      partSummaries,
-      status: this.computePackingListStatus(totalRequiredQty, totalPackedQty, lineCount, completedLineCount),
-    };
-  }
-
-  private buildPartSummaries(lines: PackingListLine[]): PackingPartSummary[] {
-    const map = new Map<string, PackingPartSummary>();
-
-    for (const line of lines) {
-      const key = line.partName || 'General';
-      const existing = map.get(key) ?? { partName: key, requiredQty: 0, packedQty: 0 };
-      existing.requiredQty += line.requiredQty;
-      existing.packedQty += Math.min(line.packedQty, line.requiredQty);
-      map.set(key, existing);
-    }
-
-    return [...map.values()].sort((left, right) => left.partName.localeCompare(right.partName, undefined, { numeric: true }));
+    return [...aggregated.values()];
   }
 
   private upsertCartons(
@@ -406,10 +387,7 @@ export class PackingListService {
     if (entryIndex === -1) {
       entries.push(entry);
     } else {
-      entries[entryIndex] = {
-        ...entries[entryIndex],
-        qty: entries[entryIndex].qty + qty,
-      };
+      entries[entryIndex] = { ...entries[entryIndex], qty: entries[entryIndex].qty + qty };
     }
 
     const updatedCarton = this.normalizeCarton({
@@ -418,7 +396,6 @@ export class PackingListService {
       entries,
       updatedAt: now,
     });
-
     const updatedCartons = [...normalizedCartons];
     updatedCartons[cartonIndex] = updatedCarton;
     return { cartons: updatedCartons, carton: updatedCarton };
@@ -437,6 +414,9 @@ export class PackingListService {
     const cartons = Array.isArray(raw?.cartons) ? raw.cartons.map((carton: any) => this.normalizeCarton(carton)) : [];
     const summary = this.buildSummary(items, cartons);
 
+    const rawMode = raw?.packingMode;
+    const packingMode: PackingMode = rawMode === 'order' ? 'order' : 'customer';
+
     return {
       id: raw?.id,
       packingListNo: String(raw?.packingListNo ?? ''),
@@ -446,6 +426,7 @@ export class PackingListService {
       salesNos: Array.isArray(raw?.salesNos) ? raw.salesNos.map((salesNo: any) => String(salesNo)) : [],
       clientId: String(raw?.clientId ?? ''),
       clientName: String(raw?.clientName ?? ''),
+      packingMode,
       status: raw?.status ?? summary.status,
       totalRequiredQty: Number(raw?.totalRequiredQty) || summary.totalRequiredQty,
       totalPackedQty: Number(raw?.totalPackedQty) || summary.totalPackedQty,
@@ -487,24 +468,23 @@ export class PackingListService {
       sleeveType: raw?.sleeveType ? String(raw.sleeveType) : undefined,
       barcode: raw?.barcode ? String(raw.barcode) : undefined,
       inventoryId: raw?.inventoryId ? String(raw.inventoryId) : undefined,
-      pickedQty: Math.max(0, Number(raw?.pickedQty) || requiredQty),
+      pickedQty: Math.max(0, Number(raw?.pickedQty) || 0),
       requiredQty,
       packedQty,
       remainingQty,
       status: this.normalizeLineStatus(raw?.status, packedQty, remainingQty),
       lastCartonNo: raw?.lastCartonNo ? String(raw.lastCartonNo) : undefined,
-      sortOrder: raw?.sortOrder != null ? Number(raw.sortOrder) || 0 : 0,
+      sortOrder: Number(raw?.sortOrder) || 0,
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,
     };
   }
 
   private normalizeCarton(raw: any): PackingCarton {
-    const entries = Array.isArray(raw?.entries) ? raw.entries.map((entry: any) => this.normalizeCartonEntry(entry)) : [];
     return {
       cartonNo: String(raw?.cartonNo ?? ''),
-      totalQty: Math.max(0, Number(raw?.totalQty) || entries.reduce((sum, entry) => sum + entry.qty, 0)),
-      entries,
+      totalQty: Math.max(0, Number(raw?.totalQty) || 0),
+      entries: Array.isArray(raw?.entries) ? raw.entries.map((entry: any) => this.normalizeCartonEntry(entry)) : [],
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,
     };
@@ -538,12 +518,8 @@ export class PackingListService {
     lineCount: number,
     completedLineCount: number,
   ): PackingList['status'] {
-    if (lineCount <= 0 || totalRequiredQty <= 0 || totalPackedQty <= 0) {
-      return 'Draft';
-    }
-    if (completedLineCount >= lineCount || totalPackedQty >= totalRequiredQty) {
-      return 'Completed';
-    }
+    if (lineCount <= 0 || totalRequiredQty <= 0 || totalPackedQty <= 0) return 'Draft';
+    if (completedLineCount >= lineCount || totalPackedQty >= totalRequiredQty) return 'Completed';
     return 'Partial';
   }
 
@@ -556,24 +532,17 @@ export class PackingListService {
 
   private stripUndefined<T>(value: T): T {
     if (Array.isArray(value)) {
-      return value
-        .filter((entry) => entry !== undefined)
-        .map((entry) => this.stripUndefined(entry)) as T;
+      return value.filter((entry) => entry !== undefined).map((entry) => this.stripUndefined(entry)) as T;
     }
-
     if (value && typeof value === 'object') {
       const prototype = Object.getPrototypeOf(value);
-      if (prototype !== Object.prototype && prototype !== null) {
-        return value;
-      }
-
+      if (prototype !== Object.prototype && prototype !== null) return value;
       return Object.fromEntries(
         Object.entries(value)
           .filter(([, entry]) => entry !== undefined)
           .map(([key, entry]) => [key, this.stripUndefined(entry)])
       ) as T;
     }
-
     return value;
   }
 }

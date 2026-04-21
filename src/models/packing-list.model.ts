@@ -1,4 +1,5 @@
 export type PackingListLineStatus = 'ready' | 'in_progress' | 'completed';
+export type PackingMode = 'customer' | 'order';
 
 export interface PackingListLine {
   lineId: string;
@@ -61,6 +62,7 @@ export interface PackingList {
   salesNos: string[];
   clientId: string;
   clientName: string;
+  packingMode: PackingMode;
   status: 'Draft' | 'Partial' | 'Completed';
   totalRequiredQty: number;
   totalPackedQty: number;
