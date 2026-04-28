@@ -12,6 +12,7 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  updateDoc,
   where,
   writeBatch,
 } from '@angular/fire/firestore';
@@ -24,6 +25,7 @@ import {
   PackingListLine,
   PackingMode,
   PackingPartSummary,
+  PackingPartyProgress,
   PackingScanResult,
 } from '../models/packing-list.model';
 
@@ -111,6 +113,7 @@ export class PackingListService {
       completedLineCount: summary.completedLineCount,
       cartonCount: summary.cartonCount,
       partSummaries: summary.partSummaries,
+      partyProgress: summary.partyProgress,
       cartons: [],
       items: normalizedLines,
       createdAt: serverTimestamp(),
@@ -198,6 +201,7 @@ export class PackingListService {
         cartonCount: summary.cartonCount,
         status: summary.status,
         partSummaries: summary.partSummaries,
+        partyProgress: summary.partyProgress,
         cartons,
         items: updatedItems,
         updatedAt: serverTimestamp(),
@@ -237,10 +241,24 @@ export class PackingListService {
         cartonCount: summary.cartonCount,
         status: summary.status,
         partSummaries: summary.partSummaries,
+        partyProgress: summary.partyProgress,
         items: normalizedItems,
         updatedAt: serverTimestamp(),
       }));
     });
+  }
+
+  async sealCarton(packingListId: string, cartonNo: string): Promise<void> {
+    const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
+    const snap = await getDoc(packingListRef);
+    if (!snap.exists()) throw new Error('packinglist_not_found');
+    const packingList = this.normalizePackingList({ id: snap.id, ...snap.data() });
+    const cartons = (packingList.cartons ?? []).map((c) =>
+      c.cartonNo.toLowerCase() === cartonNo.toLowerCase()
+        ? { ...c, cartonStatus: 'sealed' as const, updatedAt: Date.now() }
+        : c
+    );
+    await updateDoc(packingListRef, this.stripUndefined({ cartons, updatedAt: serverTimestamp() }));
   }
 
   private async resolveScannableLine(packingListId: string, barcode: string): Promise<PackingListLine | null> {
@@ -265,6 +283,7 @@ export class PackingListService {
     const completedLineCount = normalizedLines.filter((line) => line.remainingQty <= 0).length;
     const cartonCount = normalizedCartons.length;
     const partSummaries = this.buildPartSummaries(normalizedLines);
+    const partyProgress = this.buildPartyProgress(normalizedLines);
 
     return {
       totalRequiredQty,
@@ -273,6 +292,7 @@ export class PackingListService {
       completedLineCount,
       cartonCount,
       partSummaries,
+      partyProgress,
       status: this.computePackingListStatus(totalRequiredQty, totalPackedQty, lineCount, completedLineCount),
     };
   }
@@ -287,6 +307,25 @@ export class PackingListService {
       map.set(key, existing);
     }
     return [...map.values()].sort((left, right) => left.partName.localeCompare(right.partName, undefined, { numeric: true }));
+  }
+
+  private buildPartyProgress(lines: PackingListLine[]): PackingPartyProgress[] {
+    const map = new Map<string, PackingPartyProgress>();
+    for (const line of lines) {
+      for (let i = 0; i < line.salesOrderIds.length; i++) {
+        const salesOrderId = line.salesOrderIds[i] ?? '';
+        const salesNo = line.salesNos[i] ?? '';
+        if (!salesOrderId) continue;
+        const existing = map.get(salesOrderId) ?? {
+          salesOrderId, salesNo, clientName: '', requiredQty: 0, packedQty: 0, pendingQty: 0,
+        };
+        existing.requiredQty += line.requiredQty;
+        existing.packedQty += Math.min(line.packedQty, line.requiredQty);
+        existing.pendingQty = existing.requiredQty - existing.packedQty;
+        map.set(salesOrderId, existing);
+      }
+    }
+    return [...map.values()].sort((a, b) => a.salesNo.localeCompare(b.salesNo, undefined, { numeric: true }));
   }
 
   private buildPackableLines(lines: PickListLine[]): PackingListLine[] {
@@ -306,7 +345,7 @@ export class PackingListService {
       const designId = String(source.designId ?? '').trim();
       const salesOrderId = String(source.salesOrderId ?? '').trim();
       const salesNo = String(source.salesNo ?? '').trim();
-      const key = `${styleNo}||${color}||${partName}||${size}||${sleeveType}||${barcode}||${inventoryId}`;
+      const key = `${salesOrderId}||${styleNo}||${color}||${partName}||${size}||${sleeveType}||${barcode}||${inventoryId}`;
 
       if (!aggregated.has(key)) {
         aggregated.set(key, this.normalizeLine({
@@ -440,6 +479,7 @@ export class PackingListService {
             packedQty: Math.max(0, Number(entry?.packedQty) || 0),
           }))
         : summary.partSummaries,
+      partyProgress: summary.partyProgress,
       cartons,
       items,
       remarks: raw?.remarks,
@@ -484,6 +524,7 @@ export class PackingListService {
     return {
       cartonNo: String(raw?.cartonNo ?? ''),
       totalQty: Math.max(0, Number(raw?.totalQty) || 0),
+      cartonStatus: raw?.cartonStatus === 'sealed' ? 'sealed' : 'open',
       entries: Array.isArray(raw?.entries) ? raw.entries.map((entry: any) => this.normalizeCartonEntry(entry)) : [],
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,

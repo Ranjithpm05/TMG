@@ -11,12 +11,12 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
-import { PickList, PickListLine, PickListOrderSummary } from '../../models/pick-list.model';
-import { PackingCarton, PackingList, PackingListLine, PackingMode } from '../../models/packing-list.model';
+import { PickList, PickListLine } from '../../models/pick-list.model';
+import { PackingCarton, PackingList, PackingListLine, PackingPartyProgress } from '../../models/packing-list.model';
 import { PickListService } from '../../services/pick-list.service';
 import { PackingListService } from '../../services/packing-list.service';
 
-type ViewMode = 'list' | 'select-mode' | 'view' | 'live-pack';
+type ViewMode = 'list' | 'view' | 'live-pack';
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', '6XL', 'Free Size'];
 
@@ -51,6 +51,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   isLoading = signal(true);
   isSubmitting = signal(false);
+  isSealingCarton = signal(false);
+  isGenerating = signal(false);
   packFeedback = signal<'idle' | 'success' | 'error'>('idle');
   scannerMessage = signal('Scan carton box no to begin packing.');
 
@@ -59,12 +61,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
   barcodeInput = signal('');
   scanQty = signal(1);
 
-  // ─── Select-mode state ─────────────────────────────────────────────────────
-  pendingPickList = signal<PickList | null>(null);
-  pendingPackableLines = signal<PickListLine[]>([]);
-  selectedModeForPending = signal<PackingMode | null>(null);
-  selectedOrderIdForPending = signal<string>('');
-  isSavingPackingList = signal(false);
+  showCartons = signal(true);
+  showPackingLines = signal(true);
 
   // ─── Computed ──────────────────────────────────────────────────────────────
 
@@ -107,37 +105,25 @@ export class PackingListComponent implements OnInit, OnDestroy {
       lineCount: pl?.lineCount ?? 0,
       completedLineCount: pl?.completedLineCount ?? 0,
       cartonCount: pl?.cartonCount ?? 0,
-      partCount: pl?.partSummaries?.length ?? 0,
     };
   });
 
-  /** Orders available for per-order selection in select-mode */
-  pendingPickListOrders = computed<PickListOrderSummary[]>(() => {
-    const pl = this.pendingPickList();
-    if (!pl) return [];
-    if (pl.orderSummaries?.length) return pl.orderSummaries;
-    // Fallback from salesNos/salesOrderIds arrays
-    return (pl.salesNos ?? []).map((sno, i) => ({
-      salesOrderId: (pl.salesOrderIds ?? [])[i] ?? '',
-      salesNo: sno,
-      clientId: pl.clientId,
-      clientName: pl.clientName,
-      requiredQty: 0,
-      pickedQty: 0,
-      pendingQty: 0,
-    })).filter((o) => !!o.salesOrderId);
+  overallPackingProgress = computed(() => {
+    const t = this.liveTotals();
+    return t.totalRequiredQty > 0 ? Math.round((t.totalPackedQty / t.totalRequiredQty) * 100) : 0;
   });
 
-  pendingOrderCount = computed(() => this.pendingPickListOrders().length);
-
-  canConfirmGenerate = computed(() => {
-    const mode = this.selectedModeForPending();
-    if (!mode) return false;
-    if (mode === 'customer') return true;
-    // order-wise: if multiple orders, one must be selected
-    if (this.pendingOrderCount() <= 1) return true;
-    return !!this.selectedOrderIdForPending();
+  partyPackingProgress = computed((): PackingPartyProgress[] => {
+    return this.livePackingList()?.partyProgress ?? [];
   });
+
+  openCartonsCount = computed(() =>
+    (this.livePackingList()?.cartons ?? []).filter((c) => c.cartonStatus !== 'sealed').length
+  );
+
+  sealedCartonsCount = computed(() =>
+    (this.livePackingList()?.cartons ?? []).filter((c) => c.cartonStatus === 'sealed').length
+  );
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -189,26 +175,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.activeCartonNo.set('');
     this.packFeedback.set('idle');
     this.scannerMessage.set('Scan carton box no to begin packing.');
-    this._clearPendingState();
   }
 
-  private _clearPendingState() {
-    this.pendingPickList.set(null);
-    this.pendingPackableLines.set([]);
-    this.selectedModeForPending.set(null);
-    this.selectedOrderIdForPending.set('');
-  }
+  // ─── Generate flow ─────────────────────────────────────────────────────────
 
-  // ─── Generate flow: Step 1 — Initiate ──────────────────────────────────────
-
-  /**
-   * Entry point from the "Generate Packing List" button.
-   * Fetches packable lines and navigates to the mode-selection screen.
-   */
   async initiateGenerate(pickList: PickList) {
     if (!pickList.id) return;
 
-    // Check for any existing packing list tied to this pick list
     const existingPackingLists = this.packingLists().filter((pl) => pl.pickListId === pickList.id);
     if (existingPackingLists.length) {
       const existing = existingPackingLists[0];
@@ -228,7 +201,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Fetch packable lines
     await this.pickListService.ensureLegacyPickListLines(pickList);
     const lines = await this.pickListService.getPickListLinesOnce(pickList.id);
     const packableLines = lines.filter((l) => (l.pickedQty || 0) > 0 && !!l.barcode);
@@ -242,79 +214,22 @@ export class PackingListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Navigate to mode selection
-    this.pendingPickList.set(pickList);
-    this.pendingPackableLines.set(packableLines);
-    this.selectedModeForPending.set(null);
-    this.selectedOrderIdForPending.set('');
-    this.mode.set('select-mode');
-  }
-
-  // ─── Generate flow: Step 2 — Select mode ───────────────────────────────────
-
-  selectModeForPending(mode: PackingMode) {
-    this.selectedModeForPending.set(mode);
-    this.selectedOrderIdForPending.set('');
-  }
-
-  selectOrderForPending(orderId: string) {
-    this.selectedOrderIdForPending.set(orderId);
-  }
-
-  // ─── Generate flow: Step 3 — Confirm & create ──────────────────────────────
-
-  async confirmAndGenerate() {
-    const pickList = this.pendingPickList();
-    const packableLines = this.pendingPackableLines();
-    const mode = this.selectedModeForPending();
-    if (!pickList?.id || !mode || !packableLines.length) return;
-
-    // Resolve lines and scope for the chosen mode
-    let linesToPack = packableLines;
-    let salesOrderIds = [...(pickList.salesOrderIds ?? [])];
-    let salesNos = [...(pickList.salesNos ?? [])];
-
-    if (mode === 'order') {
-      const orders = this.pendingPickListOrders();
-      let targetOrderId = this.selectedOrderIdForPending();
-      // Auto-select if only one order
-      if (!targetOrderId && orders.length === 1) {
-        targetOrderId = orders[0].salesOrderId;
-      }
-      if (targetOrderId) {
-        linesToPack = packableLines.filter((l) => l.salesOrderId === targetOrderId);
-        const targetOrder = orders.find((o) => o.salesOrderId === targetOrderId);
-        salesOrderIds = [targetOrderId];
-        salesNos = targetOrder ? [targetOrder.salesNo] : salesNos;
-      }
-    }
-
-    if (!linesToPack.length) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'No Lines for Selected Order',
-        text: 'The selected order has no packable barcode items.',
-      });
-      return;
-    }
-
-    const totalQty = linesToPack.reduce((s, l) => s + (l.pickedQty || 0), 0);
-    const partCount = new Set(linesToPack.map((l) => String(l.group ?? '').trim() || 'General')).size;
-    const modeLabel = mode === 'customer' ? 'Customer-wise' : 'Order-wise';
-    const scopeLabel = mode === 'customer' ? pickList.clientName : salesNos.join(', ');
+    const totalQty = packableLines.reduce((s, l) => s + (l.pickedQty || 0), 0);
+    const orderCount = new Set(packableLines.map((l) => l.salesOrderId)).size;
+    const partCount = new Set(packableLines.map((l) => String(l.group ?? '').trim() || 'General')).size;
 
     const result = await Swal.fire({
       icon: 'question',
       title: 'Generate Packing List?',
       html: `
         <div style="text-align:left;font-size:13px">
-          <p><strong>Mode:</strong> ${modeLabel}</p>
-          <p><strong>Scope:</strong> ${scopeLabel}</p>
+          <p><strong>Client:</strong> ${pickList.clientName}</p>
           <p><strong>Pick List:</strong> ${pickList.pickListNo}</p>
+          <p><strong>Orders:</strong> ${(pickList.salesNos ?? []).join(', ')}</p>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">
             <div style="background:#ecfeff;border-radius:10px;padding:10px;text-align:center">
               <div style="font-size:11px;color:#0f766e;font-weight:700;text-transform:uppercase">Lines</div>
-              <div style="font-size:24px;font-weight:700;color:#0f766e">${linesToPack.length}</div>
+              <div style="font-size:24px;font-weight:700;color:#0f766e">${packableLines.length}</div>
             </div>
             <div style="background:#eef2ff;border-radius:10px;padding:10px;text-align:center">
               <div style="font-size:11px;color:#4338ca;font-weight:700;text-transform:uppercase">Qty to Pack</div>
@@ -325,7 +240,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
               <div style="font-size:24px;font-weight:700;color:#15803d">${partCount}</div>
             </div>
           </div>
-          <p style="margin-top:10px;color:#64748b">Scan a carton box number to start, then scan item barcodes to pack.</p>
+          <p style="margin-top:10px;color:#64748b">${orderCount} order${orderCount !== 1 ? 's' : ''} · Party-wise tracking · Scan barcodes to pack.</p>
         </div>`,
       showCancelButton: true,
       confirmButtonText: 'Generate Packing List',
@@ -334,33 +249,28 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
     if (!result.isConfirmed) return;
 
-    this.isSavingPackingList.set(true);
+    this.isGenerating.set(true);
     try {
       const packingListId = await this.packingListService.createGeneratedPackingList({
         packingListNo: `PK-${Date.now()}`,
         pickListId: pickList.id,
         pickListNo: pickList.pickListNo,
-        salesOrderIds,
-        salesNos,
+        salesOrderIds: [...(pickList.salesOrderIds ?? [])],
+        salesNos: [...(pickList.salesNos ?? [])],
         clientId: pickList.clientId,
         clientName: pickList.clientName,
-        packingMode: mode,
-        lines: linesToPack,
+        packingMode: 'customer',
+        lines: packableLines,
       });
 
-      this._clearPendingState();
       this.listTab.set('packing');
-
       const created = await this.packingListService.getPackingListByIdOnce(packingListId);
-      if (!created) {
-        this.mode.set('list');
-        return;
-      }
+      if (!created) { this.mode.set('list'); return; }
 
       const nextStep = await Swal.fire({
         icon: 'success',
         title: 'Packing List Generated',
-        text: 'You can start carton packing now or review the list first.',
+        text: 'Start carton packing now or review the list first.',
         showCancelButton: true,
         confirmButtonText: 'Start Packing Now',
         cancelButtonText: 'Review List',
@@ -372,11 +282,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
       else await this.openView(created);
     } catch (error: any) {
       const msg = error?.message === 'no_packable_lines'
-        ? 'No packable lines found for the selected scope.'
+        ? 'No packable lines found.'
         : error?.message ?? 'Unable to generate the Packing List.';
       await Swal.fire({ icon: 'error', title: 'Generation Failed', text: msg });
     } finally {
-      this.isSavingPackingList.set(false);
+      this.isGenerating.set(false);
     }
   }
 
@@ -421,6 +331,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const existing = this.livePackingList()?.cartons.find(
       (c) => c.cartonNo.toLowerCase() === cartonNo.toLowerCase()
     );
+    if (existing?.cartonStatus === 'sealed') {
+      this.flashPackFeedback('error', `Carton ${existing.cartonNo} is sealed. Create a new carton.`);
+      return;
+    }
     this.activeCartonNo.set(existing?.cartonNo ?? cartonNo);
     this.cartonInput.set(existing?.cartonNo ?? cartonNo);
     this.flashPackFeedback(
@@ -432,6 +346,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
   }
 
   setActiveCarton(cartonNo: string) {
+    const carton = this.livePackingList()?.cartons.find((c) => c.cartonNo === cartonNo);
+    if (carton?.cartonStatus === 'sealed') {
+      this.flashPackFeedback('error', `Carton ${cartonNo} is sealed. Create a new carton to continue packing.`);
+      return;
+    }
     this.activeCartonNo.set(cartonNo);
     this.cartonInput.set(cartonNo);
     this.flashPackFeedback('success', `Carton ${cartonNo} is active. Scan an item barcode next.`);
@@ -451,6 +370,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
     if (!cartonNo) { this.flashPackFeedback('error', 'Scan carton box no before scanning items.'); return; }
     if (!barcode) { this.flashPackFeedback('error', 'Scan or enter an item barcode.'); return; }
+
+    const activeCarton = this.livePackingList()?.cartons.find((c) => c.cartonNo === cartonNo);
+    if (activeCarton?.cartonStatus === 'sealed') {
+      this.flashPackFeedback('error', `Carton ${cartonNo} is sealed. Activate a different carton.`);
+      return;
+    }
 
     this.isSubmitting.set(true);
     try {
@@ -495,9 +420,52 @@ export class PackingListComponent implements OnInit, OnDestroy {
     } catch (error: any) {
       const msg = this.mapPackError(error?.message ?? '');
       this.flashPackFeedback('error', msg);
-      await this.showToast('error', 'Packing Failed', msg);
     } finally {
       this.isSubmitting.set(false);
+    }
+  }
+
+  async sealActiveCarton() {
+    const packingList = this.livePackingList();
+    const cartonNo = this.activeCartonNo().trim();
+    if (!packingList?.id || !cartonNo) return;
+
+    const carton = packingList.cartons.find((c) => c.cartonNo === cartonNo);
+    if (!carton) return;
+    if (carton.cartonStatus === 'sealed') {
+      await Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Already sealed', timer: 1500, showConfirmButton: false });
+      return;
+    }
+
+    const result = await Swal.fire({
+      icon: 'question',
+      title: `Seal Carton ${cartonNo}?`,
+      html: `<p style="font-size:13px">This carton has <strong>${carton.entries.length}</strong> line${carton.entries.length !== 1 ? 's' : ''} and <strong>${carton.totalQty}</strong> pcs. Once sealed, no more items can be added.</p>`,
+      showCancelButton: true,
+      confirmButtonText: 'Seal Carton',
+      confirmButtonColor: '#0f766e',
+    });
+    if (!result.isConfirmed) return;
+
+    this.isSealingCarton.set(true);
+    try {
+      await this.packingListService.sealCarton(packingList.id, cartonNo);
+      this.livePackingList.update((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          cartons: current.cartons.map((c) =>
+            c.cartonNo === cartonNo ? { ...c, cartonStatus: 'sealed' as const } : c
+          ),
+        };
+      });
+      this.activeCartonNo.set('');
+      this.cartonInput.set('');
+      this.flashPackFeedback('success', `Carton ${cartonNo} sealed. Scan a new carton to continue.`);
+    } catch {
+      this.flashPackFeedback('error', 'Failed to seal carton. Please try again.');
+    } finally {
+      this.isSealingCarton.set(false);
     }
   }
 
@@ -512,6 +480,23 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const html = this.buildPrintHtml(fresh ?? packingList, lines);
     const win = window.open('', '_blank', 'width=1100,height=780');
     if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+  }
+
+  async printDeliveryChallan(packingList: PackingList) {
+    if (!packingList.id) return;
+    const [fresh, lines] = await Promise.all([
+      this.packingListService.getPackingListByIdOnce(packingList.id),
+      this.packingListService.getPackingListLinesOnce(packingList.id),
+    ]);
+    const html = this.buildDCHtml(fresh ?? packingList, lines);
+    const win = window.open('', '_blank', 'width=900,height=780');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+  }
+
+  printCartonLabel(packingList: PackingList, carton: PackingCarton) {
+    const html = this.buildCartonLabelHtml(packingList, carton);
+    const win = window.open('', '_blank', 'width=600,height=500');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 400); }
   }
 
   // ─── Display helpers ───────────────────────────────────────────────────────
@@ -547,14 +532,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
     return carton.entries.length;
   }
 
-  packingModeLabel(mode: PackingMode | undefined): string {
-    if (mode === 'order') return 'Order-wise';
-    return 'Customer-wise';
-  }
-
-  packingModeBadge(mode: PackingMode | undefined): string {
-    if (mode === 'order') return 'bg-teal-100 text-teal-800';
-    return 'bg-purple-100 text-purple-800';
+  partyPackingPct(party: PackingPartyProgress): number {
+    return party.requiredQty > 0 ? Math.round((party.packedQty / party.requiredQty) * 100) : 0;
   }
 
   packingStatusBadge(status: PackingList['status'] | PickList['status']): string {
@@ -600,7 +579,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
           ? `Carton ${this.activeCartonNo()} is active. Scan an item barcode next.`
           : 'Scan carton box no to begin packing.'
       );
-    }, 1200);
+    }, 1400);
   }
 
   private mapPackError(code: string): string {
@@ -612,10 +591,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
       case 'line_completed': return 'This item is already fully packed.';
       default: return 'Unable to complete packing scan. Please try again.';
     }
-  }
-
-  private async showToast(icon: 'success' | 'error' | 'info' | 'warning', title: string, text?: string) {
-    await Swal.fire({ toast: true, position: 'top-end', icon, title, text, timer: 1800, showConfirmButton: false, timerProgressBar: true });
   }
 
   private buildPrintHtml(packingList: PackingList, lines: PackingListLine[]): string {
@@ -633,9 +608,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         if (sc !== 0) return sc;
         const cc = a.color.localeCompare(b.color, undefined, { numeric: true });
         if (cc !== 0) return cc;
-        const szc = rankSize(a.size) - rankSize(b.size);
-        if (szc !== 0) return szc;
-        return (a.sleeveType ?? '').localeCompare(b.sleeveType ?? '', undefined, { numeric: true });
+        return rankSize(a.size) - rankSize(b.size);
       });
 
     const summary = {
@@ -651,10 +624,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
       : packingList.status === 'Partial'
         ? { bg: '#fef3c7', fg: '#b45309' }
         : { bg: '#e5e7eb', fg: '#4b5563' };
-
-    const modeStyle = packingList.packingMode === 'order'
-      ? { bg: '#ccfbf1', fg: '#0f766e' }
-      : { bg: '#ede9fe', fg: '#6d28d9' };
 
     const lineRows = printLines.map((l, i) => {
       const lineBadge = l.status === 'completed'
@@ -688,6 +657,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
         <td style="padding:8px 10px;border:1px solid #d7deea;font-weight:700">${c.cartonNo}</td>
         <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${c.entries.length}</td>
         <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#047857">${c.totalQty}</td>
+        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">
+          <span style="padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;background:${c.cartonStatus === 'sealed' ? '#d1fae5' : '#fef3c7'};color:${c.cartonStatus === 'sealed' ? '#047857' : '#b45309'}">${c.cartonStatus === 'sealed' ? 'Sealed' : 'Open'}</span>
+        </td>
         <td style="padding:8px 10px;border:1px solid #d7deea;font-size:11px">${c.entries.map((e) => `${e.styleNo} / ${e.color} / ${e.size} × ${e.qty}`).join(', ')}</td>
       </tr>`).join('');
 
@@ -716,7 +688,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
             <p class="meta">Pick List: ${packingList.pickListNo}</p>
             <p class="meta">Orders: ${(packingList.salesNos ?? []).join(', ')}</p>
             <p class="meta">Client: ${packingList.clientName}</p>
-            <span class="badge" style="background:${modeStyle.bg};color:${modeStyle.fg}">${this.packingModeLabel(packingList.packingMode)}</span>
             <span class="badge" style="background:${statusStyle.bg};color:${statusStyle.fg}">${packingList.status}</span>
           </div>
           <div style="text-align:right">
@@ -734,35 +705,153 @@ export class PackingListComponent implements OnInit, OnDestroy {
         <div class="section-title">Part-wise Packing Lines</div>
         <table>
           <thead><tr>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">#</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Part</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Style No</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Color</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Size</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Sleeve</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Barcode</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Orders</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">To Pack</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Packed</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Remaining</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Last Carton</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Status</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">#</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Part</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Style No</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Color</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Size</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Sleeve</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Barcode</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Orders</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">To Pack</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Packed</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Remaining</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Last Carton</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Status</th>
           </tr></thead>
           <tbody>${lineRows}</tbody>
         </table>
         <div class="section-title">Carton Summary</div>
         <table>
           <thead><tr>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">#</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Carton No</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Lines</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Packed Qty</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;font-weight:700">Contents</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">#</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Carton No</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Lines</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Packed Qty</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Status</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Contents</th>
           </tr></thead>
-          <tbody>${cartonRows || '<tr><td colspan="5" style="padding:12px;border:1px solid #d7deea;text-align:center;color:#94a3b8">No cartons packed yet.</td></tr>'}</tbody>
+          <tbody>${cartonRows || '<tr><td colspan="6" style="padding:12px;border:1px solid #d7deea;text-align:center;color:#94a3b8">No cartons packed yet.</td></tr>'}</tbody>
         </table>
         <div class="signatures">
           <div>Prepared By</div><div>Packed By</div><div>Checked By</div>
+        </div>
+      </body></html>`;
+  }
+
+  private buildDCHtml(packingList: PackingList, lines: PackingListLine[]): string {
+    const partyProgress = packingList.partyProgress ?? [];
+    const cartonRows = packingList.cartons.map((c, i) => `
+      <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}">
+        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${i + 1}</td>
+        <td style="padding:8px 10px;border:1px solid #d7deea;font-weight:700">${c.cartonNo}</td>
+        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${c.entries.length}</td>
+        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#047857">${c.totalQty}</td>
+        <td style="padding:8px 10px;border:1px solid #d7deea;font-size:11px">${c.entries.map((e) => `${e.styleNo} / ${e.color} / ${e.size} × ${e.qty}`).join(', ')}</td>
+      </tr>`).join('');
+
+    const partyRows = partyProgress.map((p) => `
+      <tr>
+        <td style="padding:8px 10px;border:1px solid #d7deea">${p.salesNo}</td>
+        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${p.requiredQty}</td>
+        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#047857">${p.packedQty}</td>
+        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:${p.pendingQty > 0 ? '#b45309' : '#94a3b8'}">${p.pendingQty}</td>
+      </tr>`).join('');
+
+    return `
+      <!DOCTYPE html><html>
+      <head><meta charset="utf-8"><title>DC - ${packingList.packingListNo}</title>
+      <style>
+        body{font-family:Arial,sans-serif;font-size:12px;margin:18px;color:#0f172a}
+        h1,p{margin:0}
+        table{width:100%;border-collapse:collapse;margin-top:8px}
+        .section-title{margin-top:18px;font-size:14px;font-weight:700;color:#0f172a;border-bottom:1px solid #d7deea;padding-bottom:4px}
+        .signatures{display:flex;justify-content:space-between;gap:24px;margin-top:40px}
+        .signatures div{flex:1;border-top:1px solid #334155;padding-top:6px;text-align:center;color:#475569;font-size:11px}
+      </style></head>
+      <body>
+        <div style="display:flex;justify-content:space-between;border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:16px">
+          <div>
+            <h1 style="font-size:22px">Delivery Challan</h1>
+            <p style="color:#64748b;font-size:11px;margin-top:4px">${packingList.packingListNo} · Pick List: ${packingList.pickListNo}</p>
+            <p style="color:#64748b;font-size:11px">Client: <strong style="color:#0f172a">${packingList.clientName}</strong></p>
+            <p style="color:#64748b;font-size:11px">Orders: ${(packingList.salesNos ?? []).join(', ')}</p>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:11px;color:#64748b">Date</div>
+            <div style="font-size:13px;font-weight:700">${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+            <div style="font-size:11px;color:#64748b;margin-top:8px">Total Cartons</div>
+            <div style="font-size:22px;font-weight:700;color:#0f766e">${packingList.cartons.length}</div>
+          </div>
+        </div>
+
+        ${partyProgress.length ? `
+        <div class="section-title">Party-wise Summary</div>
+        <table>
+          <thead><tr>
+            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:left">Order No</th>
+            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:center">To Pack</th>
+            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:center">Packed</th>
+            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:center">Pending</th>
+          </tr></thead>
+          <tbody>${partyRows}</tbody>
+        </table>` : ''}
+
+        <div class="section-title">Carton Details</div>
+        <table>
+          <thead><tr>
+            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">#</th>
+            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:left">Carton No</th>
+            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Lines</th>
+            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Qty</th>
+            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:left">Contents</th>
+          </tr></thead>
+          <tbody>${cartonRows || '<tr><td colspan="5" style="padding:12px;text-align:center;color:#94a3b8">No cartons.</td></tr>'}</tbody>
+        </table>
+
+        <div class="signatures">
+          <div>Prepared By</div><div>Driver / Transporter</div><div>Received By</div>
+        </div>
+      </body></html>`;
+  }
+
+  private buildCartonLabelHtml(packingList: PackingList, carton: PackingCarton): string {
+    const lines = carton.entries.map((e) =>
+      `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e2e8f0">
+        <span>${e.styleNo} / ${e.color} / ${e.size}${e.sleeveType ? ' / ' + e.sleeveType : ''}</span>
+        <strong>×${e.qty}</strong>
+      </div>`
+    ).join('');
+
+    return `
+      <!DOCTYPE html><html>
+      <head><meta charset="utf-8"><title>Carton Label</title>
+      <style>body{font-family:Arial,sans-serif;font-size:12px;margin:16px;color:#0f172a}</style></head>
+      <body>
+        <div style="border:2px solid #0f172a;border-radius:10px;padding:16px;max-width:380px;margin:auto">
+          <div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:12px">
+            <div style="font-size:11px;color:#64748b;text-transform:uppercase;font-weight:700">Carton Label</div>
+            <div style="font-size:28px;font-weight:900;letter-spacing:2px;margin:4px 0">${carton.cartonNo}</div>
+            <div style="font-size:11px;color:#64748b">${packingList.packingListNo}</div>
+          </div>
+          <div style="margin-bottom:10px">
+            <div style="font-size:11px;color:#64748b;font-weight:700">CLIENT</div>
+            <div style="font-size:14px;font-weight:700">${packingList.clientName}</div>
+            <div style="font-size:11px;color:#64748b">${(packingList.salesNos ?? []).join(', ')}</div>
+          </div>
+          <div style="background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:12px">
+            ${lines}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-size:11px;color:#64748b">Total Pieces</div>
+              <div style="font-size:26px;font-weight:900;color:#0f766e">${carton.totalQty}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:11px;color:#64748b">Date</div>
+              <div style="font-size:12px;font-weight:700">${new Date().toLocaleDateString('en-IN')}</div>
+            </div>
+          </div>
         </div>
       </body></html>`;
   }

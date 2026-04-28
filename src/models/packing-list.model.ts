@@ -42,9 +42,19 @@ export interface PackingCartonEntry {
 export interface PackingCarton {
   cartonNo: string;
   totalQty: number;
+  cartonStatus: 'open' | 'sealed';
   entries: PackingCartonEntry[];
   createdAt?: any;
   updatedAt?: any;
+}
+
+export interface PackingPartyProgress {
+  salesOrderId: string;
+  salesNo: string;
+  clientName: string;
+  requiredQty: number;
+  packedQty: number;
+  pendingQty: number;
 }
 
 export interface PackingPartSummary {
@@ -70,6 +80,7 @@ export interface PackingList {
   completedLineCount: number;
   cartonCount: number;
   partSummaries: PackingPartSummary[];
+  partyProgress?: PackingPartyProgress[];
   cartons: PackingCarton[];
   items: PackingListLine[];
   remarks?: string;
