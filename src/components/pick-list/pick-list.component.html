@@ -334,102 +334,221 @@
     @let pickList = livePickList();
     @let currentLine = currentAssignedLine();
     @if (pickList) {
-      <div class="space-y-5">
-        <div class="bg-white shadow-lg rounded-xl p-6">
-          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4 mb-5">
-            <div>
-              <div class="flex items-center gap-3 flex-wrap">
-                <h2 class="text-2xl font-bold text-gray-800">{{pickList.pickListNo}}</h2>
+      <div class="space-y-3 max-w-lg mx-auto pb-8">
+
+        <!-- HEADER + PROGRESS -->
+        <div class="bg-white rounded-2xl shadow-sm p-4">
+          <div class="flex items-start justify-between gap-2 mb-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-bold text-gray-900 text-lg leading-tight">{{pickList.pickListNo}}</span>
                 <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="plTypeBadge(pickList.type)">{{plTypeLabel(pickList.type)}}</span>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class.bg-green-100]="pickList.status==='Completed'" [class.text-green-800]="pickList.status==='Completed'" [class.bg-yellow-100]="pickList.status==='Partial'" [class.text-yellow-800]="pickList.status==='Partial'" [class.bg-orange-100]="pickList.status==='Pending'" [class.text-orange-700]="pickList.status==='Pending'" [class.bg-gray-100]="pickList.status==='Draft'" [class.text-gray-600]="pickList.status==='Draft'">{{pickList.status}}</span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                      [class.bg-green-100]="pickList.status==='Completed'" [class.text-green-800]="pickList.status==='Completed'"
+                      [class.bg-yellow-100]="pickList.status==='Partial'" [class.text-yellow-800]="pickList.status==='Partial'"
+                      [class.bg-orange-100]="pickList.status==='Pending'" [class.text-orange-700]="pickList.status==='Pending'"
+                      [class.bg-gray-100]="pickList.status==='Draft'" [class.text-gray-600]="pickList.status==='Draft'">{{pickList.status}}</span>
               </div>
-              <p class="text-sm text-gray-500 mt-1">{{(pickList.salesNos ?? []).join(', ')}} · {{pickList.clientName}}</p>
+              <p class="text-xs text-gray-400 mt-0.5 truncate">{{(pickList.salesNos ?? []).join(', ')}}</p>
             </div>
-            <div class="flex gap-2">
-              <button (click)="toggleCamera()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">{{isCameraOpen() ? 'Stop Camera' : 'Open Camera'}}</button>
-              <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Close</button>
-            </div>
+            <button (click)="cancel()" class="flex-shrink-0 p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
           </div>
-
-          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <div class="bg-gray-50 rounded-xl p-4 text-center border"><p class="text-xs text-gray-500 uppercase font-semibold">Required</p><p class="text-2xl font-bold text-gray-800 mt-1">{{liveProgress().totalRequiredQty}}</p></div>
-            <div class="bg-indigo-50 rounded-xl p-4 text-center border border-indigo-200"><p class="text-xs text-indigo-600 uppercase font-semibold">Picked</p><p class="text-2xl font-bold text-indigo-700 mt-1">{{liveProgress().totalPickedQty}}</p></div>
-            <div class="bg-green-50 rounded-xl p-4 text-center border border-green-200"><p class="text-xs text-green-600 uppercase font-semibold">Completed Lines</p><p class="text-2xl font-bold text-green-700 mt-1">{{liveProgress().completedLineCount}}</p></div>
-            <div class="bg-orange-50 rounded-xl p-4 text-center border border-orange-200"><p class="text-xs text-orange-600 uppercase font-semibold">Pending Stock</p><p class="text-2xl font-bold text-orange-700 mt-1">{{liveProgress().totalPendingQty}}</p></div>
-            <div class="bg-slate-50 rounded-xl p-4 text-center border"><p class="text-xs text-slate-600 uppercase font-semibold">Open Lines</p><p class="text-2xl font-bold text-slate-700 mt-1">{{liveProgress().pickableLineCount - liveProgress().completedLineCount}}</p></div>
+          <div class="flex justify-between text-xs text-gray-500 mb-1.5">
+            <span>{{liveProgress().totalPickedQty}} / {{liveProgress().totalRequiredQty}} picked</span>
+            <span class="font-bold text-indigo-600">{{overallProgress()}}%</span>
           </div>
-        </div>
-
-        <div class="grid grid-cols-1 xl:grid-cols-[380px,1fr] gap-5">
-          <div class="space-y-5">
-            <div class="bg-white shadow-lg rounded-xl p-5">
-              <div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold text-gray-800">Current Assigned Item</h3><span class="text-xs font-medium text-gray-500">{{currentUser()?.username}}</span></div>
-              @if (currentLine) {
-                <div class="space-y-3">
-                  <div><div class="text-xl font-bold text-gray-800">{{currentLine.styleNo}}</div><div class="text-sm text-gray-500">{{currentLine.color}} · {{currentLine.size}}{{currentLine.sleeveType ? ' · ' + currentLine.sleeveType : ''}}</div></div>
-                  <div class="grid grid-cols-3 gap-3">
-                    <div class="rounded-xl border bg-gray-50 p-3 text-center"><div class="text-xs text-gray-500 uppercase font-semibold">Required</div><div class="text-xl font-bold text-gray-800 mt-1">{{currentLine.requiredQty}}</div></div>
-                    <div class="rounded-xl border bg-indigo-50 p-3 text-center"><div class="text-xs text-indigo-600 uppercase font-semibold">Picked</div><div class="text-xl font-bold text-indigo-700 mt-1">{{currentLine.pickedQty}}</div></div>
-                    <div class="rounded-xl border bg-amber-50 p-3 text-center"><div class="text-xs text-amber-600 uppercase font-semibold">Remaining</div><div class="text-xl font-bold text-amber-700 mt-1">{{currentLine.remainingQty}}</div></div>
-                  </div>
-                  <div class="rounded-xl border bg-slate-50 p-3"><div class="text-xs text-slate-500 uppercase font-semibold mb-1">Barcode</div><div class="font-mono text-sm text-slate-700 break-all">{{currentLine.barcode || '-'}}</div></div>
-                </div>
-              } @else {
-                <div class="rounded-xl border border-dashed border-gray-300 p-5 text-sm text-gray-500">No item is currently assigned to you. The next available line will be claimed automatically when it becomes free.</div>
-              }
-            </div>
-
-            <div class="bg-white shadow-lg rounded-xl p-5">
-              <h3 class="text-lg font-bold text-gray-800 mb-3">Scan</h3>
-              <div class="space-y-3">
-                <input #scanInput type="text" placeholder="Scan or type barcode" class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" [ngModel]="manualScanValue()" (ngModelChange)="onManualScanChange($event)" (keyup.enter)="submitCurrentInput()">
-                <div class="rounded-xl px-4 py-3 text-sm font-medium" [class.bg-green-50]="scanFeedback()==='success'" [class.text-green-700]="scanFeedback()==='success'" [class.bg-red-50]="scanFeedback()==='error'" [class.text-red-700]="scanFeedback()==='error'" [class.bg-gray-50]="scanFeedback()==='idle'" [class.text-gray-600]="scanFeedback()==='idle'">{{scannerMessage()}}</div>
-              </div>
-            </div>
-
-            @if (isCameraOpen()) {
-              <div class="bg-white shadow-lg rounded-xl p-4">
-                <div class="aspect-[4/3] rounded-xl overflow-hidden bg-black"><video #cameraVideo class="w-full h-full object-cover" playsinline autoplay muted></video></div>
-                <p class="text-xs text-gray-500 mt-3 text-center">Point the camera at the assigned item's QR or barcode.</p>
-              </div>
+          <div class="h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div class="h-full bg-indigo-500 rounded-full transition-all duration-500" [style.width.%]="overallProgress()"></div>
+          </div>
+          <div class="flex flex-wrap gap-3 mt-2 text-xs">
+            <span class="text-green-600 font-semibold">✓ {{liveProgress().completedLineCount}} done</span>
+            <span class="text-orange-500 font-semibold">◎ {{liveProgress().pickableLineCount - liveProgress().completedLineCount}} open</span>
+            @if (liveProgress().totalPendingQty > 0) {
+              <span class="text-gray-400">⏳ {{liveProgress().totalPendingQty}} pending stock</span>
             }
           </div>
+        </div>
 
-          <div class="bg-white shadow-lg rounded-xl overflow-hidden">
-            <div class="px-5 py-4 border-b border-gray-200">
-              <h3 class="text-lg font-bold text-gray-800">Live Line Status</h3>
-              <p class="text-sm text-gray-500 mt-1">Users can work on different lines at the same time. Claims expire automatically if a session goes idle.</p>
+        <!-- CURRENT ITEM -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div class="bg-gradient-to-r from-indigo-600 to-indigo-700 px-4 py-2.5 flex items-center justify-between">
+            <span class="text-xs font-bold text-indigo-100 uppercase tracking-wider">Current Item</span>
+            <span class="text-xs text-indigo-200">{{currentUser()?.username}}</span>
+          </div>
+          @if (currentLine) {
+            <div class="p-4">
+              <div class="mb-4">
+                <div class="text-2xl font-bold text-gray-900 leading-tight">{{currentLine.styleNo}}</div>
+                <div class="text-gray-500 mt-0.5 text-base">{{currentLine.color}}{{currentLine.size ? ' · ' + currentLine.size : ''}}{{currentLine.sleeveType ? ' · ' + currentLine.sleeveType : ''}}</div>
+                <div class="text-sm text-indigo-600 font-semibold mt-1">{{currentLine.salesNo}}</div>
+              </div>
+              <div class="grid grid-cols-3 gap-3 mb-4">
+                <div class="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+                  <div class="text-xs text-gray-400 font-bold uppercase mb-1">Need</div>
+                  <div class="text-4xl font-bold text-gray-800">{{currentLine.requiredQty}}</div>
+                </div>
+                <div class="bg-indigo-50 rounded-xl p-3 text-center border border-indigo-100">
+                  <div class="text-xs text-indigo-500 font-bold uppercase mb-1">Picked</div>
+                  <div class="text-4xl font-bold text-indigo-700">{{currentLine.pickedQty}}</div>
+                </div>
+                <div class="rounded-xl p-3 text-center border-2 transition-colors"
+                     [class.bg-amber-50]="currentLine.remainingQty > 0" [class.border-amber-300]="currentLine.remainingQty > 0"
+                     [class.bg-green-50]="currentLine.remainingQty === 0" [class.border-green-300]="currentLine.remainingQty === 0">
+                  <div class="text-xs font-bold uppercase mb-1" [class.text-amber-500]="currentLine.remainingQty > 0" [class.text-green-500]="currentLine.remainingQty === 0">Left</div>
+                  <div class="text-4xl font-bold" [class.text-amber-600]="currentLine.remainingQty > 0" [class.text-green-600]="currentLine.remainingQty === 0">{{currentLine.remainingQty}}</div>
+                </div>
+              </div>
+              @if (currentLine.barcode) {
+                <div class="bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+                  <div class="text-xs text-gray-400 font-bold uppercase mb-0.5">Barcode</div>
+                  <div class="font-mono text-sm text-gray-700 break-all">{{currentLine.barcode}}</div>
+                </div>
+              }
             </div>
-            <div class="overflow-x-auto">
-              <table class="min-w-full text-sm">
-                <thead class="bg-gray-50">
-                  <tr>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Product</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Order</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Required</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Picked</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Remaining</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Claim</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100 bg-white">
-                  @for (line of liveLines(); track line.lineId) {
-                    <tr class="hover:bg-gray-50" [class.bg-indigo-50]="currentLineId() === line.lineId">
-                      <td class="px-4 py-3"><div class="font-semibold text-gray-800">{{line.styleNo}}</div><div class="text-xs text-gray-500">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</div></td>
-                      <td class="px-4 py-3 text-xs font-medium text-indigo-600">{{line.salesNo}}</td>
-                      <td class="px-4 py-3 text-center">{{line.requiredQty}}</td>
-                      <td class="px-4 py-3 text-center font-bold text-indigo-700">{{line.pickedQty}}</td>
-                      <td class="px-4 py-3 text-center font-bold" [class.text-orange-600]="line.remainingQty > 0" [class.text-gray-400]="line.remainingQty === 0">{{line.remainingQty}}</td>
-                      <td class="px-4 py-3"><span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="liveLineStatusBadge(line)">{{liveLineStatusLabel(line)}}</span></td>
-                      <td class="px-4 py-3 text-xs">@if (line.claimedByUsername && line.remainingQty > 0 && line.status !== 'completed') { <span [class.text-indigo-700]="line.claimedByUserId===currentUser()?.id" [class.text-slate-600]="line.claimedByUserId!==currentUser()?.id">{{line.claimedByUserId===currentUser()?.id ? 'Assigned to you' : 'Assigned to ' + line.claimedByUsername}}</span> } @else { <span class="text-gray-400">Unclaimed</span> }</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
+          } @else {
+            <div class="p-8 text-center">
+              <div class="inline-flex items-center justify-center w-14 h-14 bg-gray-100 rounded-full mb-3">
+                <svg class="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+              <div class="text-gray-600 font-semibold">Waiting for available item</div>
+              <div class="text-xs text-gray-400 mt-1">The next line will be claimed automatically</div>
+            </div>
+          }
+        </div>
+
+        <!-- PARTY-WISE PROGRESS -->
+        @if (partyWiseProgress().length > 0) {
+          <div class="bg-white rounded-2xl shadow-sm p-4">
+            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+              @if (pickList.type === 'itemwise') { Party-wise · Current Item } @else { Party-wise Progress }
+            </div>
+            <div class="space-y-3">
+              @for (party of partyWiseProgress(); track party.salesOrderId) {
+                @let isDone = party.pickedQty >= party.requiredQty;
+                @let pct = party.requiredQty > 0 ? (party.pickedQty / party.requiredQty * 100) : 0;
+                <div>
+                  <div class="flex items-center justify-between mb-1.5">
+                    <div class="flex items-center gap-2 min-w-0">
+                      @if (isDone) {
+                        <span class="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 bg-green-100 rounded-full">
+                          <svg class="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                        </span>
+                      } @else {
+                        <span class="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 bg-indigo-100 rounded-full">
+                          <span class="text-xs font-bold text-indigo-600">{{$index + 1}}</span>
+                        </span>
+                      }
+                      <span class="text-sm font-semibold text-gray-700 truncate">{{party.salesNo}}</span>
+                      @if (party.clientName) {
+                        <span class="text-xs text-gray-400 truncate hidden sm:block">{{party.clientName}}</span>
+                      }
+                    </div>
+                    <span class="text-sm font-bold flex-shrink-0 ml-2" [class.text-green-700]="isDone" [class.text-indigo-700]="!isDone">{{party.pickedQty}}/{{party.requiredQty}}</span>
+                  </div>
+                  <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-300" [class.bg-green-500]="isDone" [class.bg-indigo-500]="!isDone" [style.width.%]="pct"></div>
+                  </div>
+                </div>
+              }
             </div>
           </div>
+        }
+
+        <!-- SCAN AREA -->
+        <div class="bg-white rounded-2xl shadow-sm p-4">
+          <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Scan / Enter Barcode</div>
+          <div class="rounded-xl px-4 py-3 text-sm font-medium mb-3 flex items-center gap-2 border"
+               [ngClass]="{
+                 'bg-green-50 text-green-700 border-green-200': scanFeedback()==='success',
+                 'bg-red-50 text-red-700 border-red-200': scanFeedback()==='error',
+                 'bg-gray-50 text-gray-500 border-gray-100': scanFeedback()==='idle'
+               }">
+            @if (scanFeedback() === 'success') {
+              <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+            } @else if (scanFeedback() === 'error') {
+              <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+            } @else {
+              <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+            }
+            {{scannerMessage()}}
+          </div>
+          <div class="flex gap-2 mb-3">
+            <input #scanInput type="text"
+                   inputmode="text"
+                   autocomplete="off"
+                   autocorrect="off"
+                   autocapitalize="characters"
+                   spellcheck="false"
+                   placeholder="Scan or type barcode..."
+                   class="flex-1 border-2 border-gray-200 focus:border-indigo-500 rounded-xl px-4 py-4 text-base focus:outline-none transition-colors"
+                   [ngModel]="manualScanValue()"
+                   (ngModelChange)="onManualScanChange($event)"
+                   (keyup.enter)="submitCurrentInput()">
+            <button (click)="submitCurrentInput()"
+                    [disabled]="!manualScanValue().trim() || isSubmittingScan()"
+                    class="flex-shrink-0 w-14 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl transition-colors">
+              @if (isSubmittingScan()) {
+                <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              } @else {
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+              }
+            </button>
+          </div>
+          <button (click)="toggleCamera()"
+                  class="w-full flex items-center justify-center gap-2 py-4 rounded-xl font-semibold text-sm transition-colors border-2"
+                  [class.border-red-300]="isCameraOpen()" [class.text-red-600]="isCameraOpen()" [class.bg-red-50]="isCameraOpen()"
+                  [class.border-gray-200]="!isCameraOpen()" [class.text-gray-600]="!isCameraOpen()" [class.bg-gray-50]="!isCameraOpen()">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            {{isCameraOpen() ? 'Stop Camera' : 'Open Camera'}}
+          </button>
         </div>
+
+        <!-- CAMERA VIEW -->
+        @if (isCameraOpen()) {
+          <div class="bg-black rounded-2xl overflow-hidden shadow-sm">
+            <div class="aspect-[4/3]"><video #cameraVideo class="w-full h-full object-cover" playsinline autoplay muted></video></div>
+            <p class="text-center text-xs text-gray-400 py-2.5">Point camera at the barcode · Auto-detects</p>
+          </div>
+        }
+
+        <!-- ALL LINES (collapsible) -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <button (click)="showLinesPanel.set(!showLinesPanel())"
+                  class="w-full px-4 py-3.5 flex items-center justify-between hover:bg-gray-50 transition-colors">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-bold text-gray-700">All Lines</span>
+              <span class="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">{{liveLines().length}}</span>
+            </div>
+            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" [class.rotate-180]="showLinesPanel()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          @if (showLinesPanel()) {
+            <div class="border-t border-gray-100 divide-y divide-gray-50">
+              @for (line of liveLines(); track line.lineId) {
+                <div class="px-4 py-3 flex items-center gap-3 transition-colors" [class.bg-indigo-50]="currentLineId() === line.lineId">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span class="font-semibold text-gray-800 text-sm">{{line.styleNo}}</span>
+                      <span class="text-xs text-gray-400">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <span class="text-xs text-indigo-600 font-semibold">{{line.salesNo}}</span>
+                      @if (line.claimedByUsername && line.remainingQty > 0 && line.status !== 'completed') {
+                        <span class="text-xs text-gray-400">· {{line.claimedByUserId === currentUser()?.id ? 'You' : line.claimedByUsername}}</span>
+                      }
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2 flex-shrink-0">
+                    <span class="text-sm font-bold" [class.text-green-700]="line.remainingQty === 0" [class.text-gray-700]="line.remainingQty > 0">{{line.pickedQty}}/{{line.requiredQty}}</span>
+                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold" [class]="liveLineStatusBadge(line)">{{liveLineStatusLabel(line)}}</span>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
       </div>
     }
   }

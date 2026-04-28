@@ -20,6 +20,7 @@ import {
   PickListClaimUser,
   PickListLine,
   PickListLineItem,
+  PickListOrderSummary,
   PickListType,
 } from '../../models/pick-list.model';
 import { Client } from '../../models/client.model';
@@ -83,6 +84,7 @@ export class PickListComponent implements OnInit, OnDestroy {
   scanFeedback = signal<'idle' | 'success' | 'error'>('idle');
   scannerMessage = signal('Scan the assigned item');
   manualScanValue = signal('');
+  showLinesPanel = signal(false);
 
   listTab = signal<'orders' | 'picklists'>('orders');
   searchTerm = signal('');
@@ -187,6 +189,39 @@ export class PickListComponent implements OnInit, OnDestroy {
 
   viewDisplayLines = computed(() => this.viewLines().length ? this.viewLines() : this.viewPickList()?.items ?? []);
 
+  overallProgress = computed(() => {
+    const required = this.livePickList()?.totalRequiredQty ?? 0;
+    const picked = this.livePickList()?.totalPickedQty ?? 0;
+    return required > 0 ? Math.round((picked / required) * 100) : 0;
+  });
+
+  partyWiseProgress = computed((): PickListOrderSummary[] => {
+    const pickList = this.livePickList();
+    const currentLine = this.currentAssignedLine();
+    if (!pickList) return [];
+    if (pickList.type === 'itemwise' && currentLine) {
+      return this.liveLines()
+        .filter((line) =>
+          line.styleNo === currentLine.styleNo &&
+          line.color === currentLine.color &&
+          line.size === currentLine.size &&
+          (line.sleeveType ?? '') === (currentLine.sleeveType ?? '') &&
+          line.status !== 'pending_stock' &&
+          line.status !== 'blocked'
+        )
+        .map((line) => ({
+          salesOrderId: line.salesOrderId,
+          salesNo: line.salesNo,
+          clientId: line.clientId ?? '',
+          clientName: line.clientName ?? '',
+          requiredQty: line.requiredQty,
+          pickedQty: line.pickedQty,
+          pendingQty: line.pendingQty ?? 0,
+        }));
+    }
+    return pickList.orderSummaries ?? [];
+  });
+
   ngOnInit() {
     this.isLoading.set(true);
     let doneCount = 0;
@@ -278,11 +313,13 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   hasPickableQty(pickList: PickList | null | undefined): boolean {
-    return !!pickList && (pickList.totalRequiredQty ?? 0) > 0 && pickList.status !== 'Pending';
+    return !!pickList && (pickList.totalRequiredQty ?? 0) > 0 && pickList.status !== 'Pending' && pickList.status !== 'Completed';
   }
 
   canStartPicking(pickList: PickList | null | undefined): boolean {
-    return !!pickList && (this.hasPickableQty(pickList) || !!pickList.legacyPickingPending) && pickList.status !== 'Pending';
+    if (!pickList) return false;
+    if (pickList.legacyPickingPending) return true;
+    return this.hasPickableQty(pickList);
   }
 
   getGenerateActionLabel(orderId: string): string {
@@ -489,6 +526,22 @@ export class PickListComponent implements OnInit, OnDestroy {
       status: line.requiredQty > 0 ? 'ready' : line.inventoryId ? 'pending_stock' : 'blocked',
       sortOrder: index,
     }));
+
+    if (type === 'itemwise') {
+      const skuIndexMap = new Map<string, number>();
+      for (const group of this.candidateGroups()) {
+        if (!skuIndexMap.has(group.key)) skuIndexMap.set(group.key, skuIndexMap.size);
+      }
+      liveLines.sort((a, b) => {
+        const aKey = `${a.styleNo}||${a.color}||${a.size}||${a.sleeveType ?? ''}`;
+        const bKey = `${b.styleNo}||${b.color}||${b.size}||${b.sleeveType ?? ''}`;
+        const aIdx = skuIndexMap.get(aKey) ?? 999;
+        const bIdx = skuIndexMap.get(bKey) ?? 999;
+        if (aIdx !== bIdx) return aIdx - bIdx;
+        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      });
+      liveLines.forEach((line, idx) => { line.sortOrder = idx; });
+    }
 
     const requiredQty = scannableLines.reduce((sum, line) => sum + line.requiredQty, 0);
     const result = await Swal.fire({
