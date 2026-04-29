@@ -302,6 +302,22 @@ export class PickListComponent implements OnInit, OnDestroy {
     ) ?? null;
   }
 
+  getAvailableQtyForOrder(order: SalesOrder): number {
+    let total = 0;
+    for (const item of order.items) {
+      for (const sizeEntry of item.itemSizes) {
+        const orderedQty = Number(sizeEntry.quantity) || 0;
+        const size = String(sizeEntry.size);
+        const alreadyPickedQty = this.getAlreadyPickedQty(order.id, item.design.styleNo, item.design.color ?? '', size, item.sleeveType);
+        const balanceQty = Math.max(0, orderedQty - alreadyPickedQty);
+        const inventoryMatch = this.findInventoryMatch(item.design.styleNo, item.design.color ?? '', size, item.sleeveType);
+        const stockAvailable = Number(inventoryMatch?.currentStock) || 0;
+        total += Math.min(balanceQty, stockAvailable);
+      }
+    }
+    return total;
+  }
+
   getOrderRemainingQty(orderId: string): number {
     const order = this.salesOrders().find((entry) => entry.id === orderId);
     if (!order) return 0;

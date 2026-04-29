@@ -57,6 +57,7 @@
                 <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Ordered</th>
                 <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Picked</th>
                 <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Pending</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Avail Qty</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
                 <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
               </tr>
@@ -74,6 +75,7 @@
                   <td class="px-4 py-3 text-center font-semibold text-gray-700">{{getOrderTotalQty(order)}}</td>
                   <td class="px-4 py-3 text-center font-bold text-green-700">{{getPickedQtyForOrder(order.id)}}</td>
                   <td class="px-4 py-3 text-center font-bold text-orange-600">{{getOrderPendingQty(order.id)}}</td>
+                  <td class="px-4 py-3 text-center font-bold text-blue-600">{{getAvailableQtyForOrder(order)}}</td>
                   <td class="px-4 py-3">
                     <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="orderPickBadge(order.id)">{{orderPickLabel(order.id)}}</span>
                     @if (openPickList) {
