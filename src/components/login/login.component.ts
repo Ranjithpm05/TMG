@@ -1,7 +1,8 @@
-import { Component, ChangeDetectionStrategy, signal, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
+import { LoadingService } from '../../services/loading.service';
 
 @Component({
   selector: 'app-login',
@@ -12,11 +13,13 @@ import { AuthService } from '../../services/auth.service';
 })
 export class LoginComponent {
   private authService = inject(AuthService);
+  private loadingService = inject(LoadingService);
 
   username = signal('admin');
   password = signal('123456');
   showPassword = signal(false);
   loginError = signal<string | null>(null);
+  isLoading = computed(() => this.loadingService.isLoading());
 
   togglePasswordVisibility(): void {
     this.showPassword.update(value => !value);
@@ -32,16 +35,12 @@ export class LoginComponent {
       return;
     }
 
-    try {
+    await this.loadingService.run(async () => {
       const loggedIn = await this.authService.login(username, password);
       if (!loggedIn) {
         this.loginError.set('Invalid username or password.');
       }
-      // On successful login, the AuthService's isAuthenticated signal will trigger the view change in app.component
-    } catch (error) {
-      this.loginError.set('An unexpected error occurred during login.');
-      console.error(error);
-    }
+    });
   }
 
   clear(): void {

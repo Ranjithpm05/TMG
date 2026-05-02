@@ -7,6 +7,7 @@ import { LoginComponent } from './components/login/login.component';
 import { UserManagementComponent } from './components/user-management/user-management.component';
 import { GoodsInwardComponent } from './components/goods-inward/goods-inward.component';
 import { AuthService } from './services/auth.service';
+import { LoadingService } from './services/loading.service';
 import { AppScreen } from './models/user-group.model';
 import { InventoryComponent } from './components/inventory/inventory.component';
 import { PickListComponent } from './components/pick-list/pick-list.component';
@@ -40,6 +41,7 @@ const VIEW_SEQUENCE: View[] = ['dashboard', 'sales', 'clients', 'designs', 'good
 })
 export class AppComponent {
   private authService = inject(AuthService);
+  protected loadingService = inject(LoadingService);
 
   isAuthenticated = computed(() => this.authService.isAuthenticated());
   currentView = signal<View>('dashboard');
