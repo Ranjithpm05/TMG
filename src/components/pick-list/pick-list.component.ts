@@ -55,7 +55,6 @@ export class PickListComponent implements OnInit, OnDestroy {
 
   private liveSubscriptions: Subscription[] = [];
   private claimHeartbeat: ReturnType<typeof setInterval> | null = null;
-  private scanInputTimer: ReturnType<typeof setTimeout> | null = null;
   private cameraStream: MediaStream | null = null;
   private cameraAnimationFrame: number | null = null;
   private cameraCanvas: HTMLCanvasElement | null = null;
@@ -80,6 +79,7 @@ export class PickListComponent implements OnInit, OnDestroy {
   isLoading = signal(true);
   isSaving = signal(false);
   isSubmittingScan = signal(false);
+  isClaimingItem = signal(false);
   isCameraOpen = signal(false);
   scanFeedback = signal<'idle' | 'success' | 'error'>('idle');
   scannerMessage = signal('Scan the assigned item');
@@ -148,6 +148,34 @@ export class PickListComponent implements OnInit, OnDestroy {
     };
   });
 
+  combinedPreviewGroups = computed(() => {
+    if (this.pickType() !== 'combined') return null;
+    const groups = new Map<string, {
+      styleNo: string; color: string; size: string; sleeveType?: string; barcode?: string;
+      orderedQty: number; alreadyPickedQty: number; requiredQty: number; pendingQty: number;
+      orders: { salesNo: string; requiredQty: number; pendingQty: number }[];
+    }>();
+    for (const line of this.draftLines()) {
+      const key = `${line.styleNo}||${line.color}||${line.size}||${line.sleeveType ?? ''}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.orderedQty += line.orderedQty;
+        existing.alreadyPickedQty += line.alreadyPickedQty;
+        existing.requiredQty += line.requiredQty;
+        existing.pendingQty += line.pendingQty;
+        existing.orders.push({ salesNo: line.salesNo, requiredQty: line.requiredQty, pendingQty: line.pendingQty });
+      } else {
+        groups.set(key, {
+          styleNo: line.styleNo, color: line.color, size: line.size, sleeveType: line.sleeveType,
+          barcode: line.barcode, orderedQty: line.orderedQty, alreadyPickedQty: line.alreadyPickedQty,
+          requiredQty: line.requiredQty, pendingQty: line.pendingQty,
+          orders: [{ salesNo: line.salesNo, requiredQty: line.requiredQty, pendingQty: line.pendingQty }],
+        });
+      }
+    }
+    return [...groups.values()];
+  });
+
   candidateGroups = computed(() => {
     const map = new Map<string, PickListLineItem[]>();
     for (const line of this.draftLines()) {
@@ -199,7 +227,7 @@ export class PickListComponent implements OnInit, OnDestroy {
     const pickList = this.livePickList();
     const currentLine = this.currentAssignedLine();
     if (!pickList) return [];
-    if (pickList.type === 'itemwise' && currentLine) {
+    if ((pickList.type === 'itemwise' || pickList.type === 'combined') && currentLine) {
       return this.liveLines()
         .filter((line) =>
           line.styleNo === currentLine.styleNo &&
@@ -220,6 +248,68 @@ export class PickListComponent implements OnInit, OnDestroy {
         }));
     }
     return pickList.orderSummaries ?? [];
+  });
+
+  combinedCurrentItemTotals = computed(() => {
+    const pickList = this.livePickList();
+    const currentLine = this.currentAssignedLine();
+    if (!pickList || !currentLine || pickList.type !== 'combined') return null;
+    const siblings = this.liveLines().filter((line) =>
+      line.styleNo === currentLine.styleNo &&
+      line.color === currentLine.color &&
+      line.size === currentLine.size &&
+      (line.sleeveType ?? '') === (currentLine.sleeveType ?? '') &&
+      line.status !== 'pending_stock' &&
+      line.status !== 'blocked'
+    );
+    return {
+      requiredQty: siblings.reduce((sum, l) => sum + l.requiredQty, 0),
+      pickedQty: siblings.reduce((sum, l) => sum + l.pickedQty, 0),
+      remainingQty: siblings.reduce((sum, l) => sum + l.remainingQty, 0),
+      partyCount: siblings.length,
+    };
+  });
+
+  combinedViewLines = computed(() => {
+    const pickList = this.livePickList();
+    const lines = this.liveLines();
+    if (pickList?.type !== 'combined') return null;
+    const currentLineId = this.currentLineId();
+
+    const groups = new Map<string, {
+      key: string; styleNo: string; color: string; size: string; sleeveType?: string;
+      barcode?: string; requiredQty: number; pickedQty: number; remainingQty: number;
+      partyLines: PickListLine[]; sortMin: number;
+      allCompleted: boolean; anyActive: boolean; isCurrentSku: boolean;
+    }>();
+
+    for (const line of lines) {
+      const key = `${line.styleNo}||${line.color}||${line.size}||${line.sleeveType ?? ''}`;
+      const isCurrent = line.lineId === currentLineId;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.requiredQty += line.requiredQty;
+        existing.pickedQty += line.pickedQty;
+        existing.remainingQty += line.remainingQty;
+        existing.partyLines.push(line);
+        existing.sortMin = Math.min(existing.sortMin, line.sortOrder ?? 0);
+        if (line.status !== 'completed') existing.allCompleted = false;
+        if (line.status === 'in_progress') existing.anyActive = true;
+        if (isCurrent) existing.isCurrentSku = true;
+      } else {
+        groups.set(key, {
+          key, styleNo: line.styleNo, color: line.color, size: line.size, sleeveType: line.sleeveType,
+          barcode: line.barcode,
+          requiredQty: line.requiredQty, pickedQty: line.pickedQty, remainingQty: line.remainingQty,
+          partyLines: [line], sortMin: line.sortOrder ?? 0,
+          allCompleted: line.status === 'completed',
+          anyActive: line.status === 'in_progress',
+          isCurrentSku: isCurrent,
+        });
+      }
+    }
+
+    return [...groups.values()].sort((a, b) => a.sortMin - b.sortMin);
   });
 
   ngOnInit() {
@@ -796,30 +886,43 @@ export class PickListComponent implements OnInit, OnDestroy {
       void this.pickListService.refreshClaim(livePickList.id, assignedLine.lineId, currentUser).catch(() => undefined);
     }, 45000);
 
-    const claimedLine = await this.claimNextAvailableLine();
+    let claimedLine = await this.claimNextAvailableLine();
+    if (!claimedLine) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      claimedLine = await this.claimNextAvailableLine();
+    }
+    if (!claimedLine) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      claimedLine = await this.claimNextAvailableLine();
+    }
     if (!claimedLine) this.scannerMessage.set('Waiting for an available item');
     this.focusScanInput();
   }
 
-  async submitCurrentInput() {
-    if (this.scanInputTimer) {
-      clearTimeout(this.scanInputTimer);
-      this.scanInputTimer = null;
+  async retryClaimNextItem() {
+    if (this.isClaimingItem() || this.isSubmittingScan()) return;
+    this.isClaimingItem.set(true);
+    try {
+      const claimedLine = await this.claimNextAvailableLine();
+      if (!claimedLine) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const retry = await this.claimNextAvailableLine();
+        if (!retry) {
+          this.scannerMessage.set('Waiting for an available item');
+          await this.showToast('info', 'No items available', 'All lines may be claimed by other users or completed.');
+        }
+      }
+    } finally {
+      this.isClaimingItem.set(false);
     }
+  }
+
+  async submitCurrentInput() {
     await this.submitScan(this.manualScanValue().trim());
   }
 
   onManualScanChange(value: string) {
     this.manualScanValue.set(value);
-    if (this.scanInputTimer) {
-      clearTimeout(this.scanInputTimer);
-      this.scanInputTimer = null;
-    }
-    const trimmed = value.trim();
-    if (!trimmed) return;
-    this.scanInputTimer = setTimeout(() => {
-      void this.submitScan(trimmed);
-    }, 180);
   }
 
   async toggleCamera() {
@@ -830,19 +933,23 @@ export class PickListComponent implements OnInit, OnDestroy {
     await this.startCameraScanner();
   }
 
-  private async claimNextAvailableLine() {
+  private async claimNextAvailableLine(preferredLineId?: string) {
     const pickListId = this.livePickList()?.id;
     const user = this.asClaimUser();
     if (!pickListId || !user) return null;
 
     try {
-      const claimedLine = await this.pickListService.claimNextLine(pickListId, user);
-      this.currentLineId.set(claimedLine?.lineId ?? null);
+      const claimedLine = await this.pickListService.claimNextLine(pickListId, user, preferredLineId);
+      if (claimedLine) {
+        this.currentLineId.set(claimedLine.lineId);
+        this.scannerMessage.set('Scan the assigned item');
+      } else {
+        this.currentLineId.set(null);
+      }
       this.focusScanInput();
       return claimedLine;
-    } catch {
+    } catch (err: any) {
       this.currentLineId.set(null);
-      this.scannerMessage.set('Waiting for an available item');
       return null;
     }
   }
@@ -861,15 +968,12 @@ export class PickListComponent implements OnInit, OnDestroy {
     }
 
     this.isSubmittingScan.set(true);
-    if (this.scanInputTimer) {
-      clearTimeout(this.scanInputTimer);
-      this.scanInputTimer = null;
-    }
 
     try {
       const result = await this.pickListService.processScan(pickList.id, barcode, user, currentLine.lineId);
       this.manualScanValue.set('');
-      this.flashScanFeedback('success', `${result.line.styleNo} ${result.line.size} scanned`);
+      this.lastCameraBarcodeAt = Date.now();
+      this.flashScanFeedback('success', `${result.line.styleNo} ${result.line.size} · ${result.line.pickedQty}/${result.line.requiredQty}`);
 
       if (result.orderCompleted) {
         void this.pickListService.syncSalesOrderShipment(pickList.id, result.salesOrderId);
@@ -889,6 +993,26 @@ export class PickListComponent implements OnInit, OnDestroy {
       }
 
       if (result.lineCompleted) {
+        if (pickList.type === 'combined') {
+          const done = result.line;
+          const sibling = this.liveLines().find((l) =>
+            l.lineId !== done.lineId &&
+            l.styleNo === done.styleNo &&
+            l.color === done.color &&
+            l.size === done.size &&
+            (l.sleeveType ?? '') === (done.sleeveType ?? '') &&
+            l.remainingQty > 0 &&
+            l.status !== 'blocked' &&
+            l.status !== 'pending_stock' &&
+            l.status !== 'completed'
+          );
+          if (sibling) {
+            const nextLine = await this.claimNextAvailableLine(sibling.lineId);
+            this.currentLineId.set(nextLine?.lineId ?? null);
+            this.scannerMessage.set('Scan the assigned item');
+            return;
+          }
+        }
         await this.showToast('success', 'Quantity Completed');
         const nextLine = await this.claimNextAvailableLine();
         this.currentLineId.set(nextLine?.lineId ?? null);
@@ -925,10 +1049,6 @@ export class PickListComponent implements OnInit, OnDestroy {
     if (this.claimHeartbeat) {
       clearInterval(this.claimHeartbeat);
       this.claimHeartbeat = null;
-    }
-    if (this.scanInputTimer) {
-      clearTimeout(this.scanInputTimer);
-      this.scanInputTimer = null;
     }
 
     if (shouldReleaseClaim) {
@@ -1014,7 +1134,7 @@ export class PickListComponent implements OnInit, OnDestroy {
       .then((barcode) => {
         if (!barcode) return;
         const now = Date.now();
-        if (barcode === this.lastCameraBarcode && now - this.lastCameraBarcodeAt < 800) return;
+        if (barcode === this.lastCameraBarcode && now - this.lastCameraBarcodeAt < 3000) return;
         this.lastCameraBarcode = barcode;
         this.lastCameraBarcodeAt = now;
         void this.submitScan(barcode);
@@ -1137,7 +1257,7 @@ export class PickListComponent implements OnInit, OnDestroy {
   private mapScanError(code: string): { title: string; text?: string } {
     switch (code) {
       case 'barcode_mismatch':
-        return { title: 'Scanned item is not available for you' };
+        return { title: 'Wrong item scanned', text: 'Finish picking the current item before scanning another.' };
       case 'line_claimed':
       case 'claim_conflict':
         return { title: 'Item is being picked by another user' };

@@ -291,34 +291,74 @@
 
       <div class="bg-white shadow-lg rounded-xl overflow-hidden">
         <div class="overflow-x-auto">
-          <table class="min-w-full text-sm">
-            <thead class="bg-gray-800 text-white">
-              <tr>
-                <th class="px-4 py-3 text-left text-xs font-semibold">Order</th>
-                <th class="px-4 py-3 text-left text-xs font-semibold">Product</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold">Ordered</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold">Already Picked</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold">Ready Qty</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold">Pending Qty</th>
-                <th class="px-4 py-3 text-center text-xs font-semibold">Barcode</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100 bg-white">
-              @for (line of draftLines(); track line.lineId) {
-                @if (pickType() !== 'itemwise' || line.selected) {
-                  <tr class="hover:bg-gray-50">
-                    <td class="px-4 py-3 text-xs font-medium text-indigo-600">{{line.salesNo}}</td>
-                    <td class="px-4 py-3"><div class="font-semibold text-gray-800">{{line.styleNo}}</div><div class="text-xs text-gray-500">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</div></td>
-                    <td class="px-4 py-3 text-center">{{line.orderedQty}}</td>
-                    <td class="px-4 py-3 text-center">{{line.alreadyPickedQty}}</td>
-                    <td class="px-4 py-3 text-center font-bold text-indigo-700">{{line.requiredQty}}</td>
-                    <td class="px-4 py-3 text-center font-bold text-orange-600">{{line.pendingQty}}</td>
-                    <td class="px-4 py-3 text-center font-mono text-xs text-gray-500">{{line.barcode || '-'}}</td>
+          @if (pickType() === 'combined' && combinedPreviewGroups()) {
+            <table class="min-w-full text-sm">
+              <thead class="bg-purple-800 text-white">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold">Product</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold">Combined Ordered</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold">Already Picked</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold">Ready Qty</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold">Pending Qty</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold">Orders</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold">Barcode</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 bg-white">
+                @for (group of combinedPreviewGroups()!; track group.styleNo + group.color + group.size) {
+                  <tr class="hover:bg-purple-50">
+                    <td class="px-4 py-3">
+                      <div class="font-semibold text-gray-800">{{group.styleNo}}</div>
+                      <div class="text-xs text-gray-500">{{group.color}} · {{group.size}}{{group.sleeveType ? ' · ' + group.sleeveType : ''}}</div>
+                    </td>
+                    <td class="px-4 py-3 text-center">{{group.orderedQty}}</td>
+                    <td class="px-4 py-3 text-center">{{group.alreadyPickedQty}}</td>
+                    <td class="px-4 py-3 text-center font-bold text-purple-700">{{group.requiredQty}}</td>
+                    <td class="px-4 py-3 text-center font-bold text-orange-600">{{group.pendingQty}}</td>
+                    <td class="px-4 py-3">
+                      <div class="flex flex-wrap gap-1">
+                        @for (order of group.orders; track order.salesNo) {
+                          <span class="text-xs bg-indigo-50 text-indigo-700 font-medium px-1.5 py-0.5 rounded">
+                            {{order.salesNo}} ({{order.requiredQty}})
+                          </span>
+                        }
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-center font-mono text-xs text-gray-500">{{group.barcode || '-'}}</td>
                   </tr>
                 }
-              }
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          } @else {
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-800 text-white">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold">Order</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold">Product</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold">Ordered</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold">Already Picked</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold">Ready Qty</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold">Pending Qty</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold">Barcode</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 bg-white">
+                @for (line of draftLines(); track line.lineId) {
+                  @if (pickType() !== 'itemwise' || line.selected) {
+                    <tr class="hover:bg-gray-50">
+                      <td class="px-4 py-3 text-xs font-medium text-indigo-600">{{line.salesNo}}</td>
+                      <td class="px-4 py-3"><div class="font-semibold text-gray-800">{{line.styleNo}}</div><div class="text-xs text-gray-500">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</div></td>
+                      <td class="px-4 py-3 text-center">{{line.orderedQty}}</td>
+                      <td class="px-4 py-3 text-center">{{line.alreadyPickedQty}}</td>
+                      <td class="px-4 py-3 text-center font-bold text-indigo-700">{{line.requiredQty}}</td>
+                      <td class="px-4 py-3 text-center font-bold text-orange-600">{{line.pendingQty}}</td>
+                      <td class="px-4 py-3 text-center font-mono text-xs text-gray-500">{{line.barcode || '-'}}</td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          }
         </div>
       </div>
 
@@ -384,24 +424,60 @@
               <div class="mb-4">
                 <div class="text-2xl font-bold text-gray-900 leading-tight">{{currentLine.styleNo}}</div>
                 <div class="text-gray-500 mt-0.5 text-base">{{currentLine.color}}{{currentLine.size ? ' · ' + currentLine.size : ''}}{{currentLine.sleeveType ? ' · ' + currentLine.sleeveType : ''}}</div>
-                <div class="text-sm text-indigo-600 font-semibold mt-1">{{currentLine.salesNo}}</div>
+                @if (pickList.type !== 'combined') {
+                  <div class="text-sm text-indigo-600 font-semibold mt-1">{{currentLine.salesNo}}</div>
+                } @else {
+                  <div class="mt-1">
+                    <span class="text-xs font-bold text-purple-600 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5">{{combinedCurrentItemTotals()?.partyCount ?? 0}} orders combined</span>
+                  </div>
+                }
               </div>
-              <div class="grid grid-cols-3 gap-3 mb-4">
-                <div class="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-                  <div class="text-xs text-gray-400 font-bold uppercase mb-1">Need</div>
-                  <div class="text-4xl font-bold text-gray-800">{{currentLine.requiredQty}}</div>
+              @if (pickList.type === 'combined' && combinedCurrentItemTotals()) {
+                @let combined = combinedCurrentItemTotals()!;
+                <div class="grid grid-cols-3 gap-3 mb-3">
+                  <div class="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+                    <div class="text-xs text-gray-400 font-bold uppercase mb-1">Need</div>
+                    <div class="text-4xl font-bold text-gray-800">{{combined.requiredQty}}</div>
+                  </div>
+                  <div class="bg-indigo-50 rounded-xl p-3 text-center border border-indigo-100">
+                    <div class="text-xs text-indigo-500 font-bold uppercase mb-1">Picked</div>
+                    <div class="text-4xl font-bold text-indigo-700">{{combined.pickedQty}}</div>
+                  </div>
+                  <div class="rounded-xl p-3 text-center border-2 transition-colors"
+                       [class.bg-amber-50]="combined.remainingQty > 0" [class.border-amber-300]="combined.remainingQty > 0"
+                       [class.bg-green-50]="combined.remainingQty === 0" [class.border-green-300]="combined.remainingQty === 0">
+                    <div class="text-xs font-bold uppercase mb-1" [class.text-amber-500]="combined.remainingQty > 0" [class.text-green-500]="combined.remainingQty === 0">Left</div>
+                    <div class="text-4xl font-bold" [class.text-amber-600]="combined.remainingQty > 0" [class.text-green-600]="combined.remainingQty === 0">{{combined.remainingQty}}</div>
+                  </div>
                 </div>
-                <div class="bg-indigo-50 rounded-xl p-3 text-center border border-indigo-100">
-                  <div class="text-xs text-indigo-500 font-bold uppercase mb-1">Picked</div>
-                  <div class="text-4xl font-bold text-indigo-700">{{currentLine.pickedQty}}</div>
+                @if (combined.remainingQty > 0) {
+                  <div class="text-center text-xs font-semibold text-amber-600 bg-amber-50 rounded-lg py-1.5 mb-3">
+                    {{combined.remainingQty === 1 ? 'Scan once more to complete this item' : 'Scan ' + combined.remainingQty + ' more times to complete this item'}}
+                  </div>
+                }
+              } @else {
+                <div class="grid grid-cols-3 gap-3 mb-4">
+                  <div class="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+                    <div class="text-xs text-gray-400 font-bold uppercase mb-1">Need</div>
+                    <div class="text-4xl font-bold text-gray-800">{{currentLine.requiredQty}}</div>
+                  </div>
+                  <div class="bg-indigo-50 rounded-xl p-3 text-center border border-indigo-100">
+                    <div class="text-xs text-indigo-500 font-bold uppercase mb-1">Picked</div>
+                    <div class="text-4xl font-bold text-indigo-700">{{currentLine.pickedQty}}</div>
+                  </div>
+                  <div class="rounded-xl p-3 text-center border-2 transition-colors"
+                       [class.bg-amber-50]="currentLine.remainingQty > 0" [class.border-amber-300]="currentLine.remainingQty > 0"
+                       [class.bg-green-50]="currentLine.remainingQty === 0" [class.border-green-300]="currentLine.remainingQty === 0">
+                    <div class="text-xs font-bold uppercase mb-1" [class.text-amber-500]="currentLine.remainingQty > 0" [class.text-green-500]="currentLine.remainingQty === 0">Left</div>
+                    <div class="text-4xl font-bold" [class.text-amber-600]="currentLine.remainingQty > 0" [class.text-green-600]="currentLine.remainingQty === 0">{{currentLine.remainingQty}}</div>
+                  </div>
                 </div>
-                <div class="rounded-xl p-3 text-center border-2 transition-colors"
-                     [class.bg-amber-50]="currentLine.remainingQty > 0" [class.border-amber-300]="currentLine.remainingQty > 0"
-                     [class.bg-green-50]="currentLine.remainingQty === 0" [class.border-green-300]="currentLine.remainingQty === 0">
-                  <div class="text-xs font-bold uppercase mb-1" [class.text-amber-500]="currentLine.remainingQty > 0" [class.text-green-500]="currentLine.remainingQty === 0">Left</div>
-                  <div class="text-4xl font-bold" [class.text-amber-600]="currentLine.remainingQty > 0" [class.text-green-600]="currentLine.remainingQty === 0">{{currentLine.remainingQty}}</div>
-                </div>
-              </div>
+                @if (currentLine.remainingQty > 1) {
+                  <div class="text-center text-xs font-semibold text-amber-600 bg-amber-50 rounded-lg py-1.5 mb-1">
+                    {{currentLine.remainingQty}} more scan(s) needed
+                  </div>
+                }
+              }
               @if (currentLine.barcode) {
                 <div class="bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
                   <div class="text-xs text-gray-400 font-bold uppercase mb-0.5">Barcode</div>
@@ -415,7 +491,18 @@
                 <svg class="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               </div>
               <div class="text-gray-600 font-semibold">Waiting for available item</div>
-              <div class="text-xs text-gray-400 mt-1">The next line will be claimed automatically</div>
+              <div class="text-xs text-gray-400 mt-1 mb-4">All lines may be claimed or no pickable lines remain</div>
+              <button (click)="retryClaimNextItem()"
+                      [disabled]="isClaimingItem()"
+                      class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-xl transition-colors">
+                @if (isClaimingItem()) {
+                  <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                  Claiming...
+                } @else {
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                  Claim Next Item
+                }
+              </button>
             </div>
           }
         </div>
@@ -424,7 +511,7 @@
         @if (partyWiseProgress().length > 0) {
           <div class="bg-white rounded-2xl shadow-sm p-4">
             <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-              @if (pickList.type === 'itemwise') { Party-wise · Current Item } @else { Party-wise Progress }
+              @if (pickList.type === 'itemwise' || pickList.type === 'combined') { Party-wise · Current Item } @else { Party-wise Progress }
             </div>
             <div class="space-y-3">
               @for (party of partyWiseProgress(); track party.salesOrderId) {
@@ -521,30 +608,79 @@
                   class="w-full px-4 py-3.5 flex items-center justify-between hover:bg-gray-50 transition-colors">
             <div class="flex items-center gap-2">
               <span class="text-sm font-bold text-gray-700">All Lines</span>
-              <span class="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">{{liveLines().length}}</span>
+              @if (pickList.type === 'combined') {
+                <span class="bg-purple-100 text-purple-700 text-xs font-bold px-2 py-0.5 rounded-full">{{(combinedViewLines() ?? []).length}} SKUs</span>
+              } @else {
+                <span class="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">{{liveLines().length}}</span>
+              }
             </div>
             <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" [class.rotate-180]="showLinesPanel()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           </button>
           @if (showLinesPanel()) {
-            <div class="border-t border-gray-100 divide-y divide-gray-50">
-              @for (line of liveLines(); track line.lineId) {
-                <div class="px-4 py-3 flex items-center gap-3 transition-colors" [class.bg-indigo-50]="currentLineId() === line.lineId">
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                      <span class="font-semibold text-gray-800 text-sm">{{line.styleNo}}</span>
-                      <span class="text-xs text-gray-400">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</span>
+            <div class="border-t border-gray-100">
+              @if (pickList.type === 'combined') {
+                @for (group of (combinedViewLines() ?? []); track group.key) {
+                  <div class="border-b border-gray-50 last:border-b-0">
+                    <div class="px-4 py-3 flex items-center gap-3" [class.bg-purple-50]="group.isCurrentSku">
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                          <span class="font-semibold text-gray-800 text-sm">{{group.styleNo}}</span>
+                          <span class="text-xs text-gray-400">{{group.color}} · {{group.size}}{{group.sleeveType ? ' · ' + group.sleeveType : ''}}</span>
+                          @if (group.isCurrentSku) {
+                            <span class="text-xs font-bold text-purple-600 bg-purple-100 rounded-full px-1.5 py-0.5">Active</span>
+                          }
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-2 flex-shrink-0">
+                        <span class="text-sm font-bold" [class.text-green-700]="group.allCompleted" [class.text-gray-700]="!group.allCompleted">{{group.pickedQty}}/{{group.requiredQty}}</span>
+                        @if (group.allCompleted) {
+                          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">Done</span>
+                        } @else if (group.anyActive) {
+                          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">Active</span>
+                        } @else {
+                          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">Pending</span>
+                        }
+                      </div>
                     </div>
-                    <div class="flex items-center gap-2 mt-0.5">
-                      <span class="text-xs text-indigo-600 font-semibold">{{line.salesNo}}</span>
-                      @if (line.claimedByUsername && line.remainingQty > 0 && line.status !== 'completed') {
-                        <span class="text-xs text-gray-400">· {{line.claimedByUserId === currentUser()?.id ? 'You' : line.claimedByUsername}}</span>
-                      }
+                    @for (line of group.partyLines; track line.lineId) {
+                      <div class="pl-8 pr-4 py-2 flex items-center gap-3 bg-gray-50 border-t border-gray-100">
+                        <div class="flex-1 min-w-0">
+                          <div class="flex items-center gap-2">
+                            <span class="text-xs font-semibold text-indigo-600">{{line.salesNo}}</span>
+                            @if (line.lineId === currentLineId()) {
+                              <span class="text-xs font-bold text-purple-600">(picking)</span>
+                            } @else if (line.claimedByUsername && line.remainingQty > 0 && line.status !== 'completed') {
+                              <span class="text-xs text-gray-400">· {{line.claimedByUserId === currentUser()?.id ? 'You' : line.claimedByUsername}}</span>
+                            }
+                          </div>
+                        </div>
+                        <span class="text-xs font-bold flex-shrink-0" [class.text-green-700]="line.remainingQty === 0" [class.text-gray-600]="line.remainingQty > 0">{{line.pickedQty}}/{{line.requiredQty}}</span>
+                      </div>
+                    }
+                  </div>
+                }
+              } @else {
+                <div class="divide-y divide-gray-50">
+                  @for (line of liveLines(); track line.lineId) {
+                    <div class="px-4 py-3 flex items-center gap-3 transition-colors" [class.bg-indigo-50]="currentLineId() === line.lineId">
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                          <span class="font-semibold text-gray-800 text-sm">{{line.styleNo}}</span>
+                          <span class="text-xs text-gray-400">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</span>
+                        </div>
+                        <div class="flex items-center gap-2 mt-0.5">
+                          <span class="text-xs text-indigo-600 font-semibold">{{line.salesNo}}</span>
+                          @if (line.claimedByUsername && line.remainingQty > 0 && line.status !== 'completed') {
+                            <span class="text-xs text-gray-400">· {{line.claimedByUserId === currentUser()?.id ? 'You' : line.claimedByUsername}}</span>
+                          }
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-2 flex-shrink-0">
+                        <span class="text-sm font-bold" [class.text-green-700]="line.remainingQty === 0" [class.text-gray-700]="line.remainingQty > 0">{{line.pickedQty}}/{{line.requiredQty}}</span>
+                        <span class="px-2 py-0.5 rounded-full text-xs font-semibold" [class]="liveLineStatusBadge(line)">{{liveLineStatusLabel(line)}}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div class="flex items-center gap-2 flex-shrink-0">
-                    <span class="text-sm font-bold" [class.text-green-700]="line.remainingQty === 0" [class.text-gray-700]="line.remainingQty > 0">{{line.pickedQty}}/{{line.requiredQty}}</span>
-                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold" [class]="liveLineStatusBadge(line)">{{liveLineStatusLabel(line)}}</span>
-                  </div>
+                  }
                 </div>
               }
             </div>
