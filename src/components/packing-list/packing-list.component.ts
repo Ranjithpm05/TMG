@@ -15,6 +15,7 @@ import { PickList, PickListLine } from '../../models/pick-list.model';
 import { PackingCarton, PackingList, PackingListLine, PackingPartyProgress } from '../../models/packing-list.model';
 import { PickListService } from '../../services/pick-list.service';
 import { PackingListService } from '../../services/packing-list.service';
+import { ClientService } from '../../services/client.service';
 
 type ViewMode = 'list' | 'view' | 'live-pack';
 
@@ -30,6 +31,7 @@ const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL
 export class PackingListComponent implements OnInit, OnDestroy {
   private pickListService = inject(PickListService);
   private packingListService = inject(PackingListService);
+  private clientService = inject(ClientService);
   private subscriptions: Subscription[] = [];
 
   // ─── Navigation ────────────────────────────────────────────────────────────
@@ -63,6 +65,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   showCartons = signal(true);
   showPackingLines = signal(true);
+
+  agentName = signal('');
+  transport = signal('');
+  isSavingDispatchInfo = signal(false);
 
   // ─── Computed ──────────────────────────────────────────────────────────────
 
@@ -175,6 +181,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.activeCartonNo.set('');
     this.packFeedback.set('idle');
     this.scannerMessage.set('Scan carton box no to begin packing.');
+    this.agentName.set('');
+    this.transport.set('');
   }
 
   // ─── Generate flow ─────────────────────────────────────────────────────────
@@ -298,8 +306,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
       this.packingListService.getPackingListByIdOnce(packingList.id),
       this.packingListService.getPackingListLinesOnce(packingList.id),
     ]);
-    this.viewPackingList.set(fresh ?? packingList);
+    const loaded = fresh ?? packingList;
+    this.viewPackingList.set(loaded);
     this.viewLines.set(lines);
+    this.agentName.set(loaded.agentName ?? '');
+    this.transport.set(loaded.transport ?? '');
     this.mode.set('view');
   }
 
@@ -309,8 +320,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
       this.packingListService.getPackingListByIdOnce(packingList.id),
       this.packingListService.getPackingListLinesOnce(packingList.id),
     ]);
-    this.livePackingList.set(fresh ?? packingList);
+    const loaded = fresh ?? packingList;
+    this.livePackingList.set(loaded);
     this.liveLines.set(lines);
+    this.agentName.set(loaded.agentName ?? '');
+    this.transport.set(loaded.transport ?? '');
     this.mode.set('live-pack');
     this.packFeedback.set('idle');
     this.barcodeInput.set('');
@@ -412,8 +426,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
         await Swal.fire({
           icon: 'success',
           title: 'Packing Completed!',
-          text: 'All items in this Packing List have been fully packed.',
-          timer: 2500,
+          html: `<p style="font-size:13px">All items have been fully packed.</p>
+            ${result.stockDeducted
+              ? '<p style="font-size:12px;color:#047857;margin-top:6px">&#10003; Inventory stock has been automatically reduced.</p>'
+              : '<p style="font-size:12px;color:#b45309;margin-top:6px">&#9888; Stock deduction could not be applied &mdash; please verify inventory manually.</p>'
+            }`,
+          timer: 3500,
           showConfirmButton: false,
         });
       }
@@ -482,15 +500,96 @@ export class PackingListComponent implements OnInit, OnDestroy {
     if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
   }
 
+  async saveDispatchInfo(packingList: PackingList) {
+    if (!packingList.id) return;
+    const agentName = this.agentName().trim();
+    const transport = this.transport().trim();
+    this.isSavingDispatchInfo.set(true);
+    try {
+      await this.packingListService.updateDispatchInfo(packingList.id, agentName, transport);
+      const currentList = this.viewPackingList();
+      const currentLive = this.livePackingList();
+      if (currentList?.id === packingList.id) this.viewPackingList.update((p) => p ? { ...p, agentName, transport } : p);
+      if (currentLive?.id === packingList.id) this.livePackingList.update((p) => p ? { ...p, agentName, transport } : p);
+      await Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Dispatch info saved', timer: 1400, showConfirmButton: false });
+    } catch {
+      await Swal.fire({ icon: 'error', title: 'Save Failed', text: 'Unable to save dispatch information.' });
+    } finally {
+      this.isSavingDispatchInfo.set(false);
+    }
+  }
+
   async printDeliveryChallan(packingList: PackingList) {
     if (!packingList.id) return;
-    const [fresh, lines] = await Promise.all([
-      this.packingListService.getPackingListByIdOnce(packingList.id),
-      this.packingListService.getPackingListLinesOnce(packingList.id),
-    ]);
-    const html = this.buildDCHtml(fresh ?? packingList, lines);
-    const win = window.open('', '_blank', 'width=900,height=780');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+
+    const agentNameVal = this.agentName().trim();
+    const transportVal = this.transport().trim();
+    const sealedCount = (packingList.cartons ?? []).filter((c) => c.cartonStatus === 'sealed').length;
+    const totalCartons = (packingList.cartons ?? []).length;
+
+    const { isConfirmed, value } = await Swal.fire({
+      title: 'QC Verification',
+      html: `
+        <div style="text-align:left;font-size:13px;line-height:1.7">
+          <p style="margin-bottom:10px;font-weight:600;color:#0f172a">Confirm before printing Delivery Challan:</p>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+            <tr><td style="padding:4px 8px;color:#64748b">Client</td><td style="padding:4px 8px;font-weight:600">${packingList.clientName}</td></tr>
+            <tr style="background:#f8fafc"><td style="padding:4px 8px;color:#64748b">Orders</td><td style="padding:4px 8px;font-weight:600">${(packingList.salesNos ?? []).join(', ')}</td></tr>
+            <tr><td style="padding:4px 8px;color:#64748b">Total Qty</td><td style="padding:4px 8px;font-weight:700;color:#047857">${packingList.totalPackedQty}</td></tr>
+            <tr style="background:#f8fafc"><td style="padding:4px 8px;color:#64748b">Cartons</td><td style="padding:4px 8px;font-weight:700;color:#0f766e">${totalCartons} (${sealedCount} sealed)</td></tr>
+          </table>
+          <div style="margin-bottom:8px">
+            <label style="display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px">Agent Name</label>
+            <input id="swal-agent" type="text" value="${agentNameVal}" placeholder="Enter agent name"
+              style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;outline:none">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px">Transport</label>
+            <input id="swal-transport" type="text" value="${transportVal}" placeholder="Enter transporter name"
+              style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;outline:none">
+          </div>
+        </div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Verify & Print DC',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#4f46e5',
+      focusConfirm: false,
+      preConfirm: () => ({
+        agentName: (document.getElementById('swal-agent') as HTMLInputElement)?.value?.trim() ?? '',
+        transport: (document.getElementById('swal-transport') as HTMLInputElement)?.value?.trim() ?? '',
+      }),
+    });
+
+    if (!isConfirmed || !value) return;
+
+    const finalAgent = value.agentName;
+    const finalTransport = value.transport;
+    this.agentName.set(finalAgent);
+    this.transport.set(finalTransport);
+
+    try {
+      const [fresh, lines, client] = await Promise.all([
+        this.packingListService.getPackingListByIdOnce(packingList.id),
+        this.packingListService.getPackingListLinesOnce(packingList.id),
+        this.clientService.getClientByIdOnce(packingList.clientId),
+      ]);
+
+      await Promise.all([
+        this.packingListService.updateDispatchInfo(packingList.id, finalAgent, finalTransport),
+        this.packingListService.markQcVerified(packingList.id),
+      ]);
+
+      const currentList = this.viewPackingList();
+      const currentLive = this.livePackingList();
+      if (currentList?.id === packingList.id) this.viewPackingList.update((p) => p ? { ...p, agentName: finalAgent, transport: finalTransport } : p);
+      if (currentLive?.id === packingList.id) this.livePackingList.update((p) => p ? { ...p, agentName: finalAgent, transport: finalTransport } : p);
+
+      const html = this.buildDCHtml(fresh ?? packingList, lines, client, finalAgent, finalTransport);
+      const win = window.open('', '_blank', 'width=900,height=780');
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+    } catch {
+      await Swal.fire({ icon: 'error', title: 'Print Failed', text: 'Unable to generate Delivery Challan.' });
+    }
   }
 
   printCartonLabel(packingList: PackingList, carton: PackingCarton) {
@@ -739,80 +838,154 @@ export class PackingListComponent implements OnInit, OnDestroy {
       </body></html>`;
   }
 
-  private buildDCHtml(packingList: PackingList, lines: PackingListLine[]): string {
-    const partyProgress = packingList.partyProgress ?? [];
-    const cartonRows = packingList.cartons.map((c, i) => `
-      <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}">
-        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${i + 1}</td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;font-weight:700">${c.cartonNo}</td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${c.entries.length}</td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#047857">${c.totalQty}</td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;font-size:11px">${c.entries.map((e) => `${e.styleNo} / ${e.color} / ${e.size} × ${e.qty}`).join(', ')}</td>
-      </tr>`).join('');
+  private buildDCHtml(
+    packingList: PackingList,
+    lines: PackingListLine[],
+    client: import('../../models/client.model').Client | null,
+    agentName: string,
+    transport: string,
+  ): string {
+    const rankSize = (s: string) => {
+      const idx = SIZE_ORDER.indexOf(s);
+      if (idx !== -1) return idx;
+      const n = parseInt(s, 10);
+      return isNaN(n) ? 9999 : 1000 + n;
+    };
 
-    const partyRows = partyProgress.map((p) => `
-      <tr>
-        <td style="padding:8px 10px;border:1px solid #d7deea">${p.salesNo}</td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${p.requiredQty}</td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#047857">${p.packedQty}</td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:${p.pendingQty > 0 ? '#b45309' : '#94a3b8'}">${p.pendingQty}</td>
-      </tr>`).join('');
+    const packedLines = lines.filter((l) => l.packedQty > 0 || l.requiredQty > 0);
 
-    return `
-      <!DOCTYPE html><html>
-      <head><meta charset="utf-8"><title>DC - ${packingList.packingListNo}</title>
-      <style>
-        body{font-family:Arial,sans-serif;font-size:12px;margin:18px;color:#0f172a}
-        h1,p{margin:0}
-        table{width:100%;border-collapse:collapse;margin-top:8px}
-        .section-title{margin-top:18px;font-size:14px;font-weight:700;color:#0f172a;border-bottom:1px solid #d7deea;padding-bottom:4px}
-        .signatures{display:flex;justify-content:space-between;gap:24px;margin-top:40px}
-        .signatures div{flex:1;border-top:1px solid #334155;padding-top:6px;text-align:center;color:#475569;font-size:11px}
-      </style></head>
-      <body>
-        <div style="display:flex;justify-content:space-between;border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:16px">
-          <div>
-            <h1 style="font-size:22px">Delivery Challan</h1>
-            <p style="color:#64748b;font-size:11px;margin-top:4px">${packingList.packingListNo} · Pick List: ${packingList.pickListNo}</p>
-            <p style="color:#64748b;font-size:11px">Client: <strong style="color:#0f172a">${packingList.clientName}</strong></p>
-            <p style="color:#64748b;font-size:11px">Orders: ${(packingList.salesNos ?? []).join(', ')}</p>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:11px;color:#64748b">Date</div>
-            <div style="font-size:13px;font-weight:700">${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-            <div style="font-size:11px;color:#64748b;margin-top:8px">Total Cartons</div>
-            <div style="font-size:22px;font-weight:700;color:#0f766e">${packingList.cartons.length}</div>
-          </div>
-        </div>
+    const sizeSet = new Set(packedLines.map((l) => l.size));
+    const sizes = [...sizeSet].sort((a, b) => rankSize(a) - rankSize(b));
 
-        ${partyProgress.length ? `
-        <div class="section-title">Party-wise Summary</div>
-        <table>
-          <thead><tr>
-            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:left">Order No</th>
-            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:center">To Pack</th>
-            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:center">Packed</th>
-            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:center">Pending</th>
-          </tr></thead>
-          <tbody>${partyRows}</tbody>
-        </table>` : ''}
+    interface DCRow { partName: string; styleNo: string; color: string; sizeQty: Map<string, number>; total: number; }
+    const rowMap = new Map<string, DCRow>();
+    for (const line of packedLines) {
+      const qty = line.packedQty > 0 ? line.packedQty : line.requiredQty;
+      if (qty <= 0) continue;
+      const key = `${line.partName}||${line.styleNo}||${line.color}`;
+      if (!rowMap.has(key)) rowMap.set(key, { partName: line.partName, styleNo: line.styleNo, color: line.color, sizeQty: new Map(), total: 0 });
+      const row = rowMap.get(key)!;
+      row.sizeQty.set(line.size, (row.sizeQty.get(line.size) ?? 0) + qty);
+      row.total += qty;
+    }
 
-        <div class="section-title">Carton Details</div>
-        <table>
-          <thead><tr>
-            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">#</th>
-            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:left">Carton No</th>
-            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Lines</th>
-            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Qty</th>
-            <th style="padding:8px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px;text-align:left">Contents</th>
-          </tr></thead>
-          <tbody>${cartonRows || '<tr><td colspan="5" style="padding:12px;text-align:center;color:#94a3b8">No cartons.</td></tr>'}</tbody>
-        </table>
+    const sizeTotals = new Map<string, number>();
+    let grandTotal = 0;
+    for (const row of rowMap.values()) {
+      for (const [sz, qty] of row.sizeQty) {
+        sizeTotals.set(sz, (sizeTotals.get(sz) ?? 0) + qty);
+        grandTotal += qty;
+      }
+    }
 
-        <div class="signatures">
-          <div>Prepared By</div><div>Driver / Transporter</div><div>Received By</div>
-        </div>
-      </body></html>`;
+    const B = 'border:1px solid #bbb;';
+    const th = (txt: string, extra = '') =>
+      `<th style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center;${extra}">${txt}</th>`;
+    const td = (txt: string | number, extra = '') =>
+      `<td style="padding:5px 7px;${B}font-size:10px;text-align:center;${extra}">${txt}</td>`;
+
+    const sizeHeaders = sizes.map((s) => th(s)).join('');
+    const tableRows = [...rowMap.values()].map((row, i) => {
+      const sizeCells = sizes.map((s) => td(row.sizeQty.get(s) ?? '')).join('');
+      return `<tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
+        ${td(row.partName, 'text-align:left')}
+        ${td('NOS')}
+        ${td(row.styleNo, 'font-weight:700;text-align:left')}
+        ${td(row.color || '-')}
+        ${sizeCells}
+        ${td(row.total, 'font-weight:700')}
+      </tr>`;
+    }).join('');
+
+    const totalCells = sizes.map((s) => td(sizeTotals.get(s) ?? '', 'font-weight:700;background:#f0f0f0')).join('');
+    const totalRow = `<tr>
+      <td colspan="4" style="padding:5px 7px;${B}font-weight:700;font-size:10px;text-align:right;background:#f0f0f0">Total</td>
+      ${totalCells}
+      <td style="padding:5px 7px;${B}font-weight:900;font-size:11px;text-align:center;background:#f0f0f0">${grandTotal}</td>
+    </tr>`;
+
+    const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const clientLines: string[] = [];
+    if (client?.billingAddress) clientLines.push(client.billingAddress);
+    const cityState = [client?.place, client?.state].filter(Boolean).join(', ');
+    if (cityState) clientLines.push(`${cityState}${client?.zipCode ? ' - ' + client.zipCode : ''}`);
+    if (client?.mobile) clientLines.push(`PH: ${client.mobile}`);
+
+    const clientAddrHtml = clientLines.map((l) => `<div style="font-size:10px;margin-top:1px">${l}</div>`).join('');
+    const clientGst = client?.gstNo ?? '';
+
+    return `<!DOCTYPE html><html>
+<head><meta charset="utf-8"><title>DC - ${packingList.packingListNo}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:11px;color:#000;padding:14px 18px}
+table{width:100%;border-collapse:collapse}
+</style></head>
+<body>
+
+<!-- Company Header -->
+<div style="text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:6px;position:relative">
+  <div style="position:absolute;right:0;top:0;font-size:9px;color:#666">Page: 1/1</div>
+  <div style="font-size:21px;font-weight:900;letter-spacing:0.5px">TMG Clothings</div>
+  <div style="font-size:10px;color:#333;margin-top:2px">Door No.334/2, Serayampalaym, Vellanaipatti Post,</div>
+  <div style="font-size:10px;color:#333">Coimbatore - 641048, Phone: 9842211787</div>
+  <div style="font-size:10px;color:#333">Email : order@tmggarments.in &nbsp;|&nbsp; GSTIN: 33AAYFT2559B1ZY</div>
+</div>
+
+<div style="font-size:14px;font-weight:700;text-align:center;letter-spacing:2px;text-decoration:underline;margin-bottom:8px">DELIVERY CHALLAN</div>
+
+<!-- Customer info + DC details -->
+<div style="display:flex;border:1px solid #aaa;margin-bottom:10px">
+  <div style="flex:1;padding:8px 10px;border-right:1px solid #aaa">
+    <div style="font-size:10px;font-weight:700">M/S : ${packingList.clientName}</div>
+    ${clientAddrHtml}
+    ${clientGst ? `<div style="font-size:10px;margin-top:4px">GSTIN: ${clientGst}</div>` : ''}
+  </div>
+  <div style="padding:6px 10px;min-width:250px">
+    <table style="border-collapse:collapse">
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555;white-space:nowrap">DC No.</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${packingList.packingListNo}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Packed On</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order No.</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${(packingList.salesNos ?? []).join(', ')}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order Date</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Total Qty</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${grandTotal}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">No.of Box</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${packingList.cartons.length}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Agent Name</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${agentName || '-'}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Transport</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${transport || '-'}</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- Items table -->
+<table>
+  <thead>
+    <tr>
+      ${th('Description', 'text-align:left')}
+      ${th('UOM')}
+      ${th('Design', 'text-align:left')}
+      ${th('Shade')}
+      ${sizeHeaders}
+      ${th('Total')}
+    </tr>
+  </thead>
+  <tbody>
+    ${tableRows || `<tr><td colspan="${4 + sizes.length + 1}" style="padding:10px;text-align:center;color:#888">No items packed.</td></tr>`}
+    ${totalRow}
+  </tbody>
+</table>
+
+<!-- Remarks + Signatures -->
+<div style="margin-top:14px;font-size:10px">Remarks :</div>
+<div style="display:flex;justify-content:space-between;margin-top:40px;gap:30px">
+  <div style="flex:1;text-align:center">
+    <div style="border-top:1px solid #555;padding-top:5px;font-size:10px;color:#444">Checked By</div>
+  </div>
+  <div style="flex:1;text-align:center">
+    <div style="border-top:1px solid #555;padding-top:5px;font-size:10px;color:#444">Authorized By</div>
+  </div>
+</div>
+
+</body></html>`;
   }
 
   private buildCartonLabelHtml(packingList: PackingList, carton: PackingCarton): string {

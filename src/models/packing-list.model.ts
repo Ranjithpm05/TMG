@@ -83,6 +83,10 @@ export interface PackingList {
   partyProgress?: PackingPartyProgress[];
   cartons: PackingCarton[];
   items: PackingListLine[];
+  agentName?: string;
+  transport?: string;
+  qcVerifiedAt?: any;
+  stockDeducted?: boolean;
   remarks?: string;
   createdAt?: any;
   updatedAt?: any;
@@ -93,6 +97,7 @@ export interface PackingScanResult {
   carton: PackingCarton;
   lineCompleted: boolean;
   packingListCompleted: boolean;
+  stockDeducted: boolean;
   totalPackedQty: number;
   completedLineCount: number;
   cartonCount: number;

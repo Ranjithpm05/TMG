@@ -33,6 +33,7 @@ import {
 export class PackingListService {
   private firestore = inject(Firestore);
   private packingRef = collection(this.firestore, 'packingLists');
+  private inventoryRef = collection(this.firestore, 'inventory');
 
   getPackingLists(): Observable<PackingList[]> {
     const q = query(this.packingRef, orderBy('createdAt', 'desc'));
@@ -149,7 +150,7 @@ export class PackingListService {
     const line = await this.resolveScannableLine(packingListId, trimmedBarcode);
     if (!line) throw new Error('barcode_not_found');
 
-    return runTransaction(this.firestore, async (transaction) => {
+    const txResult = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(packingListId, line.lineId);
       const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
       const [lineSnap, packingListSnap] = await Promise.all([
@@ -217,8 +218,17 @@ export class PackingListService {
         cartonCount: summary.cartonCount,
         status: summary.status,
         partSummaries: summary.partSummaries,
-      } satisfies PackingScanResult;
+        _updatedItems: updatedItems,
+      };
     });
+
+    let stockDeducted = false;
+    if (txResult.packingListCompleted) {
+      stockDeducted = await this.deductInventoryOnCompletion(packingListId, txResult._updatedItems);
+    }
+
+    const { _updatedItems: _unused, ...scanResult } = txResult;
+    return { ...scanResult, stockDeducted } satisfies PackingScanResult;
   }
 
   async recalculatePackingListStatus(packingListId: string): Promise<void> {
@@ -245,6 +255,87 @@ export class PackingListService {
         items: normalizedItems,
         updatedAt: serverTimestamp(),
       }));
+    });
+  }
+
+  async updateDispatchInfo(
+    packingListId: string,
+    agentName: string,
+    transport: string,
+  ): Promise<void> {
+    const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
+    await updateDoc(packingListRef, this.stripUndefined({
+      agentName: agentName.trim() || null,
+      transport: transport.trim() || null,
+      updatedAt: serverTimestamp(),
+    }));
+  }
+
+  async markQcVerified(packingListId: string): Promise<void> {
+    const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
+    await updateDoc(packingListRef, { qcVerifiedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  }
+
+  private async deductInventoryOnCompletion(
+    packingListId: string,
+    items: PackingListLine[],
+  ): Promise<boolean> {
+    type Deduction = { ref: ReturnType<typeof doc>; qty: number };
+    const deductions = new Map<string, Deduction>();
+
+    for (const item of items) {
+      const qty = item.packedQty;
+      if (qty <= 0) continue;
+
+      if (item.inventoryId) {
+        const existing = deductions.get(item.inventoryId);
+        if (existing) {
+          existing.qty += qty;
+        } else {
+          deductions.set(item.inventoryId, {
+            ref: doc(this.firestore, `inventory/${item.inventoryId}`),
+            qty,
+          });
+        }
+      } else if (item.barcode) {
+        const snap = await getDocs(query(this.inventoryRef, where('barcode', '==', item.barcode), limit(1)));
+        if (!snap.empty) {
+          const invId = snap.docs[0].id;
+          const existing = deductions.get(invId);
+          if (existing) {
+            existing.qty += qty;
+          } else {
+            deductions.set(invId, {
+              ref: doc(this.firestore, `inventory/${invId}`),
+              qty,
+            });
+          }
+        }
+      }
+    }
+
+    if (deductions.size === 0) return false;
+
+    const resolvedList = [...deductions.values()];
+    const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
+
+    return runTransaction(this.firestore, async (transaction) => {
+      const [plSnap, ...invSnaps] = await Promise.all([
+        transaction.get(packingListRef),
+        ...resolvedList.map(({ ref }) => transaction.get(ref)),
+      ]);
+
+      if (!plSnap.exists() || plSnap.data()?.['stockDeducted'] === true) return false;
+
+      for (let i = 0; i < resolvedList.length; i++) {
+        const invSnap = invSnaps[i];
+        if (!invSnap.exists()) continue;
+        const current = Math.max(0, Number(invSnap.data()?.['currentStock'] ?? 0) - resolvedList[i].qty);
+        transaction.update(resolvedList[i].ref, { currentStock: current, updatedAt: serverTimestamp() });
+      }
+
+      transaction.update(packingListRef, { stockDeducted: true, updatedAt: serverTimestamp() });
+      return true;
     });
   }
 
@@ -482,6 +573,10 @@ export class PackingListService {
       partyProgress: summary.partyProgress,
       cartons,
       items,
+      agentName: raw?.agentName ? String(raw.agentName) : undefined,
+      transport: raw?.transport ? String(raw.transport) : undefined,
+      qcVerifiedAt: raw?.qcVerifiedAt,
+      stockDeducted: raw?.stockDeducted === true,
       remarks: raw?.remarks,
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,

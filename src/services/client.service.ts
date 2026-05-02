@@ -6,6 +6,7 @@ import {
   collectionData,
   doc,
   addDoc,
+  getDoc,
   updateDoc,
   deleteDoc,
   serverTimestamp,
@@ -48,6 +49,11 @@ export class ClientService {
       ...client,
       updatedAt: serverTimestamp()
     });
+  }
+
+  async getClientByIdOnce(clientId: string): Promise<Client | null> {
+    const snap = await getDoc(doc(this.firestore, `clients/${clientId}`));
+    return snap.exists() ? ({ id: snap.id, ...snap.data() } as Client) : null;
   }
 
   // 🔹 Delete client
