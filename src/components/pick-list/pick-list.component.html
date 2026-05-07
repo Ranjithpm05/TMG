@@ -425,7 +425,7 @@
                 <div class="text-2xl font-bold text-gray-900 leading-tight">{{currentLine.styleNo}}</div>
                 <div class="text-gray-500 mt-0.5 text-base">{{currentLine.color}}{{currentLine.size ? ' · ' + currentLine.size : ''}}{{currentLine.sleeveType ? ' · ' + currentLine.sleeveType : ''}}</div>
                 @if (pickList.type !== 'combined') {
-                  <div class="text-sm text-indigo-600 font-semibold mt-1">{{currentLine.salesNo}}</div>
+                  <div class="text-sm text-indigo-600 font-semibold mt-1">{{currentLine.clientName}}</div>
                 } @else {
                   <div class="mt-1">
                     <span class="text-xs font-bold text-purple-600 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5">{{combinedCurrentItemTotals()?.partyCount ?? 0}} orders combined</span>
@@ -529,10 +529,7 @@
                           <span class="text-xs font-bold text-indigo-600">{{$index + 1}}</span>
                         </span>
                       }
-                      <span class="text-sm font-semibold text-gray-700 truncate">{{party.salesNo}}</span>
-                      @if (party.clientName) {
-                        <span class="text-xs text-gray-400 truncate hidden sm:block">{{party.clientName}}</span>
-                      }
+                      <span class="text-sm font-semibold text-gray-700 truncate">{{party.clientName}}</span>
                     </div>
                     <span class="text-sm font-bold flex-shrink-0 ml-2" [class.text-green-700]="isDone" [class.text-indigo-700]="!isDone">{{party.pickedQty}}/{{party.requiredQty}}</span>
                   </div>
