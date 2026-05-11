@@ -413,73 +413,91 @@
           </div>
         </div>
 
-        <!-- CURRENT ITEM -->
+        <!-- CURRENT PICK (Customer + Design + All Sizes) -->
         <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
           <div class="bg-gradient-to-r from-indigo-600 to-indigo-700 px-4 py-2.5 flex items-center justify-between">
-            <span class="text-xs font-bold text-indigo-100 uppercase tracking-wider">Current Item</span>
+            <span class="text-xs font-bold text-indigo-100 uppercase tracking-wider">Current Pick</span>
             <span class="text-xs text-indigo-200">{{currentUser()?.username}}</span>
           </div>
           @if (currentLine) {
             <div class="p-4">
-              <div class="mb-4">
-                <div class="text-2xl font-bold text-gray-900 leading-tight">{{currentLine.styleNo}}</div>
-                <div class="text-gray-500 mt-0.5 text-base">{{currentLine.color}}{{currentLine.size ? ' · ' + currentLine.size : ''}}{{currentLine.sleeveType ? ' · ' + currentLine.sleeveType : ''}}</div>
-                @if (pickList.type !== 'combined') {
-                  <div class="text-sm text-indigo-600 font-semibold mt-1">{{currentLine.clientName}}</div>
-                } @else {
-                  <div class="mt-1">
-                    <span class="text-xs font-bold text-purple-600 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5">{{combinedCurrentItemTotals()?.partyCount ?? 0}} orders combined</span>
-                  </div>
+              <!-- Customer badge -->
+              <div class="flex items-center gap-2 mb-3 flex-wrap">
+                <span class="px-2.5 py-1 bg-indigo-50 text-indigo-800 text-sm font-bold rounded-lg border border-indigo-200">{{currentLine.clientName}}</span>
+                @if (pickList.type === 'combined') {
+                  <span class="text-xs font-semibold text-purple-600 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5">Combined</span>
                 }
               </div>
-              @if (pickList.type === 'combined' && combinedCurrentItemTotals()) {
-                @let combined = combinedCurrentItemTotals()!;
-                <div class="grid grid-cols-3 gap-3 mb-3">
-                  <div class="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-                    <div class="text-xs text-gray-400 font-bold uppercase mb-1">Need</div>
-                    <div class="text-4xl font-bold text-gray-800">{{combined.requiredQty}}</div>
-                  </div>
-                  <div class="bg-indigo-50 rounded-xl p-3 text-center border border-indigo-100">
-                    <div class="text-xs text-indigo-500 font-bold uppercase mb-1">Picked</div>
-                    <div class="text-4xl font-bold text-indigo-700">{{combined.pickedQty}}</div>
-                  </div>
-                  <div class="rounded-xl p-3 text-center border-2 transition-colors"
-                       [class.bg-amber-50]="combined.remainingQty > 0" [class.border-amber-300]="combined.remainingQty > 0"
-                       [class.bg-green-50]="combined.remainingQty === 0" [class.border-green-300]="combined.remainingQty === 0">
-                    <div class="text-xs font-bold uppercase mb-1" [class.text-amber-500]="combined.remainingQty > 0" [class.text-green-500]="combined.remainingQty === 0">Left</div>
-                    <div class="text-4xl font-bold" [class.text-amber-600]="combined.remainingQty > 0" [class.text-green-600]="combined.remainingQty === 0">{{combined.remainingQty}}</div>
+              <!-- Design info -->
+              <div class="mb-3">
+                <div class="text-2xl font-bold text-gray-900 leading-tight">{{currentLine.styleNo}}</div>
+                <div class="text-gray-500 mt-0.5">{{currentLine.color}}{{currentLine.sleeveType ? ' · ' + currentLine.sleeveType : ''}}</div>
+              </div>
+              <!-- All sizes for this design displayed at the same time -->
+              @let designLines = currentDesignLines();
+              @if (designLines.length > 0) {
+                <div class="mb-4">
+                  <div class="text-xs text-gray-400 font-bold uppercase mb-2">All Sizes</div>
+                  <div class="flex flex-wrap gap-2">
+                    @for (sizeLine of designLines; track sizeLine.lineId) {
+                      <div class="rounded-xl p-2.5 text-center border-2 min-w-[64px] transition-colors"
+                           [class.border-indigo-500]="sizeLine.lineId === currentLineId()"
+                           [class.bg-indigo-50]="sizeLine.lineId === currentLineId()"
+                           [class.border-green-300]="sizeLine.remainingQty === 0 && sizeLine.lineId !== currentLineId()"
+                           [class.bg-green-50]="sizeLine.remainingQty === 0 && sizeLine.lineId !== currentLineId()"
+                           [class.border-gray-200]="sizeLine.remainingQty > 0 && sizeLine.lineId !== currentLineId()"
+                           [class.bg-gray-50]="sizeLine.remainingQty > 0 && sizeLine.lineId !== currentLineId()">
+                        <div class="text-xs font-bold mb-0.5"
+                             [class.text-indigo-700]="sizeLine.lineId === currentLineId()"
+                             [class.text-green-700]="sizeLine.remainingQty === 0 && sizeLine.lineId !== currentLineId()"
+                             [class.text-gray-500]="sizeLine.remainingQty > 0 && sizeLine.lineId !== currentLineId()">
+                          {{sizeLine.size}}
+                        </div>
+                        <div class="text-base font-bold"
+                             [class.text-indigo-700]="sizeLine.lineId === currentLineId()"
+                             [class.text-green-600]="sizeLine.remainingQty === 0 && sizeLine.lineId !== currentLineId()"
+                             [class.text-gray-700]="sizeLine.remainingQty > 0 && sizeLine.lineId !== currentLineId()">
+                          {{sizeLine.pickedQty}}/{{sizeLine.requiredQty}}
+                        </div>
+                        @if (sizeLine.lineId === currentLineId()) {
+                          <div class="text-xs font-bold text-indigo-500 mt-0.5">▶</div>
+                        } @else if (sizeLine.remainingQty === 0) {
+                          <div class="text-xs font-bold text-green-500 mt-0.5">✓</div>
+                        }
+                      </div>
+                    }
                   </div>
                 </div>
-                @if (combined.remainingQty > 0) {
-                  <div class="text-center text-xs font-semibold text-amber-600 bg-amber-50 rounded-lg py-1.5 mb-3">
-                    {{combined.remainingQty === 1 ? 'Scan once more to complete this item' : 'Scan ' + combined.remainingQty + ' more times to complete this item'}}
-                  </div>
-                }
-              } @else {
-                <div class="grid grid-cols-3 gap-3 mb-4">
-                  <div class="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-                    <div class="text-xs text-gray-400 font-bold uppercase mb-1">Need</div>
-                    <div class="text-4xl font-bold text-gray-800">{{currentLine.requiredQty}}</div>
-                  </div>
-                  <div class="bg-indigo-50 rounded-xl p-3 text-center border border-indigo-100">
-                    <div class="text-xs text-indigo-500 font-bold uppercase mb-1">Picked</div>
-                    <div class="text-4xl font-bold text-indigo-700">{{currentLine.pickedQty}}</div>
-                  </div>
-                  <div class="rounded-xl p-3 text-center border-2 transition-colors"
-                       [class.bg-amber-50]="currentLine.remainingQty > 0" [class.border-amber-300]="currentLine.remainingQty > 0"
-                       [class.bg-green-50]="currentLine.remainingQty === 0" [class.border-green-300]="currentLine.remainingQty === 0">
-                    <div class="text-xs font-bold uppercase mb-1" [class.text-amber-500]="currentLine.remainingQty > 0" [class.text-green-500]="currentLine.remainingQty === 0">Left</div>
-                    <div class="text-4xl font-bold" [class.text-amber-600]="currentLine.remainingQty > 0" [class.text-green-600]="currentLine.remainingQty === 0">{{currentLine.remainingQty}}</div>
-                  </div>
-                </div>
-                @if (currentLine.remainingQty > 1) {
-                  <div class="text-center text-xs font-semibold text-amber-600 bg-amber-50 rounded-lg py-1.5 mb-1">
-                    {{currentLine.remainingQty}} more scan(s) needed
-                  </div>
-                }
               }
+              <!-- Design totals (Need / Picked / Left) -->
+              @let dt = currentDesignTotals();
+              <div class="grid grid-cols-3 gap-3 mb-3">
+                <div class="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+                  <div class="text-xs text-gray-400 font-bold uppercase mb-1">Need</div>
+                  <div class="text-4xl font-bold text-gray-800">{{dt.requiredQty}}</div>
+                </div>
+                <div class="bg-indigo-50 rounded-xl p-3 text-center border border-indigo-100">
+                  <div class="text-xs text-indigo-500 font-bold uppercase mb-1">Picked</div>
+                  <div class="text-4xl font-bold text-indigo-700">{{dt.pickedQty}}</div>
+                </div>
+                <div class="rounded-xl p-3 text-center border-2 transition-colors"
+                     [class.bg-amber-50]="dt.remainingQty > 0" [class.border-amber-300]="dt.remainingQty > 0"
+                     [class.bg-green-50]="dt.remainingQty === 0" [class.border-green-300]="dt.remainingQty === 0">
+                  <div class="text-xs font-bold uppercase mb-1"
+                       [class.text-amber-500]="dt.remainingQty > 0" [class.text-green-500]="dt.remainingQty === 0">Left</div>
+                  <div class="text-4xl font-bold"
+                       [class.text-amber-600]="dt.remainingQty > 0" [class.text-green-600]="dt.remainingQty === 0">{{dt.remainingQty}}</div>
+                </div>
+              </div>
+              <!-- Actively scanning size info -->
+              <div class="bg-indigo-50 rounded-xl px-3 py-2 border border-indigo-100 mb-2">
+                <div class="text-xs text-indigo-400 font-bold uppercase mb-0.5">Scanning Now</div>
+                <div class="text-sm font-bold text-indigo-700">
+                  Size {{currentLine.size}} · {{currentLine.remainingQty}} piece{{currentLine.remainingQty !== 1 ? 's' : ''}} remaining
+                </div>
+              </div>
               @if (currentLine.barcode) {
-                <div class="bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+                <div class="bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100 mt-2">
                   <div class="text-xs text-gray-400 font-bold uppercase mb-0.5">Barcode</div>
                   <div class="font-mono text-sm text-gray-700 break-all">{{currentLine.barcode}}</div>
                 </div>
@@ -507,40 +525,6 @@
           }
         </div>
 
-        <!-- PARTY-WISE PROGRESS -->
-        @if (partyWiseProgress().length > 0) {
-          <div class="bg-white rounded-2xl shadow-sm p-4">
-            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-              @if (pickList.type === 'itemwise' || pickList.type === 'combined') { Party-wise · Current Item } @else { Party-wise Progress }
-            </div>
-            <div class="space-y-3">
-              @for (party of partyWiseProgress(); track party.salesOrderId) {
-                @let isDone = party.pickedQty >= party.requiredQty;
-                @let pct = party.requiredQty > 0 ? (party.pickedQty / party.requiredQty * 100) : 0;
-                <div>
-                  <div class="flex items-center justify-between mb-1.5">
-                    <div class="flex items-center gap-2 min-w-0">
-                      @if (isDone) {
-                        <span class="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 bg-green-100 rounded-full">
-                          <svg class="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
-                        </span>
-                      } @else {
-                        <span class="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 bg-indigo-100 rounded-full">
-                          <span class="text-xs font-bold text-indigo-600">{{$index + 1}}</span>
-                        </span>
-                      }
-                      <span class="text-sm font-semibold text-gray-700 truncate">{{party.clientName}}</span>
-                    </div>
-                    <span class="text-sm font-bold flex-shrink-0 ml-2" [class.text-green-700]="isDone" [class.text-indigo-700]="!isDone">{{party.pickedQty}}/{{party.requiredQty}}</span>
-                  </div>
-                  <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div class="h-full rounded-full transition-all duration-300" [class.bg-green-500]="isDone" [class.bg-indigo-500]="!isDone" [style.width.%]="pct"></div>
-                  </div>
-                </div>
-              }
-            </div>
-          </div>
-        }
 
         <!-- SCAN AREA -->
         <div class="bg-white rounded-2xl shadow-sm p-4">
@@ -599,82 +583,74 @@
           </div>
         }
 
-        <!-- ALL LINES (collapsible) -->
+        <!-- ALL LINES – Customer → Design → Sizes hierarchy (collapsible) -->
         <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
           <button (click)="showLinesPanel.set(!showLinesPanel())"
                   class="w-full px-4 py-3.5 flex items-center justify-between hover:bg-gray-50 transition-colors">
             <div class="flex items-center gap-2">
               <span class="text-sm font-bold text-gray-700">All Lines</span>
-              @if (pickList.type === 'combined') {
-                <span class="bg-purple-100 text-purple-700 text-xs font-bold px-2 py-0.5 rounded-full">{{(combinedViewLines() ?? []).length}} SKUs</span>
-              } @else {
-                <span class="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">{{liveLines().length}}</span>
-              }
+              <span class="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">{{customerWiseViewLines().length}} customer(s)</span>
             </div>
             <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" [class.rotate-180]="showLinesPanel()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           </button>
           @if (showLinesPanel()) {
             <div class="border-t border-gray-100">
-              @if (pickList.type === 'combined') {
-                @for (group of (combinedViewLines() ?? []); track group.key) {
-                  <div class="border-b border-gray-50 last:border-b-0">
-                    <div class="px-4 py-3 flex items-center gap-3" [class.bg-purple-50]="group.isCurrentSku">
-                      <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-1.5 flex-wrap">
-                          <span class="font-semibold text-gray-800 text-sm">{{group.styleNo}}</span>
-                          <span class="text-xs text-gray-400">{{group.color}} · {{group.size}}{{group.sleeveType ? ' · ' + group.sleeveType : ''}}</span>
-                          @if (group.isCurrentSku) {
-                            <span class="text-xs font-bold text-purple-600 bg-purple-100 rounded-full px-1.5 py-0.5">Active</span>
-                          }
-                        </div>
-                      </div>
-                      <div class="flex items-center gap-2 flex-shrink-0">
-                        <span class="text-sm font-bold" [class.text-green-700]="group.allCompleted" [class.text-gray-700]="!group.allCompleted">{{group.pickedQty}}/{{group.requiredQty}}</span>
-                        @if (group.allCompleted) {
-                          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">Done</span>
-                        } @else if (group.anyActive) {
-                          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">Active</span>
-                        } @else {
-                          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">Pending</span>
-                        }
-                      </div>
-                    </div>
-                    @for (line of group.partyLines; track line.lineId) {
-                      <div class="pl-8 pr-4 py-2 flex items-center gap-3 bg-gray-50 border-t border-gray-100">
-                        <div class="flex-1 min-w-0">
-                          <div class="flex items-center gap-2">
-                            <span class="text-xs font-semibold text-indigo-600">{{line.salesNo}}</span>
-                            @if (line.lineId === currentLineId()) {
-                              <span class="text-xs font-bold text-purple-600">(picking)</span>
-                            } @else if (line.claimedByUsername && line.remainingQty > 0 && line.status !== 'completed') {
-                              <span class="text-xs text-gray-400">· {{line.claimedByUserId === currentUser()?.id ? 'You' : line.claimedByUsername}}</span>
-                            }
-                          </div>
-                        </div>
-                        <span class="text-xs font-bold flex-shrink-0" [class.text-green-700]="line.remainingQty === 0" [class.text-gray-600]="line.remainingQty > 0">{{line.pickedQty}}/{{line.requiredQty}}</span>
-                      </div>
+              @for (customer of customerWiseViewLines(); track customer.clientId) {
+                <div class="border-b border-gray-100 last:border-b-0">
+                  <!-- Customer header -->
+                  <div class="px-4 py-2.5 flex items-center gap-2 text-sm font-bold"
+                       [class.bg-indigo-50]="customer.isCurrentCustomer"
+                       [class.text-indigo-800]="customer.isCurrentCustomer"
+                       [class.text-gray-600]="!customer.isCurrentCustomer">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                    <span>{{customer.clientName}}</span>
+                    @if (customer.isCurrentCustomer) {
+                      <span class="text-xs font-semibold text-indigo-500 ml-0.5">(current)</span>
                     }
                   </div>
-                }
-              } @else {
-                <div class="divide-y divide-gray-50">
-                  @for (line of liveLines(); track line.lineId) {
-                    <div class="px-4 py-3 flex items-center gap-3 transition-colors" [class.bg-indigo-50]="currentLineId() === line.lineId">
-                      <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-1.5 flex-wrap">
-                          <span class="font-semibold text-gray-800 text-sm">{{line.styleNo}}</span>
-                          <span class="text-xs text-gray-400">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</span>
+                  <!-- Designs for this customer -->
+                  @for (design of customer.designs; track design.key) {
+                    <div class="ml-5 border-b border-gray-50 last:border-b-0">
+                      <!-- Design row -->
+                      <div class="px-3 py-2 flex items-center justify-between"
+                           [class.bg-indigo-50]="design.isCurrentDesign">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <span class="text-sm font-semibold text-gray-700 truncate">
+                            {{design.styleNo}} · {{design.color}}{{design.sleeveType ? ' · ' + design.sleeveType : ''}}
+                          </span>
+                          @if (design.isCurrentDesign) {
+                            <span class="text-xs font-bold text-indigo-600 bg-indigo-100 rounded-full px-1.5 py-0.5 flex-shrink-0">Active</span>
+                          }
                         </div>
-                        <div class="flex items-center gap-2 mt-0.5">
-                          <span class="text-xs text-indigo-600 font-semibold">{{line.salesNo}}</span>
-                          @if (line.claimedByUsername && line.remainingQty > 0 && line.status !== 'completed') {
-                            <span class="text-xs text-gray-400">· {{line.claimedByUserId === currentUser()?.id ? 'You' : line.claimedByUsername}}</span>
+                        <div class="flex items-center gap-2 flex-shrink-0 ml-2">
+                          <span class="text-sm font-bold"
+                                [class.text-green-700]="design.allCompleted"
+                                [class.text-gray-700]="!design.allCompleted">
+                            {{design.pickedQty}}/{{design.requiredQty}}
+                          </span>
+                          @if (design.allCompleted) {
+                            <span class="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">Done</span>
+                          } @else if (design.anyActive) {
+                            <span class="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">Active</span>
                           }
                         </div>
                       </div>
-                      <div class="flex items-center gap-2 flex-shrink-0">
-                        <span class="text-sm font-bold" [class.text-green-700]="line.remainingQty === 0" [class.text-gray-700]="line.remainingQty > 0">{{line.pickedQty}}/{{line.requiredQty}}</span>
-                        <span class="px-2 py-0.5 rounded-full text-xs font-semibold" [class]="liveLineStatusBadge(line)">{{liveLineStatusLabel(line)}}</span>
+                      <!-- Size chips for this design -->
+                      <div class="px-4 pb-2 pt-1 flex flex-wrap gap-1.5 bg-gray-50 border-t border-gray-100">
+                        @for (line of design.lines; track line.lineId) {
+                          <div class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-medium"
+                               [class.bg-indigo-200]="currentLineId() === line.lineId"
+                               [class.text-indigo-800]="currentLineId() === line.lineId"
+                               [class.bg-green-100]="line.remainingQty === 0 && currentLineId() !== line.lineId"
+                               [class.text-green-700]="line.remainingQty === 0 && currentLineId() !== line.lineId"
+                               [class.bg-gray-200]="line.remainingQty > 0 && currentLineId() !== line.lineId"
+                               [class.text-gray-600]="line.remainingQty > 0 && currentLineId() !== line.lineId">
+                            <span class="font-bold">{{line.size}}</span>
+                            <span>{{line.pickedQty}}/{{line.requiredQty}}</span>
+                            @if (line.remainingQty === 0) { <span>✓</span> }
+                            @else if (currentLineId() === line.lineId) { <span>▶</span> }
+                          </div>
+                        }
                       </div>
                     </div>
                   }

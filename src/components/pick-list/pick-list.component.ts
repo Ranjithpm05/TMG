@@ -20,7 +20,6 @@ import {
   PickListClaimUser,
   PickListLine,
   PickListLineItem,
-  PickListOrderSummary,
   PickListType,
 } from '../../models/pick-list.model';
 import { Client } from '../../models/client.model';
@@ -223,93 +222,102 @@ export class PickListComponent implements OnInit, OnDestroy {
     return required > 0 ? Math.round((picked / required) * 100) : 0;
   });
 
-  partyWiseProgress = computed((): PickListOrderSummary[] => {
-    const pickList = this.livePickList();
+  currentDesignLines = computed(() => {
     const currentLine = this.currentAssignedLine();
-    if (!pickList) return [];
-    if ((pickList.type === 'itemwise' || pickList.type === 'combined') && currentLine) {
-      return this.liveLines()
-        .filter((line) =>
-          line.styleNo === currentLine.styleNo &&
-          line.color === currentLine.color &&
-          line.size === currentLine.size &&
-          (line.sleeveType ?? '') === (currentLine.sleeveType ?? '') &&
-          line.status !== 'pending_stock' &&
-          line.status !== 'blocked'
-        )
-        .map((line) => ({
-          salesOrderId: line.salesOrderId,
-          salesNo: line.salesNo,
-          clientId: line.clientId ?? '',
-          clientName: line.clientName ?? '',
-          requiredQty: line.requiredQty,
-          pickedQty: line.pickedQty,
-          pendingQty: line.pendingQty ?? 0,
-        }));
-    }
-    return pickList.orderSummaries ?? [];
-  });
-
-  combinedCurrentItemTotals = computed(() => {
-    const pickList = this.livePickList();
-    const currentLine = this.currentAssignedLine();
-    if (!pickList || !currentLine || pickList.type !== 'combined') return null;
-    const siblings = this.liveLines().filter((line) =>
+    if (!currentLine) return [];
+    return this.liveLines().filter((line) =>
+      (line.clientId ?? '') === (currentLine.clientId ?? '') &&
       line.styleNo === currentLine.styleNo &&
       line.color === currentLine.color &&
-      line.size === currentLine.size &&
       (line.sleeveType ?? '') === (currentLine.sleeveType ?? '') &&
       line.status !== 'pending_stock' &&
       line.status !== 'blocked'
     );
+  });
+
+  currentDesignTotals = computed(() => {
+    const lines = this.currentDesignLines();
     return {
-      requiredQty: siblings.reduce((sum, l) => sum + l.requiredQty, 0),
-      pickedQty: siblings.reduce((sum, l) => sum + l.pickedQty, 0),
-      remainingQty: siblings.reduce((sum, l) => sum + l.remainingQty, 0),
-      partyCount: siblings.length,
+      requiredQty: lines.reduce((sum, l) => sum + l.requiredQty, 0),
+      pickedQty: lines.reduce((sum, l) => sum + l.pickedQty, 0),
+      remainingQty: lines.reduce((sum, l) => sum + l.remainingQty, 0),
     };
   });
 
-  combinedViewLines = computed(() => {
-    const pickList = this.livePickList();
-    const lines = this.liveLines();
-    if (pickList?.type !== 'combined') return null;
-    const currentLineId = this.currentLineId();
-
-    const groups = new Map<string, {
-      key: string; styleNo: string; color: string; size: string; sleeveType?: string;
-      barcode?: string; requiredQty: number; pickedQty: number; remainingQty: number;
-      partyLines: PickListLine[]; sortMin: number;
-      allCompleted: boolean; anyActive: boolean; isCurrentSku: boolean;
+  currentCustomerDesigns = computed(() => {
+    const currentLine = this.currentAssignedLine();
+    if (!currentLine) return [];
+    const clientId = currentLine.clientId ?? '';
+    const designMap = new Map<string, {
+      key: string; styleNo: string; color: string; sleeveType?: string;
+      requiredQty: number; pickedQty: number; isCurrentDesign: boolean;
     }>();
-
-    for (const line of lines) {
-      const key = `${line.styleNo}||${line.color}||${line.size}||${line.sleeveType ?? ''}`;
-      const isCurrent = line.lineId === currentLineId;
-      const existing = groups.get(key);
+    for (const line of this.liveLines()) {
+      if ((line.clientId ?? '') !== clientId) continue;
+      if (line.status === 'pending_stock' || line.status === 'blocked') continue;
+      const key = `${line.styleNo}||${line.color}||${line.sleeveType ?? ''}`;
+      const isCurrent = line.styleNo === currentLine.styleNo &&
+        line.color === currentLine.color &&
+        (line.sleeveType ?? '') === (currentLine.sleeveType ?? '');
+      const existing = designMap.get(key);
       if (existing) {
         existing.requiredQty += line.requiredQty;
         existing.pickedQty += line.pickedQty;
-        existing.remainingQty += line.remainingQty;
-        existing.partyLines.push(line);
-        existing.sortMin = Math.min(existing.sortMin, line.sortOrder ?? 0);
-        if (line.status !== 'completed') existing.allCompleted = false;
-        if (line.status === 'in_progress') existing.anyActive = true;
-        if (isCurrent) existing.isCurrentSku = true;
+        if (isCurrent) existing.isCurrentDesign = true;
       } else {
-        groups.set(key, {
-          key, styleNo: line.styleNo, color: line.color, size: line.size, sleeveType: line.sleeveType,
-          barcode: line.barcode,
-          requiredQty: line.requiredQty, pickedQty: line.pickedQty, remainingQty: line.remainingQty,
-          partyLines: [line], sortMin: line.sortOrder ?? 0,
-          allCompleted: line.status === 'completed',
-          anyActive: line.status === 'in_progress',
-          isCurrentSku: isCurrent,
+        designMap.set(key, {
+          key, styleNo: line.styleNo, color: line.color, sleeveType: line.sleeveType,
+          requiredQty: line.requiredQty, pickedQty: line.pickedQty, isCurrentDesign: isCurrent,
         });
       }
     }
+    return [...designMap.values()];
+  });
 
-    return [...groups.values()].sort((a, b) => a.sortMin - b.sortMin);
+  customerWiseViewLines = computed(() => {
+    const currentLine = this.currentAssignedLine();
+    const customerMap = new Map<string, {
+      clientId: string; clientName: string; isCurrentCustomer: boolean;
+      designs: Map<string, {
+        key: string; styleNo: string; color: string; sleeveType?: string;
+        isCurrentDesign: boolean; allCompleted: boolean; anyActive: boolean;
+        requiredQty: number; pickedQty: number; remainingQty: number;
+        lines: PickListLine[];
+      }>;
+    }>();
+    for (const line of this.liveLines()) {
+      const clientKey = line.clientId || line.clientName || '';
+      const isCurrentCustomer = currentLine ? (line.clientId ?? '') === (currentLine.clientId ?? '') : false;
+      const designKey = `${line.styleNo}||${line.color}||${line.sleeveType ?? ''}`;
+      const isCurrentDesign = currentLine && isCurrentCustomer
+        ? line.styleNo === currentLine.styleNo && line.color === currentLine.color &&
+          (line.sleeveType ?? '') === (currentLine.sleeveType ?? '')
+        : false;
+      if (!customerMap.has(clientKey)) {
+        customerMap.set(clientKey, {
+          clientId: line.clientId ?? '', clientName: line.clientName ?? '',
+          isCurrentCustomer, designs: new Map(),
+        });
+      }
+      const customer = customerMap.get(clientKey)!;
+      if (isCurrentCustomer) customer.isCurrentCustomer = true;
+      if (!customer.designs.has(designKey)) {
+        customer.designs.set(designKey, {
+          key: designKey, styleNo: line.styleNo, color: line.color, sleeveType: line.sleeveType,
+          isCurrentDesign, allCompleted: true, anyActive: false,
+          requiredQty: 0, pickedQty: 0, remainingQty: 0, lines: [],
+        });
+      }
+      const design = customer.designs.get(designKey)!;
+      if (isCurrentDesign) design.isCurrentDesign = true;
+      design.lines.push(line);
+      design.requiredQty += line.requiredQty;
+      design.pickedQty += line.pickedQty;
+      design.remainingQty += line.remainingQty;
+      if (line.status !== 'completed') design.allCompleted = false;
+      if (line.status === 'in_progress') design.anyActive = true;
+    }
+    return [...customerMap.values()].map((c) => ({ ...c, designs: [...c.designs.values()] }));
   });
 
   ngOnInit() {
@@ -633,21 +641,20 @@ export class PickListComponent implements OnInit, OnDestroy {
       sortOrder: index,
     }));
 
-    if (type === 'itemwise') {
-      const skuIndexMap = new Map<string, number>();
-      for (const group of this.candidateGroups()) {
-        if (!skuIndexMap.has(group.key)) skuIndexMap.set(group.key, skuIndexMap.size);
-      }
-      liveLines.sort((a, b) => {
-        const aKey = `${a.styleNo}||${a.color}||${a.size}||${a.sleeveType ?? ''}`;
-        const bKey = `${b.styleNo}||${b.color}||${b.size}||${b.sleeveType ?? ''}`;
-        const aIdx = skuIndexMap.get(aKey) ?? 999;
-        const bIdx = skuIndexMap.get(bKey) ?? 999;
-        if (aIdx !== bIdx) return aIdx - bIdx;
-        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
-      });
-      liveLines.forEach((line, idx) => { line.sortOrder = idx; });
-    }
+    // Sort all types: customer → styleNo → color → sleeveType → size
+    const rankSize = (s: string) => { const i = SIZE_ORDER.indexOf(s); return i === -1 ? 999 : i; };
+    liveLines.sort((a, b) => {
+      const clientCmp = (a.clientName ?? '').localeCompare(b.clientName ?? '');
+      if (clientCmp !== 0) return clientCmp;
+      const styleCmp = a.styleNo.localeCompare(b.styleNo);
+      if (styleCmp !== 0) return styleCmp;
+      const colorCmp = a.color.localeCompare(b.color);
+      if (colorCmp !== 0) return colorCmp;
+      const sleeveCmp = (a.sleeveType ?? '').localeCompare(b.sleeveType ?? '');
+      if (sleeveCmp !== 0) return sleeveCmp;
+      return rankSize(a.size) - rankSize(b.size);
+    });
+    liveLines.forEach((line, idx) => { line.sortOrder = idx; });
 
     const requiredQty = scannableLines.reduce((sum, line) => sum + line.requiredQty, 0);
     const result = await Swal.fire({
@@ -993,26 +1000,6 @@ export class PickListComponent implements OnInit, OnDestroy {
       }
 
       if (result.lineCompleted) {
-        if (pickList.type === 'combined') {
-          const done = result.line;
-          const sibling = this.liveLines().find((l) =>
-            l.lineId !== done.lineId &&
-            l.styleNo === done.styleNo &&
-            l.color === done.color &&
-            l.size === done.size &&
-            (l.sleeveType ?? '') === (done.sleeveType ?? '') &&
-            l.remainingQty > 0 &&
-            l.status !== 'blocked' &&
-            l.status !== 'pending_stock' &&
-            l.status !== 'completed'
-          );
-          if (sibling) {
-            const nextLine = await this.claimNextAvailableLine(sibling.lineId);
-            this.currentLineId.set(nextLine?.lineId ?? null);
-            this.scannerMessage.set('Scan the assigned item');
-            return;
-          }
-        }
         await this.showToast('success', 'Quantity Completed');
         const nextLine = await this.claimNextAvailableLine();
         this.currentLineId.set(nextLine?.lineId ?? null);
