@@ -93,7 +93,7 @@ export class PackingListService {
       throw new Error('no_packable_lines');
     }
 
-    const summary = this.buildSummary(normalizedLines, []);
+    const summary = this.buildSummary(normalizedLines, [], input.clientName);
     const packingListDoc = doc(this.packingRef);
     const batch = writeBatch(this.firestore);
 
@@ -138,6 +138,7 @@ export class PackingListService {
     cartonNo: string,
     barcode: string,
     qty: number,
+    salesOrderId?: string,
   ): Promise<PackingScanResult> {
     const trimmedCartonNo = cartonNo.trim();
     const trimmedBarcode = barcode.trim();
@@ -147,7 +148,7 @@ export class PackingListService {
     if (!trimmedBarcode) throw new Error('barcode_not_found');
     if (normalizedQty <= 0) throw new Error('qty_invalid');
 
-    const line = await this.resolveScannableLine(packingListId, trimmedBarcode);
+    const line = await this.resolveScannableLine(packingListId, trimmedBarcode, salesOrderId);
     if (!line) throw new Error('barcode_not_found');
 
     const txResult = await runTransaction(this.firestore, async (transaction) => {
@@ -186,7 +187,7 @@ export class PackingListService {
       );
 
       const { cartons, carton } = this.upsertCartons(packingList.cartons ?? [], updatedLine, trimmedCartonNo, normalizedQty, now);
-      const summary = this.buildSummary(updatedItems, cartons);
+      const summary = this.buildSummary(updatedItems, cartons, packingList.clientName);
 
       transaction.update(lineRef, this.stripUndefined({
         packedQty: updatedLine.packedQty,
@@ -218,6 +219,7 @@ export class PackingListService {
         cartonCount: summary.cartonCount,
         status: summary.status,
         partSummaries: summary.partSummaries,
+        partyProgress: summary.partyProgress,
         _updatedItems: updatedItems,
       };
     });
@@ -238,7 +240,7 @@ export class PackingListService {
     ]);
     if (!packingList) return;
 
-    const summary = this.buildSummary(lines, packingList.cartons ?? []);
+    const summary = this.buildSummary(lines, packingList.cartons ?? [], packingList.clientName);
     const normalizedItems = lines.map((line) => this.normalizeLine(line));
 
     await runTransaction(this.firestore, async (transaction) => {
@@ -352,20 +354,28 @@ export class PackingListService {
     await updateDoc(packingListRef, this.stripUndefined({ cartons, updatedAt: serverTimestamp() }));
   }
 
-  private async resolveScannableLine(packingListId: string, barcode: string): Promise<PackingListLine | null> {
+  private async resolveScannableLine(
+    packingListId: string,
+    barcode: string,
+    salesOrderId?: string,
+  ): Promise<PackingListLine | null> {
     const snap = await getDocs(
-      query(this.linesCollection(packingListId), where('barcode', '==', barcode), limit(2))
+      query(this.linesCollection(packingListId), where('barcode', '==', barcode), limit(20))
     );
     if (snap.empty) return null;
-    const lines = snap.docs
+
+    const available = snap.docs
       .map((docSnap) => this.normalizeLine({ lineId: docSnap.id, ...docSnap.data() }))
       .filter((line) => line.remainingQty > 0)
-      .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0));
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
-    return lines[0] ?? null;
+    if (!salesOrderId) return available[0] ?? null;
+
+    const partyLines = available.filter((line) => line.salesOrderIds.includes(salesOrderId));
+    return (partyLines[0] ?? available[0]) ?? null;
   }
 
-  private buildSummary(lines: PackingListLine[], cartons: PackingCarton[]) {
+  private buildSummary(lines: PackingListLine[], cartons: PackingCarton[], clientName = '') {
     const normalizedLines = lines.map((line) => this.normalizeLine(line)).filter((line) => line.requiredQty > 0);
     const normalizedCartons = cartons.map((carton) => this.normalizeCarton(carton));
     const totalRequiredQty = normalizedLines.reduce((sum, line) => sum + line.requiredQty, 0);
@@ -374,7 +384,7 @@ export class PackingListService {
     const completedLineCount = normalizedLines.filter((line) => line.remainingQty <= 0).length;
     const cartonCount = normalizedCartons.length;
     const partSummaries = this.buildPartSummaries(normalizedLines);
-    const partyProgress = this.buildPartyProgress(normalizedLines);
+    const partyProgress = this.buildPartyProgress(normalizedLines, clientName);
 
     return {
       totalRequiredQty,
@@ -400,15 +410,16 @@ export class PackingListService {
     return [...map.values()].sort((left, right) => left.partName.localeCompare(right.partName, undefined, { numeric: true }));
   }
 
-  private buildPartyProgress(lines: PackingListLine[]): PackingPartyProgress[] {
+  private buildPartyProgress(lines: PackingListLine[], defaultClientName = ''): PackingPartyProgress[] {
     const map = new Map<string, PackingPartyProgress>();
     for (const line of lines) {
       for (let i = 0; i < line.salesOrderIds.length; i++) {
         const salesOrderId = line.salesOrderIds[i] ?? '';
         const salesNo = line.salesNos[i] ?? '';
+        const clientName = line.clientName || defaultClientName;
         if (!salesOrderId) continue;
         const existing = map.get(salesOrderId) ?? {
-          salesOrderId, salesNo, clientName: '', requiredQty: 0, packedQty: 0, pendingQty: 0,
+          salesOrderId, salesNo, clientName, requiredQty: 0, packedQty: 0, pendingQty: 0,
         };
         existing.requiredQty += line.requiredQty;
         existing.packedQty += Math.min(line.packedQty, line.requiredQty);
@@ -436,6 +447,7 @@ export class PackingListService {
       const designId = String(source.designId ?? '').trim();
       const salesOrderId = String(source.salesOrderId ?? '').trim();
       const salesNo = String(source.salesNo ?? '').trim();
+      const clientName = String(source.clientName ?? '').trim();
       const key = `${salesOrderId}||${styleNo}||${color}||${partName}||${size}||${sleeveType}||${barcode}||${inventoryId}`;
 
       if (!aggregated.has(key)) {
@@ -444,6 +456,7 @@ export class PackingListService {
           pickListLineId: String(source.lineId ?? '').trim() || this.buildPackingLineId(styleNo, color, partName, size, sleeveType, aggregated.size),
           salesOrderIds: salesOrderId ? [salesOrderId] : [],
           salesNos: salesNo ? [salesNo] : [],
+          clientName: clientName || undefined,
           designId,
           styleNo,
           color,
@@ -542,7 +555,7 @@ export class PackingListService {
   private normalizePackingList(raw: any): PackingList {
     const items = Array.isArray(raw?.items) ? raw.items.map((item: any) => this.normalizeLine(item)) : [];
     const cartons = Array.isArray(raw?.cartons) ? raw.cartons.map((carton: any) => this.normalizeCarton(carton)) : [];
-    const summary = this.buildSummary(items, cartons);
+    const summary = this.buildSummary(items, cartons, String(raw?.clientName ?? ''));
 
     const rawMode = raw?.packingMode;
     const packingMode: PackingMode = rawMode === 'order' ? 'order' : 'customer';
@@ -595,6 +608,7 @@ export class PackingListService {
       pickListLineId: String(raw?.pickListLineId ?? raw?.lineId ?? ''),
       salesOrderIds: Array.isArray(raw?.salesOrderIds) ? raw.salesOrderIds.map((id: any) => String(id)) : [],
       salesNos: Array.isArray(raw?.salesNos) ? raw.salesNos.map((salesNo: any) => String(salesNo)) : [],
+      clientName: raw?.clientName ? String(raw.clientName) : undefined,
       designId: String(raw?.designId ?? ''),
       styleNo: String(raw?.styleNo ?? ''),
       color: String(raw?.color ?? ''),

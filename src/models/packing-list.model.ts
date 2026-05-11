@@ -6,6 +6,7 @@ export interface PackingListLine {
   pickListLineId: string;
   salesOrderIds: string[];
   salesNos: string[];
+  clientName?: string;
   designId: string;
   styleNo: string;
   color: string;
@@ -103,4 +104,5 @@ export interface PackingScanResult {
   cartonCount: number;
   status: PackingList['status'];
   partSummaries: PackingPartSummary[];
+  partyProgress: PackingPartyProgress[];
 }

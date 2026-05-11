@@ -65,6 +65,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   showCartons = signal(true);
   showPackingLines = signal(true);
+  activePartyId = signal('');
 
   agentName = signal('');
   transport = signal('');
@@ -131,6 +132,20 @@ export class PackingListComponent implements OnInit, OnDestroy {
     (this.livePackingList()?.cartons ?? []).filter((c) => c.cartonStatus === 'sealed').length
   );
 
+  filteredLiveLines = computed(() => {
+    const partyId = this.activePartyId();
+    const lines = this.liveLines();
+    if (!partyId) return lines;
+    return lines.filter((l) => l.salesOrderIds.includes(partyId));
+  });
+
+  activePartyLabel = computed(() => {
+    const partyId = this.activePartyId();
+    if (!partyId) return '';
+    const p = this.partyPackingProgress().find((p) => p.salesOrderId === partyId);
+    return p ? (p.clientName || p.salesNo) : '';
+  });
+
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
   ngOnInit() {
@@ -179,6 +194,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.scanQty.set(1);
     this.cartonInput.set('');
     this.activeCartonNo.set('');
+    this.activePartyId.set('');
     this.packFeedback.set('idle');
     this.scannerMessage.set('Scan carton box no to begin packing.');
     this.agentName.set('');
@@ -331,6 +347,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.scanQty.set(1);
     this.cartonInput.set('');
     this.activeCartonNo.set('');
+    this.activePartyId.set('');
     this.scannerMessage.set('Scan carton box no to begin packing.');
   }
 
@@ -370,6 +387,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.flashPackFeedback('success', `Carton ${cartonNo} is active. Scan an item barcode next.`);
   }
 
+  setActiveParty(salesOrderId: string) {
+    if (this.activePartyId() === salesOrderId) {
+      this.activePartyId.set('');
+    } else {
+      this.activePartyId.set(salesOrderId);
+    }
+  }
+
   onScanQtyChange(value: any) {
     this.scanQty.set(Math.max(1, Math.floor(Number(value) || 1)));
   }
@@ -393,7 +418,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
     this.isSubmitting.set(true);
     try {
-      const result = await this.packingListService.processScan(packingList.id, cartonNo, barcode, qty);
+      const activeSalesOrderId = this.activePartyId() || undefined;
+      const result = await this.packingListService.processScan(packingList.id, cartonNo, barcode, qty, activeSalesOrderId);
 
       this.activeCartonNo.set(result.carton.cartonNo);
       this.cartonInput.set(result.carton.cartonNo);
@@ -415,6 +441,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
           cartonCount: result.cartonCount,
           status: result.status,
           partSummaries: result.partSummaries,
+          partyProgress: result.partyProgress,
           cartons: this.mergeCarton(current.cartons ?? [], result.carton),
           items: this.liveLines().map((l) => (l.lineId === result.line.lineId ? result.line : l)),
         };
