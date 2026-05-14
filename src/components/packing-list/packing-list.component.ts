@@ -13,9 +13,11 @@ import { Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
 import { PickList, PickListLine } from '../../models/pick-list.model';
 import { PackingCarton, PackingList, PackingListLine, PackingPartyProgress } from '../../models/packing-list.model';
+import { DeliveryChallan } from '../../models/delivery-challan.model';
 import { PickListService } from '../../services/pick-list.service';
 import { PackingListService } from '../../services/packing-list.service';
 import { ClientService } from '../../services/client.service';
+import { DeliveryChallanService } from '../../services/delivery-challan.service';
 
 type ViewMode = 'list' | 'view' | 'live-pack';
 
@@ -32,16 +34,18 @@ export class PackingListComponent implements OnInit, OnDestroy {
   private pickListService = inject(PickListService);
   private packingListService = inject(PackingListService);
   private clientService = inject(ClientService);
+  private dcService = inject(DeliveryChallanService);
   private subscriptions: Subscription[] = [];
 
   // ─── Navigation ────────────────────────────────────────────────────────────
   mode = signal<ViewMode>('list');
-  listTab = signal<'ready' | 'packing'>('ready');
+  listTab = signal<'ready' | 'packing' | 'dc-history'>('ready');
   searchTerm = signal('');
 
   // ─── Data ──────────────────────────────────────────────────────────────────
   pickLists = signal<PickList[]>([]);
   packingLists = signal<PackingList[]>([]);
+  deliveryChallans = signal<DeliveryChallan[]>([]);
 
   // ─── View state ────────────────────────────────────────────────────────────
   viewPackingList = signal<PackingList | null>(null);
@@ -55,6 +59,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   isSubmitting = signal(false);
   isSealingCarton = signal(false);
   isGenerating = signal(false);
+  isGeneratingDC = signal(false);
   packFeedback = signal<'idle' | 'success' | 'error'>('idle');
   scannerMessage = signal('Scan carton box no to begin packing.');
 
@@ -70,6 +75,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
   agentName = signal('');
   transport = signal('');
   isSavingDispatchInfo = signal(false);
+
+  packingInProgress = signal<string[]>([]);
+  activeBoxNo = signal('');
+  boxInput = signal('');
 
   // ─── Computed ──────────────────────────────────────────────────────────────
 
@@ -95,6 +104,17 @@ export class PackingListComponent implements OnInit, OnDestroy {
         || pl.pickListNo.toLowerCase().includes(term)
         || (pl.salesNos ?? []).some((s) => s.toLowerCase().includes(term))
         || pl.clientName.toLowerCase().includes(term);
+    });
+  });
+
+  filteredDCList = computed(() => {
+    const term = this.searchTerm().trim().toLowerCase();
+    return this.deliveryChallans().filter((dc) => {
+      if (!term) return true;
+      return dc.dcNo.toLowerCase().includes(term)
+        || dc.clientName.toLowerCase().includes(term)
+        || dc.salesNo.toLowerCase().includes(term)
+        || dc.packingListNo.toLowerCase().includes(term);
     });
   });
 
@@ -146,12 +166,43 @@ export class PackingListComponent implements OnInit, OnDestroy {
     return p ? (p.clientName || p.salesNo) : '';
   });
 
+  liveLinesByCustomer = computed((): { salesOrderId: string; customerName: string; salesNo: string; lines: PackingListLine[] }[] => {
+    const lines = this.liveLines();
+    const pl = this.livePackingList();
+    const partyProgress = pl?.partyProgress ?? [];
+    if (partyProgress.length === 0) {
+      return [{ salesOrderId: 'all', customerName: pl?.clientName ?? '-', salesNo: '-', lines }];
+    }
+    const groups = new Map<string, { salesOrderId: string; customerName: string; salesNo: string; lines: PackingListLine[] }>();
+    for (const party of partyProgress) {
+      groups.set(party.salesOrderId, {
+        salesOrderId: party.salesOrderId,
+        customerName: party.clientName || party.salesNo,
+        salesNo: party.salesNo,
+        lines: [],
+      });
+    }
+    for (const line of lines) {
+      let placed = false;
+      for (const soId of line.salesOrderIds) {
+        if (groups.has(soId)) { groups.get(soId)!.lines.push(line); placed = true; break; }
+      }
+      if (!placed) { const first = [...groups.values()][0]; if (first) first.lines.push(line); }
+    }
+    return [...groups.values()].filter((g) => g.lines.length > 0);
+  });
+
+  allLinesPacked = computed(() => {
+    const lines = this.liveLines();
+    return lines.length > 0 && lines.every((l) => l.status === 'completed');
+  });
+
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
   ngOnInit() {
     this.isLoading.set(true);
     let doneCount = 0;
-    const done = () => { if (++doneCount >= 2) this.isLoading.set(false); };
+    const done = () => { if (++doneCount >= 3) this.isLoading.set(false); };
 
     this.subscriptions.push(
       this.pickListService.getPickLists().subscribe({ next: (v) => { this.pickLists.set(v); done(); }, error: done })
@@ -176,6 +227,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
         error: done,
       })
     );
+    this.subscriptions.push(
+      this.dcService.getDeliveryChallans().subscribe({ next: (v) => { this.deliveryChallans.set(v); done(); }, error: done })
+    );
   }
 
   ngOnDestroy() {
@@ -199,6 +253,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.scannerMessage.set('Scan carton box no to begin packing.');
     this.agentName.set('');
     this.transport.set('');
+    this.packingInProgress.set([]);
+    this.activeBoxNo.set('');
+    this.boxInput.set('');
   }
 
   // ─── Generate flow ─────────────────────────────────────────────────────────
@@ -546,76 +603,142 @@ export class PackingListComponent implements OnInit, OnDestroy {
     }
   }
 
-  async printDeliveryChallan(packingList: PackingList) {
-    if (!packingList.id) return;
+  // ─── DC Generation ─────────────────────────────────────────────────────────
 
-    const agentNameVal = this.agentName().trim();
-    const transportVal = this.transport().trim();
-    const sealedCount = (packingList.cartons ?? []).filter((c) => c.cartonStatus === 'sealed').length;
-    const totalCartons = (packingList.cartons ?? []).length;
+  async generateAndPrintDC(packingList: PackingList) {
+    if (!packingList.id || this.isGeneratingDC()) return;
 
-    const { isConfirmed, value } = await Swal.fire({
-      title: 'QC Verification',
-      html: `
-        <div style="text-align:left;font-size:13px;line-height:1.7">
-          <p style="margin-bottom:10px;font-weight:600;color:#0f172a">Confirm before printing Delivery Challan:</p>
-          <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
-            <tr><td style="padding:4px 8px;color:#64748b">Client</td><td style="padding:4px 8px;font-weight:600">${packingList.clientName}</td></tr>
-            <tr style="background:#f8fafc"><td style="padding:4px 8px;color:#64748b">Orders</td><td style="padding:4px 8px;font-weight:600">${(packingList.salesNos ?? []).join(', ')}</td></tr>
-            <tr><td style="padding:4px 8px;color:#64748b">Total Qty</td><td style="padding:4px 8px;font-weight:700;color:#047857">${packingList.totalPackedQty}</td></tr>
-            <tr style="background:#f8fafc"><td style="padding:4px 8px;color:#64748b">Cartons</td><td style="padding:4px 8px;font-weight:700;color:#0f766e">${totalCartons} (${sealedCount} sealed)</td></tr>
-          </table>
-          <div style="margin-bottom:8px">
-            <label style="display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px">Agent Name</label>
-            <input id="swal-agent" type="text" value="${agentNameVal}" placeholder="Enter agent name"
-              style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;outline:none">
-          </div>
-          <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px">Transport</label>
-            <input id="swal-transport" type="text" value="${transportVal}" placeholder="Enter transporter name"
-              style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;outline:none">
-          </div>
-        </div>`,
-      showCancelButton: true,
-      confirmButtonText: 'Verify & Print DC',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#4f46e5',
-      focusConfirm: false,
-      preConfirm: () => ({
-        agentName: (document.getElementById('swal-agent') as HTMLInputElement)?.value?.trim() ?? '',
-        transport: (document.getElementById('swal-transport') as HTMLInputElement)?.value?.trim() ?? '',
-      }),
-    });
+    const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id);
 
-    if (!isConfirmed || !value) return;
+    if (existingDCs.length > 0) {
+      const result = await Swal.fire({
+        icon: 'info',
+        title: 'DC Already Generated',
+        html: `<p style="font-size:13px">DC(s) already exist: <strong>${existingDCs.map((d) => d.dcNo).join(', ')}</strong></p>`,
+        showConfirmButton: true,
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: 'Reprint Existing',
+        denyButtonText: 'Generate New DC',
+        cancelButtonText: 'Close',
+        confirmButtonColor: '#4f46e5',
+        denyButtonColor: '#d97706',
+      });
+      if (result.isConfirmed) {
+        await this.printDCsWithLabels(existingDCs.sort((a, b) => a.dcSeq - b.dcSeq), packingList);
+        return;
+      }
+      if (!result.isDenied) return;
+    }
 
-    const finalAgent = value.agentName;
-    const finalTransport = value.transport;
-    this.agentName.set(finalAgent);
-    this.transport.set(finalTransport);
-
+    this.isGeneratingDC.set(true);
     try {
-      const [fresh, lines, client] = await Promise.all([
+      const [fresh, lines] = await Promise.all([
         this.packingListService.getPackingListByIdOnce(packingList.id),
         this.packingListService.getPackingListLinesOnce(packingList.id),
-        this.clientService.getClientByIdOnce(packingList.clientId),
       ]);
+      const loaded = fresh ?? packingList;
+      const agentName = this.agentName().trim();
+      const transport = this.transport().trim();
 
-      await Promise.all([
-        this.packingListService.updateDispatchInfo(packingList.id, finalAgent, finalTransport),
-        this.packingListService.markQcVerified(packingList.id),
-      ]);
+      if (agentName || transport) {
+        await this.packingListService.updateDispatchInfo(packingList.id, agentName, transport);
+      }
 
-      const currentList = this.viewPackingList();
-      const currentLive = this.livePackingList();
-      if (currentList?.id === packingList.id) this.viewPackingList.update((p) => p ? { ...p, agentName: finalAgent, transport: finalTransport } : p);
-      if (currentLive?.id === packingList.id) this.livePackingList.update((p) => p ? { ...p, agentName: finalAgent, transport: finalTransport } : p);
+      const partyProgress = loaded.partyProgress ?? [];
+      const generatedDCs: DeliveryChallan[] = [];
 
-      const html = this.buildDCHtml(fresh ?? packingList, lines, client, finalAgent, finalTransport);
-      const win = window.open('', '_blank', 'width=900,height=780');
-      if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+      if (partyProgress.length === 0) {
+        const client = await this.clientService.getClientByIdOnce(loaded.clientId);
+        const dc = await this.createDCForParty(loaded, lines, client, '', '', loaded.clientName, agentName, transport);
+        generatedDCs.push(dc);
+      } else {
+        // Collect unique clientIds needed across all parties
+        const clientIdSet = new Set<string>();
+        clientIdSet.add(loaded.clientId);
+        for (const party of partyProgress) {
+          if (party.clientId) clientIdSet.add(party.clientId);
+        }
+        const clientMap = new Map<string, any>();
+        await Promise.all([...clientIdSet].map(async (cid) => {
+          const c = await this.clientService.getClientByIdOnce(cid);
+          if (c) clientMap.set(cid, c);
+        }));
+
+        for (const party of partyProgress) {
+          const partyLines = lines.filter((l) => l.salesOrderIds.includes(party.salesOrderId));
+          if (!partyLines.length) continue;
+          const client = clientMap.get(party.clientId ?? '') ?? clientMap.get(loaded.clientId) ?? null;
+          const dc = await this.createDCForParty(loaded, partyLines, client, party.salesOrderId, party.salesNo, party.clientName || loaded.clientName, agentName, transport);
+          generatedDCs.push(dc);
+        }
+      }
+
+      await this.printDCsWithLabels(generatedDCs, loaded);
+      this.cancel();
+    } catch (err: any) {
+      await Swal.fire({ icon: 'error', title: 'DC Generation Failed', text: err?.message ?? 'Unable to generate Delivery Challan.' });
+    } finally {
+      this.isGeneratingDC.set(false);
+    }
+  }
+
+  async reprintDC(dc: DeliveryChallan) {
+    const html = `<!DOCTYPE html><html>
+<head><meta charset="utf-8"><title>DC - ${dc.dcNo}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#000}table{width:100%;border-collapse:collapse}</style></head>
+<body>${this.buildCustomerDCHtml(dc, 1, 1)}</body></html>`;
+    const win = window.open('', '_blank', 'width=960,height=820');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+  }
+
+  // ─── Click-based packing ───────────────────────────────────────────────────
+
+  setActiveBox() {
+    const box = this.boxInput().trim().toUpperCase();
+    if (!box) return;
+    this.activeBoxNo.set(box);
+    this.boxInput.set(box);
+  }
+
+  async markLinePacked(line: PackingListLine, packed: boolean) {
+    const packingList = this.livePackingList();
+    if (!packingList?.id || this.packingInProgress().includes(line.lineId)) return;
+
+    if (packed && !this.activeBoxNo()) {
+      await Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'Enter a box number first', timer: 2000, showConfirmButton: false });
+      return;
+    }
+
+    this.packingInProgress.update((ids) => [...ids, line.lineId]);
+    try {
+      const cartonNo = packed ? this.activeBoxNo() : undefined;
+      const result = await this.packingListService.markLinePacked(packingList.id, line.lineId, packed, cartonNo);
+      this.liveLines.update((lines) => lines.map((l) => (l.lineId === result.line.lineId ? result.line : l)));
+      this.livePackingList.update((current) => current ? {
+        ...current,
+        totalPackedQty: result.totalPackedQty,
+        completedLineCount: result.completedLineCount,
+        cartonCount: result.cartonCount,
+        status: result.status,
+        partyProgress: result.partyProgress,
+        cartons: result.cartons,
+      } : current);
+
+      if (result.packingListCompleted) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'All Items Packed!',
+          html: `<p style="font-size:13px">All items confirmed as packed.</p>
+            ${result.stockDeducted ? '<p style="font-size:12px;color:#047857;margin-top:6px">&#10003; Inventory stock reduced automatically.</p>' : ''}`,
+          timer: 3000,
+          showConfirmButton: false,
+        });
+      }
     } catch {
-      await Swal.fire({ icon: 'error', title: 'Print Failed', text: 'Unable to generate Delivery Challan.' });
+      await Swal.fire({ toast: true, position: 'top-end', icon: 'error', title: 'Update failed', timer: 2000, showConfirmButton: false });
+    } finally {
+      this.packingInProgress.update((ids) => ids.filter((id) => id !== line.lineId));
     }
   }
 
@@ -641,6 +764,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
       const date = raw?.toDate ? raw.toDate() : new Date(raw);
       return date.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch { return '-'; }
+  }
+
+  countPackedLines(lines: PackingListLine[]): number {
+    return lines.filter((l) => l.status === 'completed').length;
+  }
+
+  sumRequiredQty(lines: PackingListLine[]): number {
+    return lines.reduce((s, l) => s + l.requiredQty, 0);
   }
 
   getPackingForPickList(pickListId: string): PackingList | null {
@@ -686,6 +817,238 @@ export class PackingListComponent implements OnInit, OnDestroy {
   }
 
   // ─── Private helpers ───────────────────────────────────────────────────────
+
+  private async createDCForParty(
+    packingList: PackingList,
+    lines: PackingListLine[],
+    client: any,
+    salesOrderId: string,
+    salesNo: string,
+    clientName: string,
+    agentName: string,
+    transport: string,
+  ): Promise<DeliveryChallan> {
+    const packedLines = lines.filter((l) => l.packedQty > 0 || l.requiredQty > 0);
+    const rowMap = new Map<string, { partName: string; styleNo: string; color: string; sizeQty: Record<string, number>; total: number }>();
+    const sizeSet = new Set<string>();
+
+    for (const line of packedLines) {
+      const qty = line.packedQty > 0 ? line.packedQty : line.requiredQty;
+      if (qty <= 0) continue;
+      sizeSet.add(line.size);
+      const key = `${line.partName}||${line.styleNo}||${line.color}`;
+      if (!rowMap.has(key)) {
+        rowMap.set(key, { partName: line.partName, styleNo: line.styleNo, color: line.color, sizeQty: {}, total: 0 });
+      }
+      const row = rowMap.get(key)!;
+      row.sizeQty[line.size] = (row.sizeQty[line.size] ?? 0) + qty;
+      row.total += qty;
+    }
+
+    const sizes = [...sizeSet].sort((a, b) => this.rankSize(a) - this.rankSize(b));
+    const totalQty = [...rowMap.values()].reduce((s, r) => s + r.total, 0);
+    const boxCount = salesOrderId
+      ? (packingList.cartons ?? []).filter((c) => c.entries.some((e) => e.salesOrderIds.includes(salesOrderId))).length
+      : (packingList.cartons ?? []).length;
+
+    return this.dcService.createDC({
+      packingListId: packingList.id!,
+      packingListNo: packingList.packingListNo,
+      salesOrderId,
+      salesNo,
+      clientId: packingList.clientId,
+      clientName: clientName || packingList.clientName,
+      billingAddress: client?.billingAddress ?? '',
+      place: client?.place ?? '',
+      state: client?.state ?? '',
+      zipCode: client?.zipCode ?? '',
+      clientPhone: client?.mobile ?? '',
+      clientGstin: client?.gstNo ?? '',
+      totalQty,
+      boxCount,
+      agentName,
+      transport,
+      items: [...rowMap.values()],
+      sizes,
+    });
+  }
+
+  private async printDCsWithLabels(dcs: DeliveryChallan[], packingList: PackingList): Promise<void> {
+    const total = dcs.length;
+    const dcHtmlParts = dcs.map((dc, idx) => this.buildCustomerDCHtml(dc, idx + 1, total));
+    const allDCHtml = dcHtmlParts.join('<div style="page-break-before:always"></div>');
+    const labelsHtml = this.buildAllLabelsHtml(packingList);
+
+    const combinedHtml = `<!DOCTYPE html><html>
+<head><meta charset="utf-8"><title>DC - ${packingList.packingListNo}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:11px;color:#000}
+table{width:100%;border-collapse:collapse}
+@media print{.pg-break{page-break-before:always}}
+</style></head>
+<body>
+${allDCHtml}
+<div class="pg-break" style="page-break-before:always;padding:16px">
+  <div style="text-align:center;font-size:15px;font-weight:900;letter-spacing:2px;text-decoration:underline;margin-bottom:14px">
+    BOX LABELS &mdash; ${packingList.packingListNo}
+  </div>
+  ${labelsHtml}
+</div>
+</body></html>`;
+
+    const win = window.open('', '_blank', 'width=960,height=820');
+    if (win) { win.document.write(combinedHtml); win.document.close(); setTimeout(() => win.print(), 600); }
+  }
+
+  private buildCustomerDCHtml(dc: DeliveryChallan, pageNum: number, totalPages: number): string {
+    const B = 'border:1px solid #bbb;';
+    const th2 = (txt: string, extra = '') =>
+      `<th style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center;${extra}">${txt}</th>`;
+    const td2 = (txt: string | number, extra = '') =>
+      `<td style="padding:5px 7px;${B}font-size:10px;text-align:center;${extra}">${txt}</td>`;
+
+    // Group items by partName for rowspan
+    const partGroups = new Map<string, typeof dc.items>();
+    for (const item of dc.items) {
+      const existing = partGroups.get(item.partName) ?? [];
+      existing.push(item);
+      partGroups.set(item.partName, existing);
+    }
+
+    // Size totals
+    const sizeTotals: Record<string, number> = {};
+    let grandTotal = 0;
+    for (const item of dc.items) {
+      for (const [sz, qty] of Object.entries(item.sizeQty)) {
+        sizeTotals[sz] = (sizeTotals[sz] ?? 0) + qty;
+        grandTotal += qty;
+      }
+    }
+
+    // Two-row header: Description | UOM | Design | Shade | MRP | Size(colspan) | Total
+    const sizeHeaderCells = dc.sizes.map((s) => th2(s)).join('');
+    const rs2 = (label: string, extra = '') =>
+      `<th rowspan="2" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center;vertical-align:middle;${extra}">${label}</th>`;
+    const thead = `<thead>
+    <tr>
+      ${rs2('Description', 'text-align:left')}
+      ${rs2('UOM')}
+      ${rs2('Design', 'text-align:left')}
+      ${rs2('Shade')}
+      ${rs2('MRP')}
+      ${dc.sizes.length > 0 ? `<th colspan="${dc.sizes.length}" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center">Size</th>` : ''}
+      ${rs2('Total')}
+    </tr>
+    <tr>${sizeHeaderCells}</tr>
+  </thead>`;
+
+    // Body rows with partName rowspan
+    const bodyRows: string[] = [];
+    for (const [partName, items] of partGroups) {
+      items.forEach((item, idx) => {
+        const isFirst = idx === 0;
+        const sizeCells = dc.sizes.map((s) => td2(item.sizeQty[s] ?? '')).join('');
+        const rowBg = bodyRows.length % 2 === 0 ? '#fff' : '#f9f9f9';
+        bodyRows.push(`<tr style="background:${rowBg}">
+          ${isFirst
+            ? `<td rowspan="${items.length}" style="padding:5px 7px;${B}font-size:10px;text-align:left;vertical-align:middle;font-weight:600">${partName}</td>`
+            : ''}
+          ${td2('NOS')}
+          ${td2(item.styleNo, 'font-weight:700;text-align:left')}
+          ${td2(item.color || '-')}
+          ${td2('-')}
+          ${sizeCells}
+          ${td2(item.total, 'font-weight:700')}
+        </tr>`);
+      });
+    }
+
+    const totalCells = dc.sizes.map((s) => td2(sizeTotals[s] ?? '', 'font-weight:700;background:#f0f0f0')).join('');
+    const totalRow = `<tr>
+      <td colspan="5" style="padding:5px 7px;${B}font-weight:700;font-size:10px;text-align:right;background:#f0f0f0">Total</td>
+      ${totalCells}
+      <td style="padding:5px 7px;${B}font-weight:900;font-size:11px;text-align:center;background:#f0f0f0">${grandTotal}</td>
+    </tr>`;
+
+    const addrLines: string[] = [];
+    if (dc.billingAddress) addrLines.push(dc.billingAddress);
+    const cityParts = [dc.place, dc.state].filter(Boolean);
+    if (cityParts.length) addrLines.push(`${cityParts.join(', ')}${dc.zipCode ? ' - ' + dc.zipCode : ''}`);
+    if (dc.clientPhone) addrLines.push(`PH: ${dc.clientPhone}`);
+    const clientAddrHtml = addrLines.map((l) => `<div style="font-size:10px;margin-top:2px">${l}</div>`).join('');
+
+    const toDateStr = (raw: any) => {
+      if (!raw) return new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      try {
+        const d = raw?.toDate ? raw.toDate() : new Date(raw);
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      } catch { return new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+    };
+    const dateStr = toDateStr(dc.createdAt);
+
+    return `<div style="padding:14px 18px;font-family:Arial,sans-serif;font-size:11px;color:#000">
+
+<div style="display:flex;align-items:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:6px">
+  <div style="flex:1"><!-- logo space --></div>
+  <div style="flex:2;text-align:center">
+    <div style="font-size:22px;font-weight:900;letter-spacing:0.5px">TMG Clothings</div>
+    <div style="font-size:10px;color:#333;margin-top:2px">Door No.334/2, Serayampalaym, Vellanaipatti Post,</div>
+    <div style="font-size:10px;color:#333">Coimbatore - 641048, Phone: 9842211787</div>
+    <div style="font-size:10px;color:#333">Email : order@tmggarments.in &nbsp;|&nbsp; GSTIN: 33AAYFT2559B1ZY</div>
+  </div>
+  <div style="flex:1;text-align:right;font-size:9px;color:#666">Page ${pageNum}/${totalPages}</div>
+</div>
+
+<div style="font-size:14px;font-weight:700;text-align:center;letter-spacing:2px;text-decoration:underline;margin-bottom:8px">DELIVERY CHALLAN</div>
+
+<div style="display:flex;border:1px solid #aaa;margin-bottom:10px">
+  <div style="flex:1;padding:8px 10px;border-right:1px solid #aaa;min-height:90px">
+    <div style="font-size:11px;font-weight:700;margin-bottom:4px">M/S : ${dc.clientName}</div>
+    ${clientAddrHtml || '<div style="font-size:10px;color:#aaa;margin-top:2px">—</div>'}
+    ${dc.clientGstin ? `<div style="font-size:10px;margin-top:4px;font-weight:600">GSTIN: ${dc.clientGstin}</div>` : ''}
+  </div>
+  <div style="padding:6px 10px;min-width:270px">
+    <table style="border-collapse:collapse;width:100%">
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555;white-space:nowrap">DC No.</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${dc.dcNo}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Packed On</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order No.</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.salesNo || dc.packingListNo}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order Date</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Total Qty</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${grandTotal}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">No.of Box</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${dc.boxCount}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Agent Name</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.agentName || '-'}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Transport</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.transport || '-'}</td></tr>
+    </table>
+  </div>
+</div>
+
+<table style="width:100%;border-collapse:collapse">
+  ${thead}
+  <tbody>
+    ${bodyRows.join('') || `<tr><td colspan="${4 + dc.sizes.length + 1}" style="padding:10px;text-align:center;color:#888">No items packed.</td></tr>`}
+    ${totalRow}
+  </tbody>
+</table>
+
+<div style="margin-top:14px;font-size:10px">Remarks :</div>
+<div style="display:flex;justify-content:space-between;margin-top:40px;gap:30px">
+  <div style="flex:1;text-align:center">
+    <div style="border-top:1px solid #555;padding-top:5px;font-size:10px;color:#444">Checked By</div>
+  </div>
+  <div style="flex:1;text-align:center">
+    <div style="border-top:1px solid #555;padding-top:5px;font-size:10px;color:#444">Authorized By</div>
+  </div>
+</div>
+
+</div>`;
+  }
+
+  private rankSize(size: string): number {
+    const idx = SIZE_ORDER.indexOf(size);
+    if (idx !== -1) return idx;
+    const n = parseInt(size, 10);
+    return isNaN(n) ? 9999 : 1000 + n;
+  }
 
   private mergeCarton(cartons: PackingCarton[], updated: PackingCarton): PackingCarton[] {
     const idx = cartons.findIndex((c) => c.cartonNo.toLowerCase() === updated.cartonNo.toLowerCase());
@@ -865,187 +1228,96 @@ export class PackingListComponent implements OnInit, OnDestroy {
       </body></html>`;
   }
 
-  private buildDCHtml(
-    packingList: PackingList,
-    lines: PackingListLine[],
-    client: import('../../models/client.model').Client | null,
-    agentName: string,
-    transport: string,
-  ): string {
-    const rankSize = (s: string) => {
-      const idx = SIZE_ORDER.indexOf(s);
-      if (idx !== -1) return idx;
-      const n = parseInt(s, 10);
-      return isNaN(n) ? 9999 : 1000 + n;
-    };
-
-    const packedLines = lines.filter((l) => l.packedQty > 0 || l.requiredQty > 0);
-
-    const sizeSet = new Set(packedLines.map((l) => l.size));
-    const sizes = [...sizeSet].sort((a, b) => rankSize(a) - rankSize(b));
-
-    interface DCRow { partName: string; styleNo: string; color: string; sizeQty: Map<string, number>; total: number; }
-    const rowMap = new Map<string, DCRow>();
-    for (const line of packedLines) {
-      const qty = line.packedQty > 0 ? line.packedQty : line.requiredQty;
-      if (qty <= 0) continue;
-      const key = `${line.partName}||${line.styleNo}||${line.color}`;
-      if (!rowMap.has(key)) rowMap.set(key, { partName: line.partName, styleNo: line.styleNo, color: line.color, sizeQty: new Map(), total: 0 });
-      const row = rowMap.get(key)!;
-      row.sizeQty.set(line.size, (row.sizeQty.get(line.size) ?? 0) + qty);
-      row.total += qty;
+  private buildAllLabelsHtml(packingList: PackingList): string {
+    const cartons = packingList.cartons ?? [];
+    if (!cartons.length) {
+      return '<p style="text-align:center;color:#94a3b8;padding:20px;font-size:12px">No boxes to print.</p>';
     }
 
-    const sizeTotals = new Map<string, number>();
-    let grandTotal = 0;
-    for (const row of rowMap.values()) {
-      for (const [sz, qty] of row.sizeQty) {
-        sizeTotals.set(sz, (sizeTotals.get(sz) ?? 0) + qty);
-        grandTotal += qty;
-      }
-    }
+    const partyProgress = packingList.partyProgress ?? [];
+    const dateStr = new Date().toLocaleDateString('en-IN');
 
-    const B = 'border:1px solid #bbb;';
-    const th = (txt: string, extra = '') =>
-      `<th style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center;${extra}">${txt}</th>`;
-    const td = (txt: string | number, extra = '') =>
-      `<td style="padding:5px 7px;${B}font-size:10px;text-align:center;${extra}">${txt}</td>`;
+    const labelCards = cartons.map((carton) => {
+      const soIds = [...new Set(carton.entries.flatMap((e) => e.salesOrderIds))];
+      const soNos = [...new Set(carton.entries.flatMap((e) => e.salesNos))];
+      const party = partyProgress.find((p) => soIds.includes(p.salesOrderId));
+      const customerName = party?.clientName || packingList.clientName;
+      const salesNosStr = soNos.length ? soNos.join(', ') : (packingList.salesNos ?? []).join(', ');
 
-    const sizeHeaders = sizes.map((s) => th(s)).join('');
-    const tableRows = [...rowMap.values()].map((row, i) => {
-      const sizeCells = sizes.map((s) => td(row.sizeQty.get(s) ?? '')).join('');
-      return `<tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
-        ${td(row.partName, 'text-align:left')}
-        ${td('NOS')}
-        ${td(row.styleNo, 'font-weight:700;text-align:left')}
-        ${td(row.color || '-')}
-        ${sizeCells}
-        ${td(row.total, 'font-weight:700')}
-      </tr>`;
+      const itemRows = carton.entries.map((e) =>
+        `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid #e2e8f0;font-size:10px">
+          <span>${e.styleNo} / ${e.color} / ${e.size}${e.sleeveType ? ' / ' + e.sleeveType : ''}</span>
+          <strong style="margin-left:8px;white-space:nowrap">&times; ${e.qty}</strong>
+        </div>`
+      ).join('');
+
+      return `<div style="border:2px solid #0f172a;border-radius:8px;padding:12px;page-break-inside:avoid;background:#fff;break-inside:avoid">
+        <div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:8px;margin-bottom:10px">
+          <div style="font-size:9px;color:#64748b;text-transform:uppercase;font-weight:700;letter-spacing:0.08em">Box Label</div>
+          <div style="font-size:28px;font-weight:900;letter-spacing:2px;margin:2px 0;color:#0f172a">${carton.cartonNo}</div>
+          <div style="font-size:10px;color:#64748b">${packingList.packingListNo}</div>
+        </div>
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px;margin-bottom:8px">
+          <div style="font-size:9px;color:#1d4ed8;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Customer</div>
+          <div style="font-size:14px;font-weight:900;color:#1e3a8a;margin-top:1px">${customerName}</div>
+          <div style="font-size:10px;color:#3b82f6;font-weight:600;margin-top:1px">${salesNosStr}</div>
+        </div>
+        <div style="background:#f8fafc;border-radius:6px;padding:8px;margin-bottom:10px">
+          ${itemRows || '<div style="font-size:10px;color:#94a3b8;text-align:center;padding:4px">No items</div>'}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-end">
+          <div>
+            <div style="font-size:9px;color:#64748b;text-transform:uppercase;font-weight:700">Total Pieces</div>
+            <div style="font-size:28px;font-weight:900;color:#0f766e;line-height:1">${carton.totalQty}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:9px;color:#64748b">Date</div>
+            <div style="font-size:11px;font-weight:700">${dateStr}</div>
+          </div>
+        </div>
+      </div>`;
     }).join('');
 
-    const totalCells = sizes.map((s) => td(sizeTotals.get(s) ?? '', 'font-weight:700;background:#f0f0f0')).join('');
-    const totalRow = `<tr>
-      <td colspan="4" style="padding:5px 7px;${B}font-weight:700;font-size:10px;text-align:right;background:#f0f0f0">Total</td>
-      ${totalCells}
-      <td style="padding:5px 7px;${B}font-weight:900;font-size:11px;text-align:center;background:#f0f0f0">${grandTotal}</td>
-    </tr>`;
-
-    const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-    const clientLines: string[] = [];
-    if (client?.billingAddress) clientLines.push(client.billingAddress);
-    const cityState = [client?.place, client?.state].filter(Boolean).join(', ');
-    if (cityState) clientLines.push(`${cityState}${client?.zipCode ? ' - ' + client.zipCode : ''}`);
-    if (client?.mobile) clientLines.push(`PH: ${client.mobile}`);
-
-    const clientAddrHtml = clientLines.map((l) => `<div style="font-size:10px;margin-top:1px">${l}</div>`).join('');
-    const clientGst = client?.gstNo ?? '';
-
-    return `<!DOCTYPE html><html>
-<head><meta charset="utf-8"><title>DC - ${packingList.packingListNo}</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;font-size:11px;color:#000;padding:14px 18px}
-table{width:100%;border-collapse:collapse}
-</style></head>
-<body>
-
-<!-- Company Header -->
-<div style="text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:6px;position:relative">
-  <div style="position:absolute;right:0;top:0;font-size:9px;color:#666">Page: 1/1</div>
-  <div style="font-size:21px;font-weight:900;letter-spacing:0.5px">TMG Clothings</div>
-  <div style="font-size:10px;color:#333;margin-top:2px">Door No.334/2, Serayampalaym, Vellanaipatti Post,</div>
-  <div style="font-size:10px;color:#333">Coimbatore - 641048, Phone: 9842211787</div>
-  <div style="font-size:10px;color:#333">Email : order@tmggarments.in &nbsp;|&nbsp; GSTIN: 33AAYFT2559B1ZY</div>
-</div>
-
-<div style="font-size:14px;font-weight:700;text-align:center;letter-spacing:2px;text-decoration:underline;margin-bottom:8px">DELIVERY CHALLAN</div>
-
-<!-- Customer info + DC details -->
-<div style="display:flex;border:1px solid #aaa;margin-bottom:10px">
-  <div style="flex:1;padding:8px 10px;border-right:1px solid #aaa">
-    <div style="font-size:10px;font-weight:700">M/S : ${packingList.clientName}</div>
-    ${clientAddrHtml}
-    ${clientGst ? `<div style="font-size:10px;margin-top:4px">GSTIN: ${clientGst}</div>` : ''}
-  </div>
-  <div style="padding:6px 10px;min-width:250px">
-    <table style="border-collapse:collapse">
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555;white-space:nowrap">DC No.</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${packingList.packingListNo}</td></tr>
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Packed On</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order No.</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${(packingList.salesNos ?? []).join(', ')}</td></tr>
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order Date</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Total Qty</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${grandTotal}</td></tr>
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555">No.of Box</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${packingList.cartons.length}</td></tr>
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Agent Name</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${agentName || '-'}</td></tr>
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Transport</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${transport || '-'}</td></tr>
-    </table>
-  </div>
-</div>
-
-<!-- Items table -->
-<table>
-  <thead>
-    <tr>
-      ${th('Description', 'text-align:left')}
-      ${th('UOM')}
-      ${th('Design', 'text-align:left')}
-      ${th('Shade')}
-      ${sizeHeaders}
-      ${th('Total')}
-    </tr>
-  </thead>
-  <tbody>
-    ${tableRows || `<tr><td colspan="${4 + sizes.length + 1}" style="padding:10px;text-align:center;color:#888">No items packed.</td></tr>`}
-    ${totalRow}
-  </tbody>
-</table>
-
-<!-- Remarks + Signatures -->
-<div style="margin-top:14px;font-size:10px">Remarks :</div>
-<div style="display:flex;justify-content:space-between;margin-top:40px;gap:30px">
-  <div style="flex:1;text-align:center">
-    <div style="border-top:1px solid #555;padding-top:5px;font-size:10px;color:#444">Checked By</div>
-  </div>
-  <div style="flex:1;text-align:center">
-    <div style="border-top:1px solid #555;padding-top:5px;font-size:10px;color:#444">Authorized By</div>
-  </div>
-</div>
-
-</body></html>`;
+    return `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">${labelCards}</div>`;
   }
 
   private buildCartonLabelHtml(packingList: PackingList, carton: PackingCarton): string {
-    const lines = carton.entries.map((e) =>
-      `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e2e8f0">
+    const partyProgress = packingList.partyProgress ?? [];
+    const soIds = [...new Set(carton.entries.flatMap((e) => e.salesOrderIds))];
+    const soNos = [...new Set(carton.entries.flatMap((e) => e.salesNos))];
+    const party = partyProgress.find((p) => soIds.includes(p.salesOrderId));
+    const customerName = party?.clientName || packingList.clientName;
+    const salesNosStr = soNos.length ? soNos.join(', ') : (packingList.salesNos ?? []).join(', ');
+
+    const itemRows = carton.entries.map((e) =>
+      `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e2e8f0;font-size:12px">
         <span>${e.styleNo} / ${e.color} / ${e.size}${e.sleeveType ? ' / ' + e.sleeveType : ''}</span>
-        <strong>×${e.qty}</strong>
+        <strong>&times; ${e.qty}</strong>
       </div>`
     ).join('');
 
-    return `
-      <!DOCTYPE html><html>
-      <head><meta charset="utf-8"><title>Carton Label</title>
+    return `<!DOCTYPE html><html>
+      <head><meta charset="utf-8"><title>Box Label - ${carton.cartonNo}</title>
       <style>body{font-family:Arial,sans-serif;font-size:12px;margin:16px;color:#0f172a}</style></head>
       <body>
-        <div style="border:2px solid #0f172a;border-radius:10px;padding:16px;max-width:380px;margin:auto">
+        <div style="border:2px solid #0f172a;border-radius:10px;padding:16px;max-width:400px;margin:auto">
           <div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:12px">
-            <div style="font-size:11px;color:#64748b;text-transform:uppercase;font-weight:700">Carton Label</div>
-            <div style="font-size:28px;font-weight:900;letter-spacing:2px;margin:4px 0">${carton.cartonNo}</div>
+            <div style="font-size:10px;color:#64748b;text-transform:uppercase;font-weight:700;letter-spacing:0.08em">Box Label</div>
+            <div style="font-size:32px;font-weight:900;letter-spacing:2px;margin:4px 0">${carton.cartonNo}</div>
             <div style="font-size:11px;color:#64748b">${packingList.packingListNo}</div>
           </div>
-          <div style="margin-bottom:10px">
-            <div style="font-size:11px;color:#64748b;font-weight:700">CLIENT</div>
-            <div style="font-size:14px;font-weight:700">${packingList.clientName}</div>
-            <div style="font-size:11px;color:#64748b">${(packingList.salesNos ?? []).join(', ')}</div>
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px;margin-bottom:10px">
+            <div style="font-size:10px;color:#1d4ed8;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Customer</div>
+            <div style="font-size:15px;font-weight:900;color:#1e3a8a;margin-top:2px">${customerName}</div>
+            <div style="font-size:11px;color:#3b82f6;font-weight:600;margin-top:2px">${salesNosStr}</div>
           </div>
           <div style="background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:12px">
-            ${lines}
+            ${itemRows || '<div style="font-size:11px;color:#94a3b8;text-align:center">No items</div>'}
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center">
             <div>
               <div style="font-size:11px;color:#64748b">Total Pieces</div>
-              <div style="font-size:26px;font-weight:900;color:#0f766e">${carton.totalQty}</div>
+              <div style="font-size:30px;font-weight:900;color:#0f766e">${carton.totalQty}</div>
             </div>
             <div style="text-align:right">
               <div style="font-size:11px;color:#64748b">Date</div>

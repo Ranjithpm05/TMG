@@ -6,6 +6,7 @@ export interface PackingListLine {
   pickListLineId: string;
   salesOrderIds: string[];
   salesNos: string[];
+  clientId?: string;
   clientName?: string;
   designId: string;
   styleNo: string;
@@ -52,6 +53,7 @@ export interface PackingCarton {
 export interface PackingPartyProgress {
   salesOrderId: string;
   salesNo: string;
+  clientId?: string;
   clientName: string;
   requiredQty: number;
   packedQty: number;

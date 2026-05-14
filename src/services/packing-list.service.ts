@@ -233,6 +233,104 @@ export class PackingListService {
     return { ...scanResult, stockDeducted } satisfies PackingScanResult;
   }
 
+  async markLinePacked(
+    packingListId: string,
+    lineId: string,
+    packed: boolean,
+    cartonNo?: string,
+  ): Promise<{
+    line: PackingListLine;
+    cartons: PackingCarton[];
+    packingListCompleted: boolean;
+    stockDeducted: boolean;
+    totalPackedQty: number;
+    completedLineCount: number;
+    cartonCount: number;
+    status: PackingList['status'];
+    partyProgress: PackingPartyProgress[];
+  }> {
+    const txResult = await runTransaction(this.firestore, async (transaction) => {
+      const lineRef = this.lineDoc(packingListId, lineId);
+      const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
+      const [lineSnap, plSnap] = await Promise.all([transaction.get(lineRef), transaction.get(packingListRef)]);
+      if (!lineSnap.exists() || !plSnap.exists()) throw new Error('not_found');
+
+      const liveLine = this.normalizeLine({ lineId: lineSnap.id, ...lineSnap.data() });
+      const packingList = this.normalizePackingList({ id: plSnap.id, ...plSnap.data() });
+      const now = Date.now();
+
+      const nextPackedQty = packed ? liveLine.requiredQty : 0;
+      const nextRemainingQty = packed ? 0 : liveLine.requiredQty;
+      const updatedLine = this.normalizeLine({
+        ...liveLine,
+        packedQty: nextPackedQty,
+        remainingQty: nextRemainingQty,
+        status: packed ? 'completed' : 'ready',
+        lastCartonNo: packed && cartonNo ? cartonNo : undefined,
+        updatedAt: now,
+      });
+
+      // Handle carton assignment
+      let cartons = packingList.cartons ?? [];
+      if (packed && cartonNo) {
+        cartons = this.upsertCartons(cartons, updatedLine, cartonNo, updatedLine.requiredQty, now).cartons;
+      } else if (!packed && liveLine.lastCartonNo) {
+        cartons = this.removeLineFromCarton(cartons, lineId, liveLine.lastCartonNo);
+      }
+
+      const updatedItems = (packingList.items ?? []).map((item) =>
+        item.lineId === lineId ? updatedLine : this.normalizeLine(item)
+      );
+      const summary = this.buildSummary(updatedItems, cartons, packingList.clientName);
+
+      transaction.update(lineRef, this.stripUndefined({
+        packedQty: updatedLine.packedQty,
+        remainingQty: updatedLine.remainingQty,
+        status: updatedLine.status,
+        lastCartonNo: updatedLine.lastCartonNo ?? null,
+        updatedAt: serverTimestamp(),
+      }));
+      transaction.update(packingListRef, this.stripUndefined({
+        totalPackedQty: summary.totalPackedQty,
+        completedLineCount: summary.completedLineCount,
+        cartonCount: summary.cartonCount,
+        status: summary.status,
+        partSummaries: summary.partSummaries,
+        partyProgress: summary.partyProgress,
+        cartons,
+        items: updatedItems,
+        updatedAt: serverTimestamp(),
+      }));
+
+      return {
+        line: updatedLine,
+        cartons,
+        packingListCompleted: summary.status === 'Completed',
+        totalPackedQty: summary.totalPackedQty,
+        completedLineCount: summary.completedLineCount,
+        cartonCount: summary.cartonCount,
+        status: summary.status,
+        partyProgress: summary.partyProgress,
+        _updatedItems: updatedItems,
+      };
+    });
+
+    let stockDeducted = false;
+    if (txResult.packingListCompleted) {
+      stockDeducted = await this.deductInventoryOnCompletion(packingListId, txResult._updatedItems);
+    }
+    const { _updatedItems: _, ...rest } = txResult;
+    return { ...rest, stockDeducted };
+  }
+
+  private removeLineFromCarton(cartons: PackingCarton[], lineId: string, cartonNo: string): PackingCarton[] {
+    return cartons.map((c) => {
+      if (c.cartonNo.toLowerCase() !== cartonNo.toLowerCase()) return c;
+      const entries = c.entries.filter((e) => e.lineId !== lineId);
+      return this.normalizeCarton({ ...c, entries, totalQty: entries.reduce((s, e) => s + e.qty, 0) });
+    });
+  }
+
   async recalculatePackingListStatus(packingListId: string): Promise<void> {
     const [packingList, lines] = await Promise.all([
       this.getPackingListByIdOnce(packingListId),
@@ -416,10 +514,11 @@ export class PackingListService {
       for (let i = 0; i < line.salesOrderIds.length; i++) {
         const salesOrderId = line.salesOrderIds[i] ?? '';
         const salesNo = line.salesNos[i] ?? '';
+        const clientId = line.clientId || undefined;
         const clientName = line.clientName || defaultClientName;
         if (!salesOrderId) continue;
         const existing = map.get(salesOrderId) ?? {
-          salesOrderId, salesNo, clientName, requiredQty: 0, packedQty: 0, pendingQty: 0,
+          salesOrderId, salesNo, clientId, clientName, requiredQty: 0, packedQty: 0, pendingQty: 0,
         };
         existing.requiredQty += line.requiredQty;
         existing.packedQty += Math.min(line.packedQty, line.requiredQty);
@@ -447,6 +546,7 @@ export class PackingListService {
       const designId = String(source.designId ?? '').trim();
       const salesOrderId = String(source.salesOrderId ?? '').trim();
       const salesNo = String(source.salesNo ?? '').trim();
+      const clientId = String(source.clientId ?? '').trim();
       const clientName = String(source.clientName ?? '').trim();
       const key = `${salesOrderId}||${styleNo}||${color}||${partName}||${size}||${sleeveType}||${barcode}||${inventoryId}`;
 
@@ -456,6 +556,7 @@ export class PackingListService {
           pickListLineId: String(source.lineId ?? '').trim() || this.buildPackingLineId(styleNo, color, partName, size, sleeveType, aggregated.size),
           salesOrderIds: salesOrderId ? [salesOrderId] : [],
           salesNos: salesNo ? [salesNo] : [],
+          clientId: clientId || undefined,
           clientName: clientName || undefined,
           designId,
           styleNo,
@@ -608,6 +709,7 @@ export class PackingListService {
       pickListLineId: String(raw?.pickListLineId ?? raw?.lineId ?? ''),
       salesOrderIds: Array.isArray(raw?.salesOrderIds) ? raw.salesOrderIds.map((id: any) => String(id)) : [],
       salesNos: Array.isArray(raw?.salesNos) ? raw.salesNos.map((salesNo: any) => String(salesNo)) : [],
+      clientId: raw?.clientId ? String(raw.clientId) : undefined,
       clientName: raw?.clientName ? String(raw.clientName) : undefined,
       designId: String(raw?.designId ?? ''),
       styleNo: String(raw?.styleNo ?? ''),
