@@ -7,11 +7,14 @@ import {
   doc,
   addDoc,
   getDoc,
+  getDocs,
   updateDoc,
   deleteDoc,
   serverTimestamp,
   query,
-  orderBy
+  orderBy,
+  where,
+  limit,
 } from '@angular/fire/firestore';
 
 import type { Client } from '../models/client.model';
@@ -56,6 +59,20 @@ export class ClientService {
     const snap = await getDoc(doc(this.firestore, `clients/${clientId}`));
     if (!snap.exists()) return null;
     return this.normalizeClient({ id: snap.id, ...snap.data() });
+  }
+
+  async getClientByNameOnce(clientName: string): Promise<Client | null> {
+    if (!clientName) return null;
+    const snap = await getDocs(query(this.clientRef, where('clientName', '==', clientName), limit(1)));
+    if (snap.empty) return null;
+    return this.normalizeClient({ id: snap.docs[0].id, ...snap.docs[0].data() });
+  }
+
+  async getClientForDC(clientId: string, clientName: string): Promise<Client | null> {
+    const byId = await this.getClientByIdOnce(clientId);
+    if (byId && (byId.billingAddress || byId.mobile || byId.gstNo)) return byId;
+    const byName = await this.getClientByNameOnce(clientName);
+    return byName ?? byId ?? null;
   }
 
   private normalizeClient(raw: any): Client {

@@ -649,27 +649,17 @@ export class PackingListComponent implements OnInit, OnDestroy {
       const generatedDCs: DeliveryChallan[] = [];
 
       if (partyProgress.length === 0) {
-        const client = await this.clientService.getClientByIdOnce(loaded.clientId);
+        const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
         const dc = await this.createDCForParty(loaded, lines, client, '', '', loaded.clientName, agentName, transport);
         generatedDCs.push(dc);
       } else {
-        // Collect unique clientIds needed across all parties
-        const clientIdSet = new Set<string>();
-        clientIdSet.add(loaded.clientId);
-        for (const party of partyProgress) {
-          if (party.clientId) clientIdSet.add(party.clientId);
-        }
-        const clientMap = new Map<string, any>();
-        await Promise.all([...clientIdSet].map(async (cid) => {
-          const c = await this.clientService.getClientByIdOnce(cid);
-          if (c) clientMap.set(cid, c);
-        }));
-
         for (const party of partyProgress) {
           const partyLines = lines.filter((l) => l.salesOrderIds.includes(party.salesOrderId));
           if (!partyLines.length) continue;
-          const client = clientMap.get(party.clientId ?? '') ?? clientMap.get(loaded.clientId) ?? null;
-          const dc = await this.createDCForParty(loaded, partyLines, client, party.salesOrderId, party.salesNo, party.clientName || loaded.clientName, agentName, transport);
+          const clientName = party.clientName || loaded.clientName;
+          const clientId = party.clientId || loaded.clientId;
+          const client = await this.clientService.getClientForDC(clientId, clientName);
+          const dc = await this.createDCForParty(loaded, partyLines, client, party.salesOrderId, party.salesNo, clientName, agentName, transport);
           generatedDCs.push(dc);
         }
       }
