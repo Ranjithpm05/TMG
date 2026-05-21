@@ -71,6 +71,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   showCartons = signal(true);
   showPackingLines = signal(true);
   activePartyId = signal('');
+  currentCustomerIndex = signal(0);
 
   agentName = signal('');
   transport = signal('');
@@ -197,6 +198,24 @@ export class PackingListComponent implements OnInit, OnDestroy {
     return lines.length > 0 && lines.every((l) => l.status === 'completed');
   });
 
+  currentCustomerGroup = computed((): { salesOrderId: string; customerName: string; salesNo: string; lines: PackingListLine[] } | null => {
+    const groups = this.liveLinesByCustomer();
+    const idx = this.currentCustomerIndex();
+    return groups[idx] ?? null;
+  });
+
+  currentCustomerAllPacked = computed(() => {
+    const group = this.currentCustomerGroup();
+    if (!group) return false;
+    return group.lines.length > 0 && group.lines.every((l) => l.status === 'completed');
+  });
+
+  isLastCustomer = computed(() => {
+    return this.currentCustomerIndex() >= this.liveLinesByCustomer().length - 1;
+  });
+
+  customersCount = computed(() => this.liveLinesByCustomer().length);
+
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
   ngOnInit() {
@@ -249,6 +268,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.cartonInput.set('');
     this.activeCartonNo.set('');
     this.activePartyId.set('');
+    this.currentCustomerIndex.set(0);
     this.packFeedback.set('idle');
     this.scannerMessage.set('Scan carton box no to begin packing.');
     this.agentName.set('');
@@ -405,6 +425,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.cartonInput.set('');
     this.activeCartonNo.set('');
     this.activePartyId.set('');
+    const groups = this.liveLinesByCustomer();
+    const firstPending = groups.findIndex((g) => g.lines.some((l) => l.status !== 'completed'));
+    this.currentCustomerIndex.set(firstPending >= 0 ? firstPending : 0);
     this.scannerMessage.set('Scan carton box no to begin packing.');
   }
 
@@ -449,6 +472,16 @@ export class PackingListComponent implements OnInit, OnDestroy {
       this.activePartyId.set('');
     } else {
       this.activePartyId.set(salesOrderId);
+    }
+  }
+
+  advanceToNextCustomer() {
+    const nextGroups = this.liveLinesByCustomer();
+    const next = this.currentCustomerIndex() + 1;
+    if (next < nextGroups.length) {
+      this.currentCustomerIndex.set(next);
+      this.activeBoxNo.set('');
+      this.boxInput.set('');
     }
   }
 
@@ -724,6 +757,26 @@ export class PackingListComponent implements OnInit, OnDestroy {
           timer: 3000,
           showConfirmButton: false,
         });
+      } else if (packed) {
+        const currentGroup = this.currentCustomerGroup();
+        if (currentGroup && currentGroup.lines.every((l) => l.status === 'completed')) {
+          const allGroups = this.liveLinesByCustomer();
+          const nextIdx = this.currentCustomerIndex() + 1;
+          if (nextIdx < allGroups.length) {
+            await Swal.fire({
+              icon: 'success',
+              title: `${currentGroup.customerName} — Done!`,
+              html: `<p style="font-size:13px">All items packed for <strong>${currentGroup.customerName}</strong>.</p>
+                <p style="font-size:12px;color:#0f766e;margin-top:6px">Next: <strong>${allGroups[nextIdx].customerName}</strong></p>`,
+              confirmButtonText: 'Pack Next Customer →',
+              confirmButtonColor: '#0f766e',
+              allowOutsideClick: false,
+            });
+            this.currentCustomerIndex.set(nextIdx);
+            this.activeBoxNo.set('');
+            this.boxInput.set('');
+          }
+        }
       }
     } catch {
       await Swal.fire({ toast: true, position: 'top-end', icon: 'error', title: 'Update failed', timer: 2000, showConfirmButton: false });
@@ -777,6 +830,22 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   getCartonEntryCount(carton: PackingCarton): number {
     return carton.entries.length;
+  }
+
+  getViewCartonsGrouped(packingList: PackingList): { customerName: string; salesNo: string; cartons: PackingCarton[] }[] {
+    const partyProgress = packingList.partyProgress ?? [];
+    if (partyProgress.length <= 1) {
+      return [{ customerName: packingList.clientName, salesNo: (packingList.salesNos ?? []).join(', '), cartons: packingList.cartons ?? [] }];
+    }
+    return partyProgress
+      .map((party) => ({
+        customerName: party.clientName || party.salesNo,
+        salesNo: party.salesNo,
+        cartons: (packingList.cartons ?? []).filter((c) =>
+          c.entries.some((e) => e.salesOrderIds.includes(party.salesOrderId))
+        ),
+      }))
+      .filter((g) => g.cartons.length > 0);
   }
 
   partyPackingPct(party: PackingPartyProgress): number {
