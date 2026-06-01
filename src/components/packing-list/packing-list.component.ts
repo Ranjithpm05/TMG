@@ -283,21 +283,35 @@ export class PackingListComponent implements OnInit, OnDestroy {
   async initiateGenerate(pickList: PickList) {
     if (!pickList.id) return;
 
+    // Check for existing packing lists (may be multiple — one per customer)
     const existingPackingLists = this.packingLists().filter((pl) => pl.pickListId === pickList.id);
     if (existingPackingLists.length) {
-      const existing = existingPackingLists[0];
+      const firstIncomplete = existingPackingLists.find((pl) => pl.status !== 'Completed');
+      const customerRows = existingPackingLists.map((pl) => {
+        const statusColor = pl.status === 'Completed' ? '#047857' : pl.status === 'Partial' ? '#b45309' : '#3730a3';
+        const statusBg = pl.status === 'Completed' ? '#d1fae5' : pl.status === 'Partial' ? '#fef3c7' : '#e0e7ff';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:8px;background:#f8fafc;margin-top:6px">
+          <span style="font-size:12px;font-weight:600">${(pl.salesNos ?? []).join(', ')} — ${pl.clientName}</span>
+          <span style="font-size:10px;padding:2px 8px;border-radius:999px;background:${statusBg};color:${statusColor};font-weight:700">${pl.status}</span>
+        </div>`;
+      }).join('');
       const result = await Swal.fire({
         icon: 'info',
-        title: 'Packing List Already Exists',
-        html: `<p style="font-size:13px">${existing.packingListNo} already exists for ${pickList.pickListNo}.</p>`,
+        title: 'Packing Lists Already Exist',
+        html: `<div style="text-align:left;font-size:13px">
+          <p><strong>${pickList.pickListNo}</strong> has ${existingPackingLists.length} packing list${existingPackingLists.length !== 1 ? 's' : ''} generated.</p>
+          ${customerRows}
+        </div>`,
         showCancelButton: true,
-        confirmButtonText: existing.status === 'Completed' ? 'View Packing List' : 'Continue Packing',
+        confirmButtonText: firstIncomplete
+          ? (firstIncomplete.totalPackedQty > 0 ? 'Continue Packing' : 'Start Packing')
+          : 'View Packing Lists',
         cancelButtonText: 'Close',
-        confirmButtonColor: existing.status === 'Completed' ? '#4f46e5' : '#16a34a',
+        confirmButtonColor: firstIncomplete ? '#16a34a' : '#4f46e5',
       });
       if (result.isConfirmed) {
-        if (existing.status === 'Completed') await this.openView(existing);
-        else await this.startPacking(existing);
+        if (firstIncomplete) await this.startPacking(firstIncomplete);
+        else await this.openView(existingPackingLists[0]);
       }
       return;
     }
@@ -315,22 +329,43 @@ export class PackingListComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Group packable lines by customer (salesOrderId) — one packing list will be created per group
+    const customerGroupMap = new Map<string, { salesOrderId: string; salesNo: string; clientId: string; clientName: string; lines: PickListLine[] }>();
+    for (const line of packableLines) {
+      const key = line.salesOrderId;
+      if (!customerGroupMap.has(key)) {
+        customerGroupMap.set(key, {
+          salesOrderId: line.salesOrderId,
+          salesNo: line.salesNo,
+          clientId: line.clientId ?? pickList.clientId,
+          clientName: line.clientName ?? pickList.clientName,
+          lines: [],
+        });
+      }
+      customerGroupMap.get(key)!.lines.push(line);
+    }
+    const customerGroups = [...customerGroupMap.values()];
+
     const totalQty = packableLines.reduce((s, l) => s + (l.pickedQty || 0), 0);
-    const orderCount = new Set(packableLines.map((l) => l.salesOrderId)).size;
     const partCount = new Set(packableLines.map((l) => String(l.group ?? '').trim() || 'General')).size;
+    const customerRows = customerGroups.map((g) => {
+      const qty = g.lines.reduce((s, l) => s + (l.pickedQty || 0), 0);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:8px;background:#f8fafc;margin-top:6px">
+        <span style="font-size:12px;font-weight:600">${g.clientName} — ${g.salesNo}</span>
+        <span style="font-size:11px;color:#0f766e;font-weight:700">${g.lines.length} lines · ${qty} pcs</span>
+      </div>`;
+    }).join('');
 
     const result = await Swal.fire({
       icon: 'question',
-      title: 'Generate Packing List?',
+      title: 'Generate Packing Lists?',
       html: `
         <div style="text-align:left;font-size:13px">
-          <p><strong>Client:</strong> ${pickList.clientName}</p>
           <p><strong>Pick List:</strong> ${pickList.pickListNo}</p>
-          <p><strong>Orders:</strong> ${(pickList.salesNos ?? []).join(', ')}</p>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0">
             <div style="background:#ecfeff;border-radius:10px;padding:10px;text-align:center">
-              <div style="font-size:11px;color:#0f766e;font-weight:700;text-transform:uppercase">Lines</div>
-              <div style="font-size:24px;font-weight:700;color:#0f766e">${packableLines.length}</div>
+              <div style="font-size:11px;color:#0f766e;font-weight:700;text-transform:uppercase">Customers</div>
+              <div style="font-size:24px;font-weight:700;color:#0f766e">${customerGroups.length}</div>
             </div>
             <div style="background:#eef2ff;border-radius:10px;padding:10px;text-align:center">
               <div style="font-size:11px;color:#4338ca;font-weight:700;text-transform:uppercase">Qty to Pack</div>
@@ -341,10 +376,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
               <div style="font-size:24px;font-weight:700;color:#15803d">${partCount}</div>
             </div>
           </div>
-          <p style="margin-top:10px;color:#64748b">${orderCount} order${orderCount !== 1 ? 's' : ''} · Party-wise tracking · Scan barcodes to pack.</p>
+          <p style="font-size:11px;color:#64748b;margin-bottom:2px">A separate packing list will be created per customer:</p>
+          ${customerRows}
         </div>`,
       showCancelButton: true,
-      confirmButtonText: 'Generate Packing List',
+      confirmButtonText: `Generate ${customerGroups.length} Packing List${customerGroups.length > 1 ? 's' : ''}`,
       confirmButtonColor: '#0f766e',
     });
 
@@ -352,26 +388,32 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
     this.isGenerating.set(true);
     try {
-      const packingListId = await this.packingListService.createGeneratedPackingList({
-        packingListNo: `PK-${Date.now()}`,
-        pickListId: pickList.id,
-        pickListNo: pickList.pickListNo,
-        salesOrderIds: [...(pickList.salesOrderIds ?? [])],
-        salesNos: [...(pickList.salesNos ?? [])],
-        clientId: pickList.clientId,
-        clientName: pickList.clientName,
-        packingMode: 'customer',
-        lines: packableLines,
-      });
+      const createdIds: string[] = [];
+      for (const group of customerGroups) {
+        const packingListId = await this.packingListService.createGeneratedPackingList({
+          packingListNo: `PK-${Date.now()}`,
+          pickListId: pickList.id,
+          pickListNo: pickList.pickListNo,
+          salesOrderIds: [group.salesOrderId],
+          salesNos: [group.salesNo],
+          clientId: group.clientId,
+          clientName: group.clientName,
+          packingMode: 'customer',
+          lines: group.lines,
+        });
+        createdIds.push(packingListId);
+      }
 
       this.listTab.set('packing');
-      const created = await this.packingListService.getPackingListByIdOnce(packingListId);
-      if (!created) { this.mode.set('list'); return; }
+      const firstCreated = await this.packingListService.getPackingListByIdOnce(createdIds[0]);
+      if (!firstCreated) { this.mode.set('list'); return; }
 
       const nextStep = await Swal.fire({
         icon: 'success',
-        title: 'Packing List Generated',
-        text: 'Start carton packing now or review the list first.',
+        title: `${createdIds.length} Packing List${createdIds.length > 1 ? 's' : ''} Generated`,
+        text: customerGroups.length > 1
+          ? `One packing list per customer. Starting with ${customerGroups[0].clientName} — ${customerGroups[0].salesNo}.`
+          : 'Start carton packing now or review the list first.',
         showCancelButton: true,
         confirmButtonText: 'Start Packing Now',
         cancelButtonText: 'Review List',
@@ -379,8 +421,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
         cancelButtonColor: '#64748b',
       });
 
-      if (nextStep.isConfirmed) await this.startPacking(created);
-      else await this.openView(created);
+      if (nextStep.isConfirmed) await this.startPacking(firstCreated);
+      else await this.openView(firstCreated);
     } catch (error: any) {
       const msg = error?.message === 'no_packable_lines'
         ? 'No packable lines found.'
@@ -819,6 +861,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   getPackingForPickList(pickListId: string): PackingList | null {
     return this.packingLists().find((pl) => pl.pickListId === pickListId) ?? null;
+  }
+
+  getPackingListsForPickList(pickListId: string): PackingList[] {
+    return this.packingLists().filter((pl) => pl.pickListId === pickListId);
+  }
+
+  getFirstIncompletePacking(packingLists: PackingList[]): PackingList | null {
+    return packingLists.find((pl) => pl.status !== 'Completed') ?? null;
   }
 
   getPartCountFromPickList(pickList: PickList): number {

@@ -66,7 +66,8 @@
             </thead>
             <tbody class="divide-y divide-gray-100 bg-white">
               @for (pickList of filteredReadyPickLists(); track pickList.id) {
-                @let existingPacking = getPackingForPickList(pickList.id ?? '');
+                @let existingPackings = getPackingListsForPickList(pickList.id ?? '');
+                @let firstIncomplete = getFirstIncompletePacking(existingPackings);
                 <tr class="hover:bg-gray-50">
                   <td class="px-4 py-3">
                     <div class="font-semibold text-gray-800">{{pickList.pickListNo}}</div>
@@ -76,31 +77,42 @@
                   <td class="px-4 py-3 text-gray-700 font-medium">{{pickList.clientName}}</td>
                   <td class="px-4 py-3 text-center font-bold text-green-700">{{pickList.totalPickedQty ?? 0}}</td>
                   <td class="px-4 py-3 text-center font-semibold text-teal-700">{{getPartCountFromPickList(pickList)}}</td>
+                  <!-- Packing status column — per-customer when multiple packing lists exist -->
                   <td class="px-4 py-3">
-                    @if (existingPacking) {
+                    @if (existingPackings.length === 0) {
+                      <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-800">Ready to Generate</span>
+                    } @else if (existingPackings.length === 1) {
                       <div class="flex items-center gap-2 flex-wrap">
-                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="packingStatusBadge(existingPacking.status)">{{existingPacking.status}}</span>
-                        <span class="text-xs text-teal-700 font-medium">{{existingPacking.packingListNo}}</span>
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="packingStatusBadge(existingPackings[0].status)">{{existingPackings[0].status}}</span>
+                        <span class="text-xs text-teal-700 font-medium">{{existingPackings[0].packingListNo}}</span>
                       </div>
                     } @else {
-                      <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-800">Ready to Generate</span>
+                      <div class="flex flex-col gap-1">
+                        @for (ep of existingPackings; track ep.id) {
+                          <div class="flex items-center gap-1.5">
+                            <span class="px-2 py-0.5 rounded-full text-xs font-semibold" [class]="packingStatusBadge(ep.status)">{{ep.status}}</span>
+                            <span class="text-xs text-gray-600">{{(ep.salesNos ?? []).join(', ')}}</span>
+                          </div>
+                        }
+                      </div>
                     }
                   </td>
+                  <!-- Actions column -->
                   <td class="px-4 py-3">
                     <div class="flex items-center justify-end gap-2 flex-wrap">
-                      @if (!existingPacking) {
+                      @if (existingPackings.length === 0) {
                         <button (click)="initiateGenerate(pickList)" [disabled]="isGenerating()"
                           class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition-colors">
                           {{isGenerating() ? 'Generating...' : 'Generate Packing List'}}
                         </button>
                       } @else {
-                        @if (existingPacking.status !== 'Completed') {
-                          <button (click)="startPacking(existingPacking)"
+                        @if (firstIncomplete) {
+                          <button (click)="startPacking(firstIncomplete)"
                             class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors">
-                            {{existingPacking.totalPackedQty > 0 ? 'Continue Packing' : 'Start Packing'}}
+                            {{firstIncomplete.totalPackedQty > 0 ? 'Continue Packing' : 'Start Packing'}}
                           </button>
                         }
-                        <button (click)="openView(existingPacking)"
+                        <button (click)="openView(existingPackings[0])"
                           class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">
                           View
                         </button>
