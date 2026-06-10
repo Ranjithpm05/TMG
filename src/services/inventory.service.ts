@@ -44,4 +44,15 @@ export class InventoryService {
       }
     }
   }
+
+  async getInventoryByBarcodes(barcodes: string[]): Promise<InventoryItem[]> {
+    if (!barcodes.length) return [];
+    const results: InventoryItem[] = [];
+    for (let i = 0; i < barcodes.length; i += 30) {
+      const batch = barcodes.slice(i, i + 30);
+      const snap = await getDocs(query(this.invRef, where('barcode', 'in', batch)));
+      snap.docs.forEach(d => results.push({ id: d.id, ...d.data() } as InventoryItem));
+    }
+    return results;
+  }
 }

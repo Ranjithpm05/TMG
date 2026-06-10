@@ -18,6 +18,9 @@ import { PickListService } from '../../services/pick-list.service';
 import { PackingListService } from '../../services/packing-list.service';
 import { ClientService } from '../../services/client.service';
 import { DeliveryChallanService } from '../../services/delivery-challan.service';
+import { Invoice } from '../../models/invoice.model';
+import { InvoiceService } from '../../services/invoice.service';
+import { InventoryService } from '../../services/inventory.service';
 
 type ViewMode = 'list' | 'view' | 'live-pack';
 
@@ -35,11 +38,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
   private packingListService = inject(PackingListService);
   private clientService = inject(ClientService);
   private dcService = inject(DeliveryChallanService);
+  private invoiceService = inject(InvoiceService);
+  private inventoryService = inject(InventoryService);
   private subscriptions: Subscription[] = [];
 
   // ─── Navigation ────────────────────────────────────────────────────────────
   mode = signal<ViewMode>('list');
-  listTab = signal<'ready' | 'packing' | 'dc-history'>('ready');
+  listTab = signal<'ready' | 'packing' | 'dc-history' | 'invoices'>('ready');
   searchTerm = signal('');
 
   // ─── Data ──────────────────────────────────────────────────────────────────
@@ -80,6 +85,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
   packingInProgress = signal<string[]>([]);
   activeBoxNo = signal('');
   boxInput = signal('');
+  invoices = signal<Invoice[]>([]);
+  isGeneratingInvoice = signal(false);
 
   // ─── Computed ──────────────────────────────────────────────────────────────
 
@@ -143,6 +150,16 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   partyPackingProgress = computed((): PackingPartyProgress[] => {
     return this.livePackingList()?.partyProgress ?? [];
+  });
+
+  filteredInvoiceList = computed(() => {
+    const term = this.searchTerm().trim().toLowerCase();
+    return this.invoices().filter((inv) => {
+      if (!term) return true;
+      return inv.invoiceNo.toLowerCase().includes(term)
+        || inv.clientName.toLowerCase().includes(term)
+        || inv.salesNos.some((s) => s.toLowerCase().includes(term));
+    });
   });
 
   openCartonsCount = computed(() =>
@@ -221,7 +238,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.isLoading.set(true);
     let doneCount = 0;
-    const done = () => { if (++doneCount >= 3) this.isLoading.set(false); };
+    const done = () => { if (++doneCount >= 4) this.isLoading.set(false); };
 
     this.subscriptions.push(
       this.pickListService.getPickLists().subscribe({ next: (v) => { this.pickLists.set(v); done(); }, error: done })
@@ -248,6 +265,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
     );
     this.subscriptions.push(
       this.dcService.getDeliveryChallans().subscribe({ next: (v) => { this.deliveryChallans.set(v); done(); }, error: done })
+    );
+    this.subscriptions.push(
+      this.invoiceService.getInvoices().subscribe({ next: (v) => { this.invoices.set(v); done(); }, error: done })
     );
   }
 
@@ -644,6 +664,240 @@ export class PackingListComponent implements OnInit, OnDestroy {
     } finally {
       this.isSealingCarton.set(false);
     }
+  }
+
+  // ─── Invoice Generation ────────────────────────────────────────────────────
+
+  async generateInvoice(packingList: PackingList): Promise<void> {
+    if (!packingList.id || this.isGeneratingInvoice()) return;
+
+    const existingInvoices = await this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id);
+    if (existingInvoices.length > 0) {
+      const result = await Swal.fire({
+        icon: 'info',
+        title: 'Invoice Already Generated',
+        html: '<p style="font-size:13px">Invoice(s) already exist: <strong>' + existingInvoices.map((i) => i.invoiceNo).join(', ') + '</strong></p>',
+        showConfirmButton: true,
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: 'Reprint Existing',
+        denyButtonText: 'Generate New Invoice',
+        cancelButtonText: 'Close',
+        confirmButtonColor: '#4f46e5',
+        denyButtonColor: '#d97706',
+      });
+      if (result.isConfirmed) { await this.reprintInvoice(existingInvoices[0]); return; }
+      if (!result.isDenied) return;
+    }
+
+    const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id);
+    const dc = existingDCs.length > 0 ? existingDCs[0] : null;
+
+    const { value: formValues } = await Swal.fire({
+      title: 'Invoice Settings',
+      html: '<div style="text-align:left;font-size:13px">'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">HSN/SAC Code</label>'
+        + '<input id="inv-hsn" class="swal2-input" style="margin:0;width:100%" value="62059090"></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Discount %</label>'
+        + '<input id="inv-disc" type="number" class="swal2-input" style="margin:0;width:100%" value="10"></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Tax Rate % (total GST)</label>'
+        + '<input id="inv-tax" type="number" class="swal2-input" style="margin:0;width:100%" value="5"></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Vehicle No.</label>'
+        + '<input id="inv-vehicle" class="swal2-input" style="margin:0;width:100%" value=""></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Document No.</label>'
+        + '<input id="inv-docno" class="swal2-input" style="margin:0;width:100%" value=""></div>'
+        + '<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Destination</label>'
+        + '<input id="inv-dest" class="swal2-input" style="margin:0;width:100%" value="' + (dc?.place || packingList.clientName || '') + '"></div>'
+        + '</div>',
+      showCancelButton: true,
+      confirmButtonText: 'Generate Invoice',
+      confirmButtonColor: '#4f46e5',
+      preConfirm: () => ({
+        hsnSac: (document.getElementById('inv-hsn') as HTMLInputElement).value.trim() || '62059090',
+        discountPct: Number((document.getElementById('inv-disc') as HTMLInputElement).value) || 0,
+        taxRate: Number((document.getElementById('inv-tax') as HTMLInputElement).value) || 5,
+        vehicleNo: (document.getElementById('inv-vehicle') as HTMLInputElement).value.trim(),
+        docNo: (document.getElementById('inv-docno') as HTMLInputElement).value.trim(),
+        destination: (document.getElementById('inv-dest') as HTMLInputElement).value.trim(),
+      }),
+    });
+    if (!formValues) return;
+
+    this.isGeneratingInvoice.set(true);
+    try {
+      const [fresh, lines] = await Promise.all([
+        this.packingListService.getPackingListByIdOnce(packingList.id),
+        this.packingListService.getPackingListLinesOnce(packingList.id),
+      ]);
+      const loaded = fresh ?? packingList;
+
+      const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean))] as string[];
+      const invItems = await this.inventoryService.getInventoryByBarcodes(barcodes);
+      const invMap = new Map<string, { wsp: number; mrp: number }>();
+      for (const inv of invItems) {
+        invMap.set(inv.barcode, { wsp: Number(inv.WSP) || 0, mrp: Number(inv.price) || 0 });
+      }
+
+      const rowMap = new Map<string, { description: string; mrp: number; wsp: number; qty: number }>();
+      for (const line of lines) {
+        const qty = line.packedQty > 0 ? line.packedQty : line.requiredQty;
+        if (qty <= 0) continue;
+        const inv = invMap.get(line.barcode ?? '') ?? { wsp: 0, mrp: 0 };
+        const key = line.partName + '||' + Math.round((inv.mrp || 0) * 100);
+        if (!rowMap.has(key)) {
+          rowMap.set(key, { description: line.partName, mrp: inv.mrp, wsp: inv.wsp, qty: 0 });
+        }
+        rowMap.get(key)!.qty += qty;
+      }
+
+      const { discountPct, taxRate, hsnSac } = formValues;
+      const halfTax = taxRate / 2;
+
+      const invoiceItems = [...rowMap.values()].map((row) => {
+        const amount = Math.round(row.qty * row.wsp * 100) / 100;
+        return { description: row.description, hsnSac, discountPct, taxRate, mrp: row.mrp, uom: 'NOS', quantity: row.qty, price: row.wsp, amount };
+      });
+
+      const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+      const discountAmount = Math.round(grossAmount * discountPct / 100 * 100) / 100;
+      const taxableValue = Math.round((grossAmount - discountAmount) * 100) / 100;
+      const cgstAmount = Math.round(taxableValue * halfTax / 100 * 100) / 100;
+      const sgstAmount = cgstAmount;
+      const totalTaxAmount = Math.round((cgstAmount + sgstAmount) * 100) / 100;
+      const rawTotal = taxableValue + totalTaxAmount;
+      const totalAmount = Math.round(rawTotal);
+      const roundOff = Math.round((totalAmount - rawTotal) * 100) / 100;
+
+      const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
+
+      const invoice = await this.invoiceService.createInvoice({
+        dcNo: dc?.dcNo ?? '',
+        dcId: dc?.id,
+        packingListId: loaded.id!,
+        packingListNo: loaded.packingListNo,
+        salesOrderIds: loaded.salesOrderIds,
+        salesNos: loaded.salesNos,
+        orderNo: (loaded.salesNos ?? []).join(', '),
+        clientId: loaded.clientId,
+        clientName: loaded.clientName,
+        clientAddress: client?.billingAddress ?? '',
+        clientPlace: client?.place ?? '',
+        clientState: client?.state ?? '',
+        clientZipCode: client?.zipCode ?? '',
+        clientPhone: client?.mobile ?? '',
+        clientGstin: client?.gstNo ?? '',
+        destination: formValues.destination,
+        transport: dc?.transport ?? loaded.transport ?? '',
+        vehicleNo: formValues.vehicleNo,
+        docNo: formValues.docNo,
+        shipmentDate: dc?.createdAt ?? null,
+        totalPkgs: loaded.cartonCount,
+        agentName: dc?.agentName ?? loaded.agentName ?? '',
+        items: invoiceItems,
+        grossAmount, discountPct, discountAmount, taxableValue,
+        cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount,
+        igstRate: 0, igstAmount: 0, totalTaxAmount, roundOff, totalAmount,
+        amountInWords: this.amountToWords(totalAmount),
+        taxSummary: [{ hsnSac, taxableValue, cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount, igstRate: 0, igstAmount: 0 }],
+      });
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Invoice ' + invoice.invoiceNo + ' Generated!',
+        html: '<p style="font-size:13px">Total: <strong>&#x20B9;' + invoice.totalAmount.toLocaleString('en-IN') + '</strong></p>',
+        showConfirmButton: true,
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: 'Print Invoice',
+        denyButtonText: 'Download Excel',
+        cancelButtonText: 'Close',
+        confirmButtonColor: '#4f46e5',
+        denyButtonColor: '#059669',
+      }).then((res) => {
+        if (res.isConfirmed) this.reprintInvoice(invoice);
+        if (res.isDenied) this.downloadInvoiceExcel(invoice);
+      });
+    } catch (err: any) {
+      await Swal.fire({ icon: 'error', title: 'Invoice Generation Failed', text: err?.message ?? 'Unable to generate invoice.' });
+    } finally {
+      this.isGeneratingInvoice.set(false);
+    }
+  }
+
+  async reprintInvoice(invoice: Invoice): Promise<void> {
+    const html = this.buildInvoiceHtml(invoice);
+    const win = window.open('', '_blank', 'width=1100,height=820');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+  }
+
+  async downloadInvoiceExcel(invoice: Invoice): Promise<void> {
+    try {
+      const XLSX = await import('xlsx');
+      const rows: any[][] = [
+        ['TMG Clothings', '', '', '', 'GSTIN: 33AAYFT2559B1ZY'],
+        ['Door No.334/2, Serayampalaym, Vellanaipatti Post, Coimbatore - 641048'],
+        ['Phone: 9842211787 | Email: order@tmggarments.in'],
+        [],
+        ['TAX INVOICE'],
+        [],
+        ['Invoice No:', invoice.invoiceNo, '', 'Invoice Date:', this.formatDate(invoice.invoiceDate)],
+        ['DC No:', invoice.dcNo, '', 'Order No:', invoice.orderNo],
+        ['Vehicle No:', invoice.vehicleNo, '', 'Total Pkgs:', invoice.totalPkgs],
+        ['Transport:', invoice.transport, '', 'Destination:', invoice.destination],
+        ['Agent:', invoice.agentName],
+        [],
+        ['Customer:', invoice.clientName],
+        ['Address:', [invoice.clientAddress, invoice.clientPlace, invoice.clientState, invoice.clientZipCode].filter(Boolean).join(', ')],
+        ['GSTIN:', invoice.clientGstin, '', 'Phone:', invoice.clientPhone],
+        [],
+        ['S.No', 'Description', 'HSN/SAC', 'Disc%', 'Tax%', 'MRP', 'UOM', 'Qty', 'Price', 'Amount'],
+        ...invoice.items.map((item, i) => [i + 1, item.description, item.hsnSac, item.discountPct, item.taxRate, item.mrp, item.uom, item.quantity, item.price, item.amount]),
+        [],
+        ['', '', '', '', '', '', '', '', 'Gross Amount:', invoice.grossAmount],
+        ['', '', '', '', '', '', '', '', 'Discount (' + invoice.discountPct + '%):', invoice.discountAmount],
+        ['', '', '', '', '', '', '', '', 'Taxable Value:', invoice.taxableValue],
+        ['', '', '', '', '', '', '', '', 'CGST (' + invoice.cgstRate + '%):', invoice.cgstAmount],
+        ['', '', '', '', '', '', '', '', 'SGST (' + invoice.sgstRate + '%):', invoice.sgstAmount],
+        ['', '', '', '', '', '', '', '', 'Total Tax:', invoice.totalTaxAmount],
+        ['', '', '', '', '', '', '', '', 'Round Off:', invoice.roundOff],
+        ['', '', '', '', '', '', '', '', 'TOTAL:', invoice.totalAmount],
+        [],
+        ['Amount in Words:', invoice.amountInWords],
+        [],
+        ['Bank Details:'],
+        ['Account Name: TMG Clothings', '', 'A/C No: 44358238258'],
+        ['IFSC: SBIN0061170', '', 'Bank: STATE BANK OF INDIA, Siruthozhil Branch, Kovilpatti'],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 6 }, { wch: 8 }, { wch: 14 }, { wch: 14 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Invoice');
+      XLSX.writeFile(wb, invoice.invoiceNo + '.xlsx');
+    } catch {
+      await Swal.fire({ icon: 'error', title: 'Excel Export Failed', text: 'Unable to generate Excel. Please try printing the PDF instead.' });
+    }
+  }
+
+  async printEnhancedBoxLabels(packingList: PackingList): Promise<void> {
+    if (!packingList.id) return;
+    const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id);
+    const dc = existingDCs.length > 0 ? existingDCs[0] : null;
+    const existingInvoices = await this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id);
+    const invoiceNo = existingInvoices.length > 0 ? existingInvoices[0].invoiceNo : '';
+    const cartons = packingList.cartons ?? [];
+    if (!cartons.length) {
+      await Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'No cartons to print', timer: 2000, showConfirmButton: false });
+      return;
+    }
+    const totalBoxes = cartons.length;
+    const labelsHtml = cartons.map((_, idx) => this.buildEnhancedBoxLabelHtml(packingList, idx, totalBoxes, dc, invoiceNo)).join('');
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Box Labels - ' + packingList.packingListNo + '</title>'
+      + '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px;background:#fff}'
+      + '.label-page{width:23cm;height:10.5cm;page-break-after:always;overflow:hidden;display:flex;flex-direction:column;border:1px solid #000}'
+      + '@media print{@page{size:23cm 10.5cm;margin:0}body{margin:0}.label-page{border:none;page-break-after:always}}'
+      + '</style></head><body>' + labelsHtml + '</body></html>';
+    const win = window.open('', '_blank', 'width=900,height=500');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
   }
 
   // ─── Print ─────────────────────────────────────────────────────────────────
@@ -1435,5 +1689,150 @@ ${allDCHtml}
           </div>
         </div>
       </body></html>`;
+  }
+
+  private buildEnhancedBoxLabelHtml(packingList: PackingList, cartonIndex: number, totalBoxes: number, dc: DeliveryChallan | null, invoiceNo: string): string {
+    const carton = packingList.cartons[cartonIndex];
+    if (!carton) return '';
+    const partyProgress = packingList.partyProgress ?? [];
+    const soIds = [...new Set(carton.entries.flatMap((e) => e.salesOrderIds))];
+    const party = partyProgress.find((p) => soIds.includes(p.salesOrderId));
+    const customerName = party?.clientName || packingList.clientName;
+    const addrParts: string[] = [];
+    if (dc?.billingAddress) addrParts.push(dc.billingAddress);
+    if (dc?.place || dc?.state) addrParts.push([dc.place, dc.state].filter(Boolean).join(', ') + (dc?.zipCode ? ' - ' + dc.zipCode : ''));
+    if (dc?.clientPhone) addrParts.push('Ph: ' + dc.clientPhone);
+    const addrHtml = addrParts.map((p) => '<div style="font-size:8px;color:#333;margin-top:1px">' + p + '</div>').join('');
+    const qrData = 'INV:' + (invoiceNo || 'N/A') + '|BOX:' + (cartonIndex + 1) + 'of' + totalBoxes + '|CODE:' + (dc?.clientId || packingList.clientId).substring(0, 8).toUpperCase();
+    return '<div class="label-page">'
+      + '<div style="display:flex;align-items:center;padding:4px 8px;border-bottom:1.5px solid #000;background:#f8f8f8">'
+      + '<div style="width:36px;height:36px;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;margin-right:6px;background:#fff;font-size:7px;font-weight:900;color:#1e3a8a;text-align:center">TMG<br>CLG</div>'
+      + '<div style="flex:1"><div style="font-size:13px;font-weight:900;color:#0f172a">TMG Clothings</div>'
+      + '<div style="font-size:7px;color:#555">Door No.334/2, Serayampalaym, Coimbatore - 641048 | GSTIN: 33AAYFT2559B1ZY</div></div>'
+      + '<div style="text-align:right;font-size:8px;color:#666;min-width:60px">'
+      + '<div style="font-weight:700">Box ' + (cartonIndex + 1) + ' of ' + totalBoxes + '</div>'
+      + '<div style="font-size:18px;font-weight:900;color:#0f172a;line-height:1.1">' + carton.cartonNo + '</div></div></div>'
+      + '<div style="display:flex;border-bottom:1px solid #ccc;flex:1;min-height:0">'
+      + '<div style="flex:1;padding:5px 8px;border-right:1px solid #ccc">'
+      + '<div style="font-size:8px;font-weight:700;text-transform:uppercase;color:#4f46e5">Ship To</div>'
+      + '<div style="font-size:11px;font-weight:900;color:#0f172a;margin-top:1px">' + customerName + '</div>'
+      + (addrHtml || '<div style="font-size:8px;color:#888">—</div>') + '</div>'
+      + '<div style="width:90px;padding:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fafafa">'
+      + '<div style="border:1.5px solid #0f172a;padding:5px;font-size:6px;font-family:monospace;word-break:break-all;text-align:center;width:76px;line-height:1.4">' + qrData + '</div>'
+      + '<div style="font-size:6px;color:#666;margin-top:3px;text-align:center">Scan for details</div></div></div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #ccc">'
+      + '<div style="padding:3px 6px;border-right:1px solid #ccc"><div style="font-size:7px;color:#666;font-weight:700;text-transform:uppercase">Pick List</div><div style="font-size:9px;font-weight:700">' + packingList.pickListNo + '</div></div>'
+      + '<div style="padding:3px 6px;border-right:1px solid #ccc"><div style="font-size:7px;color:#666;font-weight:700;text-transform:uppercase">Order No.</div><div style="font-size:9px;font-weight:700">' + (packingList.salesNos ?? []).join(', ') + '</div></div>'
+      + '<div style="padding:3px 6px"><div style="font-size:7px;color:#666;font-weight:700;text-transform:uppercase">Invoice No.</div><div style="font-size:9px;font-weight:700">' + (invoiceNo || '—') + '</div></div></div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr">'
+      + '<div style="padding:3px 6px;border-right:1px solid #ccc"><div style="font-size:7px;color:#666;font-weight:700;text-transform:uppercase">Destination</div><div style="font-size:9px;font-weight:700">' + (dc?.place || '—') + '</div></div>'
+      + '<div style="padding:3px 6px;border-right:1px solid #ccc"><div style="font-size:7px;color:#666;font-weight:700;text-transform:uppercase">Transport</div><div style="font-size:9px;font-weight:700">' + (dc?.transport || packingList.transport || '—') + '</div></div>'
+      + '<div style="padding:3px 6px;background:#f0fdf4"><div style="font-size:7px;color:#047857;font-weight:700;text-transform:uppercase">Total Qty</div>'
+      + '<div style="font-size:16px;font-weight:900;color:#047857;line-height:1">' + carton.totalQty + ' PCS</div></div></div></div>';
+  }
+
+  private buildInvoiceHtml(invoice: Invoice): string {
+    const B = 'border:1px solid #ccc;';
+    const th = (txt: string, extra = '') => '<th style="padding:4px 6px;' + B + 'background:#e8e8e8;font-size:9px;font-weight:700;text-align:center;' + extra + '">' + txt + '</th>';
+    const td = (txt: string | number, extra = '') => '<td style="padding:4px 6px;' + B + 'font-size:9px;text-align:center;' + extra + '">' + txt + '</td>';
+    const fmtDate = (raw: any): string => {
+      if (!raw) return '-';
+      try { const d = raw?.toDate ? raw.toDate() : new (Function.prototype.bind.call(Date, null, raw))(); return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }); } catch { return '-'; }
+    };
+    const addrLines = [invoice.clientAddress, [invoice.clientPlace, invoice.clientState].filter(Boolean).join(', ') + (invoice.clientZipCode ? ' - ' + invoice.clientZipCode : ''), invoice.clientPhone ? 'Mobile: ' + invoice.clientPhone : ''].filter(Boolean);
+    const clientAddrHtml = addrLines.map((l) => '<div style="font-size:9px;margin-top:1px">' + l + '</div>').join('');
+    const itemRows = invoice.items.map((item, i) => '<tr style="background:' + (i % 2 === 0 ? '#fff' : '#f9f9f9') + '">'
+      + td(i + 1) + td(item.description, 'text-align:left;font-weight:600') + td(item.hsnSac)
+      + td(item.discountPct) + td(item.taxRate) + td(item.mrp.toFixed(2)) + td(item.uom)
+      + td(item.quantity) + td(item.price.toFixed(2), 'font-weight:700') + td(item.amount.toFixed(2), 'font-weight:700') + '</tr>').join('');
+    const taxSummaryRows = invoice.taxSummary.map((t) => '<tr>'
+      + td(t.hsnSac) + td(t.taxableValue.toFixed(2), 'font-weight:700') + td(t.cgstRate) + td(t.cgstAmount.toFixed(2), 'font-weight:700')
+      + td(t.sgstRate) + td(t.sgstAmount.toFixed(2), 'font-weight:700') + td(t.igstRate || '-') + td(t.igstAmount ? t.igstAmount.toFixed(2) : '-') + '</tr>').join('');
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice - ' + invoice.invoiceNo + '</title>'
+      + '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px;color:#000}table{width:100%;border-collapse:collapse}@media print{@page{size:A4;margin:10mm}}</style>'
+      + '</head><body><div style="padding:10px 14px">'
+      + '<div style="display:flex;align-items:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:6px">'
+      + '<div style="width:60px;height:60px;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:#1e3a8a;text-align:center;flex-shrink:0;margin-right:10px">TMG<br>CLOTHINGS</div>'
+      + '<div style="flex:1;text-align:center"><div style="font-size:20px;font-weight:900">TMG Clothings</div>'
+      + '<div style="font-size:9px;color:#333;margin-top:1px">Door No.334/2, Serayampalaym, Vellanaipatti Post, Coimbatore - 641048</div>'
+      + '<div style="font-size:9px;color:#333">Phone: 9842211787 | Email: order@tmggarments.in | GSTIN: 33AAYFT2559B1ZY</div></div>'
+      + '<div style="text-align:right;font-size:8px;color:#666;min-width:100px">Triplicate-For Assessee</div></div>'
+      + '<div style="font-size:13px;font-weight:700;text-align:center;letter-spacing:2px;text-decoration:underline;margin-bottom:8px">TAX INVOICE</div>'
+      + '<div style="display:flex;border:1px solid #aaa;margin-bottom:8px">'
+      + '<div style="flex:1;padding:6px 8px;border-right:1px solid #aaa">'
+      + '<div style="font-size:10px;font-weight:700;margin-bottom:3px">M/S : ' + invoice.clientName + '</div>'
+      + clientAddrHtml + (invoice.clientGstin ? '<div style="font-size:9px;margin-top:3px;font-weight:600">GSTIN: ' + invoice.clientGstin + '</div>' : '') + '</div>'
+      + '<div style="flex:1;padding:6px 8px;border-right:1px solid #aaa">'
+      + '<div style="font-size:9px;font-weight:700;margin-bottom:2px">Ship To : ' + invoice.clientName + '</div>'
+      + clientAddrHtml + '</div>'
+      + '<div style="min-width:200px;padding:4px 8px"><table style="border-collapse:collapse;width:100%">'
+      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Invoice No.</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ' + invoice.invoiceNo + '</td></tr>'
+      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Invoice Date</td><td style="padding:2px 4px;font-size:9px">: ' + fmtDate(invoice.invoiceDate) + '</td></tr>'
+      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">DC No.</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ' + (invoice.dcNo || '—') + '</td></tr>'
+      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Order No.</td><td style="padding:2px 4px;font-size:9px;font-weight:600">: ' + invoice.orderNo + '</td></tr>'
+      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Destination</td><td style="padding:2px 4px;font-size:9px">: ' + (invoice.destination || '—') + '</td></tr>'
+      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Transport</td><td style="padding:2px 4px;font-size:9px">: ' + (invoice.transport || '—') + '</td></tr>'
+      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Doc No.</td><td style="padding:2px 4px;font-size:9px">: ' + (invoice.docNo || '—') + '</td></tr>'
+      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Vehicle No.</td><td style="padding:2px 4px;font-size:9px">: ' + (invoice.vehicleNo || '—') + '</td></tr>'
+      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Total Pkgs</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ' + invoice.totalPkgs + '</td></tr>'
+      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Agent</td><td style="padding:2px 4px;font-size:9px">: ' + (invoice.agentName || '—') + '</td></tr>'
+      + '</table></div></div>'
+      + '<table style="margin-bottom:8px"><thead><tr>'
+      + th('S.No') + th('Description', 'text-align:left') + th('HSN/SAC') + th('Disc(%)') + th('Tax(%)') + th('MRP') + th('UOM') + th('Quantity') + th('Price') + th('Amount')
+      + '</tr></thead><tbody>' + itemRows
+      + '<tr><td colspan="9" style="padding:4px 6px;' + B + 'font-weight:700;font-size:9px;text-align:right;background:#f0f0f0">Gross</td>'
+      + '<td style="padding:4px 6px;' + B + 'font-weight:900;font-size:10px;text-align:center;background:#f0f0f0">' + invoice.grossAmount.toFixed(2) + '</td></tr>'
+      + '</tbody></table>'
+      + '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">'
+      + '<table style="width:280px;border-collapse:collapse">'
+      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Discount (' + invoice.discountPct + '%)</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.discountAmount.toFixed(2) + '</td></tr>'
+      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Taxable Value</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.taxableValue.toFixed(2) + '</td></tr>'
+      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">CGST (' + invoice.cgstRate + '%)</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">' + invoice.cgstAmount.toFixed(2) + '</td></tr>'
+      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">SGST (' + invoice.sgstRate + '%)</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">' + invoice.sgstAmount.toFixed(2) + '</td></tr>'
+      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd;font-weight:700">Total Tax Amount</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.totalTaxAmount.toFixed(2) + '</td></tr>'
+      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Round Off</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">' + invoice.roundOff.toFixed(2) + '</td></tr>'
+      + '<tr style="background:#0f172a;color:#fff"><td style="padding:5px 8px;font-size:11px;font-weight:900;border:1px solid #0f172a">TOTAL</td>'
+      + '<td style="padding:5px 8px;font-size:12px;font-weight:900;text-align:right;border:1px solid #0f172a">&#x20B9; ' + invoice.totalAmount.toLocaleString('en-IN') + '</td></tr>'
+      + '</table></div>'
+      + '<div style="border:1px solid #ccc;padding:5px 8px;margin-bottom:8px;font-size:9px"><strong>Rupees :</strong> ' + invoice.amountInWords + '</div>'
+      + '<table style="margin-bottom:8px"><thead><tr>'
+      + th('HSN/SAC') + th('Taxable Value') + th('CGST %') + th('CGST Amt') + th('SGST %') + th('SGST Amt') + th('IGST %') + th('IGST Amt')
+      + '</tr></thead><tbody>' + taxSummaryRows
+      + '<tr style="background:#f0f0f0">' + td('Total', 'font-weight:700') + td(invoice.taxableValue.toFixed(2), 'font-weight:700') + td('') + td(invoice.cgstAmount.toFixed(2), 'font-weight:700') + td('') + td(invoice.sgstAmount.toFixed(2), 'font-weight:700') + td('') + td(invoice.igstAmount ? invoice.igstAmount.toFixed(2) : '-') + '</tr>'
+      + '</tbody></table>'
+      + '<div style="font-size:8px;border:1px solid #ccc;padding:4px 8px;margin-bottom:8px">Amount of Tax (in words) : ' + this.amountToWords(invoice.totalTaxAmount) + '</div>'
+      + '<div style="border:1px solid #ccc;padding:5px 8px;margin-bottom:8px;font-size:9px"><div style="font-weight:700;margin-bottom:3px">Company\'s Bank Details :</div>'
+      + '<div>Name of the Account : TMG Clothings</div><div>A/C No : 44358238258</div>'
+      + '<div>IFSC Code : SBIN0061170</div><div>Bank Name : STATE BANK OF INDIA / Branch : Siruthozhil Branch, Kovilpatti</div></div>'
+      + '<div style="font-size:9px;margin-bottom:12px">Remarks :</div>'
+      + '<div style="display:flex;justify-content:space-between;margin-top:30px">'
+      + '<div style="text-align:center"><div style="border-top:1px solid #555;padding-top:4px;font-size:9px;color:#444;width:120px">Checked By</div></div>'
+      + '<div style="text-align:center"><div style="font-size:10px;font-weight:700;color:#0f172a;margin-bottom:2px">For TMG Clothings</div>'
+      + '<div style="border-top:1px solid #555;padding-top:4px;font-size:9px;color:#444;width:150px;margin-top:30px">Authorised Signatory</div></div>'
+      + '</div></div></body></html>';
+  }
+
+  private amountToWords(amount: number): string {
+    const rounded = Math.round(amount);
+    const parts = amount.toFixed(2).split('.');
+    const paisa = parseInt(parts[1], 10);
+    const rupeeWords = this.numberToWords(rounded);
+    if (paisa > 0) return rupeeWords + ' AND ' + this.numberToWords(paisa) + ' PAISE ONLY';
+    return rupeeWords + ' RUPEES ONLY';
+  }
+
+  private numberToWords(n: number): string {
+    if (n === 0) return 'ZERO';
+    const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
+      'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+    const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+    const twoD = (num: number): string => num < 20 ? ones[num] : (tens[Math.floor(num / 10)] + (num % 10 ? ' ' + ones[num % 10] : '')).trim();
+    const threeD = (num: number): string => num >= 100 ? ones[Math.floor(num / 100)] + ' HUNDRED' + (num % 100 ? ' ' + twoD(num % 100) : '') : twoD(num);
+    const parts: string[] = [];
+    if (n >= 10000000) { parts.push(threeD(Math.floor(n / 10000000)) + ' CRORE'); n %= 10000000; }
+    if (n >= 100000) { parts.push(twoD(Math.floor(n / 100000)) + ' LAKH'); n %= 100000; }
+    if (n >= 1000) { parts.push(twoD(Math.floor(n / 1000)) + ' THOUSAND'); n %= 1000; }
+    if (n > 0) parts.push(threeD(n));
+    return parts.join(' ');
   }
 }

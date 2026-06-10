@@ -28,6 +28,11 @@
           [class.border-transparent]="listTab()!=='dc-history'" [class.text-gray-500]="listTab()!=='dc-history'">
           DC History ({{deliveryChallans().length}})
         </button>
+        <button (click)="listTab.set('invoices')" class="px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors"
+          [class.border-purple-600]="listTab()==='invoices'" [class.text-purple-700]="listTab()==='invoices'"
+          [class.border-transparent]="listTab()!=='invoices'" [class.text-gray-500]="listTab()!=='invoices'">
+          Invoices ({{filteredInvoiceList().length}})
+        </button>
       </div>
 
       <div class="flex gap-3 mb-5">
@@ -189,7 +194,7 @@
           </table>
         </div>
 
-      } @else {
+      } @else if (listTab() === 'dc-history') {
         <!-- DC History Tab -->
         <div class="overflow-x-auto rounded-lg border border-gray-200">
           <table class="min-w-full text-sm">
@@ -237,6 +242,53 @@
             </tbody>
           </table>
         </div>
+      } @else {
+        <!-- Invoices Tab -->
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+          <table class="min-w-full text-sm">
+            <thead class="bg-purple-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-purple-600 uppercase">Invoice No.</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-purple-600 uppercase">Client</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-purple-600 uppercase">Order No.</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-purple-600 uppercase">DC No.</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-purple-600 uppercase">Total (₹)</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-purple-600 uppercase">Generated On</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-purple-600 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white">
+              @for (invoice of filteredInvoiceList(); track invoice.id) {
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 font-bold text-purple-700">{{invoice.invoiceNo}}</td>
+                  <td class="px-4 py-3 text-gray-800 font-medium">{{invoice.clientName}}</td>
+                  <td class="px-4 py-3 text-xs text-gray-600">{{invoice.orderNo || invoice.salesNos.join(', ')}}</td>
+                  <td class="px-4 py-3 text-xs text-gray-600">{{invoice.dcNo || '—'}}</td>
+                  <td class="px-4 py-3 text-right font-bold text-green-700">₹{{invoice.totalAmount.toLocaleString('en-IN')}}</td>
+                  <td class="px-4 py-3 text-xs text-gray-500">{{formatDateTime(invoice.createdAt)}}</td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center justify-end gap-2 flex-wrap">
+                      <button (click)="reprintInvoice(invoice)"
+                        class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-lg transition-colors">
+                        Print PDF
+                      </button>
+                      <button (click)="downloadInvoiceExcel(invoice)"
+                        class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg transition-colors">
+                        Excel
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="7" class="px-4 py-10 text-center text-sm text-gray-500">
+                    No invoices generated yet. Open a completed packing list and click "Generate Invoice".
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
       }
     </div>
   }
@@ -265,6 +317,14 @@
               <button (click)="generateAndPrintDC(packingList)" [disabled]="isGeneratingDC()"
                 class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition-colors">
                 {{isGeneratingDC() ? 'Generating...' : 'Generate &amp; Print DC'}}
+              </button>
+              <button (click)="generateInvoice(packingList)" [disabled]="isGeneratingInvoice()"
+                class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition-colors">
+                {{isGeneratingInvoice() ? 'Generating...' : 'Invoice'}}
+              </button>
+              <button (click)="printEnhancedBoxLabels(packingList)"
+                class="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg transition-colors">
+                Box Labels
               </button>
               <button (click)="cancel()"
                 class="px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50">
@@ -608,6 +668,14 @@
               <button (click)="generateAndPrintDC(packingList)" [disabled]="isGeneratingDC()"
                 class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
                 {{isGeneratingDC() ? 'Generating...' : 'Generate &amp; Print DC'}}
+              </button>
+              <button (click)="generateInvoice(packingList)" [disabled]="isGeneratingInvoice()"
+                class="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
+                {{isGeneratingInvoice() ? 'Generating...' : 'Generate Invoice'}}
+              </button>
+              <button (click)="printEnhancedBoxLabels(packingList)"
+                class="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+                Box Labels
               </button>
               <button (click)="printPackingList(packingList)" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Print</button>
               <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Back</button>
