@@ -46,6 +46,10 @@ export class CompanySettingsService {
       stateCode: String(raw?.stateCode ?? '33'),
       phone: raw?.phone ? String(raw.phone) : undefined,
       email: raw?.email ? String(raw.email) : undefined,
+      bankAccountName: raw?.bankAccountName ? String(raw.bankAccountName) : undefined,
+      bankAccountNo: raw?.bankAccountNo ? String(raw.bankAccountNo) : undefined,
+      bankIfscCode: raw?.bankIfscCode ? String(raw.bankIfscCode) : undefined,
+      bankName: raw?.bankName ? String(raw.bankName) : undefined,
       updatedAt: raw?.updatedAt,
     };
   }

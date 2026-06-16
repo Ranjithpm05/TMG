@@ -88,6 +88,11 @@ export interface CompanySettings {
   stateCode: string;
   phone?: string;
   email?: string;
+  // Bank details for invoice print
+  bankAccountName?: string;
+  bankAccountNo?: string;
+  bankIfscCode?: string;
+  bankName?: string;
   updatedAt?: any;
 }
 

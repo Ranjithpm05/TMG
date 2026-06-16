@@ -11,7 +11,6 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
-import jsPDF from 'jspdf';
 import { Invoice } from '../../models/invoice.model';
 import { CANCEL_REASONS, CompanySettings, INDIA_STATE_CODES } from '../../models/einvoice.model';
 import { InvoiceService } from '../../services/invoice.service';
@@ -67,6 +66,10 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     stateCode: '33',
     phone: '',
     email: '',
+    bankAccountName: '',
+    bankAccountNo: '',
+    bankIfscCode: '',
+    bankName: '',
   });
 
   readonly stateCodes = INDIA_STATE_CODES;
@@ -271,10 +274,16 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     URL.revokeObjectURL(url);
   }
 
-  async printPdf(): Promise<void> {
+  printPdf(): void {
     const invoice = this.selectedInvoice();
     if (!invoice) return;
-    await this.loadingService.run(() => this.generatePdf(invoice, this.companySettings()));
+    const html = this.buildInvoiceHtml(invoice, this.companySettings());
+    const win = window.open('', '_blank', 'width=1100,height=860');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      setTimeout(() => win.print(), 700);
+    }
   }
 
   openSettingsModal(): void {
@@ -290,6 +299,10 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       stateCode: s?.stateCode || '33',
       phone: s?.phone || '',
       email: s?.email || '',
+      bankAccountName: s?.bankAccountName || '',
+      bankAccountNo: s?.bankAccountNo || '',
+      bankIfscCode: s?.bankIfscCode || '',
+      bankName: s?.bankName || '',
     });
     this.showSettingsModal.set(true);
   }
@@ -328,6 +341,10 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
           stateCode: form.stateCode || '33',
           phone: form.phone?.trim() || undefined,
           email: form.email?.trim() || undefined,
+          bankAccountName: form.bankAccountName?.trim() || undefined,
+          bankAccountNo: form.bankAccountNo?.trim() || undefined,
+          bankIfscCode: form.bankIfscCode?.trim() || undefined,
+          bankName: form.bankName?.trim() || undefined,
         });
         this.showSettingsModal.set(false);
         Swal.fire({ title: 'Saved', text: 'Company settings updated.', icon: 'success', timer: 1500, showConfirmButton: false });
@@ -385,197 +402,232 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   }
 
-  // ─── PDF Generation ────────────────────────────────────────────────────────
+  // ─── HTML Invoice Builder ──────────────────────────────────────────────────
 
-  private async generatePdf(invoice: Invoice, company: CompanySettings | null): Promise<void> {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const ML = 10, MR = 10, PW = 210;
-    const CW = PW - ML - MR;
-    let Y = 10;
+  private buildInvoiceHtml(invoice: Invoice, company: CompanySettings | null): string {
+    const B = 'border:1px solid #ccc;';
+    const th = (txt: string, extra = '') =>
+      `<th style="padding:4px 6px;${B}background:#e8e8e8;font-size:9px;font-weight:700;text-align:center;${extra}">${txt}</th>`;
+    const td = (txt: string | number, extra = '') =>
+      `<td style="padding:4px 6px;${B}font-size:9px;text-align:center;${extra}">${txt}</td>`;
 
-    const sf = (style: string, size: number, r = 0, g = 0, b = 0) => {
-      doc.setFont('helvetica', style);
-      doc.setFontSize(size);
-      doc.setTextColor(r, g, b);
-    };
-    const txt = (t: string, x: number, y: number, opts?: any) => doc.text(t, x, y, opts ?? {});
-    const hline = (y: number, clr: [number, number, number] = [220, 220, 220], lw = 0.3) => {
-      doc.setDrawColor(...clr);
-      doc.setLineWidth(lw);
-      doc.line(ML, y, ML + CW, y);
-    };
-    const fillRect = (x: number, y: number, w: number, h: number, r: number, g: number, b: number) => {
-      doc.setFillColor(r, g, b);
-      doc.roundedRect(x, y, w, h, 1.5, 1.5, 'F');
-    };
-
-    const isGenerated = invoice.eInvoiceStatus === 'generated';
-
-    // ── Header band ─────────────────────────────────────────────────────────
-    fillRect(ML, Y, CW, 22, 15, 23, 42);
-    sf('bold', 13, 255, 255, 255);
-    txt(company?.legalName || 'TMG Clothings', ML + 4, Y + 8);
-    sf('normal', 7.5, 160, 180, 210);
-    txt(company?.address1 || '', ML + 4, Y + 13.5);
-    txt(`GSTIN: ${company?.gstin || 'Not Configured'}  |  Ph: ${company?.phone || 'N/A'}`, ML + 4, Y + 18.5);
-
-    sf('bold', 15, 245, 158, 11);
-    txt('TAX INVOICE', PW - MR - 2, Y + 9, { align: 'right' });
-    sf('normal', 7.5, 180, 200, 220);
-    if (isGenerated) {
-      sf('normal', 7, 100, 220, 150);
-      txt('✓ E-INVOICE', PW - MR - 2, Y + 16, { align: 'right' });
-    }
-
-    if (invoice.signedQrCode && isGenerated) {
+    const fmtDate = (raw: any): string => {
+      if (!raw) return '-';
       try {
-        doc.addImage(invoice.signedQrCode, 'PNG', PW - MR - 30, Y + 1, 28, 28);
-      } catch (_) {}
-    }
+        const d = raw?.toDate ? raw.toDate() : new Date(raw?.seconds ? raw.seconds * 1000 : raw);
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      } catch { return '-'; }
+    };
 
-    Y += 25;
+    const co = company;
+    const companyName = co?.legalName || 'TMG Clothings';
+    const companyAddr1 = co?.address1 || 'Door No.334/2, Serayampalaym, Vellanaipatti Post, Coimbatore - 641048';
+    const companyAddr2 = co?.address2 ? `, ${co.address2}` : '';
+    const companyPlace = co?.place ? `, ${co.place} - ${co.pinCode}` : '';
+    const companyPhone = co?.phone || '9842211787';
+    const companyEmail = co?.email || 'order@tmggarments.in';
+    const companyGstin = co?.gstin || '33AAYFT2559B1ZY';
 
-    // ── Invoice & Buyer details ──────────────────────────────────────────────
-    const halfW = CW / 2 - 1;
-    fillRect(ML, Y, halfW, 28, 248, 250, 252);
-    fillRect(ML + halfW + 2, Y, halfW, 28, 248, 250, 252);
+    const addrLines = [
+      invoice.clientAddress,
+      [invoice.clientPlace, invoice.clientState].filter(Boolean).join(', ') + (invoice.clientZipCode ? ' - ' + invoice.clientZipCode : ''),
+      invoice.clientPhone ? 'Mobile: ' + invoice.clientPhone : '',
+    ].filter(Boolean);
+    const clientAddrHtml = addrLines.map((l) => `<div style="font-size:9px;margin-top:1px">${l}</div>`).join('');
 
-    sf('bold', 7, 100, 116, 139);
-    txt('INVOICE DETAILS', ML + 3, Y + 5);
-    sf('normal', 8.5, 15, 23, 42);
-    txt(`Invoice No:  ${invoice.invoiceNo}`, ML + 3, Y + 10.5);
-    txt(`Date:  ${this.formatDate(invoice.invoiceDate)}`, ML + 3, Y + 16);
-    txt(`DC No:  ${invoice.dcNo}`, ML + 3, Y + 21);
-    txt(`Pkgs:  ${invoice.totalPkgs}`, ML + 3, Y + 26);
+    const itemRows = invoice.items.map((item, i) =>
+      `<tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">` +
+      td(i + 1) + td(item.description, 'text-align:left;font-weight:600') + td(item.hsnSac) +
+      td(item.discountPct) + td(item.taxRate) + td(item.mrp.toFixed(2)) + td(item.uom) +
+      td(item.quantity) + td(item.price.toFixed(2), 'font-weight:700') +
+      td(item.amount.toFixed(2), 'font-weight:700') + '</tr>'
+    ).join('');
 
-    sf('bold', 7, 100, 116, 139);
-    txt('BILLED TO', ML + halfW + 5, Y + 5);
-    sf('bold', 9, 15, 23, 42);
-    txt(invoice.clientName, ML + halfW + 5, Y + 10.5);
-    sf('normal', 7.5, 60, 70, 90);
-    const addrLines = doc.splitTextToSize(invoice.clientAddress, halfW - 8);
-    addrLines.slice(0, 2).forEach((line: string, i: number) => txt(line, ML + halfW + 5, Y + 16 + i * 4.5));
-    sf('normal', 7.5, 60, 70, 90);
-    txt(`${invoice.clientPlace}, ${invoice.clientState} - ${invoice.clientZipCode}`, ML + halfW + 5, Y + 25);
-    sf('bold', 7.5, 60, 70, 90);
-    txt(`GSTIN: ${invoice.clientGstin || 'N/A'}`, ML + halfW + 5, Y + 29.5);
+    const taxSummaryRows = invoice.taxSummary.map((t) =>
+      '<tr>' +
+      td(t.hsnSac) + td(t.taxableValue.toFixed(2), 'font-weight:700') +
+      td(t.cgstRate) + td(t.cgstAmount.toFixed(2), 'font-weight:700') +
+      td(t.sgstRate) + td(t.sgstAmount.toFixed(2), 'font-weight:700') +
+      td(t.igstRate || '-') + td(t.igstAmount ? t.igstAmount.toFixed(2) : '-') + '</tr>'
+    ).join('');
 
-    Y += 31;
+    const isEInvoice = invoice.eInvoiceStatus === 'generated' && !!invoice.irn;
 
-    // ── IRN / Ack band ───────────────────────────────────────────────────────
-    if (isGenerated && invoice.irn) {
-      fillRect(ML, Y, CW, 13, 240, 253, 244);
-      doc.setDrawColor(34, 197, 94);
-      doc.setLineWidth(0.5);
-      doc.rect(ML, Y, CW, 13, 'S');
-      sf('bold', 7, 22, 163, 74);
-      txt('E-INVOICE VERIFIED', ML + 3, Y + 5);
-      sf('normal', 6.5, 30, 50, 40);
-      txt(`IRN: ${invoice.irn}`, ML + 3, Y + 10);
-      if (invoice.ackNo) {
-        sf('normal', 7, 60, 100, 80);
-        txt(`Ack No: ${invoice.ackNo}    Ack Dt: ${invoice.ackDt || ''}`, PW - MR - 3, Y + 10, { align: 'right' });
-      }
-      Y += 16;
-    }
+    // Top-right corner: QR code (if e-invoice) else copy type
+    const topRightHtml = isEInvoice && invoice.signedQrCode
+      ? `<div style="text-align:right;min-width:90px">
+           <div style="font-size:8px;color:#666;margin-bottom:2px">Triplicate-For Assessee</div>
+           <img src="${invoice.signedQrCode}" style="width:80px;height:80px;border:1px solid #ddd;border-radius:3px" alt="QR">
+         </div>`
+      : `<div style="text-align:right;font-size:8px;color:#666;min-width:100px">Triplicate-For Assessee</div>`;
 
-    // ── Items table ──────────────────────────────────────────────────────────
-    fillRect(ML, Y, CW, 7, 30, 41, 59);
-    sf('bold', 7, 255, 255, 255);
-    const hdrCols = [
-      { x: ML + 1, label: '#', w: 5 },
-      { x: ML + 6, label: 'Description', w: 50 },
-      { x: ML + 57, label: 'HSN', w: 14 },
-      { x: ML + 72, label: 'UOM', w: 12 },
-      { x: ML + 85, label: 'Qty', w: 13, r: true },
-      { x: ML + 99, label: 'Rate', w: 18, r: true },
-      { x: ML + 118, label: 'Disc%', w: 14, r: true },
-      { x: ML + 133, label: 'Tax%', w: 13, r: true },
-      { x: ML + 147, label: 'Amount', w: 24, r: true },
-    ];
-    hdrCols.forEach((c) => txt(c.label, c.r ? c.x + c.w : c.x, Y + 4.5, c.r ? { align: 'right' } : {}));
-    Y += 8;
+    // IRN row in invoice details (only for e-invoice)
+    const irnRow = isEInvoice
+      ? `<tr><td style="padding:2px 4px;font-size:8px;color:#555;white-space:nowrap">IRN</td>
+           <td style="padding:2px 4px;font-size:7px;font-family:monospace;color:#166534;word-break:break-all;max-width:170px">: ${invoice.irn}</td></tr>
+         <tr><td style="padding:2px 4px;font-size:8px;color:#555">Ack No.</td>
+           <td style="padding:2px 4px;font-size:9px;font-weight:600">: ${invoice.ackNo || '-'}</td></tr>
+         <tr><td style="padding:2px 4px;font-size:8px;color:#555">Ack Date</td>
+           <td style="padding:2px 4px;font-size:9px">: ${invoice.ackDt || '-'}</td></tr>`
+      : '';
 
-    invoice.items.forEach((item, i) => {
-      if (i % 2 === 0) fillRect(ML, Y - 1.5, CW, 8, 249, 250, 251);
-      sf('normal', 7.5, 30, 41, 59);
-      txt(String(i + 1), ML + 1, Y + 4);
-      const desc = doc.splitTextToSize(item.description, 49);
-      txt(desc[0], ML + 6, Y + 4);
-      txt(item.hsnSac, ML + 57, Y + 4);
-      txt(item.uom || 'NOS', ML + 72, Y + 4);
-      txt(item.quantity.toString(), ML + 98, Y + 4, { align: 'right' });
-      txt(item.price.toFixed(2), ML + 116, Y + 4, { align: 'right' });
-      txt(item.discountPct.toFixed(0) + '%', ML + 131, Y + 4, { align: 'right' });
-      txt(item.taxRate.toFixed(0) + '%', ML + 145, Y + 4, { align: 'right' });
-      txt(item.amount.toFixed(2), ML + 171, Y + 4, { align: 'right' });
-      Y += 8;
-    });
-    hline(Y, [200, 200, 200], 0.4);
-    Y += 4;
+    // Bank details
+    const hasBankDetails = co?.bankAccountName || co?.bankAccountNo || co?.bankIfscCode || co?.bankName;
+    const bankSection = hasBankDetails
+      ? `<div style="border:1px solid #ccc;padding:5px 8px;margin-bottom:8px;font-size:9px">
+           <div style="font-weight:700;margin-bottom:3px">Company's Bank Details :</div>
+           ${co?.bankAccountName ? `<div>Name of the Account : ${co.bankAccountName}</div>` : ''}
+           ${co?.bankAccountNo ? `<div>A/C No : ${co.bankAccountNo}</div>` : ''}
+           ${co?.bankIfscCode ? `<div>IFSC Code : ${co.bankIfscCode}</div>` : ''}
+           ${co?.bankName ? `<div>Bank Name : ${co.bankName}</div>` : ''}
+         </div>`
+      : `<div style="border:1px solid #ccc;padding:5px 8px;margin-bottom:8px;font-size:9px">
+           <div style="font-weight:700;margin-bottom:3px">Company's Bank Details :</div>
+           <div>Name of the Account : TMG Clothings</div>
+           <div>A/C No : 44358238258</div>
+           <div>IFSC Code : SBIN0061170</div>
+           <div>Bank Name : STATE BANK OF INDIA / Branch : Siruthozhil Branch, Kovilpatti</div>
+         </div>`;
 
-    // ── Tax summary ──────────────────────────────────────────────────────────
-    if (invoice.taxSummary?.length) {
-      fillRect(ML, Y, CW * 0.65, 6, 241, 245, 249);
-      sf('bold', 7, 30, 41, 59);
-      ['HSN/SAC', 'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total Tax'].forEach((h, i) => {
-        txt(h, ML + 2 + i * 21, Y + 4);
-      });
-      Y += 7;
-      invoice.taxSummary.forEach((ts) => {
-        sf('normal', 7.5, 60, 70, 90);
-        txt(ts.hsnSac, ML + 2, Y + 3.5);
-        txt(ts.taxableValue.toFixed(2), ML + 23, Y + 3.5);
-        txt(ts.cgstAmount > 0 ? `${ts.cgstRate}%: ${ts.cgstAmount.toFixed(2)}` : '-', ML + 44, Y + 3.5);
-        txt(ts.sgstAmount > 0 ? `${ts.sgstRate}%: ${ts.sgstAmount.toFixed(2)}` : '-', ML + 65, Y + 3.5);
-        txt(ts.igstAmount > 0 ? `${ts.igstRate}%: ${ts.igstAmount.toFixed(2)}` : '-', ML + 86, Y + 3.5);
-        txt((ts.cgstAmount + ts.sgstAmount + ts.igstAmount).toFixed(2), ML + 107, Y + 3.5);
-        Y += 5.5;
-      });
-      Y += 2;
-    }
+    const eInvoiceBadge = isEInvoice
+      ? `<span style="display:inline-block;margin-left:8px;padding:1px 6px;background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:3px;font-size:8px;font-weight:700;vertical-align:middle">✓ E-INVOICE</span>`
+      : '';
 
-    // ── Totals ────────────────────────────────────────────────────────────────
-    const totX = ML + CW * 0.55;
-    const totW = CW * 0.45;
-    const rows: [string, string][] = [
-      ['Gross Amount', invoice.grossAmount.toFixed(2)],
-      [`Discount (${invoice.discountPct}%)`, '- ' + invoice.discountAmount.toFixed(2)],
-      ['Taxable Value', invoice.taxableValue.toFixed(2)],
-    ];
-    if (invoice.cgstAmount > 0) rows.push([`CGST @ ${invoice.cgstRate}%`, invoice.cgstAmount.toFixed(2)]);
-    if (invoice.sgstAmount > 0) rows.push([`SGST @ ${invoice.sgstRate}%`, invoice.sgstAmount.toFixed(2)]);
-    if (invoice.igstAmount > 0) rows.push([`IGST @ ${invoice.igstRate}%`, invoice.igstAmount.toFixed(2)]);
-    rows.push(['Round Off', invoice.roundOff.toFixed(2)]);
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice - ${invoice.invoiceNo}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:10px;color:#000}
+  table{width:100%;border-collapse:collapse}
+  @media print{@page{size:A4;margin:10mm}}
+</style>
+</head><body><div style="padding:10px 14px">
 
-    rows.forEach(([label, value]) => {
-      sf('normal', 8, 60, 70, 90);
-      txt(label, totX + 2, Y + 4);
-      txt(`₹ ${value}`, ML + CW - 2, Y + 4, { align: 'right' });
-      Y += 5.5;
-    });
+<div style="display:flex;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:6px">
+  <div style="width:62px;height:62px;border:1.5px solid #1e3a8a;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:#1e3a8a;text-align:center;flex-shrink:0;margin-right:10px;line-height:1.3">
+    TMG<br>CLOTHINGS
+  </div>
+  <div style="flex:1;text-align:center">
+    <div style="font-size:22px;font-weight:900;letter-spacing:0.5px">${companyName}</div>
+    <div style="font-size:9px;color:#333;margin-top:2px">${companyAddr1}${companyAddr2}${companyPlace}</div>
+    <div style="font-size:9px;color:#333">Phone: ${companyPhone} | Email: ${companyEmail} | GSTIN: ${companyGstin}</div>
+  </div>
+  ${topRightHtml}
+</div>
 
-    fillRect(totX, Y, totW, 9, 15, 23, 42);
-    sf('bold', 10, 255, 255, 255);
-    txt('NET PAYABLE', totX + 3, Y + 6);
-    txt(`₹ ${invoice.totalAmount.toFixed(2)}`, ML + CW - 2, Y + 6, { align: 'right' });
-    Y += 12;
+<div style="font-size:13px;font-weight:700;text-align:center;letter-spacing:2px;text-decoration:underline;margin-bottom:8px">
+  TAX INVOICE${eInvoiceBadge}
+</div>
 
-    sf('italic', 7.5, 80, 90, 110);
-    txt(`Amount in Words: ${invoice.amountInWords}`, ML, Y);
-    Y += 8;
+<div style="display:flex;border:1px solid #aaa;margin-bottom:8px">
+  <div style="flex:1;padding:6px 8px;border-right:1px solid #aaa">
+    <div style="font-size:10px;font-weight:700;margin-bottom:3px">M/S : ${invoice.clientName}</div>
+    ${clientAddrHtml}
+    ${invoice.clientGstin ? `<div style="font-size:9px;margin-top:3px;font-weight:600">GSTIN: ${invoice.clientGstin}</div>` : ''}
+  </div>
+  <div style="flex:1;padding:6px 8px;border-right:1px solid #aaa">
+    <div style="font-size:9px;font-weight:700;margin-bottom:2px">Ship To : ${invoice.clientName}</div>
+    ${clientAddrHtml}
+    ${invoice.clientPhone ? `<div style="font-size:9px;margin-top:2px">Mobile: ${invoice.clientPhone}</div>` : ''}
+  </div>
+  <div style="min-width:215px;padding:4px 8px">
+    <table style="border-collapse:collapse;width:100%">
+      <tr><td style="padding:2px 4px;font-size:9px;color:#555;white-space:nowrap">Invoice No.</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ${invoice.invoiceNo}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Invoice Date</td><td style="padding:2px 4px;font-size:9px">: ${fmtDate(invoice.invoiceDate)}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:9px;color:#555">DC No.</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ${invoice.dcNo || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Order No.</td><td style="padding:2px 4px;font-size:9px;font-weight:600">: ${invoice.orderNo || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Destination</td><td style="padding:2px 4px;font-size:9px">: ${invoice.destination || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Transport</td><td style="padding:2px 4px;font-size:9px">: ${invoice.transport || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Doc No.</td><td style="padding:2px 4px;font-size:9px">: ${invoice.docNo || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Vehicle No.</td><td style="padding:2px 4px;font-size:9px">: ${invoice.vehicleNo || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Total Pkgs</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ${invoice.totalPkgs}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Agent</td><td style="padding:2px 4px;font-size:9px">: ${invoice.agentName || '—'}</td></tr>
+      ${irnRow}
+    </table>
+  </div>
+</div>
 
-    // ── Footer ────────────────────────────────────────────────────────────────
-    hline(286, [200, 200, 200]);
-    sf('normal', 6.5, 140, 140, 140);
-    txt('This is a computer-generated invoice and does not require a signature.', ML, 291);
-    if (isGenerated) {
-      sf('bold', 7, 22, 163, 74);
-      txt('✓ E-Invoice Authenticated', PW / 2, 291, { align: 'center' });
-    }
-    sf('normal', 6.5, 140, 140, 140);
-    txt(company?.legalName || 'TMG Clothings', ML + CW, 291, { align: 'right' });
+<table style="margin-bottom:8px"><thead><tr>
+  ${th('S.No')}${th('Description', 'text-align:left')}${th('HSN/SAC')}${th('Disc(%)')}${th('Tax(%)')}${th('MRP')}${th('UOM')}${th('Quantity')}${th('Price')}${th('Amount')}
+</tr></thead><tbody>
+  ${itemRows}
+  <tr>
+    <td colspan="9" style="padding:4px 6px;${B}font-weight:700;font-size:9px;text-align:right;background:#f0f0f0">Gross</td>
+    <td style="padding:4px 6px;${B}font-weight:900;font-size:10px;text-align:center;background:#f0f0f0">${invoice.grossAmount.toFixed(2)}</td>
+  </tr>
+</tbody></table>
 
-    doc.save(`Invoice-${invoice.invoiceNo}.pdf`);
+<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+  <table style="width:280px;border-collapse:collapse">
+    <tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Discount (${invoice.discountPct}%)</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">${invoice.discountAmount.toFixed(2)}</td></tr>
+    <tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Taxable Value</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">${invoice.taxableValue.toFixed(2)}</td></tr>
+    ${invoice.cgstAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">CGST (${invoice.cgstRate}%)</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">${invoice.cgstAmount.toFixed(2)}</td></tr>` : ''}
+    ${invoice.sgstAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">SGST (${invoice.sgstRate}%)</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">${invoice.sgstAmount.toFixed(2)}</td></tr>` : ''}
+    ${invoice.igstAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">IGST (${invoice.igstRate}%)</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">${invoice.igstAmount.toFixed(2)}</td></tr>` : ''}
+    <tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd;font-weight:700">Total Tax Amount</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">${invoice.totalTaxAmount.toFixed(2)}</td></tr>
+    <tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Round Off</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">${invoice.roundOff.toFixed(2)}</td></tr>
+    <tr style="background:#0f172a;color:#fff">
+      <td style="padding:5px 8px;font-size:11px;font-weight:900;border:1px solid #0f172a">TOTAL</td>
+      <td style="padding:5px 8px;font-size:12px;font-weight:900;text-align:right;border:1px solid #0f172a">&#x20B9; ${invoice.totalAmount.toLocaleString('en-IN')}</td>
+    </tr>
+  </table>
+</div>
+
+<div style="border:1px solid #ccc;padding:5px 8px;margin-bottom:8px;font-size:9px">
+  <strong>Rupees :</strong> ${invoice.amountInWords}
+</div>
+
+<table style="margin-bottom:8px"><thead><tr>
+  ${th('HSN/SAC')}${th('Taxable Value')}${th('CGST %')}${th('CGST Amt')}${th('SGST %')}${th('SGST Amt')}${th('IGST %')}${th('IGST Amt')}
+</tr></thead><tbody>
+  ${taxSummaryRows}
+  <tr style="background:#f0f0f0">
+    ${td('Total', 'font-weight:700')}${td(invoice.taxableValue.toFixed(2), 'font-weight:700')}${td('')}${td(invoice.cgstAmount.toFixed(2), 'font-weight:700')}${td('')}${td(invoice.sgstAmount.toFixed(2), 'font-weight:700')}${td('')}${td(invoice.igstAmount ? invoice.igstAmount.toFixed(2) : '-')}
+  </tr>
+</tbody></table>
+
+<div style="font-size:8px;border:1px solid #ccc;padding:4px 8px;margin-bottom:8px">
+  Amount of Tax (in words) : ${this.amountToWords(invoice.totalTaxAmount)}
+</div>
+
+${bankSection}
+
+<div style="font-size:9px;margin-bottom:12px">Remarks :</div>
+
+<div style="display:flex;justify-content:space-between;margin-top:30px">
+  <div style="text-align:center">
+    <div style="border-top:1px solid #555;padding-top:4px;font-size:9px;color:#444;width:120px">Checked By</div>
+  </div>
+  <div style="text-align:center">
+    <div style="font-size:10px;font-weight:700;color:#0f172a;margin-bottom:2px">For ${companyName}</div>
+    <div style="border-top:1px solid #555;padding-top:4px;font-size:9px;color:#444;width:150px;margin-top:30px">Authorised Signatory</div>
+  </div>
+</div>
+
+</div></body></html>`;
   }
+
+  private amountToWords(amount: number): string {
+    const rounded = Math.round(amount);
+    const parts = amount.toFixed(2).split('.');
+    const paisa = parseInt(parts[1], 10);
+    const rupeeWords = this.numberToWords(rounded);
+    if (paisa > 0) return rupeeWords + ' AND ' + this.numberToWords(paisa) + ' PAISE ONLY';
+    return rupeeWords + ' RUPEES ONLY';
+  }
+
+  private numberToWords(n: number): string {
+    if (n === 0) return 'ZERO';
+    const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
+      'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+    const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+    const twoD = (num: number): string => num < 20 ? ones[num] : (tens[Math.floor(num / 10)] + (num % 10 ? ' ' + ones[num % 10] : '')).trim();
+    const threeD = (num: number): string => num >= 100 ? ones[Math.floor(num / 100)] + ' HUNDRED' + (num % 100 ? ' ' + twoD(num % 100) : '') : twoD(num);
+    const p: string[] = [];
+    if (n >= 10000000) { p.push(threeD(Math.floor(n / 10000000)) + ' CRORE'); n %= 10000000; }
+    if (n >= 100000) { p.push(twoD(Math.floor(n / 100000)) + ' LAKH'); n %= 100000; }
+    if (n >= 1000) { p.push(twoD(Math.floor(n / 1000)) + ' THOUSAND'); n %= 1000; }
+    if (n > 0) p.push(threeD(n));
+    return p.join(' ');
+  }
+
 }
