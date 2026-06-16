@@ -5,6 +5,9 @@ import { Design, SizePrice } from '../../models/design.model';
 import { DesignService } from '../../services/design.service';
 import Swal from 'sweetalert2';
 
+const EXCEL_HEADERS = ['StyleNo', 'Color', 'Group', 'Size', 'MRP', 'WSP', 'Barcode', 'SleeveType', 'FabricDescription'];
+const REQUIRED_HEADERS = ['StyleNo', 'Size', 'MRP', 'WSP', 'Barcode'];
+
 type ViewMode = 'list' | 'form';
 
 const EMPTY_DESIGN: Omit<Design, 'id'> = {
@@ -225,7 +228,193 @@ export class DesignMasterComponent implements OnInit {
     trackByIndex(index: number) {
         return index;
     }
-    
+
+    // --- Excel Import / Export ---
+
+    async downloadSampleExcel() {
+        try {
+            const XLSX = await import('xlsx');
+            const rows = [
+                EXCEL_HEADERS,
+                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'S', 500, 350, '1234567890128', 'Full', 'CASUALSHIRT CHECKS FS'],
+                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'M', 500, 350, '1234567890135', 'Full', 'CASUALSHIRT CHECKS FS'],
+                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'L', 500, 350, '1234567890142', 'Half', 'CASUALSHIRT CHECKS FS'],
+                ['STYLE002', 'Blue', 'Jeans', '32', 1200, 900, '9876543210987', '', 'DENIM JEANS SLIM FIT'],
+                ['STYLE002', 'Blue', 'Jeans', '34', 1200, 900, '9876543210994', '', 'DENIM JEANS SLIM FIT'],
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            ws['!cols'] = [
+                { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 8 },
+                { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 30 },
+            ];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Designs');
+            XLSX.writeFile(wb, 'Design_Import_Template.xlsx');
+        } catch {
+            Swal.fire({ icon: 'error', title: 'Download Failed', text: 'Could not generate sample file.' });
+        }
+    }
+
+    async onFileSelected(event: Event) {
+        const input = event.target as HTMLInputElement;
+        if (!input.files?.length) return;
+
+        const file = input.files[0];
+        if (!file.name.match(/\.(xlsx|xls)$/i)) {
+            Swal.fire({ icon: 'error', title: 'Invalid File', text: 'Please upload a valid Excel file (.xlsx or .xls).' });
+            return;
+        }
+
+        Swal.fire({ title: 'Reading file…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+        try {
+            const XLSX = await import('xlsx');
+            const buffer = await file.arrayBuffer();
+            const wb = XLSX.read(buffer, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rawData: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+            Swal.close();
+
+            if (rawData.length < 2) {
+                Swal.fire({ icon: 'error', title: 'Empty File', text: 'The Excel file has no data rows.' });
+                return;
+            }
+
+            const { designs, errors } = this.parseExcelData(rawData);
+
+            if (errors.length > 0 && designs.length === 0) {
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'Validation Failed',
+                    html: `<div class="text-left"><p class="font-semibold mb-2">All rows have errors:</p><ul class="list-disc pl-4 space-y-1 text-sm max-h-60 overflow-y-auto">${errors.map(e => `<li>${e}</li>`).join('')}</ul></div>`,
+                });
+                return;
+            }
+
+            const errorSection = errors.length > 0
+                ? `<div class="mt-3 text-left border-t pt-3"><p class="text-yellow-700 font-semibold text-sm">${errors.length} row(s) skipped:</p><ul class="list-disc pl-4 space-y-1 text-xs text-yellow-600 max-h-32 overflow-y-auto mt-1">${errors.map(e => `<li>${e}</li>`).join('')}</ul></div>`
+                : '';
+            const totalSizes = designs.reduce((acc, d) => acc + d.sizes.length, 0);
+
+            const result = await Swal.fire({
+                icon: 'info',
+                title: 'Import Preview',
+                html: `<div class="text-center"><p class="text-lg font-semibold text-green-700">${designs.length} design(s) ready to import</p><p class="text-sm text-gray-500 mt-1">${totalSizes} total size variation(s)</p>${errorSection}</div>`,
+                showCancelButton: true,
+                confirmButtonText: 'Import Now',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#4f46e5',
+                cancelButtonColor: '#6b7280',
+            });
+
+            if (result.isConfirmed) {
+                await this.processImport(designs);
+            }
+        } catch (err: any) {
+            Swal.close();
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to read the Excel file. ' + (err?.message ?? '') });
+        }
+    }
+
+    private parseExcelData(rawData: any[][]): { designs: Omit<Design, 'id'>[], errors: string[] } {
+        const errors: string[] = [];
+        const designMap = new Map<string, Omit<Design, 'id'>>();
+
+        const headerRow = rawData[0].map((h: any) => String(h).trim());
+        const missingHeaders = REQUIRED_HEADERS.filter(h => !headerRow.includes(h));
+        if (missingHeaders.length > 0) {
+            errors.push(`Missing required columns: ${missingHeaders.join(', ')}. Please use the sample template.`);
+            return { designs: [], errors };
+        }
+
+        const col = (name: string) => headerRow.indexOf(name);
+        const iStyleNo = col('StyleNo'), iColor = col('Color'), iGroup = col('Group');
+        const iSize = col('Size'), iMRP = col('MRP'), iWSP = col('WSP');
+        const iBarcode = col('Barcode'), iSleeve = col('SleeveType'), iFabric = col('FabricDescription');
+
+        for (let i = 1; i < rawData.length; i++) {
+            const row = rawData[i];
+            const rowNum = i + 1;
+
+            if (row.every((cell: any) => cell === '' || cell === null || cell === undefined)) continue;
+
+            const styleNo = String(row[iStyleNo] ?? '').trim();
+            const size = String(row[iSize] ?? '').trim();
+            const barcode = String(row[iBarcode] ?? '').trim();
+            const mrpRaw = row[iMRP];
+            const wspRaw = row[iWSP];
+
+            if (!styleNo) { errors.push(`Row ${rowNum}: StyleNo is required.`); continue; }
+            if (!size) { errors.push(`Row ${rowNum}: Size is required.`); continue; }
+            if (!barcode) { errors.push(`Row ${rowNum}: Barcode is required.`); continue; }
+
+            const mrp = parseFloat(mrpRaw);
+            const wsp = parseFloat(wspRaw);
+            if (mrpRaw === '' || isNaN(mrp)) { errors.push(`Row ${rowNum}: MRP must be a valid number.`); continue; }
+            if (wspRaw === '' || isNaN(wsp)) { errors.push(`Row ${rowNum}: WSP must be a valid number.`); continue; }
+            if (mrp < 0) { errors.push(`Row ${rowNum}: MRP cannot be negative.`); continue; }
+            if (wsp < 0) { errors.push(`Row ${rowNum}: WSP cannot be negative.`); continue; }
+
+            const sleeveType = iSleeve >= 0 ? String(row[iSleeve] ?? '').trim() : '';
+            if (sleeveType && sleeveType !== 'Full' && sleeveType !== 'Half') {
+                errors.push(`Row ${rowNum}: SleeveType must be 'Full' or 'Half' (got '${sleeveType}').`);
+                continue;
+            }
+
+            const sizeObj: SizePrice = {
+                size, price: mrp, WSP: wsp, BARCODE: barcode,
+                sleeveType: sleeveType || undefined,
+                fabricType: iFabric >= 0 ? String(row[iFabric] ?? '').trim() : '',
+            };
+
+            if (designMap.has(styleNo)) {
+                designMap.get(styleNo)!.sizes.push(sizeObj);
+            } else {
+                designMap.set(styleNo, {
+                    styleNo,
+                    color: iColor >= 0 ? String(row[iColor] ?? '').trim() : '',
+                    group: iGroup >= 0 ? String(row[iGroup] ?? '').trim() : '',
+                    sizes: [sizeObj],
+                });
+            }
+        }
+
+        return { designs: Array.from(designMap.values()), errors };
+    }
+
+    private async processImport(designs: Omit<Design, 'id'>[]) {
+        Swal.fire({
+            title: `Importing ${designs.length} design(s)…`,
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        let successCount = 0;
+        let failCount = 0;
+        for (const design of designs) {
+            try {
+                await this.designService.createDesign(design);
+                successCount++;
+            } catch {
+                failCount++;
+            }
+        }
+
+        if (failCount === 0) {
+            await Swal.fire({
+                icon: 'success', title: 'Import Complete!',
+                text: `${successCount} design(s) imported successfully.`,
+                timer: 3000, showConfirmButton: false,
+            });
+        } else {
+            await Swal.fire({
+                icon: 'warning', title: 'Import Partially Complete',
+                text: `${successCount} imported, ${failCount} failed.`,
+            });
+        }
+        this.loadDesigns();
+    }
+
     // --- Pagination and Filter Methods ---
     onSearch(term: string) {
         this.searchTerm.set(term);
