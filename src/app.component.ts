@@ -13,12 +13,13 @@ import { InventoryComponent } from './components/inventory/inventory.component';
 import { PickListComponent } from './components/pick-list/pick-list.component';
 import { PackingListComponent } from './components/packing-list/packing-list.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
+import { EInvoiceComponent } from './components/einvoice/einvoice.component';
 
-type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList';
+type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'einvoice';
 type ViewHistoryState = { view: View };
 
 const VIEW_STORAGE_KEY = 'gom.activeView';
-const VIEW_SEQUENCE: View[] = ['dashboard', 'sales', 'clients', 'designs', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList'];
+const VIEW_SEQUENCE: View[] = ['dashboard', 'sales', 'clients', 'designs', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList', 'einvoice'];
 
 @Component({
   selector: 'app-root',
@@ -37,6 +38,7 @@ const VIEW_SEQUENCE: View[] = ['dashboard', 'sales', 'clients', 'designs', 'good
     PickListComponent,
     PackingListComponent,
     DashboardComponent,
+    EInvoiceComponent,
   ],
 })
 export class AppComponent {

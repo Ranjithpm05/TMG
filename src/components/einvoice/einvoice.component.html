@@ -1,0 +1,682 @@
+<!-- ══════════════════════════════════════════════════════════════
+     E-INVOICE MODULE
+     ══════════════════════════════════════════════════════════════ -->
+
+<!-- ── LIST VIEW ──────────────────────────────────────────────────── -->
+@if (mode() === 'list') {
+
+  <!-- Page header -->
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-black text-slate-800">E-Invoice</h1>
+      <p class="text-sm text-slate-500 mt-0.5">Generate, track and manage GST e-Invoices with IRN &amp; QR code</p>
+    </div>
+    <button (click)="openSettingsModal()"
+      class="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-700 transition-colors shadow">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+      </svg>
+      Company Settings
+    </button>
+  </div>
+
+  <!-- Company not configured banner -->
+  @if (!companySettings()?.gstin) {
+  <div class="mb-6 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+    <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <div class="flex-1">
+      <p class="text-sm font-semibold text-amber-800">Company GSTIN not configured</p>
+      <p class="text-xs text-amber-700 mt-0.5">Set up your company GSTIN and address to enable e-Invoice generation.</p>
+    </div>
+    <button (click)="openSettingsModal()" class="text-xs font-bold text-amber-700 hover:text-amber-900 underline">Configure →</button>
+  </div>
+  }
+
+  <!-- Stats cards -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total Invoices</p>
+      <p class="text-3xl font-black text-slate-800 mt-1">{{ stats().total }}</p>
+    </div>
+    <div class="bg-amber-50 rounded-2xl p-4 shadow-sm border border-amber-100 cursor-pointer hover:border-amber-300 transition-colors" (click)="setFilterTab('pending')">
+      <p class="text-xs font-semibold text-amber-500 uppercase tracking-wide">Pending</p>
+      <p class="text-3xl font-black text-amber-600 mt-1">{{ stats().pending }}</p>
+    </div>
+    <div class="bg-emerald-50 rounded-2xl p-4 shadow-sm border border-emerald-100 cursor-pointer hover:border-emerald-300 transition-colors" (click)="setFilterTab('generated')">
+      <p class="text-xs font-semibold text-emerald-500 uppercase tracking-wide">Generated</p>
+      <p class="text-3xl font-black text-emerald-600 mt-1">{{ stats().generated }}</p>
+    </div>
+    <div class="bg-rose-50 rounded-2xl p-4 shadow-sm border border-rose-100 cursor-pointer hover:border-rose-300 transition-colors" (click)="setFilterTab('cancelled')">
+      <p class="text-xs font-semibold text-rose-500 uppercase tracking-wide">Cancelled</p>
+      <p class="text-3xl font-black text-rose-600 mt-1">{{ stats().cancelled }}</p>
+    </div>
+  </div>
+
+  <!-- Filter tabs + Search -->
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 pb-3 border-b border-slate-100">
+      <!-- Tabs -->
+      <div class="flex gap-1 p-1 bg-slate-100 rounded-xl">
+        @for (tab of [['all','All'],['pending','Pending'],['generated','Generated'],['cancelled','Cancelled']]; track tab[0]) {
+        <button (click)="setFilterTab($any(tab[0]))"
+          [class]="filterTab() === tab[0] ? 'bg-white text-slate-800 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700'"
+          class="px-3 py-1.5 rounded-lg text-sm transition-all">
+          {{ tab[1] }}
+        </button>
+        }
+      </div>
+      <!-- Search -->
+      <div class="relative">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input type="text" placeholder="Search invoice, client…"
+          [value]="searchTerm()"
+          (input)="searchTerm.set($any($event.target).value)"
+          class="pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 w-60">
+      </div>
+    </div>
+
+    <!-- Invoice Table -->
+    @if (isLoading()) {
+      <div class="flex items-center justify-center py-16 text-slate-400">
+        <svg class="animate-spin w-7 h-7 mr-3 text-amber-500" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        Loading invoices…
+      </div>
+    } @else if (filteredInvoices().length === 0) {
+      <div class="text-center py-16 text-slate-400">
+        <svg class="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <p class="font-semibold">No invoices found</p>
+        <p class="text-sm mt-1">Invoices created from the Packing List module will appear here.</p>
+      </div>
+    } @else {
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50">
+              <th class="px-4 py-3 text-left">Invoice No</th>
+              <th class="px-4 py-3 text-left">Client</th>
+              <th class="px-4 py-3 text-left">Date</th>
+              <th class="px-4 py-3 text-left">DC No</th>
+              <th class="px-4 py-3 text-right">Amount</th>
+              <th class="px-4 py-3 text-center">E-Invoice</th>
+              <th class="px-4 py-3 text-center">IRN</th>
+              <th class="px-4 py-3 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-50">
+            @for (inv of filteredInvoices(); track inv.id) {
+            <tr class="hover:bg-slate-50/70 transition-colors">
+              <td class="px-4 py-3.5 font-semibold text-slate-800">{{ inv.invoiceNo }}</td>
+              <td class="px-4 py-3.5 text-slate-600 max-w-[180px] truncate">{{ inv.clientName }}</td>
+              <td class="px-4 py-3.5 text-slate-500 whitespace-nowrap">{{ formatDate(inv.invoiceDate) }}</td>
+              <td class="px-4 py-3.5 text-slate-500">{{ inv.dcNo || '-' }}</td>
+              <td class="px-4 py-3.5 text-right font-semibold text-slate-700">{{ formatCurrency(inv.totalAmount) }}</td>
+              <td class="px-4 py-3.5 text-center">
+                <span class="inline-block px-2.5 py-1 rounded-full text-xs font-semibold {{ getStatusClass(inv.eInvoiceStatus || 'pending') }}">
+                  {{ getStatusLabel(inv.eInvoiceStatus || 'pending') }}
+                </span>
+              </td>
+              <td class="px-4 py-3.5 text-center">
+                @if (inv.irn) {
+                  <span class="inline-block font-mono text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 max-w-[100px] truncate" [title]="inv.irn">
+                    {{ inv.irn.substring(0, 10) }}…
+                  </span>
+                } @else {
+                  <span class="text-slate-300 text-xs">—</span>
+                }
+              </td>
+              <td class="px-4 py-3.5 text-center">
+                <button (click)="viewInvoice(inv)"
+                  class="px-3 py-1.5 bg-slate-800 text-white text-xs font-semibold rounded-lg hover:bg-amber-600 transition-colors">
+                  View
+                </button>
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+}
+
+<!-- ── DETAIL VIEW ──────────────────────────────────────────────────── -->
+@if (mode() === 'view' && selectedInvoice(); as inv) {
+
+  <!-- Back + title -->
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <div class="flex items-center gap-3">
+      <button (click)="backToList()" class="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm">
+        <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+        </svg>
+      </button>
+      <div>
+        <h1 class="text-xl font-black text-slate-800">{{ inv.invoiceNo }}</h1>
+        <p class="text-xs text-slate-500">{{ inv.clientName }} · {{ formatDate(inv.invoiceDate) }}</p>
+      </div>
+    </div>
+    <!-- Action buttons -->
+    <div class="flex flex-wrap gap-2">
+      <button (click)="printPdf()"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-700 text-white text-sm font-semibold hover:bg-slate-600 transition-colors shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+        </svg>
+        Print PDF
+      </button>
+
+      <button (click)="viewPayload()"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+        </svg>
+        View JSON
+      </button>
+
+      @if (!inv.eInvoiceStatus || inv.eInvoiceStatus === 'pending') {
+      <button (click)="generateEInvoice()" [disabled]="isGenerating()"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm">
+        @if (isGenerating()) {
+          <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+          Generating…
+        } @else {
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Generate E-Invoice
+        }
+      </button>
+      }
+
+      @if (inv.eInvoiceStatus === 'generated') {
+      <button (click)="openCancelModal()"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        Cancel E-Invoice
+      </button>
+      }
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+
+    <!-- Left: Invoice details -->
+    <div class="xl:col-span-2 space-y-4">
+
+      <!-- Status banner -->
+      @if (inv.eInvoiceStatus === 'generated') {
+      <div class="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+        <div class="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+          </svg>
+        </div>
+        <div>
+          <p class="font-semibold text-emerald-800 text-sm">E-Invoice Successfully Generated</p>
+          <p class="text-xs text-emerald-600 mt-0.5">IRN has been computed and QR code embedded. Ready for submission to IRP.</p>
+        </div>
+      </div>
+      }
+      @if (inv.eInvoiceStatus === 'cancelled') {
+      <div class="flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-2xl p-4">
+        <div class="w-10 h-10 rounded-full bg-rose-500 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </div>
+        <div>
+          <p class="font-semibold text-rose-800 text-sm">E-Invoice Cancelled</p>
+          <p class="text-xs text-rose-600 mt-0.5">Reason: {{ inv.cancelReason }}</p>
+        </div>
+      </div>
+      }
+
+      <!-- Invoice meta -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Invoice Details</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div>
+            <p class="text-xs text-slate-400">Invoice No</p>
+            <p class="font-bold text-slate-800 text-sm mt-0.5">{{ inv.invoiceNo }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">Date</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ formatDate(inv.invoiceDate) }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">DC No</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ inv.dcNo || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">Transport</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ inv.transport || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">Vehicle No</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ inv.vehicleNo || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">Total Packages</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ inv.totalPkgs }}</p>
+          </div>
+        </div>
+        <div class="border-t border-slate-100 mt-4 pt-4">
+          <p class="text-xs text-slate-400 mb-1">Billed To</p>
+          <p class="font-bold text-slate-800">{{ inv.clientName }}</p>
+          <p class="text-sm text-slate-500 mt-0.5">{{ inv.clientAddress }}</p>
+          <p class="text-sm text-slate-500">{{ inv.clientPlace }}, {{ inv.clientState }} – {{ inv.clientZipCode }}</p>
+          <p class="text-sm font-semibold text-slate-600 mt-1">GSTIN: {{ inv.clientGstin || 'N/A' }}</p>
+        </div>
+      </div>
+
+      <!-- Items table -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100">
+          <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Line Items</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-800 text-white text-xs">
+                <th class="px-3 py-3 text-left">#</th>
+                <th class="px-3 py-3 text-left">Description</th>
+                <th class="px-3 py-3 text-left">HSN</th>
+                <th class="px-3 py-3 text-center">Qty</th>
+                <th class="px-3 py-3 text-right">Rate</th>
+                <th class="px-3 py-3 text-right">Disc%</th>
+                <th class="px-3 py-3 text-right">Tax%</th>
+                <th class="px-3 py-3 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              @for (item of inv.items; track $index) {
+              <tr class="hover:bg-slate-50">
+                <td class="px-3 py-3 text-slate-400">{{ $index + 1 }}</td>
+                <td class="px-3 py-3 font-medium text-slate-800">{{ item.description }}</td>
+                <td class="px-3 py-3 text-slate-500 font-mono text-xs">{{ item.hsnSac }}</td>
+                <td class="px-3 py-3 text-center text-slate-700">{{ item.quantity }}</td>
+                <td class="px-3 py-3 text-right text-slate-700">{{ item.price.toFixed(2) }}</td>
+                <td class="px-3 py-3 text-right text-slate-500">{{ item.discountPct }}%</td>
+                <td class="px-3 py-3 text-right text-slate-500">{{ item.taxRate }}%</td>
+                <td class="px-3 py-3 text-right font-semibold text-slate-800">{{ formatCurrency(item.amount) }}</td>
+              </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tax Summary -->
+      @if (inv.taxSummary?.length) {
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100">
+          <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Tax Summary</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-xs font-semibold text-slate-500 uppercase">
+                <th class="px-4 py-3 text-left">HSN/SAC</th>
+                <th class="px-4 py-3 text-right">Taxable Value</th>
+                <th class="px-4 py-3 text-right">CGST</th>
+                <th class="px-4 py-3 text-right">SGST</th>
+                <th class="px-4 py-3 text-right">IGST</th>
+                <th class="px-4 py-3 text-right">Total Tax</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              @for (ts of inv.taxSummary; track ts.hsnSac) {
+              <tr>
+                <td class="px-4 py-3 font-mono font-semibold text-slate-700">{{ ts.hsnSac }}</td>
+                <td class="px-4 py-3 text-right text-slate-600">{{ formatCurrency(ts.taxableValue) }}</td>
+                <td class="px-4 py-3 text-right text-slate-500">
+                  @if (ts.cgstAmount > 0) { {{ ts.cgstRate }}%: {{ formatCurrency(ts.cgstAmount) }} } @else { — }
+                </td>
+                <td class="px-4 py-3 text-right text-slate-500">
+                  @if (ts.sgstAmount > 0) { {{ ts.sgstRate }}%: {{ formatCurrency(ts.sgstAmount) }} } @else { — }
+                </td>
+                <td class="px-4 py-3 text-right text-slate-500">
+                  @if (ts.igstAmount > 0) { {{ ts.igstRate }}%: {{ formatCurrency(ts.igstAmount) }} } @else { — }
+                </td>
+                <td class="px-4 py-3 text-right font-semibold text-slate-700">
+                  {{ formatCurrency(ts.cgstAmount + ts.sgstAmount + ts.igstAmount) }}
+                </td>
+              </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+      }
+
+      <!-- Totals -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <div class="max-w-xs ml-auto space-y-2">
+          <div class="flex justify-between text-sm text-slate-600">
+            <span>Gross Amount</span><span>{{ formatCurrency(inv.grossAmount) }}</span>
+          </div>
+          <div class="flex justify-between text-sm text-slate-600">
+            <span>Discount ({{ inv.discountPct }}%)</span><span class="text-rose-500">- {{ formatCurrency(inv.discountAmount) }}</span>
+          </div>
+          <div class="flex justify-between text-sm font-semibold text-slate-700 border-t border-slate-100 pt-2">
+            <span>Taxable Value</span><span>{{ formatCurrency(inv.taxableValue) }}</span>
+          </div>
+          @if (inv.cgstAmount > 0) {
+          <div class="flex justify-between text-sm text-slate-600">
+            <span>CGST @ {{ inv.cgstRate }}%</span><span>{{ formatCurrency(inv.cgstAmount) }}</span>
+          </div>
+          }
+          @if (inv.sgstAmount > 0) {
+          <div class="flex justify-between text-sm text-slate-600">
+            <span>SGST @ {{ inv.sgstRate }}%</span><span>{{ formatCurrency(inv.sgstAmount) }}</span>
+          </div>
+          }
+          @if (inv.igstAmount > 0) {
+          <div class="flex justify-between text-sm text-slate-600">
+            <span>IGST @ {{ inv.igstRate }}%</span><span>{{ formatCurrency(inv.igstAmount) }}</span>
+          </div>
+          }
+          <div class="flex justify-between text-sm text-slate-600">
+            <span>Round Off</span><span>{{ formatCurrency(inv.roundOff) }}</span>
+          </div>
+          <div class="flex justify-between font-black text-base text-slate-900 bg-slate-800 text-white px-4 py-3 rounded-xl mt-2">
+            <span>NET PAYABLE</span><span>{{ formatCurrency(inv.totalAmount) }}</span>
+          </div>
+        </div>
+        <p class="text-xs text-slate-400 italic mt-3">{{ inv.amountInWords }}</p>
+      </div>
+    </div>
+
+    <!-- Right: E-Invoice status panel -->
+    <div class="space-y-4">
+
+      <!-- Status card -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">E-Invoice Status</h3>
+        <div class="flex items-center gap-3 mb-4">
+          <span class="inline-block px-3 py-1.5 rounded-full text-sm font-bold {{ getStatusClass(inv.eInvoiceStatus || 'pending') }}">
+            {{ getStatusLabel(inv.eInvoiceStatus || 'pending') }}
+          </span>
+        </div>
+
+        @if (inv.irn) {
+        <div class="space-y-3">
+          <div>
+            <p class="text-xs text-slate-400 mb-1">IRN (Invoice Reference Number)</p>
+            <p class="font-mono text-[11px] text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2.5 break-all leading-relaxed select-all">{{ inv.irn }}</p>
+          </div>
+          @if (inv.ackNo) {
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <p class="text-xs text-slate-400">Ack Number</p>
+              <p class="font-mono font-semibold text-slate-700 text-xs mt-0.5">{{ inv.ackNo }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400">Ack Date</p>
+              <p class="font-semibold text-slate-700 text-xs mt-0.5">{{ inv.ackDt }}</p>
+            </div>
+          </div>
+          }
+        </div>
+        }
+
+        @if (!inv.irn && (!inv.eInvoiceStatus || inv.eInvoiceStatus === 'pending')) {
+        <p class="text-sm text-slate-400 italic">No IRN generated yet. Click <strong>Generate E-Invoice</strong> to proceed.</p>
+        }
+      </div>
+
+      <!-- QR Code card -->
+      @if (inv.signedQrCode) {
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 text-center">
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Signed QR Code</h3>
+        <img [src]="inv.signedQrCode" alt="E-Invoice QR Code"
+          class="w-48 h-48 mx-auto rounded-xl border border-slate-200 shadow-sm object-contain p-2">
+        <p class="text-xs text-slate-400 mt-3">Scan to verify invoice authenticity</p>
+      </div>
+      }
+
+      <!-- Workflow guide -->
+      <div class="bg-slate-50 rounded-2xl border border-slate-100 p-5">
+        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">E-Invoice Workflow</h3>
+        <ol class="space-y-3">
+          <li class="flex gap-2.5 text-sm">
+            <span class="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+              [class]="!inv.eInvoiceStatus || inv.eInvoiceStatus === 'pending' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'">1</span>
+            <div>
+              <p class="font-semibold text-slate-700">Generate E-Invoice</p>
+              <p class="text-xs text-slate-400">Compute IRN &amp; QR code from invoice data.</p>
+            </div>
+          </li>
+          <li class="flex gap-2.5 text-sm">
+            <span class="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+              [class]="inv.eInvoiceStatus === 'generated' ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'">2</span>
+            <div>
+              <p class="font-semibold text-slate-700">Submit to IRP</p>
+              <p class="text-xs text-slate-400">Download JSON and submit via GSP/IRP portal for official registration.</p>
+            </div>
+          </li>
+          <li class="flex gap-2.5 text-sm">
+            <span class="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-slate-200 text-slate-500">3</span>
+            <div>
+              <p class="font-semibold text-slate-700">Print &amp; Share</p>
+              <p class="text-xs text-slate-400">Print the invoice PDF with embedded QR code for the buyer.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Cancel info -->
+      @if (inv.eInvoiceStatus === 'cancelled') {
+      <div class="bg-rose-50 rounded-2xl border border-rose-200 p-4">
+        <p class="text-xs font-bold text-rose-500 uppercase tracking-wide mb-1">Cancellation Details</p>
+        <p class="text-sm text-rose-700"><span class="font-semibold">Reason:</span> {{ inv.cancelReason }}</p>
+        @if (inv.cancelledAt) {
+        <p class="text-xs text-rose-500 mt-1">Cancelled on {{ formatDate(inv.cancelledAt) }}</p>
+        }
+      </div>
+      }
+
+    </div>
+  </div>
+}
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODALS
+     ══════════════════════════════════════════════════════════════ -->
+
+<!-- ── Company Settings Modal ──────────────────────────────────── -->
+@if (showSettingsModal()) {
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" (click)="closeSettingsModal()"></div>
+  <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+      <div>
+        <h2 class="text-lg font-black text-slate-800">Company Settings</h2>
+        <p class="text-xs text-slate-400 mt-0.5">Configure GSTIN and company details for e-Invoice generation</p>
+      </div>
+      <button (click)="closeSettingsModal()" class="p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Legal / Company Name <span class="text-rose-500">*</span></label>
+          <input type="text" [value]="settingsForm().legalName || ''"
+            (input)="updateSettingsField('legalName', $any($event.target).value)"
+            placeholder="e.g. TMG Clothings Pvt Ltd"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Trade Name (optional)</label>
+          <input type="text" [value]="settingsForm().tradeName || ''"
+            (input)="updateSettingsField('tradeName', $any($event.target).value)"
+            placeholder="Trade / brand name"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">GSTIN <span class="text-rose-500">*</span></label>
+          <input type="text" [value]="settingsForm().gstin || ''" maxlength="15"
+            (input)="updateSettingsField('gstin', $any($event.target).value.toUpperCase())"
+            placeholder="e.g. 33AAAAA0000A1ZA"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400 uppercase">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Address Line 1</label>
+          <input type="text" [value]="settingsForm().address1 || ''"
+            (input)="updateSettingsField('address1', $any($event.target).value)"
+            placeholder="Street, building, area"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Address Line 2 (optional)</label>
+          <input type="text" [value]="settingsForm().address2 || ''"
+            (input)="updateSettingsField('address2', $any($event.target).value)"
+            placeholder="Landmark, locality"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">City / Place</label>
+          <input type="text" [value]="settingsForm().place || ''"
+            (input)="updateSettingsField('place', $any($event.target).value)"
+            placeholder="City"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">PIN Code</label>
+          <input type="text" [value]="settingsForm().pinCode || ''" maxlength="6"
+            (input)="updateSettingsField('pinCode', $any($event.target).value)"
+            placeholder="6-digit PIN"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">State</label>
+          <select [value]="settingsForm().stateCode || '33'"
+            (change)="updateSettingsField('stateCode', $any($event.target).value)"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white">
+            @for (s of stateCodes; track s.code) {
+              <option [value]="s.code">{{ s.code }} – {{ s.name }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Phone</label>
+          <input type="text" [value]="settingsForm().phone || ''"
+            (input)="updateSettingsField('phone', $any($event.target).value)"
+            placeholder="Company phone"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Email</label>
+          <input type="email" [value]="settingsForm().email || ''"
+            (input)="updateSettingsField('email', $any($event.target).value)"
+            placeholder="Company email"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+      </div>
+    </div>
+    <div class="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
+      <button (click)="closeSettingsModal()" class="px-5 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
+      <button (click)="saveSettings()" [disabled]="isSavingSettings()"
+        class="px-5 py-2 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60 transition-colors">
+        {{ isSavingSettings() ? 'Saving…' : 'Save Settings' }}
+      </button>
+    </div>
+  </div>
+</div>
+}
+
+<!-- ── JSON Payload Modal ────────────────────────────────────────── -->
+@if (showPayloadModal()) {
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" (click)="showPayloadModal.set(false)"></div>
+  <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+    <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+      <div>
+        <h2 class="text-lg font-black text-slate-800">E-Invoice JSON Payload</h2>
+        <p class="text-xs text-slate-400 mt-0.5">NIC schema v1.1 — ready for IRP submission</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button (click)="downloadJson()"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          Download JSON
+        </button>
+        <button (click)="showPayloadModal.set(false)" class="p-2 rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="flex-1 overflow-y-auto p-4">
+      <pre class="text-xs font-mono bg-slate-950 text-emerald-300 rounded-xl p-4 overflow-x-auto whitespace-pre leading-relaxed">{{ payloadJson() }}</pre>
+    </div>
+  </div>
+</div>
+}
+
+<!-- ── Cancel Modal ─────────────────────────────────────────────── -->
+@if (showCancelModal()) {
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" (click)="closeCancelModal()"></div>
+  <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-md">
+    <div class="px-6 py-5 border-b border-slate-100">
+      <h2 class="text-lg font-black text-rose-700">Cancel E-Invoice</h2>
+      <p class="text-xs text-slate-400 mt-0.5">This action will mark the e-Invoice as cancelled.</p>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-500 mb-2">Cancellation Reason <span class="text-rose-500">*</span></label>
+        <div class="space-y-2">
+          @for (reason of cancelReasons; track reason) {
+          <label class="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors"
+            [class]="cancelReason() === reason ? 'border-rose-400 bg-rose-50' : 'border-slate-200 hover:border-slate-300'">
+            <input type="radio" name="cancelReason" [value]="reason"
+              [checked]="cancelReason() === reason"
+              (change)="cancelReason.set(reason)"
+              class="text-rose-500">
+            <span class="text-sm font-medium text-slate-700">{{ reason }}</span>
+          </label>
+          }
+        </div>
+        @if (cancelReason() === 'Others') {
+        <div class="mt-3">
+          <textarea [value]="cancelReasonOther()"
+            (input)="cancelReasonOther.set($any($event.target).value)"
+            placeholder="Enter cancellation reason…"
+            rows="3"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-400 resize-none"></textarea>
+        </div>
+        }
+      </div>
+    </div>
+    <div class="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
+      <button (click)="closeCancelModal()" class="px-5 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Back</button>
+      <button (click)="confirmCancel()" [disabled]="isCancelling() || !cancelReason()"
+        class="px-5 py-2 rounded-xl bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 disabled:opacity-60 transition-colors">
+        {{ isCancelling() ? 'Cancelling…' : 'Confirm Cancellation' }}
+      </button>
+    </div>
+  </div>
+</div>
+}

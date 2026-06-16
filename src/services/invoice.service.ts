@@ -10,6 +10,7 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  updateDoc,
   where,
 } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
@@ -45,8 +46,20 @@ export class InvoiceService {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
-    const docRef = await addDoc(this.invoicesRef, data);
+    const docRef = await addDoc(this.invoicesRef, this.stripUndefined(data));
     return { id: docRef.id, ...data };
+  }
+
+  async getInvoiceByIdOnce(invoiceId: string): Promise<Invoice | null> {
+    const snap = await getDocs(query(this.invoicesRef, where('__name__', '==', invoiceId)));
+    if (snap.empty) return null;
+    const d = snap.docs[0];
+    return this.normalize({ id: d.id, ...d.data() });
+  }
+
+  async updateInvoice(invoiceId: string, updates: Partial<Invoice>): Promise<void> {
+    const invoiceRef = doc(this.firestore, 'invoices', invoiceId);
+    await updateDoc(invoiceRef, this.stripUndefined({ ...updates, updatedAt: serverTimestamp() }));
   }
 
   private async generateNextInvoiceNo(): Promise<{ invoiceNo: string; invoiceSeq: number }> {
@@ -72,6 +85,12 @@ export class InvoiceService {
     const fyStart = month >= 4 ? year : year - 1;
     const fyEnd = fyStart + 1;
     return String(fyStart).slice(2) + String(fyEnd).slice(2);
+  }
+
+  private stripUndefined(obj: Record<string, any>): Record<string, any> {
+    return Object.fromEntries(
+      Object.entries(obj).filter(([, v]) => v !== undefined)
+    );
   }
 
   private normalize(raw: any): Invoice {
@@ -141,6 +160,15 @@ export class InvoiceService {
             igstAmount: Number(t?.igstAmount) || 0,
           }))
         : [],
+      eInvoiceStatus: raw?.eInvoiceStatus || undefined,
+      irn: raw?.irn ? String(raw.irn) : undefined,
+      irnGeneratedAt: raw?.irnGeneratedAt,
+      ackNo: raw?.ackNo ? String(raw.ackNo) : undefined,
+      ackDt: raw?.ackDt ? String(raw.ackDt) : undefined,
+      signedQrCode: raw?.signedQrCode ? String(raw.signedQrCode) : undefined,
+      eInvoicePayload: raw?.eInvoicePayload || undefined,
+      cancelReason: raw?.cancelReason ? String(raw.cancelReason) : undefined,
+      cancelledAt: raw?.cancelledAt,
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,
     };

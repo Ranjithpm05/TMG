@@ -64,6 +64,16 @@ export interface Invoice {
   totalAmount: number;
   amountInWords: string;
   taxSummary: InvoiceTaxSummary[];
+  // E-Invoice fields
+  eInvoiceStatus?: 'pending' | 'generated' | 'cancelled';
+  irn?: string;
+  irnGeneratedAt?: any;
+  ackNo?: string;
+  ackDt?: string;
+  signedQrCode?: string;
+  eInvoicePayload?: any;
+  cancelReason?: string;
+  cancelledAt?: any;
   createdAt?: any;
   updatedAt?: any;
 }
