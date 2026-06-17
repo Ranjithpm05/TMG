@@ -270,7 +270,7 @@ export class DesignMasterComponent implements OnInit {
         try {
             const XLSX = await import('xlsx');
             const buffer = await file.arrayBuffer();
-            const wb = XLSX.read(buffer, { type: 'array' });
+            const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' });
             const ws = wb.Sheets[wb.SheetNames[0]];
             const rawData: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
             Swal.close();
@@ -320,14 +320,17 @@ export class DesignMasterComponent implements OnInit {
         const errors: string[] = [];
         const designMap = new Map<string, Omit<Design, 'id'>>();
 
+        // Case-insensitive header matching so minor capitalisation differences don't block import
         const headerRow = rawData[0].map((h: any) => String(h).trim());
-        const missingHeaders = REQUIRED_HEADERS.filter(h => !headerRow.includes(h));
+        const headerLower = headerRow.map(h => h.toLowerCase());
+        const col = (name: string) => headerLower.indexOf(name.toLowerCase());
+
+        const missingHeaders = REQUIRED_HEADERS.filter(h => col(h) === -1);
         if (missingHeaders.length > 0) {
             errors.push(`Missing required columns: ${missingHeaders.join(', ')}. Please use the sample template.`);
             return { designs: [], errors };
         }
 
-        const col = (name: string) => headerRow.indexOf(name);
         const iStyleNo = col('StyleNo'), iColor = col('Color'), iGroup = col('Group');
         const iSize = col('Size'), iMRP = col('MRP'), iWSP = col('WSP');
         const iBarcode = col('Barcode'), iSleeve = col('SleeveType'), iFabric = col('FabricDescription');
@@ -336,34 +339,44 @@ export class DesignMasterComponent implements OnInit {
             const row = rawData[i];
             const rowNum = i + 1;
 
-            if (row.every((cell: any) => cell === '' || cell === null || cell === undefined)) continue;
+            // Skip rows where every cell is empty or whitespace
+            if (row.every((cell: any) => String(cell ?? '').trim() === '')) continue;
 
             const styleNo = String(row[iStyleNo] ?? '').trim();
             const size = String(row[iSize] ?? '').trim();
+            // Barcodes can be numeric in Excel; convert without precision loss for ≤15-digit numbers
             const barcode = String(row[iBarcode] ?? '').trim();
             const mrpRaw = row[iMRP];
             const wspRaw = row[iWSP];
 
             if (!styleNo) { errors.push(`Row ${rowNum}: StyleNo is required.`); continue; }
-            if (!size) { errors.push(`Row ${rowNum}: Size is required.`); continue; }
+            if (!size)    { errors.push(`Row ${rowNum}: Size is required.`);    continue; }
             if (!barcode) { errors.push(`Row ${rowNum}: Barcode is required.`); continue; }
 
-            const mrp = parseFloat(mrpRaw);
-            const wsp = parseFloat(wspRaw);
-            if (mrpRaw === '' || isNaN(mrp)) { errors.push(`Row ${rowNum}: MRP must be a valid number.`); continue; }
-            if (wspRaw === '' || isNaN(wsp)) { errors.push(`Row ${rowNum}: WSP must be a valid number.`); continue; }
+            const mrp = parseFloat(String(mrpRaw ?? ''));
+            const wsp = parseFloat(String(wspRaw ?? ''));
+            if (mrpRaw === '' || mrpRaw == null || isNaN(mrp)) { errors.push(`Row ${rowNum}: MRP must be a valid number.`); continue; }
+            if (wspRaw === '' || wspRaw == null || isNaN(wsp)) { errors.push(`Row ${rowNum}: WSP must be a valid number.`); continue; }
             if (mrp < 0) { errors.push(`Row ${rowNum}: MRP cannot be negative.`); continue; }
             if (wsp < 0) { errors.push(`Row ${rowNum}: WSP cannot be negative.`); continue; }
 
-            const sleeveType = iSleeve >= 0 ? String(row[iSleeve] ?? '').trim() : '';
-            if (sleeveType && sleeveType !== 'Full' && sleeveType !== 'Half') {
-                errors.push(`Row ${rowNum}: SleeveType must be 'Full' or 'Half' (got '${sleeveType}').`);
-                continue;
+            // Normalise SleeveType — accept any casing of Full / Half
+            const sleeveRaw = iSleeve >= 0 ? String(row[iSleeve] ?? '').trim() : '';
+            let sleeveType: string | null = null;
+            if (sleeveRaw) {
+                const lower = sleeveRaw.toLowerCase();
+                if (lower === 'full')       sleeveType = 'Full';
+                else if (lower === 'half')  sleeveType = 'Half';
+                else {
+                    errors.push(`Row ${rowNum}: SleeveType must be 'Full' or 'Half' (got '${sleeveRaw}').`);
+                    continue;
+                }
             }
+            // null (not undefined) — Firestore rejects undefined field values
 
             const sizeObj: SizePrice = {
                 size, price: mrp, WSP: wsp, BARCODE: barcode,
-                sleeveType: sleeveType || undefined,
+                sleeveType,
                 fabricType: iFabric >= 0 ? String(row[iFabric] ?? '').trim() : '',
             };
 
@@ -372,8 +385,8 @@ export class DesignMasterComponent implements OnInit {
             } else {
                 designMap.set(styleNo, {
                     styleNo,
-                    color: iColor >= 0 ? String(row[iColor] ?? '').trim() : '',
-                    group: iGroup >= 0 ? String(row[iGroup] ?? '').trim() : '',
+                    color:  iColor >= 0 ? String(row[iColor]  ?? '').trim() : '',
+                    group:  iGroup >= 0 ? String(row[iGroup]  ?? '').trim() : '',
                     sizes: [sizeObj],
                 });
             }
@@ -390,26 +403,33 @@ export class DesignMasterComponent implements OnInit {
         });
 
         let successCount = 0;
-        let failCount = 0;
+        const failedItems: { styleNo: string; reason: string }[] = [];
+
         for (const design of designs) {
             try {
                 await this.designService.createDesign(design);
                 successCount++;
-            } catch {
-                failCount++;
+            } catch (err: any) {
+                failedItems.push({ styleNo: design.styleNo, reason: err?.message ?? 'Unknown error' });
             }
         }
 
-        if (failCount === 0) {
+        if (failedItems.length === 0) {
             await Swal.fire({
                 icon: 'success', title: 'Import Complete!',
                 text: `${successCount} design(s) imported successfully.`,
                 timer: 3000, showConfirmButton: false,
             });
         } else {
+            const failRows = failedItems
+                .map(f => `<li><strong>${f.styleNo}</strong>: ${f.reason}</li>`)
+                .join('');
             await Swal.fire({
-                icon: 'warning', title: 'Import Partially Complete',
-                text: `${successCount} imported, ${failCount} failed.`,
+                icon: 'warning',
+                title: 'Import Partially Complete',
+                html: `<p>${successCount} imported successfully.</p>
+                       <p class="mt-2 font-semibold text-red-600">${failedItems.length} failed:</p>
+                       <ul class="list-disc pl-4 text-left text-sm max-h-40 overflow-y-auto mt-1">${failRows}</ul>`,
             });
         }
         this.loadDesigns();
