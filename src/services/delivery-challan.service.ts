@@ -6,6 +6,7 @@ import {
   collectionData,
   doc,
   getDocs,
+  limit,
   orderBy,
   query,
   runTransaction,
@@ -21,8 +22,8 @@ export class DeliveryChallanService {
   private firestore = inject(Firestore);
   private dcRef = collection(this.firestore, 'deliveryChallans');
 
-  getDeliveryChallans(): Observable<DeliveryChallan[]> {
-    const q = query(this.dcRef, orderBy('createdAt', 'desc'));
+  getDeliveryChallans(pageLimit = 100): Observable<DeliveryChallan[]> {
+    const q = query(this.dcRef, orderBy('createdAt', 'desc'), limit(pageLimit));
     return (collectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
       map((docs) => docs.map((d) => this.normalize(d)))
     );

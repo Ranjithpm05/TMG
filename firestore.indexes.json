@@ -1,0 +1,70 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "inventory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "styleNo", "order": "ASCENDING" },
+        { "fieldPath": "color", "order": "ASCENDING" },
+        { "fieldPath": "size", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "packingLists",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "pickListId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "invoices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "packingListId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveryChallans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "packingListId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pickLists",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "salesOrderIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lines",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "sortOrder", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lines",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "claimedByUserId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lines",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "barcode", "order": "ASCENDING" },
+        { "fieldPath": "sortOrder", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

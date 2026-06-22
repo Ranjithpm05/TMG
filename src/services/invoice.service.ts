@@ -5,7 +5,9 @@ import {
   collection,
   collectionData,
   doc,
+  getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   runTransaction,
@@ -22,8 +24,8 @@ export class InvoiceService {
   private firestore = inject(Firestore);
   private invoicesRef = collection(this.firestore, 'invoices');
 
-  getInvoices(): Observable<Invoice[]> {
-    const q = query(this.invoicesRef, orderBy('createdAt', 'desc'));
+  getInvoices(pageLimit = 100): Observable<Invoice[]> {
+    const q = query(this.invoicesRef, orderBy('createdAt', 'desc'), limit(pageLimit));
     return (collectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
       map((docs) => docs.map((d) => this.normalize(d)))
     );
@@ -51,10 +53,9 @@ export class InvoiceService {
   }
 
   async getInvoiceByIdOnce(invoiceId: string): Promise<Invoice | null> {
-    const snap = await getDocs(query(this.invoicesRef, where('__name__', '==', invoiceId)));
-    if (snap.empty) return null;
-    const d = snap.docs[0];
-    return this.normalize({ id: d.id, ...d.data() });
+    const snap = await getDoc(doc(this.firestore, 'invoices', invoiceId));
+    if (!snap.exists()) return null;
+    return this.normalize({ id: snap.id, ...snap.data() });
   }
 
   async updateInvoice(invoiceId: string, updates: Partial<Invoice>): Promise<void> {

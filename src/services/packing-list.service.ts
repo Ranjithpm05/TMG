@@ -35,8 +35,8 @@ export class PackingListService {
   private packingRef = collection(this.firestore, 'packingLists');
   private inventoryRef = collection(this.firestore, 'inventory');
 
-  getPackingLists(): Observable<PackingList[]> {
-    const q = query(this.packingRef, orderBy('createdAt', 'desc'));
+  getPackingLists(pageLimit = 100): Observable<PackingList[]> {
+    const q = query(this.packingRef, orderBy('createdAt', 'desc'), limit(pageLimit));
     return (collectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
       map((packingLists) => packingLists.map((packingList) => this.normalizePackingList(packingList)))
     );

@@ -9,6 +9,7 @@ import {
   deleteDoc,
   query,
   orderBy,
+  limit,
   serverTimestamp
 } from '@angular/fire/firestore';
 
@@ -33,9 +34,8 @@ export class SalesOrderService {
         } as SalesOrder;
     }
 
-    // 🔹 Get all sales orders
-    getSalesOrders(): Observable<SalesOrder[]> {
-        const q = query(this.salesOrderRef, orderBy('createdAt', 'desc'));
+    getSalesOrders(pageLimit = 100): Observable<SalesOrder[]> {
+        const q = query(this.salesOrderRef, orderBy('createdAt', 'desc'), limit(pageLimit));
         return collectionData(q, { idField: 'id' }) as Observable<SalesOrder[]>;
     }
 

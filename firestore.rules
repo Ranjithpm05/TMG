@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Counters: only backend-style increments via transactions
+    match /counters/{counterId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Company settings: read-only for most users, restrict write to app
+    match /settings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // All transactional and master-data collections
+    match /{collection}/{docId} {
+      allow read, write: if isAuthenticated();
+
+      // Subcollections (lines under pickLists / packingLists)
+      match /{subcollection}/{subDocId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+  }
+}

@@ -46,8 +46,8 @@ export class PickListService {
   private plRef = collection(this.firestore, 'pickLists');
   private invRef = collection(this.firestore, 'inventory');
 
-  getPickLists(): Observable<PickList[]> {
-    const q = query(this.plRef, orderBy('createdAt', 'desc'));
+  getPickLists(pageLimit = 100): Observable<PickList[]> {
+    const q = query(this.plRef, orderBy('createdAt', 'desc'), limit(pageLimit));
     return (collectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
       map((pickLists) => pickLists.map((pickList) => this.normalizePickList(pickList)))
     );
@@ -284,26 +284,47 @@ export class PickListService {
     preferredLineId?: string,
     retryCount = 0
   ): Promise<PickListLine | null> {
-    const lines = await this.getPickListLinesOnce(pickListId);
     const now = Date.now();
 
-    const activePreferred = preferredLineId
-      ? lines.find((line) => line.lineId === preferredLineId && this.isClaimUsable(line, user.id, now))
-      : undefined;
-    if (activePreferred) {
-      return this.refreshClaim(pickListId, activePreferred.lineId, user);
+    // Fast path: if caller already knows which line they want, check it with a single doc read.
+    if (preferredLineId) {
+      const snap = await getDoc(this.lineDoc(pickListId, preferredLineId));
+      if (snap.exists()) {
+        const line = this.normalizeLine({ lineId: snap.id, ...snap.data() });
+        if (this.isClaimUsable(line, user.id, now)) {
+          return this.refreshClaim(pickListId, preferredLineId, user);
+        }
+      }
     }
 
-    const activeOwnedLine = lines.find((line) => this.isClaimUsable(line, user.id, now) && line.claimedByUserId === user.id);
+    // Load only the lines that matter: claims by this user + the next batch of candidates.
+    // Requires composite indexes: (claimedByUserId, status) and (status, sortOrder) on collection group "lines".
+    const [claimedByUserSnap, candidatesSnap] = await Promise.all([
+      getDocs(query(this.linesCollection(pickListId), where('claimedByUserId', '==', user.id))),
+      getDocs(query(
+        this.linesCollection(pickListId),
+        where('status', 'in', ['ready', 'in_progress']),
+        orderBy('sortOrder', 'asc'),
+        limit(30),
+      )),
+    ]);
+
+    const userClaimedLines = claimedByUserSnap.docs.map(d => this.normalizeLine({ lineId: d.id, ...d.data() }));
+    const candidateLines = candidatesSnap.docs.map(d => this.normalizeLine({ lineId: d.id, ...d.data() }));
+
+    // Re-use existing active claim if still valid.
+    const activeOwnedLine = userClaimedLines.find(line => this.isClaimUsable(line, user.id, now) && line.claimedByUserId === user.id);
     if (activeOwnedLine) {
       return this.refreshClaim(pickListId, activeOwnedLine.lineId, user);
     }
 
-    const claimableLine = lines.find((line) => this.isLineAvailableForClaim(line, user.id, now));
+    // Pick the first candidate that is actually free (expired/no claim, or owned by this user).
+    const claimableLine = candidateLines.find(line => this.isLineAvailableForClaim(line, user.id, now));
     if (!claimableLine) return null;
 
-    const ownedClaims = lines.filter(
-      (line) => line.claimedByUserId === user.id && line.lineId !== claimableLine.lineId && this.isClaimActive(line, now)
+    // Release any stale claims this user holds on other lines.
+    const ownedClaims = userClaimedLines.filter(
+      line => line.claimedByUserId === user.id && line.lineId !== claimableLine.lineId && this.isClaimActive(line, now)
     );
     if (ownedClaims.length > 0) {
       const batch = writeBatch(this.firestore);
@@ -594,8 +615,8 @@ export class PickListService {
 
     if (nextStatus === order.status) return;
 
+    // Write only the changed field — spreading the entire order object writes every field unnecessarily.
     await updateDoc(doc(this.firestore, `salesOrders/${salesOrderId}`), {
-      ...order,
       status: nextStatus,
       updatedAt: serverTimestamp(),
     });
