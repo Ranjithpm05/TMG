@@ -393,9 +393,18 @@
               </div>
               <p class="text-xs text-gray-400 mt-0.5 truncate">{{(pickList.salesNos ?? []).join(', ')}}</p>
             </div>
-            <button (click)="cancel()" class="flex-shrink-0 p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <button (click)="toggleCamera()"
+                      title="{{isCameraOpen() ? 'Close Camera' : 'Open Camera'}}"
+                      class="flex-shrink-0 p-2 rounded-xl transition-colors border-2"
+                      [class.border-red-400]="isCameraOpen()" [class.text-red-600]="isCameraOpen()" [class.bg-red-50]="isCameraOpen()"
+                      [class.border-gray-200]="!isCameraOpen()" [class.text-gray-500]="!isCameraOpen()" [class.bg-white]="!isCameraOpen()">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              </button>
+              <button (click)="cancel()" class="flex-shrink-0 p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
           </div>
           <div class="flex justify-between text-xs text-gray-500 mb-1.5">
             <span>{{liveProgress().totalPickedQty}} / {{liveProgress().totalRequiredQty}} picked</span>
@@ -412,6 +421,53 @@
             }
           </div>
         </div>
+
+        <!-- CAMERA VIEW (shown immediately after header for no-scroll access) -->
+        @if (isCameraOpen()) {
+          <div class="bg-black rounded-2xl overflow-hidden shadow-sm">
+            <div class="aspect-[4/3]"><video #cameraVideo class="w-full h-full object-cover" playsinline autoplay muted></video></div>
+            <p class="text-center text-xs text-gray-400 py-2.5">Point camera at the barcode · Auto-detects</p>
+          </div>
+        }
+
+        <!-- PARTY-WISE TOTALS -->
+        @if (partyWiseTotals().length > 0) {
+          <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+              <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Party-wise Totals</span>
+              <span class="text-xs text-gray-400">Picked / Required</span>
+            </div>
+            <div class="divide-y divide-gray-50">
+              @for (party of partyWiseTotals(); track party.clientId) {
+                <div class="px-4 py-2.5 flex items-center justify-between transition-colors"
+                     [class.bg-indigo-50]="party.isCurrentCustomer">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-sm font-semibold truncate"
+                          [class.text-indigo-800]="party.isCurrentCustomer"
+                          [class.text-gray-700]="!party.isCurrentCustomer">
+                      {{party.clientName}}
+                    </span>
+                    @if (party.isCurrentCustomer) {
+                      <span class="text-[10px] font-bold text-indigo-500 bg-indigo-100 rounded-full px-1.5 py-0.5 flex-shrink-0">current</span>
+                    }
+                  </div>
+                  <div class="flex items-center gap-1 flex-shrink-0 ml-2">
+                    <span class="text-sm font-bold"
+                          [class.text-green-700]="party.totalPicked === party.totalRequired && party.totalRequired > 0"
+                          [class.text-indigo-700]="party.totalPicked < party.totalRequired">
+                      {{party.totalPicked}}
+                    </span>
+                    <span class="text-gray-300 text-xs">/</span>
+                    <span class="text-sm font-semibold text-gray-600">{{party.totalRequired}}</span>
+                    @if (party.totalPicked === party.totalRequired && party.totalRequired > 0) {
+                      <span class="ml-1 text-green-500 text-xs font-bold">✓</span>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
 
         <!-- CURRENT PICK (Customer + Design + All Sizes) -->
         <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -567,21 +623,13 @@
             </button>
           </div>
           <button (click)="toggleCamera()"
-                  class="w-full flex items-center justify-center gap-2 py-4 rounded-xl font-semibold text-sm transition-colors border-2"
+                  class="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-colors border-2"
                   [class.border-red-300]="isCameraOpen()" [class.text-red-600]="isCameraOpen()" [class.bg-red-50]="isCameraOpen()"
                   [class.border-gray-200]="!isCameraOpen()" [class.text-gray-600]="!isCameraOpen()" [class.bg-gray-50]="!isCameraOpen()">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             {{isCameraOpen() ? 'Stop Camera' : 'Open Camera'}}
           </button>
         </div>
-
-        <!-- CAMERA VIEW -->
-        @if (isCameraOpen()) {
-          <div class="bg-black rounded-2xl overflow-hidden shadow-sm">
-            <div class="aspect-[4/3]"><video #cameraVideo class="w-full h-full object-cover" playsinline autoplay muted></video></div>
-            <p class="text-center text-xs text-gray-400 py-2.5">Point camera at the barcode · Auto-detects</p>
-          </div>
-        }
 
         <!-- ALL LINES – Customer → Design → Sizes hierarchy (collapsible) -->
         <div class="bg-white rounded-2xl shadow-sm overflow-hidden">

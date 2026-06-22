@@ -274,6 +274,16 @@ export class PickListComponent implements OnInit, OnDestroy {
     return [...designMap.values()];
   });
 
+  partyWiseTotals = computed(() =>
+    this.customerWiseViewLines().map((customer) => ({
+      clientId: customer.clientId,
+      clientName: customer.clientName,
+      isCurrentCustomer: customer.isCurrentCustomer,
+      totalRequired: customer.designs.reduce((s, d) => s + d.requiredQty, 0),
+      totalPicked: customer.designs.reduce((s, d) => s + d.pickedQty, 0),
+    }))
+  );
+
   customerWiseViewLines = computed(() => {
     const currentLine = this.currentAssignedLine();
     const customerMap = new Map<string, {
@@ -1083,7 +1093,7 @@ export class PickListComponent implements OnInit, OnDestroy {
         this.barcodeDetector = this.barcodeDetector || await this.createBarcodeDetector();
         this.cameraCanvas = document.createElement('canvas');
         this.cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
         });
         const video = this.cameraVideoElement!.nativeElement;
         video.srcObject = this.cameraStream;
@@ -1142,19 +1152,26 @@ export class PickListComponent implements OnInit, OnDestroy {
     }
 
     if (!this.cameraCanvas) return null;
-    const size = 420;
+    const size = 640;
     this.cameraCanvas.width = size;
     this.cameraCanvas.height = size;
     const context = this.cameraCanvas.getContext('2d', { willReadFrequently: true });
     if (!context) return null;
 
-    const sourceWidth = video.videoWidth * 0.7;
-    const sourceHeight = video.videoHeight * 0.7;
+    // Try full frame first — better for distant/wide barcodes
+    context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, 0, 0, size, size);
+    let imageData = context.getImageData(0, 0, size, size);
+    let result = jsQR(imageData.data, size, size, { inversionAttempts: 'attemptBoth' });
+    if (result?.data) return result.data;
+
+    // Fallback: tight center crop — better for close-up scans
+    const sourceWidth = video.videoWidth * 0.55;
+    const sourceHeight = video.videoHeight * 0.55;
     const sourceX = (video.videoWidth - sourceWidth) / 2;
     const sourceY = (video.videoHeight - sourceHeight) / 2;
     context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, size, size);
-    const imageData = context.getImageData(0, 0, size, size);
-    const result = jsQR(imageData.data, size, size, { inversionAttempts: 'attemptBoth' });
+    imageData = context.getImageData(0, 0, size, size);
+    result = jsQR(imageData.data, size, size, { inversionAttempts: 'attemptBoth' });
     return result?.data ?? null;
   }
 
@@ -1235,10 +1252,30 @@ export class PickListComponent implements OnInit, OnDestroy {
   private flashScanFeedback(type: 'success' | 'error', message: string) {
     this.scanFeedback.set(type);
     this.scannerMessage.set(message);
+    if (type === 'success') this.playSuccessBeep();
     setTimeout(() => {
       this.scanFeedback.set('idle');
       this.scannerMessage.set(this.currentAssignedLine() ? 'Scan the assigned item' : 'Waiting for an available item');
     }, 800);
+  }
+
+  private playSuccessBeep(): void {
+    try {
+      const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(1047, ctx.currentTime);
+      oscillator.frequency.setValueAtTime(1319, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.35, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + 0.35);
+    } catch {
+      // Audio API not supported
+    }
   }
 
   private mapScanError(code: string): { title: string; text?: string } {
@@ -1263,16 +1300,30 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   private async showToast(icon: 'success' | 'error' | 'info' | 'warning', title: string, text?: string) {
-    await Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon,
-      title,
-      text,
-      timer: 1800,
-      showConfirmButton: false,
-      timerProgressBar: true,
-    });
+    if (icon === 'error') {
+      await Swal.fire({
+        icon: 'error',
+        title,
+        html: text ? `<p style="font-size:15px;color:#374151;margin-top:4px">${text}</p>` : undefined,
+        confirmButtonText: 'Try Again',
+        confirmButtonColor: '#dc2626',
+        timer: 5000,
+        timerProgressBar: true,
+        showConfirmButton: true,
+        customClass: { title: 'text-xl font-bold' },
+      });
+    } else {
+      await Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon,
+        title,
+        text,
+        timer: 1800,
+        showConfirmButton: false,
+        timerProgressBar: true,
+      });
+    }
   }
 
   private buildPrintHtml(

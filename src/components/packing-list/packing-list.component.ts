@@ -464,7 +464,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const loaded = fresh ?? packingList;
     this.viewPackingList.set(loaded);
     this.viewLines.set(lines);
-    this.agentName.set(loaded.agentName ?? '');
+    let agentName = loaded.agentName ?? '';
+    if (!agentName && loaded.clientId) {
+      const client = await this.clientService.getClientByIdOnce(loaded.clientId);
+      agentName = client?.agentName ?? '';
+    }
+    this.agentName.set(agentName);
     this.transport.set(loaded.transport ?? '');
     this.mode.set('view');
   }
@@ -478,7 +483,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const loaded = fresh ?? packingList;
     this.livePackingList.set(loaded);
     this.liveLines.set(lines);
-    this.agentName.set(loaded.agentName ?? '');
+    let agentName = loaded.agentName ?? '';
+    if (!agentName && loaded.clientId) {
+      const client = await this.clientService.getClientByIdOnce(loaded.clientId);
+      agentName = client?.agentName ?? '';
+    }
+    this.agentName.set(agentName);
     this.transport.set(loaded.transport ?? '');
     this.mode.set('live-pack');
     this.packFeedback.set('idle');
@@ -1733,14 +1743,15 @@ ${allDCHtml}
 
   private buildInvoiceHtml(invoice: Invoice): string {
     const B = 'border:1px solid #ccc;';
-    const th = (txt: string, extra = '') => '<th style="padding:4px 6px;' + B + 'background:#e8e8e8;font-size:9px;font-weight:700;text-align:center;' + extra + '">' + txt + '</th>';
-    const td = (txt: string | number, extra = '') => '<td style="padding:4px 6px;' + B + 'font-size:9px;text-align:center;' + extra + '">' + txt + '</td>';
+    const th = (txt: string, extra = '') => '<th style="padding:5px 7px;' + B + 'background:#e8e8e8;font-size:11px;font-weight:700;text-align:center;' + extra + '">' + txt + '</th>';
+    const td = (txt: string | number, extra = '') => '<td style="padding:5px 7px;' + B + 'font-size:11px;text-align:center;' + extra + '">' + txt + '</td>';
     const fmtDate = (raw: any): string => {
       if (!raw) return '-';
       try { const d = raw?.toDate ? raw.toDate() : new (Function.prototype.bind.call(Date, null, raw))(); return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }); } catch { return '-'; }
     };
+    const logoUrl = window.location.origin + '/assets/logo.jpeg';
     const addrLines = [invoice.clientAddress, [invoice.clientPlace, invoice.clientState].filter(Boolean).join(', ') + (invoice.clientZipCode ? ' - ' + invoice.clientZipCode : ''), invoice.clientPhone ? 'Mobile: ' + invoice.clientPhone : ''].filter(Boolean);
-    const clientAddrHtml = addrLines.map((l) => '<div style="font-size:9px;margin-top:1px">' + l + '</div>').join('');
+    const clientAddrHtml = addrLines.map((l) => '<div style="font-size:11px;margin-top:2px">' + l + '</div>').join('');
     const itemRows = invoice.items.map((item, i) => '<tr style="background:' + (i % 2 === 0 ? '#fff' : '#f9f9f9') + '">'
       + td(i + 1) + td(item.description, 'text-align:left;font-weight:600') + td(item.hsnSac)
       + td(item.discountPct) + td(item.taxRate) + td(item.mrp.toFixed(2)) + td(item.uom)
@@ -1749,66 +1760,66 @@ ${allDCHtml}
       + td(t.hsnSac) + td(t.taxableValue.toFixed(2), 'font-weight:700') + td(t.cgstRate) + td(t.cgstAmount.toFixed(2), 'font-weight:700')
       + td(t.sgstRate) + td(t.sgstAmount.toFixed(2), 'font-weight:700') + td(t.igstRate || '-') + td(t.igstAmount ? t.igstAmount.toFixed(2) : '-') + '</tr>').join('');
     return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice - ' + invoice.invoiceNo + '</title>'
-      + '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px;color:#000}table{width:100%;border-collapse:collapse}@media print{@page{size:A4;margin:10mm}}</style>'
+      + '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;color:#000}table{width:100%;border-collapse:collapse}@media print{@page{size:A4;margin:10mm}}</style>'
       + '</head><body><div style="padding:10px 14px">'
-      + '<div style="display:flex;align-items:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:6px">'
-      + '<div style="width:60px;height:60px;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:#1e3a8a;text-align:center;flex-shrink:0;margin-right:10px">TMG<br>CLOTHINGS</div>'
-      + '<div style="flex:1;text-align:center"><div style="font-size:20px;font-weight:900">TMG Clothings</div>'
-      + '<div style="font-size:9px;color:#333;margin-top:1px">Door No.334/2, Serayampalaym, Vellanaipatti Post, Coimbatore - 641048</div>'
-      + '<div style="font-size:9px;color:#333">Phone: 9842211787 | Email: order@tmggarments.in | GSTIN: 33AAYFT2559B1ZY</div></div>'
-      + '<div style="text-align:right;font-size:8px;color:#666;min-width:100px">Triplicate-For Assessee</div></div>'
-      + '<div style="font-size:13px;font-weight:700;text-align:center;letter-spacing:2px;text-decoration:underline;margin-bottom:8px">TAX INVOICE</div>'
-      + '<div style="display:flex;border:1px solid #aaa;margin-bottom:8px">'
-      + '<div style="flex:1;padding:6px 8px;border-right:1px solid #aaa">'
-      + '<div style="font-size:10px;font-weight:700;margin-bottom:3px">M/S : ' + invoice.clientName + '</div>'
-      + clientAddrHtml + (invoice.clientGstin ? '<div style="font-size:9px;margin-top:3px;font-weight:600">GSTIN: ' + invoice.clientGstin + '</div>' : '') + '</div>'
-      + '<div style="flex:1;padding:6px 8px;border-right:1px solid #aaa">'
-      + '<div style="font-size:9px;font-weight:700;margin-bottom:2px">Ship To : ' + invoice.clientName + '</div>'
+      + '<div style="display:flex;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:8px">'
+      + '<img src="' + logoUrl + '" style="width:90px;height:auto;border-radius:6px;flex-shrink:0;margin-right:14px;object-fit:contain" alt="TMG Logo" onerror="this.style.display=\'none\'">'
+      + '<div style="flex:1;text-align:center"><div style="font-size:22px;font-weight:900">TMG Clothings</div>'
+      + '<div style="font-size:11px;color:#333;margin-top:2px">Door No.334/2, Serayampalaym, Vellanaipatti Post, Coimbatore - 641048</div>'
+      + '<div style="font-size:11px;color:#333">Phone: 9842211787 | Email: order@tmggarments.in | GSTIN: 33AAYFT2559B1ZY</div></div>'
+      + '<div style="text-align:right;font-size:10px;color:#666;min-width:110px">Triplicate-For Assessee</div></div>'
+      + '<div style="font-size:15px;font-weight:700;text-align:center;letter-spacing:2px;text-decoration:underline;margin-bottom:10px">TAX INVOICE</div>'
+      + '<div style="display:flex;border:1px solid #aaa;margin-bottom:10px">'
+      + '<div style="flex:1;padding:7px 10px;border-right:1px solid #aaa">'
+      + '<div style="font-size:12px;font-weight:700;margin-bottom:4px">M/S : ' + invoice.clientName + '</div>'
+      + clientAddrHtml + (invoice.clientGstin ? '<div style="font-size:11px;margin-top:4px;font-weight:600">GSTIN: ' + invoice.clientGstin + '</div>' : '') + '</div>'
+      + '<div style="flex:1;padding:7px 10px;border-right:1px solid #aaa">'
+      + '<div style="font-size:11px;font-weight:700;margin-bottom:3px">Ship To : ' + invoice.clientName + '</div>'
       + clientAddrHtml + '</div>'
-      + '<div style="min-width:200px;padding:4px 8px"><table style="border-collapse:collapse;width:100%">'
-      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Invoice No.</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ' + invoice.invoiceNo + '</td></tr>'
-      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Invoice Date</td><td style="padding:2px 4px;font-size:9px">: ' + fmtDate(invoice.invoiceDate) + '</td></tr>'
-      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">DC No.</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ' + (invoice.dcNo || '—') + '</td></tr>'
-      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Order No.</td><td style="padding:2px 4px;font-size:9px;font-weight:600">: ' + invoice.orderNo + '</td></tr>'
-      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Destination</td><td style="padding:2px 4px;font-size:9px">: ' + (invoice.destination || '—') + '</td></tr>'
-      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Transport</td><td style="padding:2px 4px;font-size:9px">: ' + (invoice.transport || '—') + '</td></tr>'
-      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Doc No.</td><td style="padding:2px 4px;font-size:9px">: ' + (invoice.docNo || '—') + '</td></tr>'
-      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Vehicle No.</td><td style="padding:2px 4px;font-size:9px">: ' + (invoice.vehicleNo || '—') + '</td></tr>'
-      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Total Pkgs</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ' + invoice.totalPkgs + '</td></tr>'
-      + '<tr><td style="padding:2px 4px;font-size:9px;color:#555">Agent</td><td style="padding:2px 4px;font-size:9px">: ' + (invoice.agentName || '—') + '</td></tr>'
+      + '<div style="min-width:210px;padding:5px 10px"><table style="border-collapse:collapse;width:100%">'
+      + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Invoice No.</td><td style="padding:3px 4px;font-size:11px;font-weight:700">: ' + invoice.invoiceNo + '</td></tr>'
+      + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Invoice Date</td><td style="padding:3px 4px;font-size:11px">: ' + fmtDate(invoice.invoiceDate) + '</td></tr>'
+      + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">DC No.</td><td style="padding:3px 4px;font-size:11px;font-weight:700">: ' + (invoice.dcNo || '—') + '</td></tr>'
+      + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Order No.</td><td style="padding:3px 4px;font-size:11px;font-weight:600">: ' + invoice.orderNo + '</td></tr>'
+      + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Destination</td><td style="padding:3px 4px;font-size:11px">: ' + (invoice.destination || '—') + '</td></tr>'
+      + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Transport</td><td style="padding:3px 4px;font-size:11px">: ' + (invoice.transport || '—') + '</td></tr>'
+      + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Doc No.</td><td style="padding:3px 4px;font-size:11px">: ' + (invoice.docNo || '—') + '</td></tr>'
+      + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Vehicle No.</td><td style="padding:3px 4px;font-size:11px">: ' + (invoice.vehicleNo || '—') + '</td></tr>'
+      + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Total Pkgs</td><td style="padding:3px 4px;font-size:11px;font-weight:700">: ' + invoice.totalPkgs + '</td></tr>'
+      + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Agent</td><td style="padding:3px 4px;font-size:11px">: ' + (invoice.agentName || '—') + '</td></tr>'
       + '</table></div></div>'
-      + '<table style="margin-bottom:8px"><thead><tr>'
+      + '<table style="margin-bottom:10px"><thead><tr>'
       + th('S.No') + th('Description', 'text-align:left') + th('HSN/SAC') + th('Disc(%)') + th('Tax(%)') + th('MRP') + th('UOM') + th('Quantity') + th('Price') + th('Amount')
       + '</tr></thead><tbody>' + itemRows
-      + '<tr><td colspan="9" style="padding:4px 6px;' + B + 'font-weight:700;font-size:9px;text-align:right;background:#f0f0f0">Gross</td>'
-      + '<td style="padding:4px 6px;' + B + 'font-weight:900;font-size:10px;text-align:center;background:#f0f0f0">' + invoice.grossAmount.toFixed(2) + '</td></tr>'
+      + '<tr><td colspan="9" style="padding:5px 7px;' + B + 'font-weight:700;font-size:11px;text-align:right;background:#f0f0f0">Gross</td>'
+      + '<td style="padding:5px 7px;' + B + 'font-weight:900;font-size:12px;text-align:center;background:#f0f0f0">' + invoice.grossAmount.toFixed(2) + '</td></tr>'
       + '</tbody></table>'
-      + '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">'
-      + '<table style="width:280px;border-collapse:collapse">'
-      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Discount (' + invoice.discountPct + '%)</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.discountAmount.toFixed(2) + '</td></tr>'
-      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Taxable Value</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.taxableValue.toFixed(2) + '</td></tr>'
-      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">CGST (' + invoice.cgstRate + '%)</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">' + invoice.cgstAmount.toFixed(2) + '</td></tr>'
-      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">SGST (' + invoice.sgstRate + '%)</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">' + invoice.sgstAmount.toFixed(2) + '</td></tr>'
-      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd;font-weight:700">Total Tax Amount</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.totalTaxAmount.toFixed(2) + '</td></tr>'
-      + '<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Round Off</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">' + invoice.roundOff.toFixed(2) + '</td></tr>'
-      + '<tr style="background:#0f172a;color:#fff"><td style="padding:5px 8px;font-size:11px;font-weight:900;border:1px solid #0f172a">TOTAL</td>'
-      + '<td style="padding:5px 8px;font-size:12px;font-weight:900;text-align:right;border:1px solid #0f172a">&#x20B9; ' + invoice.totalAmount.toLocaleString('en-IN') + '</td></tr>'
+      + '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">'
+      + '<table style="width:300px;border-collapse:collapse">'
+      + '<tr><td style="padding:4px 10px;font-size:11px;border:1px solid #ddd">Discount (' + invoice.discountPct + '%)</td><td style="padding:4px 10px;font-size:11px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.discountAmount.toFixed(2) + '</td></tr>'
+      + '<tr><td style="padding:4px 10px;font-size:11px;border:1px solid #ddd">Taxable Value</td><td style="padding:4px 10px;font-size:11px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.taxableValue.toFixed(2) + '</td></tr>'
+      + '<tr><td style="padding:4px 10px;font-size:11px;border:1px solid #ddd">CGST (' + invoice.cgstRate + '%)</td><td style="padding:4px 10px;font-size:11px;text-align:right;border:1px solid #ddd">' + invoice.cgstAmount.toFixed(2) + '</td></tr>'
+      + '<tr><td style="padding:4px 10px;font-size:11px;border:1px solid #ddd">SGST (' + invoice.sgstRate + '%)</td><td style="padding:4px 10px;font-size:11px;text-align:right;border:1px solid #ddd">' + invoice.sgstAmount.toFixed(2) + '</td></tr>'
+      + '<tr><td style="padding:4px 10px;font-size:11px;border:1px solid #ddd;font-weight:700">Total Tax Amount</td><td style="padding:4px 10px;font-size:11px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.totalTaxAmount.toFixed(2) + '</td></tr>'
+      + '<tr><td style="padding:4px 10px;font-size:11px;border:1px solid #ddd">Round Off</td><td style="padding:4px 10px;font-size:11px;text-align:right;border:1px solid #ddd">' + invoice.roundOff.toFixed(2) + '</td></tr>'
+      + '<tr style="background:#0f172a;color:#fff"><td style="padding:6px 10px;font-size:13px;font-weight:900;border:1px solid #0f172a">TOTAL</td>'
+      + '<td style="padding:6px 10px;font-size:14px;font-weight:900;text-align:right;border:1px solid #0f172a">&#x20B9; ' + invoice.totalAmount.toLocaleString('en-IN') + '</td></tr>'
       + '</table></div>'
-      + '<div style="border:1px solid #ccc;padding:5px 8px;margin-bottom:8px;font-size:9px"><strong>Rupees :</strong> ' + invoice.amountInWords + '</div>'
-      + '<table style="margin-bottom:8px"><thead><tr>'
+      + '<div style="border:1px solid #ccc;padding:6px 10px;margin-bottom:10px;font-size:11px"><strong>Rupees :</strong> ' + invoice.amountInWords + '</div>'
+      + '<table style="margin-bottom:10px"><thead><tr>'
       + th('HSN/SAC') + th('Taxable Value') + th('CGST %') + th('CGST Amt') + th('SGST %') + th('SGST Amt') + th('IGST %') + th('IGST Amt')
       + '</tr></thead><tbody>' + taxSummaryRows
       + '<tr style="background:#f0f0f0">' + td('Total', 'font-weight:700') + td(invoice.taxableValue.toFixed(2), 'font-weight:700') + td('') + td(invoice.cgstAmount.toFixed(2), 'font-weight:700') + td('') + td(invoice.sgstAmount.toFixed(2), 'font-weight:700') + td('') + td(invoice.igstAmount ? invoice.igstAmount.toFixed(2) : '-') + '</tr>'
       + '</tbody></table>'
-      + '<div style="font-size:8px;border:1px solid #ccc;padding:4px 8px;margin-bottom:8px">Amount of Tax (in words) : ' + this.amountToWords(invoice.totalTaxAmount) + '</div>'
-      + '<div style="border:1px solid #ccc;padding:5px 8px;margin-bottom:8px;font-size:9px"><div style="font-weight:700;margin-bottom:3px">Company\'s Bank Details :</div>'
+      + '<div style="font-size:10px;border:1px solid #ccc;padding:5px 10px;margin-bottom:10px">Amount of Tax (in words) : ' + this.amountToWords(invoice.totalTaxAmount) + '</div>'
+      + '<div style="border:1px solid #ccc;padding:6px 10px;margin-bottom:10px;font-size:11px"><div style="font-weight:700;margin-bottom:4px">Company\'s Bank Details :</div>'
       + '<div>Name of the Account : TMG Clothings</div><div>A/C No : 44358238258</div>'
       + '<div>IFSC Code : SBIN0061170</div><div>Bank Name : STATE BANK OF INDIA / Branch : Siruthozhil Branch, Kovilpatti</div></div>'
-      + '<div style="font-size:9px;margin-bottom:12px">Remarks :</div>'
-      + '<div style="display:flex;justify-content:space-between;margin-top:30px">'
-      + '<div style="text-align:center"><div style="border-top:1px solid #555;padding-top:4px;font-size:9px;color:#444;width:120px">Checked By</div></div>'
-      + '<div style="text-align:center"><div style="font-size:10px;font-weight:700;color:#0f172a;margin-bottom:2px">For TMG Clothings</div>'
-      + '<div style="border-top:1px solid #555;padding-top:4px;font-size:9px;color:#444;width:150px;margin-top:30px">Authorised Signatory</div></div>'
+      + '<div style="font-size:11px;margin-bottom:14px">Remarks :</div>'
+      + '<div style="display:flex;justify-content:space-between;margin-top:34px">'
+      + '<div style="text-align:center"><div style="border-top:1px solid #555;padding-top:5px;font-size:11px;color:#444;width:130px">Checked By</div></div>'
+      + '<div style="text-align:center"><div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:2px">For TMG Clothings</div>'
+      + '<div style="border-top:1px solid #555;padding-top:5px;font-size:11px;color:#444;width:160px;margin-top:34px">Authorised Signatory</div></div>'
       + '</div></div></body></html>';
   }
 
