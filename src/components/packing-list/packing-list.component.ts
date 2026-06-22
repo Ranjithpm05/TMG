@@ -835,9 +835,26 @@ export class PackingListComponent implements OnInit, OnDestroy {
   }
 
   async reprintInvoice(invoice: Invoice): Promise<void> {
-    const html = this.buildInvoiceHtml(invoice);
+    const logoDataUri = await this.fetchLogoDataUri();
+    const html = this.buildInvoiceHtml(invoice, logoDataUri);
     const win = window.open('', '_blank', 'width=1100,height=820');
     if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+  }
+
+  private async fetchLogoDataUri(): Promise<string> {
+    try {
+      const res = await fetch('/assets/logo.jpeg');
+      if (!res.ok) return '';
+      const blob = await res.blob();
+      return new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return '';
+    }
   }
 
   async downloadInvoiceExcel(invoice: Invoice): Promise<void> {
@@ -1741,7 +1758,7 @@ ${allDCHtml}
       + '<div style="font-size:16px;font-weight:900;color:#047857;line-height:1">' + carton.totalQty + ' PCS</div></div></div></div>';
   }
 
-  private buildInvoiceHtml(invoice: Invoice): string {
+  private buildInvoiceHtml(invoice: Invoice, logoDataUri = ''): string {
     const B = 'border:1px solid #ccc;';
     const th = (txt: string, extra = '') => '<th style="padding:5px 7px;' + B + 'background:#e8e8e8;font-size:11px;font-weight:700;text-align:center;' + extra + '">' + txt + '</th>';
     const td = (txt: string | number, extra = '') => '<td style="padding:5px 7px;' + B + 'font-size:11px;text-align:center;' + extra + '">' + txt + '</td>';
@@ -1749,7 +1766,9 @@ ${allDCHtml}
       if (!raw) return '-';
       try { const d = raw?.toDate ? raw.toDate() : new (Function.prototype.bind.call(Date, null, raw))(); return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }); } catch { return '-'; }
     };
-    const logoUrl = window.location.origin + '/assets/logo.jpeg';
+    const logoHtml = logoDataUri
+      ? '<img src="' + logoDataUri + '" style="width:90px;height:auto;border-radius:6px;flex-shrink:0;margin-right:14px;object-fit:contain" alt="TMG Logo">'
+      : '<div style="width:80px;height:60px;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:#1e3a8a;text-align:center;flex-shrink:0;margin-right:14px">TMG<br>CLOTHINGS</div>';
     const addrLines = [invoice.clientAddress, [invoice.clientPlace, invoice.clientState].filter(Boolean).join(', ') + (invoice.clientZipCode ? ' - ' + invoice.clientZipCode : ''), invoice.clientPhone ? 'Mobile: ' + invoice.clientPhone : ''].filter(Boolean);
     const clientAddrHtml = addrLines.map((l) => '<div style="font-size:11px;margin-top:2px">' + l + '</div>').join('');
     const itemRows = invoice.items.map((item, i) => '<tr style="background:' + (i % 2 === 0 ? '#fff' : '#f9f9f9') + '">'
@@ -1763,7 +1782,7 @@ ${allDCHtml}
       + '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;color:#000}table{width:100%;border-collapse:collapse}@media print{@page{size:A4;margin:10mm}}</style>'
       + '</head><body><div style="padding:10px 14px">'
       + '<div style="display:flex;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:8px">'
-      + '<img src="' + logoUrl + '" style="width:90px;height:auto;border-radius:6px;flex-shrink:0;margin-right:14px;object-fit:contain" alt="TMG Logo" onerror="this.style.display=\'none\'">'
+      + logoHtml
       + '<div style="flex:1;text-align:center"><div style="font-size:22px;font-weight:900">TMG Clothings</div>'
       + '<div style="font-size:11px;color:#333;margin-top:2px">Door No.334/2, Serayampalaym, Vellanaipatti Post, Coimbatore - 641048</div>'
       + '<div style="font-size:11px;color:#333">Phone: 9842211787 | Email: order@tmggarments.in | GSTIN: 33AAYFT2559B1ZY</div></div>'
