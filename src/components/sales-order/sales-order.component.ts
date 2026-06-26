@@ -25,6 +25,7 @@ type ConsolidatedEntryState = {
   selectedSleeveType: 'Full' | 'Half' | null;
   allPossibleSizes: string[];
   sizeQuantities: Record<string, string>;
+  shirtSizeQuantities: Record<string, { full: string; half: string }>;
   portion: string;
 };
 
@@ -37,6 +38,7 @@ const EMPTY_CONSOLIDATED_ENTRY_STATE: ConsolidatedEntryState = {
   selectedSleeveType: null,
   allPossibleSizes: [],
   sizeQuantities: {},
+  shirtSizeQuantities: {},
   portion: 'All',
 };
 
@@ -154,10 +156,13 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   isConsolidatedAddDisabled = computed(() => {
     const state = this.consolidatedEntryState();
     if (!state.isActive) return true;
+    if (state.containsShirt) {
+      return !Object.values(state.shirtSizeQuantities).some(
+        sq => this.parseFractionalQuantity(sq.full) > 0 || this.parseFractionalQuantity(sq.half) > 0
+      );
+    }
     const hasValidSelection = Object.values(state.sizeQuantities).some(qty => this.parseFractionalQuantity(qty) > 0);
-    if (!hasValidSelection) return true;
-    if (state.containsShirt && !state.selectedSleeveType) return true;
-    return false;
+    return !hasValidSelection;
   });
 
   filteredClientsForDropdown = computed(() => {
@@ -966,6 +971,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       selectedSleeveType: null,
       allPossibleSizes: uniqueSizes,
       sizeQuantities: {},
+      shirtSizeQuantities: {},
       portion: 'All',
     });
 
@@ -1228,16 +1234,21 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       selectedSleeveType: determinedSleeveType,
       allPossibleSizes: uniqueSizes,
       sizeQuantities: {},
+      shirtSizeQuantities: {},
       portion: 'All',
     });
   }
 
   addConsolidatedItemsToOrder() {
     const state = this.consolidatedEntryState();
-    const { sizeQuantities, selectedSleeveType, scannedBarcodes, designs } = state;
+    const { sizeQuantities, shirtSizeQuantities, scannedBarcodes, designs } = state;
 
-    if (Object.keys(sizeQuantities).length === 0 || (state.containsShirt && !selectedSleeveType)) {
-      Swal.fire({ icon: 'warning', title: 'Incomplete Selection', text: 'Please select at least one size and specify a sleeve type for shirts.' });
+    if (state.containsShirt && Object.keys(shirtSizeQuantities).length === 0) {
+      Swal.fire({ icon: 'warning', title: 'Incomplete Selection', text: 'Please enter at least one size quantity for Full or Half sleeve.' });
+      return;
+    }
+    if (!state.containsShirt && Object.keys(sizeQuantities).length === 0) {
+      Swal.fire({ icon: 'warning', title: 'Incomplete Selection', text: 'Please select at least one size.' });
       return;
     }
 
@@ -1268,53 +1279,93 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
     let itemsAddedCount = 0;
 
-    for (const [size, quantityRuleString] of Object.entries(sizeQuantities)) {
-      const trimmedRule = (quantityRuleString || '0').trim();
+    if (state.containsShirt) {
+      // ── SHIRT MODE: per-size Full + Half sleeve quantities ─────────────────
+      for (const [size, { full: fullQtyStr, half: halfQtyStr }] of Object.entries(shirtSizeQuantities)) {
+        const sleeveEntries: Array<{ sleeveType: 'Full' | 'Half'; qtyStr: string }> = [
+          { sleeveType: 'Full', qtyStr: (fullQtyStr || '').trim() },
+          { sleeveType: 'Half', qtyStr: (halfQtyStr || '').trim() },
+        ];
 
-      if (trimmedRule.includes('/')) {
-        // ── FRACTION MODE ──────────────────────────────────────────────────────
-        // "N/D" means: apply qty 1 to round(totalDesigns × N/D) designs.
-        // Example: 6 designs, "1/4" → round(6 × 0.25) = 2 designs get qty 1.
-        // Example: 6 designs, "3/4" → round(6 × 0.75) = 5 designs get qty 1.
-        const parts = trimmedRule.split('/');
-        const numerator = parseInt(parts[0], 10);
-        const denominator = parseInt(parts[1], 10);
+        for (const { sleeveType, qtyStr } of sleeveEntries) {
+          if (!qtyStr || qtyStr === '0') continue;
 
-        if (isNaN(numerator) || isNaN(denominator) || denominator === 0 || numerator <= 0) continue;
+          if (qtyStr.includes('/')) {
+            // Fraction mode: apply qty 1 to round(N × numerator/denominator) designs
+            const parts = qtyStr.split('/');
+            const numerator = parseInt(parts[0], 10);
+            const denominator = parseInt(parts[1], 10);
+            if (isNaN(numerator) || isNaN(denominator) || denominator === 0 || numerator <= 0) continue;
 
-        const designsToApply = Math.round(finalDesigns.length * numerator / denominator);
-        if (designsToApply <= 0) continue;
+            const designsToApply = Math.round(finalDesigns.length * numerator / denominator);
+            if (designsToApply <= 0) continue;
 
-        // Apply qty 1 to the first N qualifying designs
-        let applied = 0;
-        for (const design of finalDesigns) {
-          if (applied >= designsToApply) break;
-          const isShirt = design.group?.toUpperCase().includes('SHIRT');
-          const sizeVar = design.sizes.find(s =>
-            isShirt ? s.size === size && s.sleeveType === selectedSleeveType : s.size === size
-          );
-          if (sizeVar) {
-            this.addOrUpdateOrderItem(design, sizeVar, 1);
-            itemsAddedCount++;
-            applied++;
+            let applied = 0;
+            for (const design of finalDesigns) {
+              if (applied >= designsToApply) break;
+              if (!design.group?.toUpperCase().includes('SHIRT')) continue;
+              const sizeVar = design.sizes.find(s => s.size === size && s.sleeveType === sleeveType);
+              if (sizeVar) {
+                this.addOrUpdateOrderItem(design, sizeVar, 1);
+                itemsAddedCount++;
+                applied++;
+              }
+            }
+          } else {
+            // Literal mode: every shirt design gets exactly that qty
+            const literalValue = Math.round(parseFloat(qtyStr));
+            if (isNaN(literalValue) || literalValue <= 0) continue;
+
+            for (const design of finalDesigns) {
+              if (!design.group?.toUpperCase().includes('SHIRT')) continue;
+              const sizeVar = design.sizes.find(s => s.size === size && s.sleeveType === sleeveType);
+              if (sizeVar) {
+                this.addOrUpdateOrderItem(design, sizeVar, literalValue);
+                itemsAddedCount++;
+              }
+            }
           }
         }
+      }
 
-      } else {
-        // ── LITERAL MODE ───────────────────────────────────────────────────────
-        // A plain number means every design gets exactly that qty.
-        // Example: 6 designs, "2" → each of the 6 designs gets qty 2.
-        const literalValue = Math.round(parseFloat(trimmedRule));
-        if (isNaN(literalValue) || literalValue <= 0) continue;
+    } else {
+      // ── STANDARD MODE: single qty per size ────────────────────────────────
+      for (const [size, quantityRuleString] of Object.entries(sizeQuantities)) {
+        const trimmedRule = (quantityRuleString || '0').trim();
 
-        for (const design of finalDesigns) {
-          const isShirt = design.group?.toUpperCase().includes('SHIRT');
-          const sizeVar = design.sizes.find(s =>
-            isShirt ? s.size === size && s.sleeveType === selectedSleeveType : s.size === size
-          );
-          if (sizeVar) {
-            this.addOrUpdateOrderItem(design, sizeVar, literalValue);
-            itemsAddedCount++;
+        if (trimmedRule.includes('/')) {
+          // "N/D" means: apply qty 1 to round(totalDesigns × N/D) designs.
+          const parts = trimmedRule.split('/');
+          const numerator = parseInt(parts[0], 10);
+          const denominator = parseInt(parts[1], 10);
+
+          if (isNaN(numerator) || isNaN(denominator) || denominator === 0 || numerator <= 0) continue;
+
+          const designsToApply = Math.round(finalDesigns.length * numerator / denominator);
+          if (designsToApply <= 0) continue;
+
+          let applied = 0;
+          for (const design of finalDesigns) {
+            if (applied >= designsToApply) break;
+            const sizeVar = design.sizes.find(s => s.size === size);
+            if (sizeVar) {
+              this.addOrUpdateOrderItem(design, sizeVar, 1);
+              itemsAddedCount++;
+              applied++;
+            }
+          }
+
+        } else {
+          // A plain number means every design gets exactly that qty.
+          const literalValue = Math.round(parseFloat(trimmedRule));
+          if (isNaN(literalValue) || literalValue <= 0) continue;
+
+          for (const design of finalDesigns) {
+            const sizeVar = design.sizes.find(s => s.size === size);
+            if (sizeVar) {
+              this.addOrUpdateOrderItem(design, sizeVar, literalValue);
+              itemsAddedCount++;
+            }
           }
         }
       }
@@ -1399,6 +1450,22 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     });
   }
 
+  getShirtSizeQty(size: string, sleeveType: 'Full' | 'Half'): string {
+    const entry = this.consolidatedEntryState().shirtSizeQuantities[size];
+    if (!entry) return '';
+    return sleeveType === 'Full' ? (entry.full || '') : (entry.half || '');
+  }
+
+  updateShirtSizeQty(size: string, sleeveType: 'Full' | 'Half', value: string) {
+    this.consolidatedEntryState.update(state => {
+      const existing = state.shirtSizeQuantities[size] ?? { full: '', half: '' };
+      const updated = sleeveType === 'Full'
+        ? { ...existing, full: value }
+        : { ...existing, half: value };
+      return { ...state, shirtSizeQuantities: { ...state.shirtSizeQuantities, [size]: updated } };
+    });
+  }
+
   // --- Order Save/Delete ---
   saveOrder() {
     if (!this.selectedClientId()) {
@@ -1447,6 +1514,48 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
         error: (err) => Swal.fire({ icon: 'error', title: 'Error', text: err.message })
       });
     }
+  }
+
+  showSaveAsForm(order: SalesOrder) {
+    // Collect unique designs from the source order's items
+    const designMap = new Map<string, Design>();
+    for (const item of order.items) {
+      if (item.design?.id && !designMap.has(item.design.id)) {
+        designMap.set(item.design.id, item.design);
+      }
+    }
+    const designs = Array.from(designMap.values());
+
+    if (designs.length === 0) {
+      Swal.fire({ icon: 'warning', title: 'No Designs', text: 'This order has no designs to copy.' });
+      return;
+    }
+
+    const containsShirt = designs.some(d => d.group?.toUpperCase().includes('SHIRT'));
+    const uniqueSizes = [...new Set(designs.flatMap(d => d.sizes.map(s => s.size)))].sort((a, b) =>
+      String(a).localeCompare(String(b), undefined, { numeric: true })
+    );
+
+    // Open a fresh new-order form with the same client pre-selected
+    this.editableOrder.set(null);
+    this.orderItems.set([]);
+    this.selectedClientId.set(order.clientId);
+    this.deliveryDate.set('');
+    this.mode.set('form');
+
+    // Immediately open the size/qty entry modal with the same designs but empty quantities
+    this.consolidatedEntryState.set({
+      isActive: true,
+      designs,
+      scannedBarcodes: designs.map(d => d.sizes[0]?.BARCODE).filter((b): b is string => !!b),
+      containsShirt,
+      determinedSleeveType: null,
+      selectedSleeveType: null,
+      allPossibleSizes: uniqueSizes,
+      sizeQuantities: {},
+      shirtSizeQuantities: {},
+      portion: 'All',
+    });
   }
 
   requestDeleteOrder(order: SalesOrder) {
