@@ -99,6 +99,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     consolidatedEntryState = signal<ConsolidatedEntryState>(EMPTY_CONSOLIDATED_ENTRY_STATE);
     scanFeedback = signal<'idle' | 'success' | 'duplicate'>('idle');
     lastAddedBarcode = signal<string | null>(null);
+    collapsedScanGroups = signal<Set<string>>(new Set());
 
     // --- State for Manual Design Selection ---
     manualDesignSelectionState = signal<ManualDesignSelectionState>(EMPTY_MANUAL_SELECTION_STATE);
@@ -252,9 +253,28 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   isTorchOn = signal(false);
   // offscreen canvas reused across frames to avoid GC pressure
   private enhanceCanvas: HTMLCanvasElement | null = null;
+  private audioCtx: AudioContext | null = null;
 
   // --- Print state ---
   printOrder = signal<SalesOrder | null>(null);
+
+  scannedBarcodesGroupedByItemGroup = computed(() => {
+    const barcodes = this.scannedBarcodes();
+    if (barcodes.length === 0) return [];
+
+    const barcodeToDesign = new Map<string, Design>();
+    this.designs().forEach(d => d.sizes.forEach(s => barcodeToDesign.set(s.BARCODE, d)));
+
+    const groups = new Map<string, { barcode: string; index: number }[]>();
+    barcodes.forEach((barcode, index) => {
+      const design = barcodeToDesign.get(barcode.trim());
+      const group = design?.group || 'Unknown';
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group)!.push({ barcode, index });
+    });
+
+    return Array.from(groups.entries()).map(([group, items]) => ({ group, items }));
+  });
 
   orderItemsGroupedByDesign = computed(() => {
     const items = this.orderItems();
@@ -985,6 +1005,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   async startBatchScan() {
     this.isBatchScanning.set(true);
     this.scannedBarcodes.set([]);
+    this.collapsedScanGroups.set(new Set());
     this.lastScannedTime = 0;
     this.lastTickTime = 0;
     this.isTorchAvailable.set(false);
@@ -1149,6 +1170,28 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     return new ImageData(d, imageData.width, imageData.height);
   }
 
+  private playSuccessBeep() {
+    try {
+      if (!this.audioCtx) {
+        this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = this.audioCtx;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1046, ctx.currentTime);       // C6 — clear, scanner-like tone
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + 0.008);  // fast attack
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12); // quick decay
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.12);
+    } catch {
+      // Audio not available — silently skip
+    }
+  }
+
   addBarcodeToBatch(barcode: string) {
     const now = Date.now();
     if (now - this.lastScannedTime < this.SCAN_DEBOUNCE) return;
@@ -1163,7 +1206,17 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.lastAddedBarcode.set(barcode);
     setTimeout(() => this.lastAddedBarcode.set(null), 600);
     this.scanFeedback.set('success');
+    this.playSuccessBeep();
     setTimeout(() => this.scanFeedback.set('idle'), 400);
+  }
+
+  toggleScanGroup(group: string) {
+    this.collapsedScanGroups.update(s => {
+      const next = new Set(s);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
   }
 
   removeScannedBarcode(index: number) {
@@ -1183,6 +1236,8 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.torchEnabled = false;
     this.torchTrack = null;
     this.enhanceCanvas = null;
+    this.audioCtx?.close().catch(() => {});
+    this.audioCtx = null;
   }
 
   processScannedBarcodes() {

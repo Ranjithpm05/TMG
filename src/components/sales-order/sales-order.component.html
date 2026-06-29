@@ -480,21 +480,43 @@
 
       <div class="overflow-y-auto flex-1 px-4 py-2">
         @if (scannedBarcodes().length > 0) {
-          <ul class="space-y-1">
-            @for (code of scannedBarcodes(); track code; let i = $index) {
-              <li class="flex justify-between items-center rounded-lg px-3 py-2 text-sm transition-all duration-300"
-                  [class.bg-green-100]="code === lastAddedBarcode()"
-                  [class.scale-105]="code === lastAddedBarcode()"
-                  [class.bg-gray-50]="code !== lastAddedBarcode()">
-                <span class="font-mono text-gray-700 truncate mr-2">{{ code }}</span>
-                <button (click)="removeScannedBarcode(i)" class="text-red-400 hover:text-red-600 flex-shrink-0">
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                  </svg>
+          <div class="space-y-2">
+            @for (group of scannedBarcodesGroupedByItemGroup(); track group.group) {
+              @let isCollapsed = collapsedScanGroups().has(group.group);
+              <div class="rounded-lg overflow-hidden border border-gray-200">
+                <!-- Group header -->
+                <button type="button"
+                        (click)="toggleScanGroup(group.group)"
+                        class="w-full flex items-center justify-between px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-sm font-semibold text-indigo-800 transition-colors">
+                  <span>{{ group.group }}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="bg-indigo-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">{{ group.items.length }}</span>
+                    <svg class="w-3.5 h-3.5 transition-transform" [class.rotate-180]="!isCollapsed" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </div>
                 </button>
-              </li>
+                <!-- Group items -->
+                @if (!isCollapsed) {
+                  <ul class="divide-y divide-gray-100">
+                    @for (item of group.items; track item.barcode) {
+                      <li class="flex justify-between items-center px-3 py-2 text-sm transition-all duration-300"
+                          [class.bg-green-100]="item.barcode === lastAddedBarcode()"
+                          [class.scale-105]="item.barcode === lastAddedBarcode()"
+                          [class.bg-white]="item.barcode !== lastAddedBarcode()">
+                        <span class="font-mono text-gray-700 truncate mr-2">{{ item.barcode }}</span>
+                        <button (click)="removeScannedBarcode(item.index)" class="text-red-400 hover:text-red-600 flex-shrink-0">
+                          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                          </svg>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
             }
-          </ul>
+          </div>
         } @else {
           <p class="text-center text-gray-400 text-sm py-4">Point camera at a barcode to begin scanning.</p>
         }
