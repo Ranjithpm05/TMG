@@ -748,9 +748,9 @@
       </div>
 
       <!-- Order Items List -->
-      <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
-        <h3 class="text-lg font-semibold text-gray-700 mb-4">Order Items</h3>
-        <div class="space-y-4">
+      <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8 flex flex-col max-h-[30rem] sm:max-h-[42rem]">
+        <h3 class="text-lg font-semibold text-gray-700 mb-4 flex-shrink-0">Order Items</h3>
+        <div class="space-y-4 overflow-y-auto min-h-0 overscroll-contain pr-1">
           @if(orderItemsGroupedByDesign().length === 0) {
             <div class="text-center py-10 border-2 border-dashed border-gray-200 rounded-lg">
               <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
