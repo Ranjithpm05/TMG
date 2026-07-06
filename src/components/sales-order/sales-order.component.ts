@@ -22,8 +22,8 @@ type DesignRatio = {
   shirtSizeQuantities: Record<string, { full: string; half: string }>;
 };
 
-type ItemGroupEntry = {
-  groupName: string;
+type FabricGroupEntry = {
+  fabricDescription: string;
   containsShirt: boolean;
   allPossibleSizes: string[];
   designRatios: DesignRatio[];
@@ -35,7 +35,7 @@ type ItemGroupEntry = {
 type ConsolidatedEntryState = {
   isActive: boolean;
   scannedBarcodes: string[];
-  groups: ItemGroupEntry[];
+  groups: FabricGroupEntry[];
 };
 
 const EMPTY_CONSOLIDATED_ENTRY_STATE: ConsolidatedEntryState = {
@@ -1240,20 +1240,20 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   // --- Consolidated Entry: group-based quantity editing ---
   // ============================================================
 
-  private buildGroupsFromDesigns(designs: Design[]): ItemGroupEntry[] {
+  private buildGroupsFromDesigns(designs: Design[]): FabricGroupEntry[] {
     const groupMap = new Map<string, Design[]>();
     for (const design of designs) {
-      const g = design.group?.trim() || 'Uncategorized';
+      const g = design.sizes[0]?.fabricType?.trim() || 'Uncategorized';
       if (!groupMap.has(g)) groupMap.set(g, []);
       groupMap.get(g)!.push(design);
     }
-    return Array.from(groupMap.entries()).map(([groupName, groupDesigns]) => {
+    return Array.from(groupMap.entries()).map(([fabricDescription, groupDesigns]) => {
       const containsShirt = groupDesigns.some(d => d.group?.toUpperCase().includes('SHIRT'));
       const allPossibleSizes = [...new Set(groupDesigns.flatMap(d => d.sizes.map(s => s.size)))].sort(
         (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })
       );
       return {
-        groupName,
+        fabricDescription,
         containsShirt,
         allPossibleSizes,
         designRatios: groupDesigns.map(d => ({ design: d, sizeQuantities: {}, shirtSizeQuantities: {} })),
