@@ -1,0 +1,241 @@
+<div class="animate-fade-in">
+  <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-4 border-b pb-4 mb-6">
+      <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Reports</h2>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+      <div class="flex flex-wrap items-end gap-3 mb-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">From</label>
+          <input type="date" [ngModel]="startDate()" (ngModelChange)="updateStartDate($event)"
+                 class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">To</label>
+          <input type="date" [ngModel]="endDate()" (ngModelChange)="updateEndDate($event)"
+                 class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div class="flex gap-2">
+          <button (click)="setPreset(1)" class="px-3 py-2 text-xs font-medium rounded-md bg-white border border-gray-300 hover:bg-gray-100">Today</button>
+          <button (click)="setPreset(7)" class="px-3 py-2 text-xs font-medium rounded-md bg-white border border-gray-300 hover:bg-gray-100">7 Days</button>
+          <button (click)="resetToCurrentMonth()" class="px-3 py-2 text-xs font-medium rounded-md bg-white border border-gray-300 hover:bg-gray-100">This Month</button>
+          <button (click)="setPreset(365)" class="px-3 py-2 text-xs font-medium rounded-md bg-white border border-gray-300 hover:bg-gray-100">This Year</button>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Customer</label>
+          <select [ngModel]="selectedCustomerId()" (ngModelChange)="selectedCustomerId.set($event)"
+                  class="block w-48 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="">All Customers</option>
+            @for (client of sortedClients(); track client.id) {
+              <option [value]="client.id">{{ client.clientName }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Agent</label>
+          <select [ngModel]="selectedAgent()" (ngModelChange)="selectedAgent.set($event)"
+                  class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="">All Agents</option>
+            @for (agent of agentOptions(); track agent) {
+              <option [value]="agent">{{ agent }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Product / Group</label>
+          <select [ngModel]="selectedGroup()" (ngModelChange)="selectedGroup.set($event)"
+                  class="block w-44 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="">All Products</option>
+            @for (group of groupOptions(); track group) {
+              <option [value]="group">{{ group }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Design / Style No</label>
+          <input type="text" placeholder="Search style no..." [ngModel]="designSearch()" (ngModelChange)="designSearch.set($event)"
+                 class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
+          <select [ngModel]="selectedStatus()" (ngModelChange)="selectedStatus.set($event)"
+                  class="block w-36 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="">All Status</option>
+            @for (status of statusOptions; track status) {
+              <option [value]="status">{{ status }}</option>
+            }
+          </select>
+        </div>
+        <button (click)="resetFilters()" class="px-3 py-2 text-xs font-medium rounded-md bg-white border border-gray-300 hover:bg-gray-100 text-gray-600">
+          Clear Filters
+        </button>
+      </div>
+    </div>
+
+    <!-- Tabs + export actions -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+      <div class="flex flex-wrap gap-2">
+        <button (click)="setTab('customer')" [class]="activeReport() === 'customer' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'"
+                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">Customer Wise</button>
+        <button (click)="setTab('agent')" [class]="activeReport() === 'agent' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'"
+                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">Agent Wise</button>
+        <button (click)="setTab('product')" [class]="activeReport() === 'product' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'"
+                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">Product Wise</button>
+        <button (click)="setTab('exceed')" [class]="activeReport() === 'exceed' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'"
+                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">Exceed Order</button>
+      </div>
+      <div class="flex gap-2">
+        <button (click)="exportExcel()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+          Export Excel
+        </button>
+        <button (click)="exportPdf()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+          Export PDF
+        </button>
+        <button (click)="printReport()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+          Print
+        </button>
+      </div>
+    </div>
+
+    <h3 class="text-lg font-semibold text-gray-800 mb-1">{{ getReportTitle() }}</h3>
+    <p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
+
+    <!-- Customer / Agent wise matrix reports -->
+    @if (activeReport() === 'customer' || activeReport() === 'agent') {
+      @let matrix = activeReport() === 'customer' ? report1() : report2();
+      <div class="overflow-x-auto border border-gray-200 rounded-lg">
+        @if (matrix.rows.length > 0) {
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-800 text-white">
+              <tr>
+                <th class="px-3 py-3 text-center font-medium">#</th>
+                <th class="px-4 py-3 text-left font-medium">{{ activeReport() === 'customer' ? 'Customer Name' : 'Agent Name' }}</th>
+                @for (group of matrix.groups; track group) {
+                  <th class="px-3 py-3 text-center font-medium whitespace-nowrap">{{ group }}</th>
+                }
+                <th class="px-3 py-3 text-center font-medium">Total Qty</th>
+                <th class="px-4 py-3 text-right font-medium">Total Order Value</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              @for (row of matrix.rows; track row.key; let i = $index) {
+                <tr class="hover:bg-gray-50">
+                  <td class="px-3 py-2 text-center text-gray-500">{{ i + 1 }}</td>
+                  <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ row.label }}</td>
+                  @for (group of matrix.groups; track group) {
+                    <td class="px-3 py-2 text-center text-gray-700">{{ row.qtyByGroup[group] ?? 0 }}</td>
+                  }
+                  <td class="px-3 py-2 text-center font-semibold text-gray-900">{{ row.totalQty }}</td>
+                  <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ row.totalValue | number:'1.2-2' }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot class="bg-gray-100 font-bold">
+              <tr>
+                <td class="px-3 py-3"></td>
+                <td class="px-4 py-3 text-gray-900">Grand Total</td>
+                @for (group of matrix.groups; track group) {
+                  <td class="px-3 py-3 text-center text-gray-900">{{ matrix.grandTotal.qtyByGroup[group] ?? 0 }}</td>
+                }
+                <td class="px-3 py-3 text-center text-gray-900">{{ matrix.grandTotal.totalQty }}</td>
+                <td class="px-4 py-3 text-right text-gray-900">{{ matrix.grandTotal.totalValue | number:'1.2-2' }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        } @else {
+          <div class="text-center py-10">
+            <p class="text-sm text-gray-500">No orders match the current filters.</p>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Product wise summary -->
+    @if (activeReport() === 'product') {
+      @let product = report3();
+      <div class="overflow-x-auto border border-gray-200 rounded-lg">
+        @if (product.rows.length > 0) {
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-800 text-white">
+              <tr>
+                <th class="px-3 py-3 text-center font-medium">#</th>
+                <th class="px-4 py-3 text-left font-medium">Product / Group</th>
+                <th class="px-3 py-3 text-center font-medium">Order Qty</th>
+                <th class="px-4 py-3 text-right font-medium">Order Value</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              @for (row of product.rows; track row.group; let i = $index) {
+                <tr class="hover:bg-gray-50">
+                  <td class="px-3 py-2 text-center text-gray-500">{{ i + 1 }}</td>
+                  <td class="px-4 py-2 font-medium text-gray-900">{{ row.group }}</td>
+                  <td class="px-3 py-2 text-center text-gray-700">{{ row.totalQty }}</td>
+                  <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ row.totalValue | number:'1.2-2' }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot class="bg-gray-100 font-bold">
+              <tr>
+                <td class="px-3 py-3"></td>
+                <td class="px-4 py-3 text-gray-900">Grand Total</td>
+                <td class="px-3 py-3 text-center text-gray-900">{{ product.grandTotal.totalQty }}</td>
+                <td class="px-4 py-3 text-right text-gray-900">{{ product.grandTotal.totalValue | number:'1.2-2' }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        } @else {
+          <div class="text-center py-10">
+            <p class="text-sm text-gray-500">No orders match the current filters.</p>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Exceed order report -->
+    @if (activeReport() === 'exceed') {
+      @let exceed = report4();
+      <div class="overflow-x-auto border border-gray-200 rounded-lg">
+        @if (exceed.rows.length > 0) {
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-800 text-white">
+              <tr>
+                <th class="px-3 py-3 text-center font-medium">#</th>
+                <th class="px-4 py-3 text-left font-medium">Design No</th>
+                <th class="px-4 py-3 text-left font-medium">Color</th>
+                <th class="px-3 py-3 text-center font-medium">Ordered Qty</th>
+                <th class="px-3 py-3 text-center font-medium">Available Qty</th>
+                <th class="px-3 py-3 text-center font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              @for (row of exceed.rows; track row.designId; let i = $index) {
+                <tr [class]="row.exceeds ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-gray-50'">
+                  <td class="px-3 py-2 text-center text-gray-500">{{ i + 1 }}</td>
+                  <td class="px-4 py-2 font-medium text-gray-900">{{ row.styleNo }}</td>
+                  <td class="px-4 py-2 text-gray-700">{{ row.color || '-' }}</td>
+                  <td class="px-3 py-2 text-center text-gray-700">{{ row.orderedQty }}</td>
+                  <td class="px-3 py-2 text-center text-gray-700">{{ row.availableQty }}</td>
+                  <td class="px-3 py-2 text-center">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                          [class]="row.exceeds ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'">
+                      {{ row.exceeds ? 'Exceeds' : 'OK' }}
+                    </span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        } @else {
+          <div class="text-center py-10">
+            <p class="text-sm text-gray-500">No orders match the current filters.</p>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

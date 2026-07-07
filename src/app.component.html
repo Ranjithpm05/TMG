@@ -12,6 +12,52 @@
 
 @if (isAuthenticated()) {
 <div class="flex h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_#f8fafc,_#e2e8f0_55%,_#dbeafe)] font-sans text-slate-900">
+
+  <!-- Shared, grouped navigation — rendered once, reused by both the desktop rail and mobile drawer -->
+  <ng-template #navGroupsTpl>
+    <div class="space-y-1">
+      @for (group of visibleGroups(); track group.id) {
+        <div>
+          <button type="button" (click)="toggleGroup(group.id)"
+                  class="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-[11px] font-semibold uppercase tracking-wider transition-colors"
+                  [class]="isGroupActive(group) ? 'text-white bg-white/10' : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'">
+            <span class="flex items-center gap-2.5 min-w-0">
+              <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                @for (d of group.iconPaths; track d) {
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" [attr.d]="d"/>
+                }
+              </svg>
+              <span class="truncate">{{ group.label }}</span>
+            </span>
+            <svg class="h-3.5 w-3.5 flex-shrink-0 transition-transform duration-300" [class.rotate-180]="isGroupExpanded(group.id)" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+
+          <div class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out"
+               [class]="isGroupExpanded(group.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
+            <div class="overflow-hidden min-h-0">
+              <div class="pl-2 pr-0.5 pt-1 pb-2 space-y-1">
+                @for (item of group.items; track item.view) {
+                  <button (click)="setView(item.view)"
+                          class="w-full flex items-center px-4 py-2.5 rounded-2xl text-sm transition-colors"
+                          [class]="currentView() === item.view ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-900/30' : 'text-slate-300 hover:bg-white/10 hover:text-white'">
+                    <svg class="h-5 w-5 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      @for (d of item.iconPaths; track d) {
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" [attr.d]="d"/>
+                      }
+                    </svg>
+                    {{ item.label }}
+                  </button>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  </ng-template>
+
   <!-- Static sidebar for desktop -->
   <aside class="hidden md:flex md:w-72 lg:w-80 flex-col border-r border-slate-200/70 bg-slate-950 text-white shadow-2xl">
     <div class="flex items-center justify-start gap-3 px-6 py-6">
@@ -21,115 +67,9 @@
         <span class="text-2xl font-black">TMG Clothings</span>
       </div>
     </div>
-    <nav class="flex-1 flex flex-col justify-between px-4 pb-5">
-      <div class="space-y-2">
-        <button (click)="setView('dashboard')"
-          class="w-full flex items-center px-4 py-3 text-slate-200 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
-          [class.bg-white/12]="currentView() === 'dashboard'">
-          <svg class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 13h8V3H3v10zm10 8h8V11h-8v10zM3 21h8v-6H3v6zm10-10h8V3h-8v8z"/>
-          </svg>
-          Dashboard
-        </button>
-
-        @if(canView('sales')) {
-        <button (click)="setView('sales')"
-          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
-          [class.bg-white/12]="currentView() === 'sales'">
-          <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-          </svg>
-          Sales Order
-        </button>
-        }
-
-        @if(canView('clients')) {
-        <button (click)="setView('clients')"
-          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
-          [class.bg-white/12]="currentView() === 'clients'">
-          <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.084-1.28-.24-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.084-1.28.24-1.857m10.514-6.32a4 4 0 10-5.028 0m5.028 0a4 4 0 11-5.028 0M7 11a4 4 0 100-8 4 4 0 000 8z"/>
-          </svg>
-          Client Master
-        </button>
-        }
-
-        @if(canView('designs')) {
-        <button (click)="setView('designs')"
-          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
-          [class.bg-white/12]="currentView() === 'designs'">
-          <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
-          </svg>
-          Design Master
-        </button>
-        }
-
-        @if(canView('goodsInward')) {
-        <button (click)="setView('goodsInward')"
-          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
-          [class.bg-white/12]="currentView() === 'goodsInward'">
-          <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-          </svg>
-          Goods Inward
-        </button>
-        }
-
-        @if(canView('users')) {
-        <button (click)="setView('users')"
-          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
-          [class.bg-white/12]="currentView() === 'users'">
-          <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.084-1.28-.24-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.084-1.28.24-1.857m10.514-6.32a4 4 0 10-5.028 0m5.028 0a4 4 0 11-5.028 0M7 11a4 4 0 100-8 4 4 0 000 8z"/>
-          </svg>
-          User Management
-        </button>
-        }
-
-        @if(canView('inventory')) {
-        <button (click)="setView('inventory')"
-          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors"
-          [class.bg-white/12]="currentView() === 'inventory'">
-          <svg class="h-6 w-6 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-          </svg>
-          Inventory
-        </button>
-        }
-
-        @if(canView('pickList')) {
-        <button (click)="setView('pickList')" [class.bg-white/12]="currentView() === 'pickList'"
-          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors">
-          <svg class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-          </svg>
-          Pick List
-        </button>
-        }
-
-        @if(canView('packingList')) {
-        <button (click)="setView('packingList')" [class.bg-white/12]="currentView() === 'packingList'"
-          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors">
-          <svg class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M8 9l8 4"/>
-          </svg>
-          Packing List
-        </button>
-        }
-
-        @if(canView('einvoice')) {
-        <button (click)="setView('einvoice')" [class.bg-white/12]="currentView() === 'einvoice'"
-          class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-white/10 hover:text-white transition-colors">
-          <svg class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-          </svg>
-          E-Invoice
-        </button>
-        }
-
-      </div>
-      <div>
+    <nav class="flex-1 flex flex-col justify-between px-4 pb-5 overflow-y-auto">
+      <ng-container *ngTemplateOutlet="navGroupsTpl"></ng-container>
+      <div class="pt-2">
         <button (click)="logout()"
           class="w-full flex items-center px-4 py-3 text-slate-300 rounded-2xl hover:bg-rose-500 hover:text-white transition-colors">
           <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -168,21 +108,12 @@
           </button>
         </div>
         <div class="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
-          <div class="flex-shrink-0 flex items-center px-4">
+          <div class="flex-shrink-0 flex items-center px-4 mb-4">
             <img src="/src/assets/logo.jpeg" alt="Company Logo" width="40" height="40" class="rounded-xl">
             <span class="ml-3 text-xl font-black">TMG Clothings</span>
           </div>
-          <nav class="mt-5 px-2 space-y-1">
-            <button (click)="setView('dashboard')" [class]="currentView() === 'dashboard' ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Dashboard</button>
-            @if(canView('sales'))      { <button (click)="setView('sales')"       [class]="currentView() === 'sales'       ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Sales Order</button> }
-            @if(canView('clients'))    { <button (click)="setView('clients')"     [class]="currentView() === 'clients'     ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Client Master</button> }
-            @if(canView('designs'))    { <button (click)="setView('designs')"     [class]="currentView() === 'designs'     ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Design Master</button> }
-            @if(canView('goodsInward')){ <button (click)="setView('goodsInward')" [class]="currentView() === 'goodsInward' ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Goods Inward</button> }
-            @if(canView('users'))      { <button (click)="setView('users')"       [class]="currentView() === 'users'       ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">User Management</button> }
-            @if(canView('inventory'))  { <button (click)="setView('inventory')"   [class]="currentView() === 'inventory'   ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Inventory</button> }
-            @if(canView('pickList'))   { <button (click)="setView('pickList')"    [class]="currentView() === 'pickList'    ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Pick List</button> }
-            @if(canView('packingList')){ <button (click)="setView('packingList')" [class]="currentView() === 'packingList' ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">Packing List</button> }
-            @if(canView('einvoice'))   { <button (click)="setView('einvoice')"    [class]="currentView() === 'einvoice'    ? 'bg-white/12' : 'hover:bg-white/8'" class="w-full group flex items-center px-4 py-3 text-base font-medium rounded-2xl text-white">E-Invoice</button> }
+          <nav class="px-2">
+            <ng-container *ngTemplateOutlet="navGroupsTpl"></ng-container>
           </nav>
         </div>
         <div class="flex-shrink-0 flex bg-white/6 p-4">
@@ -212,6 +143,7 @@
           @case ('pickList')    { <app-pick-list></app-pick-list> }
           @case ('packingList') { <app-packing-list></app-packing-list> }
           @case ('einvoice')    { <app-einvoice></app-einvoice> }
+          @case ('reports')     { <app-reports></app-reports> }
         }
       </div>
     </main>

@@ -1,4 +1,4 @@
-export type AppScreen = 'sales' | 'clients' | 'designs' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'users' | 'einvoice';
+export type AppScreen = 'sales' | 'clients' | 'designs' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'users' | 'einvoice' | 'reports';
 
 export const ALL_SCREENS: { id: AppScreen, name: string }[] = [
   { id: 'sales',       name: 'Sales Order' },
@@ -10,6 +10,7 @@ export const ALL_SCREENS: { id: AppScreen, name: string }[] = [
   { id: 'packingList', name: 'Packing List' },
   { id: 'users',       name: 'User Management' },
   { id: 'einvoice',    name: 'E-Invoice' },
+  { id: 'reports',     name: 'Reports' },
 ];
 
 export interface UserGroup {

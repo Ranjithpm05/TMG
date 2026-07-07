@@ -10,6 +10,8 @@ import {
   query,
   orderBy,
   limit,
+  where,
+  Timestamp,
   serverTimestamp
 } from '@angular/fire/firestore';
 
@@ -36,6 +38,18 @@ export class SalesOrderService {
 
     getSalesOrders(pageLimit = 100): Observable<SalesOrder[]> {
         const q = query(this.salesOrderRef, orderBy('createdAt', 'desc'), limit(pageLimit));
+        return collectionData(q, { idField: 'id' }) as Observable<SalesOrder[]>;
+    }
+
+    // 🔹 Date-bounded query for reports — avoids pulling the full collection for large datasets
+    getSalesOrdersInRange(start: Date, end: Date, hardLimit = 5000): Observable<SalesOrder[]> {
+        const q = query(
+            this.salesOrderRef,
+            where('createdAt', '>=', Timestamp.fromDate(start)),
+            where('createdAt', '<=', Timestamp.fromDate(end)),
+            orderBy('createdAt', 'desc'),
+            limit(hardLimit)
+        );
         return collectionData(q, { idField: 'id' }) as Observable<SalesOrder[]>;
     }
 
