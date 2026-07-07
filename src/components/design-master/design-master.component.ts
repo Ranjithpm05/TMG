@@ -7,6 +7,7 @@ import Swal from 'sweetalert2';
 
 const EXCEL_HEADERS = ['StyleNo', 'Color', 'Group', 'Size', 'MRP', 'WSP', 'Barcode', 'SleeveType', 'FabricDescription'];
 const REQUIRED_HEADERS = ['StyleNo', 'Size', 'MRP', 'WSP', 'Barcode'];
+const EXPORT_HEADERS = ['ID', 'StyleNo', 'Color', 'Group', 'Size', 'MRP', 'WSP', 'Barcode', 'SleeveType', 'FabricDescription', 'CreatedAt', 'UpdatedAt'];
 
 type ViewMode = 'list' | 'form';
 
@@ -253,6 +254,76 @@ export class DesignMasterComponent implements OnInit {
         } catch {
             Swal.fire({ icon: 'error', title: 'Download Failed', text: 'Could not generate sample file.' });
         }
+    }
+
+    async exportDesignsToExcel() {
+        const designs = this.designs();
+        if (designs.length === 0) {
+            Swal.fire({ icon: 'info', title: 'No Data', text: 'There are no designs to export.' });
+            return;
+        }
+
+        try {
+            const XLSX = await import('xlsx');
+            const rows: any[][] = [EXPORT_HEADERS];
+
+            for (const design of designs) {
+                const sizes = design.sizes?.length ? design.sizes : [{} as SizePrice];
+                for (const size of sizes) {
+                    rows.push([
+                        design.id ?? '',
+                        design.styleNo ?? '',
+                        design.color ?? '',
+                        design.group ?? '',
+                        size.size ?? '',
+                        size.price ?? '',
+                        size.WSP ?? '',
+                        size.BARCODE ?? '',
+                        size.sleeveType ?? '',
+                        size.fabricType ?? '',
+                        this.formatTimestamp(design.createdAt),
+                        this.formatTimestamp(design.updatedAt),
+                    ]);
+                }
+            }
+
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            ws['!cols'] = [
+                { wch: 22 }, { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 8 },
+                { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 30 },
+                { wch: 20 }, { wch: 20 },
+            ];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Designs');
+            const timestamp = this.formatTimestamp(null, true);
+            XLSX.writeFile(wb, `Design_Master_Export_${timestamp}.xlsx`);
+        } catch (err) {
+            console.error(err);
+            Swal.fire({ icon: 'error', title: 'Export Failed', text: 'Could not generate the export file.' });
+        }
+    }
+
+    private formatTimestamp(value: any, forFilename = false): string {
+        let date: Date | null = null;
+        if (forFilename) {
+            date = new Date();
+        } else if (value?.toDate) {
+            date = value.toDate();
+        } else if (value?.seconds != null) {
+            date = new Date(value.seconds * 1000);
+        } else if (value) {
+            const parsed = new Date(value);
+            if (!isNaN(parsed.getTime())) date = parsed;
+        }
+
+        if (!date) return '';
+
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const datePart = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
+        if (forFilename) {
+            return `${datePart}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+        }
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     }
 
     async onFileSelected(event: Event) {
