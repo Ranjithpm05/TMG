@@ -451,13 +451,19 @@ export class DesignMasterComponent implements OnInit {
                 fabricType: iFabric >= 0 ? String(row[iFabric] ?? '').trim() : '',
             };
 
-            if (designMap.has(styleNo)) {
-                designMap.get(styleNo)!.sizes.push(sizeObj);
+            const color = iColor >= 0 ? String(row[iColor] ?? '').trim() : '';
+            const group = iGroup >= 0 ? String(row[iGroup] ?? '').trim() : '';
+            // Group by StyleNo + Color (+ Group) so distinct colors of the same style
+            // become separate design records instead of collapsing into one.
+            const designKey = `${styleNo}|${color}|${group}`;
+
+            if (designMap.has(designKey)) {
+                designMap.get(designKey)!.sizes.push(sizeObj);
             } else {
-                designMap.set(styleNo, {
+                designMap.set(designKey, {
                     styleNo,
-                    color:  iColor >= 0 ? String(row[iColor]  ?? '').trim() : '',
-                    group:  iGroup >= 0 ? String(row[iGroup]  ?? '').trim() : '',
+                    color,
+                    group,
                     sizes: [sizeObj],
                 });
             }
