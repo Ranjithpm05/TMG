@@ -18,7 +18,7 @@ import {
   where,
   writeBatch,
 } from '@angular/fire/firestore';
-import { Observable, map } from 'rxjs';
+import { from, Observable, map } from 'rxjs';
 import type { SalesOrder } from '../models/sales-order.model';
 import type {
   PickList,
@@ -28,6 +28,7 @@ import type {
   PickListOrderSummary,
   PickListScanResult,
 } from '../models/pick-list.model';
+import { InventoryService } from './inventory.service';
 
 type StoredPickList = PickList & {
   orderSummaries?: PickListOrderSummary[];
@@ -43,13 +44,16 @@ export class PickListService {
   private readonly CLAIM_TTL_MS = 2 * 60 * 1000;
 
   private firestore = inject(Firestore);
+  private inventoryService = inject(InventoryService);
   private plRef = collection(this.firestore, 'pickLists');
   private invRef = collection(this.firestore, 'inventory');
 
+  // One-time read for the list screen — the active picking session for a single
+  // pick list uses getPickListById()/getPickListLines() below, which stay live.
   getPickLists(pageLimit = 100): Observable<PickList[]> {
     const q = query(this.plRef, orderBy('createdAt', 'desc'), limit(pageLimit));
-    return (collectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
-      map((pickLists) => pickLists.map((pickList) => this.normalizePickList(pickList)))
+    return from(getDocs(q)).pipe(
+      map((snap) => snap.docs.map((d) => this.normalizePickList({ id: d.id, ...d.data() })))
     );
   }
 
@@ -448,7 +452,7 @@ export class PickListService {
       throw new Error(currentLineId ? 'barcode_mismatch' : 'barcode_not_found');
     }
 
-    return runTransaction(this.firestore, async (transaction) => {
+    const result = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(pickListId, line.lineId);
       const pickListRef = doc(this.firestore, `pickLists/${pickListId}`);
       const [lineSnap, pickListSnap] = await Promise.all([
@@ -557,6 +561,11 @@ export class PickListService {
         salesOrderId: liveLine.salesOrderId,
       } satisfies PickListScanResult;
     });
+
+    // The transaction may have deducted inventory.currentStock — drop the cached
+    // inventory list so the next read (Dashboard/Reports/Inventory screen) is fresh.
+    this.inventoryService.invalidateCache();
+    return result;
   }
 
   async recalculatePickListStatus(pickListId: string): Promise<void> {

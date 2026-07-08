@@ -3,7 +3,6 @@ import {
   Firestore,
   addDoc,
   collection,
-  collectionData,
   doc,
   getDocs,
   limit,
@@ -13,7 +12,7 @@ import {
   serverTimestamp,
   where,
 } from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
+import { from, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { DCItem, DeliveryChallan } from '../models/delivery-challan.model';
 
@@ -22,10 +21,11 @@ export class DeliveryChallanService {
   private firestore = inject(Firestore);
   private dcRef = collection(this.firestore, 'deliveryChallans');
 
+  // One-time read — the Packing List screen snapshots this into a local list.
   getDeliveryChallans(pageLimit = 100): Observable<DeliveryChallan[]> {
     const q = query(this.dcRef, orderBy('createdAt', 'desc'), limit(pageLimit));
-    return (collectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
-      map((docs) => docs.map((d) => this.normalize(d)))
+    return from(getDocs(q)).pipe(
+      map((snap) => snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() })))
     );
   }
 

@@ -87,6 +87,7 @@ import {
   collectionData,
   doc,
   addDoc,
+  getDocs,
   updateDoc,
   deleteDoc,
   query,
@@ -94,7 +95,7 @@ import {
   where,
   serverTimestamp
 } from '@angular/fire/firestore';
-import { map, Observable } from 'rxjs';
+import { from, map, Observable, shareReplay } from 'rxjs';
 import type { Design } from '../models/design.model';
 
 @Injectable({ providedIn: 'root' })
@@ -103,10 +104,23 @@ export class DesignService {
     private firestore = inject(Firestore);
     private designRef = collection(this.firestore, 'designs');
 
-    // 🔹 GET ALL DESIGNS
+    // Master data — cached one-time read, invalidated on write (see ClientService for rationale).
+    private designsCache$: Observable<Design[]> | null = null;
+
+    // 🔹 GET ALL DESIGNS (cached one-time read)
     getDesigns(): Observable<Design[]> {
-        const q = query(this.designRef, orderBy('createdAt', 'desc'));
-        return collectionData(q, { idField: 'id' }) as Observable<Design[]>;
+        if (!this.designsCache$) {
+            const q = query(this.designRef, orderBy('createdAt', 'desc'));
+            this.designsCache$ = from(getDocs(q)).pipe(
+                map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as Design))),
+                shareReplay(1)
+            );
+        }
+        return this.designsCache$;
+    }
+
+    private invalidateCache(): void {
+        this.designsCache$ = null;
     }
 
     // 🔹 CREATE DESIGN (no id)
@@ -118,6 +132,7 @@ export class DesignService {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
         });
+        this.invalidateCache();
     }
 
     // 🔹 UPDATE DESIGN (id required)
@@ -129,12 +144,14 @@ export class DesignService {
         ...design,
         updatedAt: serverTimestamp()
         });
+        this.invalidateCache();
     }
 
     // 🔹 DELETE DESIGN
     async deleteDesign(designId: string): Promise<void> {
         const designDoc = doc(this.firestore, `designs/${designId}`);
         await deleteDoc(designDoc);
+        this.invalidateCache();
     }
 
     findDesignByStyleNo(styleNo: string): Observable<Design | null> {

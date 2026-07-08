@@ -2,16 +2,17 @@ import { Injectable, inject } from '@angular/core';
 import {
   Firestore,
   collection,
-  collectionData,
   doc,
   addDoc,
+  getDocs,
   updateDoc,
   deleteDoc,
+  limit,
   query,
   orderBy,
   serverTimestamp
 } from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
+import { from, map, Observable } from 'rxjs';
 import type { GoodsInward } from '../models/goods-inward.model';
 
 @Injectable({ providedIn: 'root' })
@@ -39,10 +40,14 @@ export class GoodsInwardService {
     return obj;
   }
 
-  // 🔹 Get all GRNs
-  getGoodsInwards(): Observable<GoodsInward[]> {
-    const q = query(this.grnRef, orderBy('createdAt', 'desc'));
-    return collectionData(q, { idField: 'id' }) as Observable<GoodsInward[]>;
+  // 🔹 Get recent GRNs (bounded + one-time, matching the other list services —
+  // an unbounded realtime listener here would re-read the whole collection on
+  // every open and on every remote GRN change from any user).
+  getGoodsInwards(pageLimit = 100): Observable<GoodsInward[]> {
+    const q = query(this.grnRef, orderBy('createdAt', 'desc'), limit(pageLimit));
+    return from(getDocs(q)).pipe(
+      map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as GoodsInward)))
+    );
   }
 
   // 🔹 Create GRN

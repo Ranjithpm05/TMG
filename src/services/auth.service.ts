@@ -50,9 +50,11 @@ export class AuthService {
   async login(username: string, passwordHash: string): Promise<boolean> {
     try {
         const user = await this.userService.getUserByUsername(username);
-        if (user && user.status === 'Active') 
+        if (user && user.status === 'Active')
         {
-            const isValidPassword = await this.userService.validatePassword(user.id, passwordHash)
+            // user.passwordHash is already in hand from the lookup above — comparing it
+            // directly avoids an extra getUserById() round trip on every login attempt.
+            const isValidPassword = user.passwordHash === passwordHash;
             if (isValidPassword) {
                 const group = await this.userGroupService.getUserGroupById(user.userGroupId);
                 const expiresAt = Date.now() + SESSION_DURATION_MS;

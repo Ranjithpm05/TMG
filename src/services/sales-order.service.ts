@@ -2,9 +2,9 @@ import { Injectable, inject } from '@angular/core';
 import {
   Firestore,
   collection,
-  collectionData,
   doc,
   addDoc,
+  getDocs,
   updateDoc,
   deleteDoc,
   query,
@@ -16,7 +16,7 @@ import {
 } from '@angular/fire/firestore';
 
 import type { SalesOrder } from '../models/sales-order.model';
-import { from, Observable } from 'rxjs';
+import { from, map, Observable } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class SalesOrderService {
@@ -36,12 +36,18 @@ export class SalesOrderService {
         } as SalesOrder;
     }
 
+    // One-time read: every screen that lists sales orders just snapshots into a
+    // signal/array and manually reloads after its own writes, so a standing
+    // realtime listener buys nothing but extra reads on every remote change.
     getSalesOrders(pageLimit = 100): Observable<SalesOrder[]> {
         const q = query(this.salesOrderRef, orderBy('createdAt', 'desc'), limit(pageLimit));
-        return collectionData(q, { idField: 'id' }) as Observable<SalesOrder[]>;
+        return from(getDocs(q)).pipe(
+            map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as SalesOrder)))
+        );
     }
 
-    // 🔹 Date-bounded query for reports — avoids pulling the full collection for large datasets
+    // 🔹 Date-bounded one-time query for reports — avoids pulling the full collection
+    // for large datasets and avoids leaving a listener open while a report is viewed.
     getSalesOrdersInRange(start: Date, end: Date, hardLimit = 5000): Observable<SalesOrder[]> {
         const q = query(
             this.salesOrderRef,
@@ -50,7 +56,9 @@ export class SalesOrderService {
             orderBy('createdAt', 'desc'),
             limit(hardLimit)
         );
-        return collectionData(q, { idField: 'id' }) as Observable<SalesOrder[]>;
+        return from(getDocs(q)).pipe(
+            map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as SalesOrder)))
+        );
     }
 
     // 🔹 Create sales order

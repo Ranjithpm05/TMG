@@ -16,7 +16,7 @@ import {
   where,
   writeBatch,
 } from '@angular/fire/firestore';
-import { map, Observable } from 'rxjs';
+import { from, map, Observable } from 'rxjs';
 import { PickListLine } from '../models/pick-list.model';
 import {
   PackingCarton,
@@ -28,17 +28,21 @@ import {
   PackingPartyProgress,
   PackingScanResult,
 } from '../models/packing-list.model';
+import { InventoryService } from './inventory.service';
 
 @Injectable({ providedIn: 'root' })
 export class PackingListService {
   private firestore = inject(Firestore);
+  private inventoryService = inject(InventoryService);
   private packingRef = collection(this.firestore, 'packingLists');
   private inventoryRef = collection(this.firestore, 'inventory');
 
+  // One-time read for the list screen — the active packing session for a single
+  // packing list uses getPackingListById()/getPackingListLines() below, which stay live.
   getPackingLists(pageLimit = 100): Observable<PackingList[]> {
     const q = query(this.packingRef, orderBy('createdAt', 'desc'), limit(pageLimit));
-    return (collectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
-      map((packingLists) => packingLists.map((packingList) => this.normalizePackingList(packingList)))
+    return from(getDocs(q)).pipe(
+      map((snap) => snap.docs.map((d) => this.normalizePackingList({ id: d.id, ...d.data() })))
     );
   }
 
@@ -419,7 +423,7 @@ export class PackingListService {
     const resolvedList = [...deductions.values()];
     const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
 
-    return runTransaction(this.firestore, async (transaction) => {
+    const deducted = await runTransaction(this.firestore, async (transaction) => {
       const [plSnap, ...invSnaps] = await Promise.all([
         transaction.get(packingListRef),
         ...resolvedList.map(({ ref }) => transaction.get(ref)),
@@ -437,6 +441,12 @@ export class PackingListService {
       transaction.update(packingListRef, { stockDeducted: true, updatedAt: serverTimestamp() });
       return true;
     });
+
+    if (deducted) {
+      // Stock quantities changed — drop the cached inventory list so the next read is fresh.
+      this.inventoryService.invalidateCache();
+    }
+    return deducted;
   }
 
   async sealCarton(packingListId: string, cartonNo: string): Promise<void> {

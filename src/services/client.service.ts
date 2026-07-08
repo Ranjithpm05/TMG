@@ -3,7 +3,6 @@ import { Injectable, inject } from '@angular/core';
 import {
   Firestore,
   collection,
-  collectionData,
   doc,
   addDoc,
   getDoc,
@@ -18,7 +17,7 @@ import {
 } from '@angular/fire/firestore';
 
 import type { Client } from '../models/client.model';
-import { Observable } from 'rxjs';
+import { from, map, Observable, shareReplay } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class ClientService {
@@ -26,10 +25,26 @@ export class ClientService {
   private firestore = inject(Firestore);
   private clientRef = collection(this.firestore, 'clients');
 
-  // 🔹 Get all clients
+  // Master data is read once and cached in memory; invalidated only when this
+  // service writes to the collection, so every screen shares a single read.
+  private clientsCache$: Observable<Client[]> | null = null;
+
+  // 🔹 Get all clients (cached one-time read — clients rarely change and every
+  // mutation below invalidates the cache, so this stays in sync without a
+  // standing realtime listener per screen).
   getClients(): Observable<Client[]> {
-    const q = query(this.clientRef, orderBy('createdAt', 'desc'));
-    return collectionData(q, { idField: 'id' }) as Observable<Client[]>;
+    if (!this.clientsCache$) {
+      const q = query(this.clientRef, orderBy('createdAt', 'desc'));
+      this.clientsCache$ = from(getDocs(q)).pipe(
+        map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as Client))),
+        shareReplay(1)
+      );
+    }
+    return this.clientsCache$;
+  }
+
+  private invalidateCache(): void {
+    this.clientsCache$ = null;
   }
 
     // 🔹 Create client
@@ -41,6 +56,7 @@ export class ClientService {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
         });
+        this.invalidateCache();
     }
 
   // 🔹 Update client
@@ -52,6 +68,7 @@ export class ClientService {
       ...client,
       updatedAt: serverTimestamp()
     });
+    this.invalidateCache();
   }
 
   async getClientByIdOnce(clientId: string): Promise<Client | null> {
@@ -101,5 +118,6 @@ export class ClientService {
   async deleteClient(clientId: string): Promise<void> {
     const clientDoc = doc(this.firestore, `clients/${clientId}`);
     await deleteDoc(clientDoc);
+    this.invalidateCache();
   }
 }

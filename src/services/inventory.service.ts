@@ -1,9 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import {
-  Firestore, collection, collectionData, doc,
+  Firestore, collection, doc,
   updateDoc, query, orderBy, where, getDocs, serverTimestamp, writeBatch
 } from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
+import { from, map, Observable, shareReplay } from 'rxjs';
 import type { InventoryItem } from '../models/inventory.model';
 import type { GoodsInwardItem } from '../models/goods-inward.model';
 
@@ -12,9 +12,25 @@ export class InventoryService {
   private firestore = inject(Firestore);
   private invRef = collection(this.firestore, 'inventory');
 
+  // Inventory is read as a bulk list from several screens (Dashboard, Reports,
+  // Pick List, Packing List, Inventory). Cache the one-time read and let any
+  // stock-mutating write path (here or in Pick/Packing List services) call
+  // invalidateCache() instead of every screen holding its own live listener.
+  private inventoryCache$: Observable<InventoryItem[]> | null = null;
+
   getInventory(): Observable<InventoryItem[]> {
-    const q = query(this.invRef, orderBy('styleNo', 'asc'));
-    return collectionData(q, { idField: 'id' }) as Observable<InventoryItem[]>;
+    if (!this.inventoryCache$) {
+      const q = query(this.invRef, orderBy('styleNo', 'asc'));
+      this.inventoryCache$ = from(getDocs(q)).pipe(
+        map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryItem))),
+        shareReplay(1)
+      );
+    }
+    return this.inventoryCache$;
+  }
+
+  invalidateCache(): void {
+    this.inventoryCache$ = null;
   }
 
   async upsertFromGrn(items: GoodsInwardItem[], grnNo: string): Promise<void> {
@@ -64,6 +80,7 @@ export class InventoryService {
       }
     });
     await batch.commit();
+    this.invalidateCache();
   }
 
   async getInventoryByBarcodes(barcodes: string[]): Promise<InventoryItem[]> {
