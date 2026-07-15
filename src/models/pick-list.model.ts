@@ -77,7 +77,7 @@ export interface PickList {
   salesNos: string[];
   clientId: string;
   clientName: string;
-  status: 'Draft' | 'Pending' | 'Partial' | 'Completed';
+  status: 'Draft' | 'Pending' | 'Partial' | 'Completed' | 'Packed';
   totalRequiredQty?: number;
   totalPickedQty?: number;
   totalPendingQty?: number;
@@ -88,6 +88,10 @@ export interface PickList {
   legacyPickingPending?: boolean;
   items: PickListLine[];
   remarks?: string;
+  // Set once this pick list has been combined/converted into a Packing List,
+  // so it can't be picked again for another packing list.
+  packedIntoPackingListId?: string;
+  packedIntoPackingListNo?: string;
   createdAt?: any;
   updatedAt?: any;
 }

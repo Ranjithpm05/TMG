@@ -82,8 +82,8 @@ export class PackingListService {
 
   async createGeneratedPackingList(input: {
     packingListNo: string;
-    pickListId: string;
-    pickListNo: string;
+    pickListIds: string[];
+    pickListNos: string[];
     salesOrderIds: string[];
     salesNos: string[];
     clientId: string;
@@ -91,11 +91,20 @@ export class PackingListService {
     packingMode: PackingMode;
     remarks?: string;
     lines: PickListLine[];
+    // When true, every source pick list is atomically flipped to status
+    // 'Packed' in the same batch as the packing-list creation — used by the
+    // "combine multiple pick lists" flow so a pick list can't be combined
+    // twice. The original single-pick-list-to-N-packing-lists flow leaves
+    // this false, preserving its existing behavior.
+    markSourcePickListsPacked?: boolean;
   }): Promise<string> {
     const normalizedLines = this.buildPackableLines(input.lines);
     if (!normalizedLines.length) {
       throw new Error('no_packable_lines');
     }
+
+    const pickListIds = [...new Set(input.pickListIds.filter(Boolean))];
+    const pickListNos = [...new Set(input.pickListNos.filter(Boolean))];
 
     const summary = this.buildSummary(normalizedLines, [], input.clientName);
     const packingListDoc = doc(this.packingRef);
@@ -103,8 +112,10 @@ export class PackingListService {
 
     batch.set(packingListDoc, this.stripUndefined({
       packingListNo: input.packingListNo,
-      pickListId: input.pickListId,
-      pickListNo: input.pickListNo,
+      pickListId: pickListIds[0] ?? '',
+      pickListNo: pickListNos[0] ?? '',
+      pickListIds,
+      pickListNos,
       salesOrderIds: [...new Set(input.salesOrderIds)],
       salesNos: [...new Set(input.salesNos)],
       clientId: input.clientId,
@@ -131,6 +142,17 @@ export class PackingListService {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }));
+    }
+
+    if (input.markSourcePickListsPacked) {
+      for (const pickListId of pickListIds) {
+        batch.update(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
+          status: 'Packed',
+          packedIntoPackingListId: packingListDoc.id,
+          packedIntoPackingListNo: input.packingListNo,
+          updatedAt: serverTimestamp(),
+        }));
+      }
     }
 
     await batch.commit();
@@ -676,6 +698,14 @@ export class PackingListService {
       packingListNo: String(raw?.packingListNo ?? ''),
       pickListId: String(raw?.pickListId ?? ''),
       pickListNo: String(raw?.pickListNo ?? ''),
+      // Fall back to the singular fields for packing lists written before
+      // pickListIds/pickListNos existed.
+      pickListIds: Array.isArray(raw?.pickListIds) && raw.pickListIds.length
+        ? raw.pickListIds.map((id: any) => String(id))
+        : (raw?.pickListId ? [String(raw.pickListId)] : []),
+      pickListNos: Array.isArray(raw?.pickListNos) && raw.pickListNos.length
+        ? raw.pickListNos.map((no: any) => String(no))
+        : (raw?.pickListNo ? [String(raw.pickListNo)] : []),
       salesOrderIds: Array.isArray(raw?.salesOrderIds) ? raw.salesOrderIds.map((id: any) => String(id)) : [],
       salesNos: Array.isArray(raw?.salesNos) ? raw.salesNos.map((salesNo: any) => String(salesNo)) : [],
       clientId: String(raw?.clientId ?? ''),

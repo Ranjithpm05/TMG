@@ -236,21 +236,23 @@
             <!-- ── Group Header ──────────────────────────────────────────── -->
             <button type="button"
                     (click)="toggleGroupExpanded(gi)"
-                    class="w-full flex items-center justify-between px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white transition-colors">
-              <div class="flex items-center gap-3 min-w-0">
-                <svg class="w-4 h-4 flex-shrink-0 transition-transform duration-200"
+                    class="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white transition-colors text-left">
+              <div class="flex items-start gap-3 min-w-0">
+                <svg class="w-4 h-4 flex-shrink-0 mt-1 transition-transform duration-200"
                      [class.rotate-180]="group.isExpanded"
                      fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
-                <span class="font-semibold text-base truncate">{{ group.fabricDescription }}</span>
-                <span class="text-indigo-200 text-sm flex-shrink-0">
+                <span class="font-semibold text-base break-words">{{ group.fabricDescription }}</span>
+              </div>
+              <div class="flex items-center gap-2 pl-7 sm:pl-0 flex-shrink-0">
+                <span class="text-indigo-200 text-sm whitespace-nowrap">
                   {{ group.designRatios.length }} design{{ group.designRatios.length !== 1 ? 's' : '' }}
                 </span>
+                @if (group.containsShirt) {
+                  <span class="text-xs bg-white/25 px-2 py-0.5 rounded-full whitespace-nowrap">Full / Half Sleeve</span>
+                }
               </div>
-              @if (group.containsShirt) {
-                <span class="text-xs bg-white/25 px-2 py-0.5 rounded-full flex-shrink-0">Full / Half Sleeve</span>
-              }
             </button>
 
             @if (group.isExpanded) {

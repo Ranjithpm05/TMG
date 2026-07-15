@@ -69,8 +69,13 @@ export interface PackingPartSummary {
 export interface PackingList {
   id?: string;
   packingListNo: string;
+  // Singular fields kept for backward compatibility — always derived as
+  // pickListIds[0]/pickListNos[0]. Prefer the arrays below for new code since
+  // a packing list can now be combined from multiple source pick lists.
   pickListId: string;
   pickListNo: string;
+  pickListIds: string[];
+  pickListNos: string[];
   salesOrderIds: string[];
   salesNos: string[];
   clientId: string;

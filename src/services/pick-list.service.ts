@@ -574,6 +574,9 @@ export class PickListService {
       this.getPickListLinesOnce(pickListId),
     ]);
     if (!pickList) return;
+    // Once combined into a Packing List, a pick list's status must not be
+    // recomputed back to 'Completed' — 'Packed' is a one-way terminal state.
+    if (pickList.status === 'Packed') return;
 
     const summary = this.buildSummary(lines);
     await updateDoc(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({

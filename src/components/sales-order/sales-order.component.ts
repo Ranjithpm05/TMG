@@ -1498,7 +1498,10 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
           this.loadSalesOrders();
           this.switchToListView();
         },
-        error: () => Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to update sales order.' })
+        error: (err) => {
+          console.error('Failed to update sales order:', err);
+          Swal.fire({ icon: 'error', title: 'Error', text: err?.message || 'Failed to update sales order.' });
+        }
       });
     } else {
       const orderData = {
@@ -1512,7 +1515,10 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
           this.loadSalesOrders();
           this.switchToListView();
         },
-        error: (err) => Swal.fire({ icon: 'error', title: 'Error', text: err.message })
+        error: (err) => {
+          console.error('Failed to create sales order:', err);
+          Swal.fire({ icon: 'error', title: 'Error', text: err?.message || 'Failed to create sales order.' });
+        }
       });
     }
   }

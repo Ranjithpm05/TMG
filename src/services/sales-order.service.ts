@@ -4,6 +4,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   getDocs,
   updateDoc,
   deleteDoc,
@@ -26,14 +27,13 @@ export class SalesOrderService {
 
     private buildSalesOrder(
         order: Omit<SalesOrder, 'id' | 'status' | 'orderDate'>
-    ): SalesOrder {
+    ): Omit<SalesOrder, 'id'> {
         return {
             ...order,
-            id:"",
             salesNo: `SO-${Date.now()}`,
             status: 'Pending',
             orderDate: new Date().toISOString().split('T')[0]
-        } as SalesOrder;
+        } as Omit<SalesOrder, 'id'>;
     }
 
     // One-time read: every screen that lists sales orders just snapshots into a
@@ -42,7 +42,10 @@ export class SalesOrderService {
     getSalesOrders(pageLimit = 100): Observable<SalesOrder[]> {
         const q = query(this.salesOrderRef, orderBy('createdAt', 'desc'), limit(pageLimit));
         return from(getDocs(q)).pipe(
-            map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as SalesOrder)))
+            // Spread doc data first, then override with the real Firestore doc id last —
+            // some legacy documents have a stale/blank "id" field stored in their body
+            // (see createSalesOrder), which must never win over the actual doc reference id.
+            map((snap) => snap.docs.map((d) => ({ ...d.data(), id: d.id } as SalesOrder)))
         );
     }
 
@@ -57,7 +60,7 @@ export class SalesOrderService {
             limit(hardLimit)
         );
         return from(getDocs(q)).pipe(
-            map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as SalesOrder)))
+            map((snap) => snap.docs.map((d) => ({ ...d.data(), id: d.id } as SalesOrder)))
         );
     }
 
@@ -73,8 +76,12 @@ export class SalesOrderService {
         order: Omit<SalesOrder, 'id' | 'status' | 'orderDate'>
     ): Observable<SalesOrder> {
         const promise = (async () => {
-            const newOrder = this.buildSalesOrder(order);
-            await addDoc(this.salesOrderRef, {
+            // Pre-allocate the doc ref so the real Firestore id can be stored in the
+            // document body too, instead of the old placeholder id:"" that used to get
+            // written and then clobber the real id on every subsequent read.
+            const docRef = doc(this.salesOrderRef);
+            const newOrder: SalesOrder = { ...this.buildSalesOrder(order), id: docRef.id };
+            await setDoc(docRef, {
                 ...newOrder,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
@@ -86,20 +93,25 @@ export class SalesOrderService {
     }
 
     // 🔹 Update sales order
-    // async updateSalesOrder(order: SalesOrder): Promise<void> {
-    //     const orderDoc = doc(this.firestore, `salesOrders/${order.id}`);
-    //     await updateDoc(orderDoc, {
-    //     ...order,
-    //     updatedAt: serverTimestamp()
-    //     });
-    // }
     updateSalesOrder(order: SalesOrder): Observable<void> {
-        return from(
-            updateDoc(doc(this.firestore, `salesOrders/${order.id}`), {
-            ...order,
-            updatedAt: serverTimestamp()
-            })
-        );
+        // Wrapped in an async IIFE so any synchronous error (e.g. an invalid/missing
+        // doc id, or a Firestore rejection on undefined field values) becomes a
+        // rejected promise routed through the caller's error handler, instead of
+        // throwing before subscribe() ever attaches — which previously left the
+        // "Updating..." loading dialog stuck forever with nothing saved.
+        const promise = (async () => {
+            if (!order.id) {
+                throw new Error('Cannot update sales order: missing document ID.');
+            }
+            // Strip any stray undefined values (Firestore rejects them) before writing.
+            const sanitized = JSON.parse(JSON.stringify(order));
+            await updateDoc(doc(this.firestore, `salesOrders/${order.id}`), {
+                ...sanitized,
+                updatedAt: serverTimestamp()
+            });
+        })();
+
+        return from(promise);
     }
 
     // 🔹 Delete sales order

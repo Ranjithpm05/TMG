@@ -22,7 +22,7 @@ import { Invoice } from '../../models/invoice.model';
 import { InvoiceService } from '../../services/invoice.service';
 import { InventoryService } from '../../services/inventory.service';
 
-type ViewMode = 'list' | 'view' | 'live-pack';
+type ViewMode = 'list' | 'view' | 'live-pack' | 'combine';
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', '6XL', 'Free Size'];
 
@@ -88,11 +88,50 @@ export class PackingListComponent implements OnInit, OnDestroy {
   invoices = signal<Invoice[]>([]);
   isGeneratingInvoice = signal(false);
 
+  // ─── Combine (multiple Pick Lists → one Packing List) ─────────────────────
+  combineClientId = signal<string | null>(null);
+  selectedPickListIdsForCombine = signal<Set<string>>(new Set());
+
   // ─── Computed ──────────────────────────────────────────────────────────────
 
   completedPickLists = computed(() =>
     this.pickLists().filter((pl) => pl.status === 'Completed' && (pl.totalPickedQty ?? 0) > 0)
   );
+
+  // Completed pick lists not yet referenced by any packing list (old single-flow
+  // or new combine-flow) — the only ones safe to offer for combining.
+  combineEligiblePickLists = computed(() =>
+    this.completedPickLists().filter((pl) => this.getPackingListsForPickList(pl.id ?? '').length === 0)
+  );
+
+  combineEligibleCustomers = computed((): { clientId: string; clientName: string }[] => {
+    const map = new Map<string, string>();
+    for (const pl of this.combineEligiblePickLists()) {
+      if (!pl.clientId) continue;
+      if (!map.has(pl.clientId)) map.set(pl.clientId, pl.clientName);
+    }
+    return [...map.entries()]
+      .map(([clientId, clientName]) => ({ clientId, clientName }))
+      .sort((a, b) => a.clientName.localeCompare(b.clientName, undefined, { numeric: true }));
+  });
+
+  combinePickListsForSelectedCustomer = computed(() => {
+    const clientId = this.combineClientId();
+    if (!clientId) return [];
+    return this.combineEligiblePickLists().filter((pl) => pl.clientId === clientId);
+  });
+
+  selectedPickListsForCombine = computed(() =>
+    this.combinePickListsForSelectedCustomer().filter((pl) => this.selectedPickListIdsForCombine().has(pl.id ?? ''))
+  );
+
+  combineSelectionTotals = computed(() => {
+    const selected = this.selectedPickListsForCombine();
+    return {
+      count: selected.length,
+      totalQty: selected.reduce((sum, pl) => sum + (pl.totalPickedQty ?? 0), 0),
+    };
+  });
 
   filteredReadyPickLists = computed(() => {
     const term = this.searchTerm().trim().toLowerCase();
@@ -296,6 +335,149 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.packingInProgress.set([]);
     this.activeBoxNo.set('');
     this.boxInput.set('');
+    this.combineClientId.set(null);
+    this.selectedPickListIdsForCombine.set(new Set());
+  }
+
+  // ─── Combine multiple Pick Lists into one Packing List ─────────────────────
+
+  openCombineFlow() {
+    this.combineClientId.set(null);
+    this.selectedPickListIdsForCombine.set(new Set());
+    this.mode.set('combine');
+  }
+
+  cancelCombine() {
+    this.combineClientId.set(null);
+    this.selectedPickListIdsForCombine.set(new Set());
+    this.mode.set('list');
+  }
+
+  selectCombineCustomer(clientId: string) {
+    this.combineClientId.set(clientId);
+    this.selectedPickListIdsForCombine.set(new Set());
+  }
+
+  togglePickListForCombine(pickListId: string) {
+    this.selectedPickListIdsForCombine.update((selected) => {
+      const next = new Set(selected);
+      if (next.has(pickListId)) next.delete(pickListId);
+      else next.add(pickListId);
+      return next;
+    });
+  }
+
+  isPickListSelectedForCombine(pickListId: string): boolean {
+    return this.selectedPickListIdsForCombine().has(pickListId);
+  }
+
+  async confirmCombinePackingList() {
+    const pickLists = this.selectedPickListsForCombine();
+    const clientId = this.combineClientId();
+    if (!clientId || pickLists.length === 0) return;
+
+    if (pickLists.some((pl) => pl.clientId !== clientId)) {
+      await Swal.fire({ icon: 'error', title: 'Error', text: 'All selected Pick Lists must belong to the same customer.' });
+      return;
+    }
+
+    this.isGenerating.set(true);
+    try {
+      const linesPerPickList = await Promise.all(pickLists.map(async (pl) => {
+        await this.pickListService.ensureLegacyPickListLines(pl);
+        const lines = await this.pickListService.getPickListLinesOnce(pl.id!);
+        return lines.filter((l) => (l.pickedQty || 0) > 0 && !!l.barcode);
+      }));
+      const allLines = linesPerPickList.flat();
+
+      if (!allLines.length) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'No Packable Items',
+          text: 'The selected Pick Lists have no scanned barcode items ready to pack.',
+        });
+        return;
+      }
+
+      const totalQty = allLines.reduce((s, l) => s + (l.pickedQty || 0), 0);
+      const pickListRows = pickLists.map((pl) => {
+        const qty = pl.totalPickedQty ?? 0;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:8px;background:#f8fafc;margin-top:6px">
+          <span style="font-size:12px;font-weight:600">${pl.pickListNo}</span>
+          <span style="font-size:11px;color:#0f766e;font-weight:700">${qty} pcs</span>
+        </div>`;
+      }).join('');
+
+      const clientName = pickLists[0].clientName;
+      const result = await Swal.fire({
+        icon: 'question',
+        title: 'Combine into One Packing List?',
+        html: `
+          <div style="text-align:left;font-size:13px">
+            <p><strong>Customer:</strong> ${clientName}</p>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:12px 0">
+              <div style="background:#eef2ff;border-radius:10px;padding:10px;text-align:center">
+                <div style="font-size:11px;color:#4338ca;font-weight:700;text-transform:uppercase">Pick Lists</div>
+                <div style="font-size:24px;font-weight:700;color:#4338ca">${pickLists.length}</div>
+              </div>
+              <div style="background:#ecfeff;border-radius:10px;padding:10px;text-align:center">
+                <div style="font-size:11px;color:#0f766e;font-weight:700;text-transform:uppercase">Qty to Pack</div>
+                <div style="font-size:24px;font-weight:700;color:#0f766e">${totalQty}</div>
+              </div>
+            </div>
+            <p style="font-size:11px;color:#64748b;margin-bottom:2px">Duplicate items (same design/barcode/size) will be merged and quantities summed:</p>
+            ${pickListRows}
+          </div>`,
+        showCancelButton: true,
+        confirmButtonText: `Combine ${pickLists.length} Picking List${pickLists.length > 1 ? 's' : ''}`,
+        confirmButtonColor: '#0f766e',
+      });
+
+      if (!result.isConfirmed) return;
+
+      const salesOrderIds = [...new Set(allLines.map((l) => l.salesOrderId).filter(Boolean))];
+      const salesNos = [...new Set(allLines.map((l) => l.salesNo).filter(Boolean))];
+
+      const packingListId = await this.packingListService.createGeneratedPackingList({
+        packingListNo: `PK-${Date.now()}`,
+        pickListIds: pickLists.map((pl) => pl.id!),
+        pickListNos: pickLists.map((pl) => pl.pickListNo),
+        salesOrderIds,
+        salesNos,
+        clientId,
+        clientName,
+        packingMode: 'customer',
+        lines: allLines,
+        markSourcePickListsPacked: true,
+      });
+
+      const created = await this.packingListService.getPackingListByIdOnce(packingListId);
+      this.combineClientId.set(null);
+      this.selectedPickListIdsForCombine.set(new Set());
+      this.listTab.set('packing');
+      if (!created) { this.mode.set('list'); return; }
+
+      const nextStep = await Swal.fire({
+        icon: 'success',
+        title: 'Packing List Generated',
+        text: `${created.packingListNo} created from ${pickLists.length} Pick List${pickLists.length > 1 ? 's' : ''}. Start carton packing now or review the list first.`,
+        showCancelButton: true,
+        confirmButtonText: 'Start Packing Now',
+        cancelButtonText: 'Review List',
+        confirmButtonColor: '#16a34a',
+        cancelButtonColor: '#64748b',
+      });
+
+      if (nextStep.isConfirmed) await this.startPacking(created);
+      else await this.openView(created);
+    } catch (error: any) {
+      const msg = error?.message === 'no_packable_lines'
+        ? 'No packable lines found.'
+        : error?.message ?? 'Unable to generate the Packing List.';
+      await Swal.fire({ icon: 'error', title: 'Generation Failed', text: msg });
+    } finally {
+      this.isGenerating.set(false);
+    }
   }
 
   // ─── Generate flow ─────────────────────────────────────────────────────────
@@ -412,8 +594,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
       for (const group of customerGroups) {
         const packingListId = await this.packingListService.createGeneratedPackingList({
           packingListNo: `PK-${Date.now()}`,
-          pickListId: pickList.id,
-          pickListNo: pickList.pickListNo,
+          pickListIds: [pickList.id],
+          pickListNos: [pickList.pickListNo],
           salesOrderIds: [group.salesOrderId],
           salesNos: [group.salesNo],
           clientId: group.clientId,
@@ -940,6 +1122,38 @@ export class PackingListComponent implements OnInit, OnDestroy {
     if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
   }
 
+  async exportPackingListToExcel(packingList: PackingList): Promise<void> {
+    if (!packingList.id) return;
+    try {
+      const [fresh, lines] = await Promise.all([
+        this.packingListService.getPackingListByIdOnce(packingList.id),
+        this.packingListService.getPackingListLinesOnce(packingList.id),
+      ]);
+      const loaded = fresh ?? packingList;
+      const XLSX = await import('xlsx');
+      const rows: any[][] = [
+        ['Packing List No:', loaded.packingListNo, '', 'Date:', this.formatDate(loaded.createdAt)],
+        ['Source Pick List(s):', (loaded.pickListNos ?? []).join(', ')],
+        ['Customer:', loaded.clientName, '', 'Orders:', (loaded.salesNos ?? []).join(', ')],
+        [],
+        ['S.No', 'Style No', 'Color', 'Part', 'Size', 'Sleeve', 'Barcode', 'Required Qty', 'Packed Qty'],
+        ...lines.map((line, i) => [
+          i + 1, line.styleNo, line.color, line.partName, line.size, line.sleeveType ?? '',
+          line.barcode ?? '', line.requiredQty, line.packedQty,
+        ]),
+        [],
+        ['', '', '', '', '', '', 'TOTAL:', loaded.totalRequiredQty, loaded.totalPackedQty],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 12 }, { wch: 12 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Packing List');
+      XLSX.writeFile(wb, `${loaded.packingListNo}.xlsx`);
+    } catch {
+      await Swal.fire({ icon: 'error', title: 'Excel Export Failed', text: 'Unable to generate Excel. Please try printing the PDF instead.' });
+    }
+  }
+
   async saveDispatchInfo(packingList: PackingList) {
     if (!packingList.id) return;
     const agentName = this.agentName().trim();
@@ -1145,7 +1359,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
   }
 
   getPackingListsForPickList(pickListId: string): PackingList[] {
-    return this.packingLists().filter((pl) => pl.pickListId === pickListId);
+    if (!pickListId) return [];
+    return this.packingLists().filter((pl) => pl.pickListId === pickListId || pl.pickListIds?.includes(pickListId));
   }
 
   getFirstIncompletePacking(packingLists: PackingList[]): PackingList | null {

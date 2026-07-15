@@ -35,7 +35,7 @@
         </button>
       </div>
 
-      <div class="flex gap-3 mb-5">
+      <div class="flex flex-col sm:flex-row gap-3 mb-5">
         <div class="relative flex-1">
           <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -46,6 +46,12 @@
             class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
             [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event)">
         </div>
+        @if (listTab() === 'ready') {
+          <button (click)="openCombineFlow()"
+            class="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap">
+            Combine Pick Lists
+          </button>
+        }
       </div>
 
       @if (isLoading()) {
@@ -156,7 +162,7 @@
                 <tr class="hover:bg-gray-50">
                   <td class="px-4 py-3">
                     <div class="font-semibold text-gray-800">{{packingList.packingListNo}}</div>
-                    <div class="text-xs text-gray-400 mt-0.5">{{packingList.pickListNo}} · {{formatDate(packingList.createdAt)}}</div>
+                    <div class="text-xs text-gray-400 mt-0.5">{{(packingList.pickListNos ?? []).join(', ')}} · {{formatDate(packingList.createdAt)}}</div>
                   </td>
                   <td class="px-4 py-3 text-xs text-gray-600">{{(packingList.salesNos ?? []).join(', ')}}</td>
                   <td class="px-4 py-3 text-gray-700 font-medium">{{packingList.clientName}}</td>
@@ -293,6 +299,97 @@
     </div>
   }
 
+  <!-- ══════════════════════════════════════════════════════════════════
+       COMBINE VIEW — merge multiple Pick Lists (same customer) into one
+       Packing List
+  ═══════════════════════════════════════════════════════════════════ -->
+  @else if (mode() === 'combine') {
+    <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4 mb-5">
+        <div>
+          <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Combine Pick Lists</h2>
+          <p class="text-sm text-gray-500 mt-1">Select a customer, then choose the Pick Lists to merge into a single Packing List.</p>
+        </div>
+        <button (click)="cancelCombine()" class="px-4 py-2 border border-gray-300 text-gray-600 text-sm font-semibold rounded-lg hover:bg-gray-50 transition-colors">
+          Cancel
+        </button>
+      </div>
+
+      @if (!combineClientId()) {
+        <!-- Step 1: choose a customer -->
+        @if (combineEligibleCustomers().length === 0) {
+          <div class="text-center text-sm text-gray-500 py-10">
+            No completed Pick Lists are currently available to combine.
+          </div>
+        } @else {
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            @for (customer of combineEligibleCustomers(); track customer.clientId) {
+              <button (click)="selectCombineCustomer(customer.clientId)"
+                class="text-left px-4 py-3 border border-gray-200 rounded-lg hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
+                <div class="font-semibold text-gray-800">{{customer.clientName}}</div>
+              </button>
+            }
+          </div>
+        }
+      } @else {
+        <!-- Step 2: choose Pick Lists for the selected customer -->
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <button (click)="combineClientId.set(null)" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+            &larr; Change Customer
+          </button>
+        </div>
+
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-10"></th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Pick List</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Orders</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Picked Qty</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Parts</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white">
+              @for (pickList of combinePickListsForSelectedCustomer(); track pickList.id) {
+                <tr class="hover:bg-gray-50 cursor-pointer" (click)="togglePickListForCombine(pickList.id ?? '')">
+                  <td class="px-4 py-3 text-center" (click)="$event.stopPropagation()">
+                    <input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      [checked]="isPickListSelectedForCombine(pickList.id ?? '')"
+                      (change)="togglePickListForCombine(pickList.id ?? '')">
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="font-semibold text-gray-800">{{pickList.pickListNo}}</div>
+                    <div class="text-xs text-gray-400 mt-0.5">{{formatDate(pickList.createdAt)}}</div>
+                  </td>
+                  <td class="px-4 py-3 text-xs text-gray-600">{{(pickList.salesNos ?? []).join(', ')}}</td>
+                  <td class="px-4 py-3 text-center font-bold text-green-700">{{pickList.totalPickedQty ?? 0}}</td>
+                  <td class="px-4 py-3 text-center font-semibold text-teal-700">{{getPartCountFromPickList(pickList)}}</td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="5" class="px-4 py-10 text-center text-sm text-gray-500">
+                    No eligible Pick Lists for this customer.
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+          <div class="text-sm text-gray-700">
+            <strong>{{combineSelectionTotals().count}}</strong> Pick List{{combineSelectionTotals().count !== 1 ? 's' : ''}} selected
+            &middot; <strong>{{combineSelectionTotals().totalQty}}</strong> pcs total
+          </div>
+          <button (click)="confirmCombinePackingList()" [disabled]="isGenerating() || combineSelectionTotals().count === 0"
+            class="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors">
+            {{isGenerating() ? 'Combining...' : 'Combine ' + combineSelectionTotals().count + ' Picking List' + (combineSelectionTotals().count !== 1 ? 's' : '')}}
+          </button>
+        </div>
+      }
+    </div>
+  }
 
   <!-- ══════════════════════════════════════════════════════════════════
        LIVE PACK VIEW — customer-wise click checklist
@@ -311,7 +408,7 @@
                 <span class="px-2 py-0.5 rounded-full text-xs font-semibold" [class]="packingStatusBadge(packingList.status)">{{packingList.status}}</span>
               </div>
               <div class="text-sm text-gray-600 mt-0.5 font-medium">{{packingList.clientName}}</div>
-              <div class="text-xs text-gray-400 mt-0.5">{{(packingList.salesNos ?? []).join(', ')}} · {{packingList.pickListNo}}</div>
+              <div class="text-xs text-gray-400 mt-0.5">{{(packingList.salesNos ?? []).join(', ')}} · {{(packingList.pickListNos ?? []).join(', ')}}</div>
             </div>
             <div class="flex gap-2 flex-shrink-0 flex-wrap justify-end">
               <button (click)="generateAndPrintDC(packingList)" [disabled]="isGeneratingDC()"
@@ -678,6 +775,7 @@
                 Box Labels
               </button>
               <button (click)="printPackingList(packingList)" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Print</button>
+              <button (click)="exportPackingListToExcel(packingList)" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Excel</button>
               <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Back</button>
             </div>
           </div>

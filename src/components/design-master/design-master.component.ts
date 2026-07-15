@@ -472,6 +472,31 @@ export class DesignMasterComponent implements OnInit {
         return { designs: Array.from(designMap.values()), errors };
     }
 
+    // Same normalisation used to group Excel rows into designs — case-insensitive
+    // so "Red"/"red" or manually-entered vs. imported casing still match.
+    private designKey(styleNo: string, color: string | undefined, group: string | undefined): string {
+        return `${(styleNo ?? '').trim()}|${(color ?? '').trim()}|${(group ?? '').trim()}`.toLowerCase();
+    }
+
+    // Merge imported size rows into a design's existing sizes: a row matching an
+    // existing size by (Size + SleeveType) updates that entry in place; anything
+    // new is appended. Existing sizes not present in the import file are kept as-is.
+    private mergeSizes(existingSizes: SizePrice[], importedSizes: SizePrice[]): SizePrice[] {
+        const merged = existingSizes.map(s => ({ ...s }));
+        for (const incoming of importedSizes) {
+            const idx = merged.findIndex(s =>
+                String(s.size).trim().toLowerCase() === String(incoming.size).trim().toLowerCase() &&
+                (s.sleeveType ?? null) === (incoming.sleeveType ?? null)
+            );
+            if (idx >= 0) {
+                merged[idx] = { ...merged[idx], ...incoming };
+            } else {
+                merged.push(incoming);
+            }
+        }
+        return merged;
+    }
+
     private async processImport(designs: Omit<Design, 'id'>[]) {
         Swal.fire({
             title: `Importing ${designs.length} design(s)…`,
@@ -479,22 +504,48 @@ export class DesignMasterComponent implements OnInit {
             didOpen: () => Swal.showLoading()
         });
 
-        let successCount = 0;
+        // Load current designs fresh (cached one-time read) so re-imports of the same
+        // file — or imports of styles that already exist — update instead of duplicate.
+        const existingDesigns = await new Promise<Design[]>((resolve, reject) => {
+            this.designService.getDesigns().subscribe({ next: resolve, error: reject });
+        });
+        const existingByKey = new Map<string, Design>();
+        for (const d of existingDesigns) {
+            existingByKey.set(this.designKey(d.styleNo, d.color, d.group), d);
+        }
+
+        let createdCount = 0;
+        let updatedCount = 0;
         const failedItems: { styleNo: string; reason: string }[] = [];
 
         for (const design of designs) {
+            const key = this.designKey(design.styleNo, design.color, design.group);
             try {
-                await this.designService.createDesign(design);
-                successCount++;
+                const existing = existingByKey.get(key);
+                if (existing) {
+                    const merged: Design = {
+                        ...existing,
+                        color: design.color,
+                        group: design.group,
+                        sizes: this.mergeSizes(existing.sizes, design.sizes),
+                    };
+                    await this.designService.updateDesign(merged);
+                    existingByKey.set(key, merged);
+                    updatedCount++;
+                } else {
+                    await this.designService.createDesign(design);
+                    createdCount++;
+                }
             } catch (err: any) {
                 failedItems.push({ styleNo: design.styleNo, reason: err?.message ?? 'Unknown error' });
             }
         }
 
+        const summary = `${createdCount} created, ${updatedCount} updated`;
         if (failedItems.length === 0) {
             await Swal.fire({
                 icon: 'success', title: 'Import Complete!',
-                text: `${successCount} design(s) imported successfully.`,
+                text: `${summary}.`,
                 timer: 3000, showConfirmButton: false,
             });
         } else {
@@ -504,7 +555,7 @@ export class DesignMasterComponent implements OnInit {
             await Swal.fire({
                 icon: 'warning',
                 title: 'Import Partially Complete',
-                html: `<p>${successCount} imported successfully.</p>
+                html: `<p>${summary}.</p>
                        <p class="mt-2 font-semibold text-red-600">${failedItems.length} failed:</p>
                        <ul class="list-disc pl-4 text-left text-sm max-h-40 overflow-y-auto mt-1">${failRows}</ul>`,
             });
