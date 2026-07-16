@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, signal, inject, OnInit, OnDestroy, ViewChild, ElementRef, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, inject, OnInit, OnDestroy, ViewChild, ElementRef, computed, effect } from '@angular/core';
 import { CommonModule, formatDate } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Client } from '../../models/client.model';
@@ -61,6 +61,19 @@ const EMPTY_MANUAL_SELECTION_STATE: ManualDesignSelectionState = {
   confirmedDesigns: [],
 };
 
+// --- Auto-saved local draft for an in-progress (unsubmitted) new Sales Order ---
+type SalesOrderDraft = {
+  selectedClientId: string | null;
+  deliveryDate: string;
+  orderItems: OrderItem[];
+  consolidatedEntryState: ConsolidatedEntryState;
+  manualDesignSelectionState: ManualDesignSelectionState;
+  savedAt: number;
+};
+
+const SALES_ORDER_DRAFT_KEY = 'salesOrderEntryDraft';
+const DRAFT_SAVE_DEBOUNCE_MS = 500;
+
 
 @Component({
   selector: 'app-sales-order',
@@ -105,6 +118,32 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
     // --- State for Manual Design Selection ---
     manualDesignSelectionState = signal<ManualDesignSelectionState>(EMPTY_MANUAL_SELECTION_STATE);
+
+    // --- Auto-save draft (new, unsubmitted Sales Orders only) ---
+    private draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
+    private autoSaveDraftEffect = effect(() => {
+      const mode = this.mode();
+      const isEdit = this.isEditMode();
+      const selectedClientId = this.selectedClientId();
+      const deliveryDate = this.deliveryDate();
+      const orderItems = this.orderItems();
+      const consolidatedEntryState = this.consolidatedEntryState();
+      const manualDesignSelectionState = this.manualDesignSelectionState();
+
+      // Only auto-save while creating a brand-new (not-yet-submitted) order.
+      if (mode !== 'form' || isEdit) return;
+
+      if (this.draftSaveTimer) clearTimeout(this.draftSaveTimer);
+      this.draftSaveTimer = setTimeout(() => {
+        this.persistDraft({
+          selectedClientId,
+          deliveryDate,
+          orderItems,
+          consolidatedEntryState,
+          manualDesignSelectionState,
+        });
+      }, DRAFT_SAVE_DEBOUNCE_MS);
+    });
 
     viewfinderBorderClass = computed(() => {
         switch (this.scanFeedback()) {
@@ -385,6 +424,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
     this.stream?.getTracks().forEach(track => track.stop());
+    if (this.draftSaveTimer) clearTimeout(this.draftSaveTimer);
   }
 
   switchToListView() {
@@ -395,12 +435,79 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.deliveryDate.set('');
   }
 
-  showAddForm() {
+  async showAddForm() {
+    const draft = this.loadDraftFromStorage();
+    if (draft) {
+      const result = await Swal.fire({
+        icon: 'question',
+        title: 'Resume Draft?',
+        text: 'A draft Sales Order was found. Would you like to continue where you left off?',
+        showCancelButton: true,
+        confirmButtonText: 'Resume',
+        cancelButtonText: 'Discard',
+        reverseButtons: true,
+        allowOutsideClick: false,
+      });
+
+      if (result.isConfirmed) {
+        this.resumeDraft(draft);
+        return;
+      }
+      this.clearDraft();
+    }
+    this.startBlankOrderForm();
+  }
+
+  private startBlankOrderForm() {
     this.editableOrder.set(null);
     this.orderItems.set([]);
     this.selectedClientId.set(null);
     this.deliveryDate.set('');
+    this.consolidatedEntryState.set(EMPTY_CONSOLIDATED_ENTRY_STATE);
+    this.manualDesignSelectionState.set(EMPTY_MANUAL_SELECTION_STATE);
     this.mode.set('form');
+  }
+
+  private resumeDraft(draft: SalesOrderDraft) {
+    this.editableOrder.set(null);
+    this.selectedClientId.set(draft.selectedClientId);
+    this.deliveryDate.set(draft.deliveryDate);
+    this.orderItems.set(draft.orderItems);
+    this.consolidatedEntryState.set(draft.consolidatedEntryState);
+    this.manualDesignSelectionState.set(draft.manualDesignSelectionState);
+    this.mode.set('form');
+  }
+
+  private loadDraftFromStorage(): SalesOrderDraft | null {
+    try {
+      const raw = localStorage.getItem(SALES_ORDER_DRAFT_KEY);
+      return raw ? (JSON.parse(raw) as SalesOrderDraft) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private persistDraft(data: Omit<SalesOrderDraft, 'savedAt'>) {
+    const hasContent = !!data.selectedClientId
+      || !!data.deliveryDate
+      || data.orderItems.length > 0
+      || data.consolidatedEntryState.isActive
+      || data.manualDesignSelectionState.isActive;
+
+    try {
+      if (!hasContent) {
+        localStorage.removeItem(SALES_ORDER_DRAFT_KEY);
+        return;
+      }
+      const draft: SalesOrderDraft = { ...data, savedAt: Date.now() };
+      localStorage.setItem(SALES_ORDER_DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // localStorage unavailable/full — auto-save is best-effort, in-memory entry is unaffected
+    }
+  }
+
+  private clearDraft() {
+    try { localStorage.removeItem(SALES_ORDER_DRAFT_KEY); } catch {}
   }
 
   showEditForm(order: SalesOrder) {
@@ -1523,6 +1630,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       };
       this.salesOrderService.createSalesOrder(orderData as any).subscribe({
         next: (savedOrder) => {
+          this.clearDraft();
           Swal.fire({ icon: 'success', title: 'Created!', text: `Sales Order ${savedOrder.id} created successfully!`, timer: 2000, showConfirmButton: false });
           this.loadSalesOrders();
           this.switchToListView();
