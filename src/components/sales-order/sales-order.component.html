@@ -246,9 +246,16 @@
                 <span class="font-semibold text-base break-words">{{ group.fabricDescription }}</span>
               </div>
               <div class="flex items-center gap-2 pl-7 sm:pl-0 flex-shrink-0">
-                <span class="text-indigo-200 text-sm whitespace-nowrap">
-                  {{ group.designRatios.length }} design{{ group.designRatios.length !== 1 ? 's' : '' }}
-                </span>
+                @if (group.containsShirt) {
+                  @let sleeveTotals = getGroupSleeveTotals(group);
+                  <span class="text-indigo-200 text-sm whitespace-nowrap">
+                    Full Sleeve: {{ sleeveTotals.full }} <span class="mx-1 text-indigo-300">|</span> Half Sleeve: {{ sleeveTotals.half }}
+                  </span>
+                } @else {
+                  <span class="text-indigo-200 text-sm whitespace-nowrap">
+                    {{ group.designRatios.length }} design{{ group.designRatios.length !== 1 ? 's' : '' }}
+                  </span>
+                }
                 @if (group.containsShirt) {
                   <span class="text-xs bg-white/25 px-2 py-0.5 rounded-full whitespace-nowrap">Full / Half Sleeve</span>
                 }

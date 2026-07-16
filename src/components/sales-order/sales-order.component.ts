@@ -1444,6 +1444,18 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.scannedBarcodes.set([]);
   }
 
+  getGroupSleeveTotals(group: FabricGroupEntry): { full: number; half: number } {
+    let full = 0;
+    let half = 0;
+    for (const dr of group.designRatios) {
+      for (const { full: f, half: h } of Object.values(dr.shirtSizeQuantities)) {
+        full += this.parseFractionalQuantity(f);
+        half += this.parseFractionalQuantity(h);
+      }
+    }
+    return { full, half };
+  }
+
   private parseFractionalQuantity(value: unknown): number {
     if (typeof value === 'number') return value >= 0 ? value : 0;
     if (typeof value !== 'string') {
