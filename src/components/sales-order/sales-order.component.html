@@ -297,13 +297,15 @@
                             <td class="px-3 py-1.5 text-center font-semibold text-gray-700 bg-indigo-100/60 border border-indigo-200">{{ size }}</td>
                             <td class="px-2 py-1 border border-indigo-200">
                               <input type="number" min="0" placeholder="0"
-                                     class="block w-full text-center px-2 py-1 bg-white border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                                     [disabled]="!group.groupScannedSleeveTypes.full"
+                                     class="block w-full text-center px-2 py-1 bg-white border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
                                      [ngModel]="group.groupShirtSizeQuantities[size]?.full || ''"
                                      (ngModelChange)="updateGroupShirtSizeQty(gi, size, 'Full', $event)">
                             </td>
                             <td class="px-2 py-1 border border-indigo-200">
                               <input type="number" min="0" placeholder="0"
-                                     class="block w-full text-center px-2 py-1 bg-white border border-emerald-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 text-sm"
+                                     [disabled]="!group.groupScannedSleeveTypes.half"
+                                     class="block w-full text-center px-2 py-1 bg-white border border-emerald-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 text-sm disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
                                      [ngModel]="group.groupShirtSizeQuantities[size]?.half || ''"
                                      (ngModelChange)="updateGroupShirtSizeQty(gi, size, 'Half', $event)">
                             </td>
@@ -356,13 +358,15 @@
                                 <td class="px-2 py-1 text-center font-semibold text-gray-600 bg-gray-50 border border-gray-200">{{ size }}</td>
                                 <td class="px-1.5 py-0.5 border border-gray-200">
                                   <input type="number" min="0" placeholder="0"
-                                         class="block w-full text-center px-1 py-0.5 bg-white border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                                         [disabled]="!dr.scannedSleeveTypes.full"
+                                         class="block w-full text-center px-1 py-0.5 bg-white border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
                                          [ngModel]="dr.shirtSizeQuantities[size]?.full || ''"
                                          (ngModelChange)="updateDesignShirtSizeQty(gi, di, size, 'Full', $event)">
                                 </td>
                                 <td class="px-1.5 py-0.5 border border-gray-200">
                                   <input type="number" min="0" placeholder="0"
-                                         class="block w-full text-center px-1 py-0.5 bg-white border border-emerald-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
+                                         [disabled]="!dr.scannedSleeveTypes.half"
+                                         class="block w-full text-center px-1 py-0.5 bg-white border border-emerald-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
                                          [ngModel]="dr.shirtSizeQuantities[size]?.half || ''"
                                          (ngModelChange)="updateDesignShirtSizeQty(gi, di, size, 'Half', $event)">
                                 </td>

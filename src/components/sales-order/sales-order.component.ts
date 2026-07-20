@@ -16,10 +16,13 @@ declare const jsQR: any;
 type ViewMode = 'list' | 'form';
 
 // --- State for Consolidated Entry (group-based) ---
+type SleeveAvailability = { full: boolean; half: boolean };
+
 type DesignRatio = {
   design: Design;
   sizeQuantities: Record<string, string>;
   shirtSizeQuantities: Record<string, { full: string; half: string }>;
+  scannedSleeveTypes: SleeveAvailability;
 };
 
 type FabricGroupEntry = {
@@ -29,6 +32,7 @@ type FabricGroupEntry = {
   designRatios: DesignRatio[];
   groupSizeQuantities: Record<string, string>;
   groupShirtSizeQuantities: Record<string, { full: string; half: string }>;
+  groupScannedSleeveTypes: SleeveAvailability;
   isExpanded: boolean;
 };
 
@@ -1339,7 +1343,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.consolidatedEntryState.set({
       isActive: true,
       scannedBarcodes: barcodes,
-      groups: this.buildGroupsFromDesigns(Array.from(uniqueDesigns.values())),
+      groups: this.buildGroupsFromDesigns(Array.from(uniqueDesigns.values()), barcodes),
     });
   }
 
@@ -1347,7 +1351,46 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   // --- Consolidated Entry: group-based quantity editing ---
   // ============================================================
 
-  private buildGroupsFromDesigns(designs: Design[]): FabricGroupEntry[] {
+  /**
+   * Determines which sleeve types (Full/Half) are actually available for a design.
+   * When `scannedBarcodes` is provided, availability reflects only the sleeve types
+   * whose barcode was actually scanned. When omitted (manual selection / save-as,
+   * i.e. no real scan happened), availability falls back to whatever sleeve types
+   * exist for the design in the catalog — unrestricted, matching prior behavior.
+   */
+  private getScannedSleeveTypesForDesign(design: Design, barcodeSet: Set<string> | null): SleeveAvailability {
+    if (!barcodeSet) {
+      return {
+        full: design.sizes.some(s => s.sleeveType === 'Full'),
+        half: design.sizes.some(s => s.sleeveType === 'Half'),
+      };
+    }
+    let full = false;
+    let half = false;
+    for (const s of design.sizes) {
+      if (!barcodeSet.has(String(s.BARCODE ?? '').trim())) continue;
+      if (s.sleeveType === 'Full') full = true;
+      else if (s.sleeveType === 'Half') half = true;
+    }
+    return { full, half };
+  }
+
+  /** Zeroes out the full/half value for any sleeve type that wasn't actually scanned. */
+  private applySleeveAvailabilityMask(
+    shirtQty: Record<string, { full: string; half: string }>,
+    availability: SleeveAvailability
+  ): Record<string, { full: string; half: string }> {
+    return Object.fromEntries(
+      Object.entries(shirtQty).map(([size, v]) => [
+        size,
+        { full: availability.full ? v.full : '', half: availability.half ? v.half : '' },
+      ])
+    );
+  }
+
+  private buildGroupsFromDesigns(designs: Design[], scannedBarcodes?: string[]): FabricGroupEntry[] {
+    const barcodeSet = scannedBarcodes ? new Set(scannedBarcodes.map(b => b.trim())) : null;
+
     const groupMap = new Map<string, Design[]>();
     for (const design of designs) {
       const g = design.sizes[0]?.fabricType?.trim() || 'Uncategorized';
@@ -1359,13 +1402,23 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       const allPossibleSizes = [...new Set(groupDesigns.flatMap(d => d.sizes.map(s => s.size)))].sort(
         (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })
       );
+      const designRatios = groupDesigns.map(d => ({
+        design: d,
+        sizeQuantities: {},
+        shirtSizeQuantities: {},
+        scannedSleeveTypes: this.getScannedSleeveTypesForDesign(d, barcodeSet),
+      }));
       return {
         fabricDescription,
         containsShirt,
         allPossibleSizes,
-        designRatios: groupDesigns.map(d => ({ design: d, sizeQuantities: {}, shirtSizeQuantities: {} })),
+        designRatios,
         groupSizeQuantities: {},
         groupShirtSizeQuantities: {},
+        groupScannedSleeveTypes: {
+          full: designRatios.some(dr => dr.scannedSleeveTypes.full),
+          half: designRatios.some(dr => dr.scannedSleeveTypes.half),
+        },
         isExpanded: true,
       };
     });
@@ -1414,9 +1467,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
           designRatios: g.designRatios.map(dr => ({
             ...dr,
             sizeQuantities: { ...g.groupSizeQuantities },
-            shirtSizeQuantities: Object.fromEntries(
-              Object.entries(g.groupShirtSizeQuantities).map(([k, v]) => [k, { ...v }])
-            ),
+            shirtSizeQuantities: this.applySleeveAvailabilityMask(g.groupShirtSizeQuantities, dr.scannedSleeveTypes),
           })),
         };
       }),
@@ -1456,14 +1507,17 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
           return {
             ...g,
-            // Update this group's own template so it also shows the applied ratio
-            groupShirtSizeQuantities: g.containsShirt ? newShirtQty : g.groupShirtSizeQuantities,
+            // Update this group's own template so it also shows the applied ratio,
+            // masked to the sleeve types actually scanned somewhere in this group.
+            groupShirtSizeQuantities: g.containsShirt
+              ? this.applySleeveAvailabilityMask(newShirtQty, g.groupScannedSleeveTypes)
+              : g.groupShirtSizeQuantities,
             groupSizeQuantities: !g.containsShirt ? newSizeQty : g.groupSizeQuantities,
-            // Apply the ratio to every design in this group
+            // Apply the ratio to every design in this group, masked per design's own scanned sleeve types
             designRatios: g.designRatios.map(dr => ({
               ...dr,
               shirtSizeQuantities: g.containsShirt
-                ? Object.fromEntries(Object.entries(newShirtQty).map(([k, v]) => [k, { ...v }]))
+                ? this.applySleeveAvailabilityMask(newShirtQty, dr.scannedSleeveTypes)
                 : dr.shirtSizeQuantities,
               sizeQuantities: !g.containsShirt ? { ...newSizeQty } : dr.sizeQuantities,
             })),
