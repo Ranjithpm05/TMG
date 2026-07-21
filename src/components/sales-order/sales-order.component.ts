@@ -42,6 +42,13 @@ type ConsolidatedEntryState = {
   groups: FabricGroupEntry[];
 };
 
+// One card per (fabric description, sleeve type) shown in the shirt section of the entry modal
+type ShirtSleeveDisplayCard = {
+  group: FabricGroupEntry;
+  groupIndex: number;
+  sleeveType: 'Full' | 'Half';
+};
+
 const EMPTY_CONSOLIDATED_ENTRY_STATE: ConsolidatedEntryState = {
   isActive: false,
   scannedBarcodes: [],
@@ -119,6 +126,19 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     scanFeedback = signal<'idle' | 'success' | 'duplicate'>('idle');
     lastAddedBarcode = signal<string | null>(null);
     collapsedScanGroups = signal<Set<string>>(new Set());
+
+    // --- Shirt groups: displayed as one card per (fabric description, sleeve type) ---
+    shirtSleeveDisplayCards = computed<ShirtSleeveDisplayCard[]>(() => {
+      const groups = this.consolidatedEntryState().groups;
+      const cards: ShirtSleeveDisplayCard[] = [];
+      groups.forEach((g, groupIndex) => {
+        if (g.containsShirt && g.groupScannedSleeveTypes.full) cards.push({ group: g, groupIndex, sleeveType: 'Full' });
+      });
+      groups.forEach((g, groupIndex) => {
+        if (g.containsShirt && g.groupScannedSleeveTypes.half) cards.push({ group: g, groupIndex, sleeveType: 'Half' });
+      });
+      return cards;
+    });
 
     // --- State for Manual Design Selection ---
     manualDesignSelectionState = signal<ManualDesignSelectionState>(EMPTY_MANUAL_SELECTION_STATE);
@@ -1603,6 +1623,16 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   cancelConsolidatedEntry() {
     this.consolidatedEntryState.set(EMPTY_CONSOLIDATED_ENTRY_STATE);
     this.scannedBarcodes.set([]);
+  }
+
+  /** Whether the given design row belongs under the given sleeve type. */
+  isDesignInSleeve(dr: DesignRatio, sleeveType: 'Full' | 'Half'): boolean {
+    return sleeveType === 'Full' ? dr.scannedSleeveTypes.full : dr.scannedSleeveTypes.half;
+  }
+
+  /** Number of scanned designs in this group that belong to the given sleeve type. */
+  getGroupDesignCountForSleeve(group: FabricGroupEntry, sleeveType: 'Full' | 'Half'): number {
+    return group.designRatios.filter(dr => this.isDesignInSleeve(dr, sleeveType)).length;
   }
 
   getGroupSleeveTotals(group: FabricGroupEntry): { full: number; half: number } {
