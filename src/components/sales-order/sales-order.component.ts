@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, signal, inject, OnInit, OnDestroy, ViewChild, ElementRef, computed, effect } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, inject, OnInit, OnDestroy, ViewChild, ElementRef, computed, effect, HostListener } from '@angular/core';
 import { CommonModule, formatDate } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Client } from '../../models/client.model';
@@ -77,6 +77,7 @@ type SalesOrderDraft = {
   selectedClientId: string | null;
   deliveryDate: string;
   orderItems: OrderItem[];
+  scannedBarcodes: string[];
   consolidatedEntryState: ConsolidatedEntryState;
   manualDesignSelectionState: ManualDesignSelectionState;
   savedAt: number;
@@ -151,6 +152,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       const selectedClientId = this.selectedClientId();
       const deliveryDate = this.deliveryDate();
       const orderItems = this.orderItems();
+      const scannedBarcodes = this.scannedBarcodes();
       const consolidatedEntryState = this.consolidatedEntryState();
       const manualDesignSelectionState = this.manualDesignSelectionState();
 
@@ -163,11 +165,43 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
           selectedClientId,
           deliveryDate,
           orderItems,
+          scannedBarcodes,
           consolidatedEntryState,
           manualDesignSelectionState,
         });
       }, DRAFT_SAVE_DEBOUNCE_MS);
     });
+
+    /**
+     * Mobile browsers can suspend/kill a backgrounded tab (e.g. an incoming call taking
+     * over the camera) before a pending debounce fires — flush synchronously whenever the
+     * page is hidden or about to be torn down so a mid-scan session is never lost.
+     */
+    @HostListener('document:visibilitychange')
+    onVisibilityChange() {
+      if (document.visibilityState === 'hidden') this.flushDraftSaveImmediately();
+    }
+
+    @HostListener('window:pagehide')
+    onPageHide() {
+      this.flushDraftSaveImmediately();
+    }
+
+    private flushDraftSaveImmediately() {
+      if (this.draftSaveTimer) {
+        clearTimeout(this.draftSaveTimer);
+        this.draftSaveTimer = null;
+      }
+      if (this.mode() !== 'form' || this.isEditMode()) return;
+      this.persistDraft({
+        selectedClientId: this.selectedClientId(),
+        deliveryDate: this.deliveryDate(),
+        orderItems: this.orderItems(),
+        scannedBarcodes: this.scannedBarcodes(),
+        consolidatedEntryState: this.consolidatedEntryState(),
+        manualDesignSelectionState: this.manualDesignSelectionState(),
+      });
+    }
 
     viewfinderBorderClass = computed(() => {
         switch (this.scanFeedback()) {
@@ -487,6 +521,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.orderItems.set([]);
     this.selectedClientId.set(null);
     this.deliveryDate.set('');
+    this.scannedBarcodes.set([]);
     this.consolidatedEntryState.set(EMPTY_CONSOLIDATED_ENTRY_STATE);
     this.manualDesignSelectionState.set(EMPTY_MANUAL_SELECTION_STATE);
     this.mode.set('form');
@@ -497,9 +532,42 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.selectedClientId.set(draft.selectedClientId);
     this.deliveryDate.set(draft.deliveryDate);
     this.orderItems.set(draft.orderItems);
-    this.consolidatedEntryState.set(draft.consolidatedEntryState);
+    this.scannedBarcodes.set(draft.scannedBarcodes ?? []);
     this.manualDesignSelectionState.set(draft.manualDesignSelectionState);
+
+    // Scanning was interrupted (e.g. incoming call, app backgrounded) before "Process"
+    // was pressed — rebuild the Enter Quantities groups from what was already scanned
+    // so nothing has to be re-scanned. If "Process" had already been pressed, the saved
+    // consolidatedEntryState already reflects that and is restored as-is.
+    if (!draft.consolidatedEntryState.isActive && draft.scannedBarcodes?.length) {
+      const matchedDesigns = this.matchDesignsFromBarcodes(draft.scannedBarcodes);
+      this.consolidatedEntryState.set(
+        matchedDesigns.length > 0
+          ? {
+              isActive: true,
+              scannedBarcodes: draft.scannedBarcodes,
+              groups: this.buildGroupsFromDesigns(matchedDesigns, draft.scannedBarcodes),
+            }
+          : EMPTY_CONSOLIDATED_ENTRY_STATE
+      );
+    } else {
+      this.consolidatedEntryState.set(draft.consolidatedEntryState);
+    }
+
     this.mode.set('form');
+  }
+
+  /** Matches raw scanned barcode strings to their designs — mirrors processScannedBarcodes()'s lookup. */
+  private matchDesignsFromBarcodes(barcodes: string[]): Design[] {
+    const barcodeToDesign = new Map<string, Design>();
+    this.designs().forEach(d => d.sizes.forEach(s => barcodeToDesign.set(s.BARCODE, d)));
+
+    const uniqueDesigns = new Map<string, Design>();
+    for (const barcode of barcodes) {
+      const design = barcodeToDesign.get(barcode.trim());
+      if (design) uniqueDesigns.set(design.id!, design);
+    }
+    return Array.from(uniqueDesigns.values());
   }
 
   private loadDraftFromStorage(): SalesOrderDraft | null {
@@ -515,6 +583,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     const hasContent = !!data.selectedClientId
       || !!data.deliveryDate
       || data.orderItems.length > 0
+      || data.scannedBarcodes.length > 0
       || data.consolidatedEntryState.isActive
       || data.manualDesignSelectionState.isActive;
 
