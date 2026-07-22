@@ -15,8 +15,8 @@ export class LoginComponent {
   private authService = inject(AuthService);
   private loadingService = inject(LoadingService);
 
-  username = signal('admin');
-  password = signal('123456');
+  username = signal('');
+  password = signal('');
   showPassword = signal(false);
   loginError = signal<string | null>(null);
   isLoading = computed(() => this.loadingService.isLoading());
