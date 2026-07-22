@@ -40,8 +40,14 @@
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
                 @for(user of users(); track user.id) {
+                  @let locked = isUserSuperAdmin(user) && !canManageSuperAdmins();
                   <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ user.username }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {{ user.username }}
+                      @if(isUserSuperAdmin(user)) {
+                        <span class="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">Super Admin</span>
+                      }
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user.email }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ getGroupName(user.userGroupId) }}</td>
                     <td class="px-6 py-4 whitespace-nowrap">
@@ -50,8 +56,9 @@
                       </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button (click)="showEditUserForm(user)" class="text-indigo-600 hover:text-indigo-900">Edit</button>
-                      <button (click)="deleteUser(user)" class="text-red-600 hover:text-red-900 ml-4">Delete</button>
+                      <button (click)="showEditUserForm(user)" [disabled]="locked" [title]="locked ? 'Only Super Admin users can manage Super Admin accounts.' : ''" class="text-indigo-600 hover:text-indigo-900 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:text-gray-400">Edit</button>
+                      <button (click)="resetPassword(user)" [disabled]="locked" [title]="locked ? 'Only Super Admin users can manage Super Admin accounts.' : ''" class="text-amber-600 hover:text-amber-900 ml-4 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:text-gray-400">Reset Password</button>
+                      <button (click)="deleteUser(user)" [disabled]="locked" [title]="locked ? 'Only Super Admin users can manage Super Admin accounts.' : ''" class="text-red-600 hover:text-red-900 ml-4 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:text-gray-400">Delete</button>
                     </td>
                   </tr>
                 }
@@ -63,7 +70,7 @@
         </div>
       } @else {
         <!-- User Form View -->
-        @let user = userFormModel();
+        @let user = editableUser();
         <div>
           <h2 class="text-2xl font-bold text-gray-800 mb-6">{{ isUserEditMode() ? 'Edit' : 'Add' }} User</h2>
           <form #userForm="ngForm" (ngSubmit)="saveUser()" class="space-y-6 max-w-lg">
@@ -81,14 +88,14 @@
             @if(!isUserEditMode()) {
               <div>
                 <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
-                <input type="password" id="password" name="password" [(ngModel)]="user.password" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required minlength="6" placeholder="Min 6 characters">
+                <input type="password" id="password" name="password" [(ngModel)]="user.passwordHash" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required minlength="6" placeholder="Min 6 characters">
               </div>
             }
             <div>
               <label for="userGroupId" class="block text-sm font-medium text-gray-700">User Group</label>
               <select id="userGroupId" name="userGroupId" [(ngModel)]="user.userGroupId" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md" required>
                  <option value="" disabled>Select a group</option>
-                 @for(group of userGroups(); track group.id) {
+                 @for(group of selectableGroupsForUserForm(); track group.id) {
                     <option [value]="group.id">{{ group.name }}</option>
                  }
               </select>
@@ -131,8 +138,15 @@
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
                 @for(group of userGroups(); track group.id) {
+                  @let groupEditLocked = isProtectedGroup(group) && !canManageSuperAdmins();
+                  @let groupDeleteLocked = isProtectedGroup(group) || isGroupInUse(group.id);
                   <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ group.name }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {{ group.name }}
+                      @if(group.isSuperAdmin) {
+                        <span class="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">Super Admin</span>
+                      }
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                        <span class="flex flex-wrap gap-1">
                           @for(screen of allScreens; track screen.id) {
@@ -143,8 +157,8 @@
                        </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button (click)="showEditGroupForm(group)" class="text-indigo-600 hover:text-indigo-900">Edit</button>
-                      <button (click)="deleteGroup(group)" [disabled]="isGroupInUse(group.id)" class="text-red-600 hover:text-red-900 ml-4 disabled:text-gray-400 disabled:cursor-not-allowed">Delete</button>
+                      <button (click)="showEditGroupForm(group)" [disabled]="groupEditLocked" [title]="groupEditLocked ? 'Only Super Admin users can edit the Super Admin role.' : ''" class="text-indigo-600 hover:text-indigo-900 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:text-gray-400">Edit</button>
+                      <button (click)="deleteGroup(group)" [disabled]="groupDeleteLocked" [title]="isProtectedGroup(group) ? 'The Super Admin role is protected and cannot be deleted.' : ''" class="text-red-600 hover:text-red-900 ml-4 disabled:text-gray-400 disabled:cursor-not-allowed">Delete</button>
                     </td>
                   </tr>
                 }
@@ -164,13 +178,27 @@
               <label for="groupName" class="block text-sm font-medium text-gray-700">Group Name</label>
               <input type="text" id="groupName" name="groupName" [(ngModel)]="group.name" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required>
             </div>
+            @if(canManageSuperAdmins()) {
+              <div class="relative flex items-start rounded-md border border-purple-200 bg-purple-50 p-3">
+                <div class="flex items-center h-5">
+                  <input id="isSuperAdmin" name="isSuperAdmin" type="checkbox" [checked]="group.isSuperAdmin" (change)="toggleSuperAdmin()" class="focus:ring-purple-500 h-4 w-4 text-purple-600 border-gray-300 rounded">
+                </div>
+                <div class="ml-3 text-sm">
+                  <label for="isSuperAdmin" class="font-medium text-purple-900">Super Admin (unrestricted access)</label>
+                  <p class="text-purple-700">Grants unrestricted access to every module. Only Super Admin users can create, edit, or reset accounts in this role.</p>
+                </div>
+              </div>
+            }
             <div>
               <label class="block text-sm font-medium text-gray-700">Screen Permissions</label>
+              @if(group.isSuperAdmin) {
+                <p class="mt-1 text-xs text-gray-500">All screens are unrestricted for the Super Admin role.</p>
+              }
               <fieldset class="mt-2 space-y-2">
                 @for(screen of allScreens; track screen.id) {
                   <div class="relative flex items-start">
                     <div class="flex items-center h-5">
-                      <input [id]="'screen-' + screen.id" [name]="'screen-' + screen.id" type="checkbox" [checked]="group.permissions[screen.id]" (change)="togglePermission(screen.id)" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                      <input [id]="'screen-' + screen.id" [name]="'screen-' + screen.id" type="checkbox" [checked]="group.permissions[screen.id]" [disabled]="group.isSuperAdmin" (change)="togglePermission(screen.id)" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded disabled:opacity-60">
                     </div>
                     <div class="ml-3 text-sm">
                       <label [for]="'screen-' + screen.id" class="font-medium text-gray-700">{{screen.name}}</label>

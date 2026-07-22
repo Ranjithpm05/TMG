@@ -71,6 +71,16 @@ export class UserService {
         this.invalidateCache();
     }
 
+    // 🔹 RESET PASSWORD (only touches passwordHash, avoids clobbering other fields)
+    async resetPassword(userId: string, newPasswordHash: string): Promise<void> {
+        const userDoc = doc(this.firestore, `users/${userId}`);
+        await updateDoc(userDoc, {
+            passwordHash: newPasswordHash,
+            updatedAt: serverTimestamp()
+        });
+        this.invalidateCache();
+    }
+
     // Targeted single-document lookups for the login flow — avoids reading the
     // entire users collection on every login attempt.
     async getUserByUsername(username: string): Promise<User | null> {

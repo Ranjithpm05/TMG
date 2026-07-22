@@ -17,4 +17,7 @@ export interface UserGroup {
   id: string;
   name: string;
   permissions: Partial<Record<AppScreen, boolean>>;
+  // Protected system role: unrestricted access to every screen. Only Super Admins
+  // may create/edit/delete this group or manage users assigned to it.
+  isSuperAdmin?: boolean;
 }
