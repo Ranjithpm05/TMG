@@ -18,11 +18,16 @@ type ViewMode = 'list' | 'form';
 // --- State for Consolidated Entry (group-based) ---
 type SleeveAvailability = { full: boolean; half: boolean };
 
+// The catalog's own Fabric Description per sleeve type — a design's Full and Half
+// sizeVars can carry different Fabric Description strings (e.g. "...FS" vs "...HS").
+type SleeveFabricDescriptions = { full: string | null; half: string | null };
+
 type DesignRatio = {
   design: Design;
   sizeQuantities: Record<string, string>;
   shirtSizeQuantities: Record<string, { full: string; half: string }>;
   scannedSleeveTypes: SleeveAvailability;
+  sleeveFabricDescriptions: SleeveFabricDescriptions;
 };
 
 type FabricGroupEntry = {
@@ -33,7 +38,7 @@ type FabricGroupEntry = {
   groupSizeQuantities: Record<string, string>;
   groupShirtSizeQuantities: Record<string, { full: string; half: string }>;
   groupScannedSleeveTypes: SleeveAvailability;
-  isExpanded: boolean;
+  groupSleeveFabricDescriptions: SleeveFabricDescriptions;
 };
 
 type ConsolidatedEntryState = {
@@ -140,6 +145,9 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       });
       return cards;
     });
+
+    // --- Fabric Description card accordion: at most one card expanded at a time ---
+    expandedCardKey = signal<string | null>(null);
 
     // --- State for Manual Design Selection ---
     manualDesignSelectionState = signal<ManualDesignSelectionState>(EMPTY_MANUAL_SELECTION_STATE);
@@ -389,33 +397,45 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     return Array.from(groups.values());
   });
 
-  /** Orders filtered by the selected date range (based on createdAt) */
+  /** Orders filtered by the selected date range (based on createdAt), sorted oldest-first by createdAt */
   filteredSalesOrders = computed(() => {
     const orders = this.salesOrders();
     const from = this.filterFromDate();
     const to   = this.filterToDate();
-    if (!from && !to) return orders;
 
     const fromMs = from ? new Date(from).setHours(0, 0, 0, 0)    : -Infinity;
     const toMs   = to   ? new Date(to).setHours(23, 59, 59, 999)  :  Infinity;
 
-    return orders.filter(order => {
-      const raw: any = order.createdAt;
-      let d: Date;
-      if (raw && typeof raw.toDate === 'function') {
-        d = raw.toDate();
-      } else if (raw instanceof Date) {
-        d = raw;
-      } else if (raw) {
-        d = new Date(raw);
-      } else {
-        // fall back to deliveryDate if createdAt is missing
-        d = new Date(order.deliveryDate);
-      }
-      const ms = d.getTime();
-      return ms >= fromMs && ms <= toMs;
-    });
+    const filtered = (!from && !to)
+      ? orders
+      : orders.filter(order => {
+          const ms = this.getOrderCreatedAtDate(order).getTime();
+          return ms >= fromMs && ms <= toMs;
+        });
+
+    return [...filtered].sort(
+      (a, b) => this.getOrderCreatedAtDate(a).getTime() - this.getOrderCreatedAtDate(b).getTime()
+    );
   });
+
+  /** Robustly resolves an order's created date, whatever shape it comes back from Firestore as. */
+  private getOrderCreatedAtDate(order: SalesOrder): Date {
+    const raw: any = order.createdAt;
+    if (raw && typeof raw.toDate === 'function') return raw.toDate();
+    if (raw instanceof Date) return raw;
+    if (raw) return new Date(raw);
+    // fall back to deliveryDate if createdAt is missing
+    return new Date(order.deliveryDate);
+  }
+
+  /** Formatted "Created Date" for display in the Sales Orders table. */
+  getOrderCreatedAtDisplay(order: SalesOrder): string {
+    try {
+      return formatDate(this.getOrderCreatedAtDate(order), 'dd MMM yyyy, hh:mm a', 'en-US');
+    } catch {
+      return '';
+    }
+  }
 
   isCurrentMonthFilter = computed(() =>
     this.filterFromDate() === this.currentMonthStart() &&
@@ -524,6 +544,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.scannedBarcodes.set([]);
     this.consolidatedEntryState.set(EMPTY_CONSOLIDATED_ENTRY_STATE);
     this.manualDesignSelectionState.set(EMPTY_MANUAL_SELECTION_STATE);
+    this.expandedCardKey.set(null);
     this.mode.set('form');
   }
 
@@ -554,6 +575,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       this.consolidatedEntryState.set(draft.consolidatedEntryState);
     }
 
+    this.expandedCardKey.set(null);
     this.mode.set('form');
   }
 
@@ -1024,8 +1046,13 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
           );
         }
       } else {
+        // Exclude the design catalog's own createdAt/updatedAt Firestore Timestamps — once
+        // embedded here, a later JSON.stringify/parse round-trip (e.g. re-cloning currentItems
+        // above, or the local draft auto-save) strips their Timestamp type, and Firestore then
+        // persists them as a plain {seconds, nanoseconds, type} map instead of a real timestamp.
+        const { createdAt, updatedAt, ...designForOrder } = design;
         const newOrderItem: OrderItem = {
-          design: design,
+          design: designForOrder as Design,
           itemSizes: [{ size: sizeVar.size, quantity: quantity, price: sizeVar.price, WSP: sizeVar.WSP  }]
         };
         if (isShirt) newOrderItem.sleeveType = sizeVar.sleeveType;
@@ -1164,6 +1191,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       scannedBarcodes: pseudoBarcodes,
       groups: this.buildGroupsFromDesigns(confirmedDesigns),
     });
+    this.expandedCardKey.set(null);
 
     this.cancelManualEntry();
   }
@@ -1434,6 +1462,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       scannedBarcodes: barcodes,
       groups: this.buildGroupsFromDesigns(Array.from(uniqueDesigns.values()), barcodes),
     });
+    this.expandedCardKey.set(null);
   }
 
   // ============================================================
@@ -1441,27 +1470,38 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   // ============================================================
 
   /**
-   * Determines which sleeve types (Full/Half) are actually available for a design.
-   * When `scannedBarcodes` is provided, availability reflects only the sleeve types
-   * whose barcode was actually scanned. When omitted (manual selection / save-as,
-   * i.e. no real scan happened), availability falls back to whatever sleeve types
-   * exist for the design in the catalog — unrestricted, matching prior behavior.
+   * Determines which sleeve types (Full/Half) are actually available for a design, and
+   * the catalog Fabric Description that belongs to each sleeve (a design's Full and Half
+   * sizeVars can carry different Fabric Description strings, e.g. "...FS" vs "...HS").
+   * When `scannedBarcodes` is provided, availability/labels reflect only the sizeVars
+   * whose barcode was actually scanned. When omitted (manual selection / save-as, i.e.
+   * no real scan happened), this falls back to whatever sleeve types exist for the
+   * design in the catalog — unrestricted, matching prior behavior.
    */
-  private getScannedSleeveTypesForDesign(design: Design, barcodeSet: Set<string> | null): SleeveAvailability {
-    if (!barcodeSet) {
-      return {
-        full: design.sizes.some(s => s.sleeveType === 'Full'),
-        half: design.sizes.some(s => s.sleeveType === 'Half'),
-      };
-    }
+  private getScannedSleeveInfoForDesign(
+    design: Design,
+    barcodeSet: Set<string> | null
+  ): { scanned: SleeveAvailability; fabricDescriptions: SleeveFabricDescriptions } {
     let full = false;
     let half = false;
+    let fullFabricDescription: string | null = null;
+    let halfFabricDescription: string | null = null;
+
     for (const s of design.sizes) {
-      if (!barcodeSet.has(String(s.BARCODE ?? '').trim())) continue;
-      if (s.sleeveType === 'Full') full = true;
-      else if (s.sleeveType === 'Half') half = true;
+      const wasScanned = barcodeSet ? barcodeSet.has(String(s.BARCODE ?? '').trim()) : true;
+      if (!wasScanned) continue;
+      if (s.sleeveType === 'Full') {
+        full = true;
+        if (!fullFabricDescription) fullFabricDescription = s.fabricType?.trim() || null;
+      } else if (s.sleeveType === 'Half') {
+        half = true;
+        if (!halfFabricDescription) halfFabricDescription = s.fabricType?.trim() || null;
+      }
     }
-    return { full, half };
+    return {
+      scanned: { full, half },
+      fabricDescriptions: { full: fullFabricDescription, half: halfFabricDescription },
+    };
   }
 
   /** Zeroes out the full/half value for any sleeve type that wasn't actually scanned. */
@@ -1491,12 +1531,16 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       const allPossibleSizes = [...new Set(groupDesigns.flatMap(d => d.sizes.map(s => s.size)))].sort(
         (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })
       );
-      const designRatios = groupDesigns.map(d => ({
-        design: d,
-        sizeQuantities: {},
-        shirtSizeQuantities: {},
-        scannedSleeveTypes: this.getScannedSleeveTypesForDesign(d, barcodeSet),
-      }));
+      const designRatios = groupDesigns.map(d => {
+        const { scanned, fabricDescriptions } = this.getScannedSleeveInfoForDesign(d, barcodeSet);
+        return {
+          design: d,
+          sizeQuantities: {},
+          shirtSizeQuantities: {},
+          scannedSleeveTypes: scanned,
+          sleeveFabricDescriptions: fabricDescriptions,
+        };
+      });
       return {
         fabricDescription,
         containsShirt,
@@ -1508,16 +1552,21 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
           full: designRatios.some(dr => dr.scannedSleeveTypes.full),
           half: designRatios.some(dr => dr.scannedSleeveTypes.half),
         },
-        isExpanded: true,
+        groupSleeveFabricDescriptions: {
+          full: designRatios.find(dr => dr.sleeveFabricDescriptions.full)?.sleeveFabricDescriptions.full ?? null,
+          half: designRatios.find(dr => dr.sleeveFabricDescriptions.half)?.sleeveFabricDescriptions.half ?? null,
+        },
       };
     });
   }
 
-  toggleGroupExpanded(groupIndex: number) {
-    this.consolidatedEntryState.update(state => ({
-      ...state,
-      groups: state.groups.map((g, i) => i === groupIndex ? { ...g, isExpanded: !g.isExpanded } : g),
-    }));
+  /** Accordion state for the Fabric Description cards — at most one expanded at a time. */
+  toggleCardExpanded(cardKey: string) {
+    this.expandedCardKey.update(current => (current === cardKey ? null : cardKey));
+  }
+
+  isCardExpanded(cardKey: string): boolean {
+    return this.expandedCardKey() === cardKey;
   }
 
   updateGroupSizeQty(groupIndex: number, size: string, value: string) {
@@ -1692,6 +1741,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   cancelConsolidatedEntry() {
     this.consolidatedEntryState.set(EMPTY_CONSOLIDATED_ENTRY_STATE);
     this.scannedBarcodes.set([]);
+    this.expandedCardKey.set(null);
   }
 
   /** Whether the given design row belongs under the given sleeve type. */
@@ -1702,6 +1752,14 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   /** Number of scanned designs in this group that belong to the given sleeve type. */
   getGroupDesignCountForSleeve(group: FabricGroupEntry, sleeveType: 'Full' | 'Half'): number {
     return group.designRatios.filter(dr => this.isDesignInSleeve(dr, sleeveType)).length;
+  }
+
+  /** The catalog Fabric Description (e.g. "...FS" or "...HS") that matches this card's sleeve type. */
+  getCardFabricDescription(group: FabricGroupEntry, sleeveType: 'Full' | 'Half'): string {
+    const label = sleeveType === 'Full'
+      ? group.groupSleeveFabricDescriptions.full
+      : group.groupSleeveFabricDescriptions.half;
+    return label || group.fabricDescription;
   }
 
   getGroupSleeveTotals(group: FabricGroupEntry): { full: number; half: number } {
@@ -1821,6 +1879,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       scannedBarcodes: designs.map(d => d.sizes[0]?.BARCODE).filter((b): b is string => !!b),
       groups: this.buildGroupsFromDesigns(designs),
     });
+    this.expandedCardKey.set(null);
   }
 
   requestDeleteOrder(order: SalesOrder) {
