@@ -776,14 +776,16 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
     // Draw item rows
     items.forEach((item, idx) => {
-      if (Y > PH - 50) { doc.addPage(); Y = 12; }
-
-      fr(ML, Y, CW, ROW_H, idx % 2 === 0 ? WHITE : GREY);
-      hl(Y + ROW_H, ML, PW - MR, LGREY, 0.2);
-
       const descLines: string[] = [item.design?.styleNo ?? ''];
       if (item.design?.color)  descLines.push(item.design.color);
       if (item.sleeveType)     descLines.push(this.printGetSleeveTypeAbbreviation(item.sleeveType));
+
+      const rowH = Math.max(ROW_H, 3.5 + descLines.length * 2.5 + 1);
+
+      if (Y > PH - 50) { doc.addPage(); Y = 12; }
+
+      fr(ML, Y, CW, rowH, idx % 2 === 0 ? WHITE : GREY);
+      hl(Y + rowH, ML, PW - MR, LGREY, 0.2);
 
       const rowVals: string[] = [
         String(idx + 1),
@@ -811,16 +813,16 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
           const tx2 = col.align === 'right'  ? cx + col.width - 1.5
                     : col.align === 'center' ? cx + col.width / 2
                     : cx + 1.5;
-          txt(val, tx2, Y + 4.5, { align: col.align === 'center' ? 'center' : col.align });
+          txt(val, tx2, Y + rowH / 2 + 1, { align: col.align === 'center' ? 'center' : col.align });
         }
         // Vertical separator
         doc.setDrawColor(LGREY[0], LGREY[1], LGREY[2]);
         doc.setLineWidth(0.2);
-        doc.line(cx + col.width, Y, cx + col.width, Y + ROW_H);
+        doc.line(cx + col.width, Y, cx + col.width, Y + rowH);
         cx += col.width;
       });
 
-      Y += ROW_H;
+      Y += rowH;
     });
 
     // Total footer row
