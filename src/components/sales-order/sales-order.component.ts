@@ -131,6 +131,10 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     isBatchScanning = signal(false);
     scannedBarcodes = signal<string[]>([]);
     consolidatedEntryState = signal<ConsolidatedEntryState>(EMPTY_CONSOLIDATED_ENTRY_STATE);
+    // Set only when the modal is opened directly from "Edit" (pre-filled with the order's existing
+    // quantities); orderItems is cleared to let the modal's additive add-logic double as "set". If the
+    // user cancels before adding, this restores the original items instead of leaving the order blank.
+    private consolidatedEntryEditBackup = signal<OrderItem[] | null>(null);
     scanFeedback = signal<'idle' | 'success' | 'duplicate'>('idle');
     lastAddedBarcode = signal<string | null>(null);
     collapsedScanGroups = signal<Set<string>>(new Set());
@@ -637,6 +641,54 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       : order.deliveryDate;
     this.deliveryDate.set(date);
     this.mode.set('form');
+
+    // Jump straight into the Fabric Description quantity modal, pre-filled with the order's
+    // current quantities, instead of landing on the plain Order Items list first.
+    const designs = this.uniqueDesignsFromOrderItems(order.items);
+    if (designs.length > 0) {
+      const groups = this.seedGroupsWithOrderQuantities(this.buildGroupsFromDesigns(designs), order.items);
+      this.consolidatedEntryEditBackup.set(this.orderItems());
+      this.orderItems.set([]);
+      this.consolidatedEntryState.set({ isActive: true, scannedBarcodes: [], groups });
+      this.expandedCardKey.set(null);
+    }
+  }
+
+  /** Unique catalog designs referenced by an order's items — used to reopen the quantity-entry modal for editing. */
+  private uniqueDesignsFromOrderItems(items: OrderItem[]): Design[] {
+    const designMap = new Map<string, Design>();
+    for (const item of items) {
+      if (item.design?.id && !designMap.has(item.design.id)) designMap.set(item.design.id, item.design);
+    }
+    return Array.from(designMap.values());
+  }
+
+  /** Pre-fills freshly-built FabricGroupEntry groups with an order's existing quantities, so Edit opens the modal showing current values instead of blank fields. */
+  private seedGroupsWithOrderQuantities(groups: FabricGroupEntry[], items: OrderItem[]): FabricGroupEntry[] {
+    return groups.map(g => ({
+      ...g,
+      designRatios: g.designRatios.map(dr => {
+        if (g.containsShirt) {
+          const shirtSizeQuantities: Record<string, { full: string; half: string }> = {};
+          const fullItem = items.find(it => it.design.id === dr.design.id && it.sleeveType === 'Full');
+          const halfItem = items.find(it => it.design.id === dr.design.id && it.sleeveType === 'Half');
+          for (const size of g.allPossibleSizes) {
+            const fullQty = fullItem?.itemSizes.find(s => s.size === size)?.quantity ?? 0;
+            const halfQty = halfItem?.itemSizes.find(s => s.size === size)?.quantity ?? 0;
+            if (fullQty > 0 || halfQty > 0) {
+              shirtSizeQuantities[size] = { full: fullQty > 0 ? String(fullQty) : '', half: halfQty > 0 ? String(halfQty) : '' };
+            }
+          }
+          return { ...dr, shirtSizeQuantities };
+        }
+        const sizeQuantities: Record<string, string> = {};
+        const item = items.find(it => it.design.id === dr.design.id);
+        for (const s of item?.itemSizes ?? []) {
+          if ((Number(s.quantity) || 0) > 0) sizeQuantities[s.size] = String(s.quantity);
+        }
+        return { ...dr, sizeQuantities };
+      }),
+    }));
   }
 
   showPrintView(order: SalesOrder) {
@@ -1743,10 +1795,16 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       Swal.fire({ icon: 'info', title: 'No Quantities Entered', text: 'Please enter at least one size quantity before adding to the order.' });
       return;
     }
+    this.consolidatedEntryEditBackup.set(null);
     this.cancelConsolidatedEntry();
   }
 
   cancelConsolidatedEntry() {
+    const editBackup = this.consolidatedEntryEditBackup();
+    if (editBackup) {
+      this.orderItems.set(editBackup);
+      this.consolidatedEntryEditBackup.set(null);
+    }
     this.consolidatedEntryState.set(EMPTY_CONSOLIDATED_ENTRY_STATE);
     this.scannedBarcodes.set([]);
     this.expandedCardKey.set(null);
