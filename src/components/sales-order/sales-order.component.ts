@@ -711,10 +711,12 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     const client = this.clientForPrint();
     if (!order || !client) return;
 
-    await this.loadingService.run(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+    try {
+      await this.loadingService.run(async () => {
+        // rAF (not setTimeout) lets the spinner paint one frame without eroding the mobile user-activation window before the download below.
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
     // ── CONSTANTS ──────────────────────────────────────────────────────────
     const PW = 210, PH = 297, ML = 10, MR = 10, CW = 190;
@@ -944,8 +946,35 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     txt('Page 1 of 1', PW - MR, Y + 4, { align: 'right' });
 
       // ── SAVE ──────────────────────────────────────────────────────────────
-      doc.save(`SalesOrder-${order.salesNo}.pdf`);
-    });
+      this.downloadPdf(doc, `SalesOrder-${order.salesNo}.pdf`);
+      });
+    } catch (err) {
+      console.error('Failed to generate/download sales order PDF:', err);
+      Swal.fire({
+        icon: 'error',
+        title: 'Download Failed',
+        text: 'Could not generate the PDF. Please try again — if the problem continues on this device, try a different browser.',
+      });
+    }
+  }
+
+  // DOM-attached anchor (vs. jsPDF's own detached-anchor doc.save()) is more reliable on mobile/in-app webviews; falls back to window.open so iOS Safari can at least preview/share it.
+  private downloadPdf(doc: jsPDF, filename: string): void {
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch {
+      window.open(url, '_blank', 'noopener');
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
   }
 
   get printFormattedOrderDate(): string {
