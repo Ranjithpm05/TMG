@@ -275,7 +275,7 @@
                     <span class="hidden sm:inline ml-1.5 text-xs text-indigo-500">— enter once, click Apply</span>
                   </div>
                   <button type="button"
-                          (click)="applyGroupRatioToAll(gi)"
+                          (click)="applyGroupRatioToAll(gi, sleeveType)"
                           class="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
@@ -302,15 +302,15 @@
                           <td class="px-3 py-1.5 text-center font-semibold text-gray-700 bg-indigo-100/60 border border-indigo-200">{{ size }}</td>
                           <td class="px-2 py-1 border border-indigo-200">
                             @if (sleeveType === 'Full') {
-                              <input type="number" min="0" placeholder="0"
-                                     class="block w-full text-center px-2 py-1 bg-white border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-                                     [ngModel]="group.groupShirtSizeQuantities[size]?.full || ''"
-                                     (ngModelChange)="updateGroupShirtSizeQty(gi, size, 'Full', $event)">
+                               <input type="text" inputmode="text" placeholder="0"
+                                      class="block w-full text-center px-2 py-1 bg-white border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                                      [ngModel]="group.groupShirtSizeQuantities[size]?.full || ''"
+                                      (ngModelChange)="updateGroupShirtSizeQty(gi, size, 'Full', $event)">
                             } @else {
-                              <input type="number" min="0" placeholder="0"
-                                     class="block w-full text-center px-2 py-1 bg-white border border-emerald-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 text-sm"
-                                     [ngModel]="group.groupShirtSizeQuantities[size]?.half || ''"
-                                     (ngModelChange)="updateGroupShirtSizeQty(gi, size, 'Half', $event)">
+                               <input type="text" inputmode="text" placeholder="0"
+                                      class="block w-full text-center px-2 py-1 bg-white border border-emerald-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 text-sm"
+                                      [ngModel]="group.groupShirtSizeQuantities[size]?.half || ''"
+                                      (ngModelChange)="updateGroupShirtSizeQty(gi, size, 'Half', $event)">
                             }
                           </td>
                         </tr>
@@ -352,15 +352,15 @@
                               <td class="px-2 py-1 text-center font-semibold text-gray-600 bg-gray-50 border border-gray-200">{{ size }}</td>
                               <td class="px-1.5 py-0.5 border border-gray-200">
                                 @if (sleeveType === 'Full') {
-                                  <input type="number" min="0" placeholder="0"
-                                         class="block w-full text-center px-1 py-0.5 bg-white border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-                                         [ngModel]="dr.shirtSizeQuantities[size]?.full || ''"
-                                         (ngModelChange)="updateDesignShirtSizeQty(gi, di, size, 'Full', $event)">
+                                   <input type="text" inputmode="numeric" placeholder="0"
+                                          class="block w-full text-center px-1 py-0.5 bg-white border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                                          [ngModel]="dr.shirtSizeQuantities[size]?.full || ''"
+                                          (ngModelChange)="updateDesignShirtSizeQty(gi, di, size, 'Full', $event)">
                                 } @else {
-                                  <input type="number" min="0" placeholder="0"
-                                         class="block w-full text-center px-1 py-0.5 bg-white border border-emerald-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
-                                         [ngModel]="dr.shirtSizeQuantities[size]?.half || ''"
-                                         (ngModelChange)="updateDesignShirtSizeQty(gi, di, size, 'Half', $event)">
+                                   <input type="text" inputmode="numeric" placeholder="0"
+                                          class="block w-full text-center px-1 py-0.5 bg-white border border-emerald-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
+                                          [ngModel]="dr.shirtSizeQuantities[size]?.half || ''"
+                                          (ngModelChange)="updateDesignShirtSizeQty(gi, di, size, 'Half', $event)">
                                 }
                               </td>
                             </tr>
@@ -425,7 +425,7 @@
                   @for (size of group.allPossibleSizes; track size) {
                     <div class="flex items-center gap-1.5 bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5">
                       <span class="text-xs font-bold text-indigo-700 w-7 text-center">{{ size }}</span>
-                      <input type="number" min="0" placeholder="0"
+                      <input type="text" inputmode="text" placeholder="0"
                              class="w-14 text-center px-1 py-0.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
                              [ngModel]="group.groupSizeQuantities[size] || ''"
                              (ngModelChange)="updateGroupSizeQty(gi, size, $event)">
@@ -451,7 +451,7 @@
                       @for (size of group.allPossibleSizes; track size) {
                         <div class="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-md px-2 py-1">
                           <span class="text-xs font-semibold text-gray-500 w-5 text-center">{{ size }}</span>
-                          <input type="number" min="0" placeholder="0"
+                          <input type="text" inputmode="numeric" placeholder="0"
                                  class="w-12 text-center px-1 py-0.5 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white"
                                  [ngModel]="dr.sizeQuantities[size] || ''"
                                  (ngModelChange)="updateDesignSizeQty(gi, di, size, $event)">

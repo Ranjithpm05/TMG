@@ -22,7 +22,6 @@ type SleeveAvailability = { full: boolean; half: boolean };
 // The catalog's own Fabric Description per sleeve type — a design's Full and Half
 // sizeVars can carry different Fabric Description strings (e.g. "...FS" vs "...HS").
 type SleeveFabricDescriptions = { full: string | null; half: string | null };
-
 type DesignRatio = {
   design: Design;
   sizeQuantities: Record<string, string>;
@@ -266,7 +265,6 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   // --- State for searchable client dropdown ---
   clientSearchTerm = signal('');
   isClientDropdownOpen = signal(false);
-
   isConsolidatedAddDisabled = computed(() => {
     const state = this.consolidatedEntryState();
     if (!state.isActive || state.groups.length === 0) return true;
@@ -1684,16 +1682,39 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     }));
   }
 
-  applyGroupRatioToAll(groupIndex: number) {
+  applyGroupRatioToAll(groupIndex: number, sleeveType?: 'Full' | 'Half') {
     this.consolidatedEntryState.update(state => ({
       ...state,
       groups: state.groups.map((g, i) => {
         if (i !== groupIndex) return g;
+        if (g.containsShirt && sleeveType) {
+          const eligibleIndexes = g.designRatios
+            .map((dr, index) => this.isDesignInSleeve(dr, sleeveType) ? index : -1)
+            .filter(index => index >= 0);
+
+          return {
+            ...g,
+            designRatios: g.designRatios.map((dr, index) => {
+              const eligibleIndex = eligibleIndexes.indexOf(index);
+              if (eligibleIndex === -1) return dr;
+              return {
+                ...dr,
+                shirtSizeQuantities: this.applySleeveRatiosToDesign(
+                  dr.shirtSizeQuantities,
+                  g.groupShirtSizeQuantities,
+                  sleeveType,
+                  eligibleIndex,
+                  eligibleIndexes.length
+                ),
+              };
+            }),
+          };
+        }
         return {
           ...g,
-          designRatios: g.designRatios.map(dr => ({
+          designRatios: g.designRatios.map((dr, index) => ({
             ...dr,
-            sizeQuantities: { ...g.groupSizeQuantities },
+            sizeQuantities: this.applySizeRatiosToDesign(g.groupSizeQuantities, index, g.designRatios.length),
             shirtSizeQuantities: this.applySleeveAvailabilityMask(g.groupShirtSizeQuantities, dr.scannedSleeveTypes),
           })),
         };
@@ -1731,6 +1752,12 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
               newSizeQty[size] = (sourceGroup.groupSizeQuantities as Record<string, string>)[size] ?? '';
             }
           }
+          const fullEligibleIndexes = g.designRatios
+            .map((dr, index) => this.isDesignInSleeve(dr, 'Full') ? index : -1)
+            .filter(index => index >= 0);
+          const halfEligibleIndexes = g.designRatios
+            .map((dr, index) => this.isDesignInSleeve(dr, 'Half') ? index : -1)
+            .filter(index => index >= 0);
 
           return {
             ...g,
@@ -1741,13 +1768,32 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
               : g.groupShirtSizeQuantities,
             groupSizeQuantities: !g.containsShirt ? newSizeQty : g.groupSizeQuantities,
             // Apply the ratio to every design in this group, masked per design's own scanned sleeve types
-            designRatios: g.designRatios.map(dr => ({
-              ...dr,
-              shirtSizeQuantities: g.containsShirt
-                ? this.applySleeveAvailabilityMask(newShirtQty, dr.scannedSleeveTypes)
-                : dr.shirtSizeQuantities,
-              sizeQuantities: !g.containsShirt ? { ...newSizeQty } : dr.sizeQuantities,
-            })),
+            designRatios: g.designRatios.map((dr, index) => {
+              if (g.containsShirt) {
+                const fullEligibleIndex = fullEligibleIndexes.indexOf(index);
+                const halfEligibleIndex = halfEligibleIndexes.indexOf(index);
+                return {
+                  ...dr,
+                  shirtSizeQuantities: this.applySleeveRatiosToBothSleeves(
+                    dr.shirtSizeQuantities,
+                    newShirtQty,
+                    {
+                      fullIndex: fullEligibleIndex,
+                      fullCount: fullEligibleIndexes.length,
+                      halfIndex: halfEligibleIndex,
+                      halfCount: halfEligibleIndexes.length,
+                    }
+                  ),
+                  sizeQuantities: dr.sizeQuantities,
+                };
+              }
+
+              return {
+                ...dr,
+                shirtSizeQuantities: dr.shirtSizeQuantities,
+                sizeQuantities: this.applySizeRatiosToDesign(newSizeQty, index, g.designRatios.length),
+              };
+            }),
           };
         }),
       };
@@ -1867,6 +1913,75 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       }
     }
     return { full, half };
+  }
+
+  private getAppliedItemCount(totalItems: number, ratio: unknown): number {
+    if (totalItems <= 0) return 0;
+    const ratioValue = this.parseFractionalQuantity(ratio);
+    if (ratioValue >= 1) return totalItems;
+    if (ratioValue <= 0) return 0;
+    if (ratioValue <= 0.5) return Math.max(1, Math.round(totalItems * ratioValue));
+    return Math.max(1, totalItems - Math.round(totalItems * (1 - ratioValue)));
+  }
+
+  private applySizeRatiosToDesign(
+    templateQty: Record<string, string>,
+    designIndex: number,
+    totalDesigns: number
+  ): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const [size, ratioValue] of Object.entries(templateQty)) {
+      const applyCount = this.getAppliedItemCount(totalDesigns, ratioValue);
+      result[size] = designIndex < applyCount ? '1' : '';
+    }
+    return result;
+  }
+
+  private applySleeveRatiosToDesign(
+    existingQty: Record<string, { full: string; half: string }>,
+    templateQty: Record<string, { full: string; half: string }>,
+    sleeveType: 'Full' | 'Half',
+    sleeveDesignIndex: number,
+    totalSleeveDesigns: number
+  ): Record<string, { full: string; half: string }> {
+    const key = sleeveType === 'Full' ? 'full' : 'half';
+    const result: Record<string, { full: string; half: string }> = {};
+
+    const sizes = new Set([...Object.keys(existingQty), ...Object.keys(templateQty)]);
+    for (const size of sizes) {
+      const existing = existingQty[size] ?? { full: '', half: '' };
+      const template = templateQty[size] ?? { full: '', half: '' };
+      const ratioValue = template[key];
+      const applyCount = this.getAppliedItemCount(totalSleeveDesigns, ratioValue);
+      const appliedValue = sleeveDesignIndex < applyCount ? '1' : '';
+      result[size] = {
+        full: key === 'full' ? appliedValue : existing.full,
+        half: key === 'half' ? appliedValue : existing.half,
+      };
+    }
+
+    return result;
+  }
+
+  private applySleeveRatiosToBothSleeves(
+    existingQty: Record<string, { full: string; half: string }>,
+    templateQty: Record<string, { full: string; half: string }>,
+    position: { fullIndex: number; fullCount: number; halfIndex: number; halfCount: number }
+  ): Record<string, { full: string; half: string }> {
+    const result: Record<string, { full: string; half: string }> = {};
+    const sizes = new Set([...Object.keys(existingQty), ...Object.keys(templateQty)]);
+
+    for (const size of sizes) {
+      const template = templateQty[size] ?? { full: '', half: '' };
+      const fullApplyCount = this.getAppliedItemCount(position.fullCount, template.full);
+      const halfApplyCount = this.getAppliedItemCount(position.halfCount, template.half);
+      result[size] = {
+        full: position.fullIndex !== -1 && position.fullIndex < fullApplyCount ? '1' : '',
+        half: position.halfIndex !== -1 && position.halfIndex < halfApplyCount ? '1' : '',
+      };
+    }
+
+    return result;
   }
 
   private parseFractionalQuantity(value: unknown): number {
