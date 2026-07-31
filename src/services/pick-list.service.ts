@@ -17,8 +17,9 @@ import {
   updateDoc,
   where,
   writeBatch,
+  WriteBatch,
 } from '@angular/fire/firestore';
-import { from, Observable, map } from 'rxjs';
+import { from, firstValueFrom, Observable, map } from 'rxjs';
 import type { SalesOrder } from '../models/sales-order.model';
 import type {
   PickList,
@@ -28,6 +29,7 @@ import type {
   PickListOrderSummary,
   PickListScanResult,
 } from '../models/pick-list.model';
+import type { InventoryItem } from '../models/inventory.model';
 import { InventoryService } from './inventory.service';
 
 type StoredPickList = PickList & {
@@ -46,7 +48,6 @@ export class PickListService {
   private firestore = inject(Firestore);
   private inventoryService = inject(InventoryService);
   private plRef = collection(this.firestore, 'pickLists');
-  private invRef = collection(this.firestore, 'inventory');
 
   // One-time read for the list screen — the active picking session for a single
   // pick list uses getPickListById()/getPickListLines() below, which stay live.
@@ -109,42 +110,48 @@ export class PickListService {
 
     const summary = this.buildSummary(normalizedLines);
     const pickListDoc = doc(this.plRef);
-    const batch = writeBatch(this.firestore);
     const salesOrderIds = [...new Set(normalizedLines.map((line) => line.salesOrderId))];
     const salesNos = [...new Set(normalizedLines.map((line) => line.salesNo))];
 
-    batch.set(pickListDoc, this.stripUndefined({
-      pickListNo: input.pickListNo,
-      type: input.type,
-      salesOrderIds,
-      salesNos,
-      clientId: input.clientId,
-      clientName: input.clientName,
-      inventoryReserved: false,
-      legacyPickingPending: false,
-      remarks: input.remarks,
-      status: summary.status,
-      totalRequiredQty: summary.totalRequiredQty,
-      totalPickedQty: summary.totalPickedQty,
-      totalPendingQty: summary.totalPendingQty,
-      pickableLineCount: summary.pickableLineCount,
-      completedLineCount: summary.completedLineCount,
-      orderSummaries: summary.orderSummaries,
-      items: summary.items,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }));
-
-    for (const line of normalizedLines) {
-      batch.set(this.lineDoc(pickListDoc.id, line.lineId), this.stripUndefined({
+    const operations: Array<(batch: WriteBatch) => void> = [
+      (batch) => batch.set(pickListDoc, this.stripUndefined({
+        pickListNo: input.pickListNo,
+        type: input.type,
+        salesOrderIds,
+        salesNos,
+        clientId: input.clientId,
+        clientName: input.clientName,
+        inventoryReserved: false,
+        legacyPickingPending: false,
+        remarks: input.remarks,
+        status: summary.status,
+        totalRequiredQty: summary.totalRequiredQty,
+        totalPickedQty: summary.totalPickedQty,
+        totalPendingQty: summary.totalPendingQty,
+        pickableLineCount: summary.pickableLineCount,
+        completedLineCount: summary.completedLineCount,
+        orderSummaries: summary.orderSummaries,
+        items: summary.items,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })),
+      ...normalizedLines.map((line) => (batch: WriteBatch) => batch.set(this.lineDoc(pickListDoc.id, line.lineId), this.stripUndefined({
         ...line,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      }));
-    }
+      }))),
+    ];
 
-    await batch.commit();
+    await this.commitInChunks(operations);
     return pickListDoc.id;
+  }
+
+  private async commitInChunks(operations: Array<(batch: WriteBatch) => void>, chunkSize = 450): Promise<void> {
+    for (let i = 0; i < operations.length; i += chunkSize) {
+      const batch = writeBatch(this.firestore);
+      operations.slice(i, i + chunkSize).forEach((op) => op(batch));
+      await batch.commit();
+    }
   }
 
   async ensureLegacyPickListLines(pickList: PickList): Promise<PickListLine[]> {
@@ -157,10 +164,11 @@ export class PickListService {
 
     const sourceItems = Array.isArray(pickList.items) ? pickList.items : [];
     const legacyLines: PickListLine[] = [];
+    const inventoryList = await firstValueFrom(this.inventoryService.getInventory());
 
     for (let index = 0; index < sourceItems.length; index += 1) {
       const source = this.normalizeLine({ ...sourceItems[index], lineId: sourceItems[index]?.lineId ?? `legacy-${index + 1}` });
-      const inventory = await this.findInventoryMatch(source.styleNo, source.color, source.size, source.sleeveType);
+      const inventory = this.findInventoryMatch(inventoryList, source.styleNo, source.color, source.size, source.sleeveType);
       const pickableQty = Math.max(0, source.requiredQty || (source.orderedQty - (source.pendingQty || 0)));
       const pickedQty = Math.min(source.pickedQty, pickableQty);
       const remainingQty = Math.max(0, pickableQty - pickedQty);
@@ -192,15 +200,11 @@ export class PickListService {
       }));
     }
 
-    const batch = writeBatch(this.firestore);
-    for (const line of legacyLines) {
-      batch.set(this.lineDoc(pickList.id, line.lineId), this.stripUndefined({
-        ...line,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }));
-    }
-    await batch.commit();
+    await this.commitInChunks(legacyLines.map((line) => (batch: WriteBatch) => batch.set(this.lineDoc(pickList.id!, line.lineId), this.stripUndefined({
+      ...line,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }))));
     await this.recalculatePickListStatus(pickList.id);
 
     return this.getPickListLinesOnce(pickList.id);
@@ -214,9 +218,10 @@ export class PickListService {
     if (!sourceItems.length) return pickList;
 
     const resetLines: PickListLine[] = [];
+    const inventoryList = await firstValueFrom(this.inventoryService.getInventory());
     for (let index = 0; index < sourceItems.length; index += 1) {
       const source = this.normalizeLine({ ...sourceItems[index], lineId: sourceItems[index]?.lineId ?? `legacy-${index + 1}` });
-      const inventory = await this.findInventoryMatch(source.styleNo, source.color, source.size, source.sleeveType);
+      const inventory = this.findInventoryMatch(inventoryList, source.styleNo, source.color, source.size, source.sleeveType);
       const requiredQty = Math.max(0, Number(source.requiredQty) || Number(source.pickedQty) || Math.max(0, source.orderedQty - (source.pendingQty || 0)));
       const pendingQty = Math.max(0, Number(source.pendingQty) || 0);
       const isReady = requiredQty > 0 && !!inventory?.id && !!inventory?.barcode;
@@ -244,41 +249,39 @@ export class PickListService {
     }
 
     const summary = this.buildSummary(resetLines);
-    const batch = writeBatch(this.firestore);
-    for (const line of resetLines) {
-      batch.set(this.lineDoc(pickListId, line.lineId), this.stripUndefined({
+    const operations: Array<(batch: WriteBatch) => void> = [
+      ...resetLines.map((line) => (batch: WriteBatch) => batch.set(this.lineDoc(pickListId, line.lineId), this.stripUndefined({
         ...line,
         updatedAt: serverTimestamp(),
-      }));
-    }
-
-    batch.update(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
-      status: summary.status,
-      totalRequiredQty: summary.totalRequiredQty,
-      totalPickedQty: 0,
-      totalPendingQty: summary.totalPendingQty,
-      pickableLineCount: summary.pickableLineCount,
-      completedLineCount: 0,
-      orderSummaries: summary.orderSummaries.map((entry) => ({ ...entry, pickedQty: 0 })),
-      items: summary.items.map((line) => ({
-        ...line,
-        pickedQty: 0,
-        remainingQty: line.requiredQty,
-        balanceQty: line.requiredQty + (line.pendingQty || 0),
-        status: line.requiredQty > 0 && line.inventoryId && line.barcode ? 'ready' : line.status,
-        claimedByUserId: undefined,
-        claimedByUsername: undefined,
-        claimExpiresAt: undefined,
-        completedAt: undefined,
-        completedByUserId: undefined,
-        completedByUsername: undefined,
+      }))),
+      (batch) => batch.update(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
+        status: summary.status,
+        totalRequiredQty: summary.totalRequiredQty,
+        totalPickedQty: 0,
+        totalPendingQty: summary.totalPendingQty,
+        pickableLineCount: summary.pickableLineCount,
+        completedLineCount: 0,
+        orderSummaries: summary.orderSummaries.map((entry) => ({ ...entry, pickedQty: 0 })),
+        items: summary.items.map((line) => ({
+          ...line,
+          pickedQty: 0,
+          remainingQty: line.requiredQty,
+          balanceQty: line.requiredQty + (line.pendingQty || 0),
+          status: line.requiredQty > 0 && line.inventoryId && line.barcode ? 'ready' : line.status,
+          claimedByUserId: undefined,
+          claimedByUsername: undefined,
+          claimExpiresAt: undefined,
+          completedAt: undefined,
+          completedByUserId: undefined,
+          completedByUsername: undefined,
+        })),
+        inventoryReserved: true,
+        legacyPickingPending: false,
+        updatedAt: serverTimestamp(),
       })),
-      inventoryReserved: true,
-      legacyPickingPending: false,
-      updatedAt: serverTimestamp(),
-    }));
+    ];
 
-    await batch.commit();
+    await this.commitInChunks(operations);
     return this.getPickListByIdOnce(pickListId);
   }
 
@@ -660,26 +663,22 @@ export class PickListService {
     );
   }
 
-  private async findInventoryMatch(styleNo: string, color: string, size: string, sleeveType?: string): Promise<{ id: string; barcode?: string } | null> {
-    const snap = await getDocs(query(
-      this.invRef,
-      where('styleNo', '==', styleNo),
-      where('color', '==', color),
-      where('size', '==', size)
-    ));
+  private findInventoryMatch(
+    inventoryList: InventoryItem[],
+    styleNo: string,
+    color: string,
+    size: string,
+    sleeveType?: string
+  ): { id: string; barcode?: string } | null {
+    const candidates = inventoryList.filter(
+      (inv) => inv.styleNo === styleNo && inv.color === color && inv.size === size
+    );
 
-    for (const docSnap of snap.docs) {
-      const data = docSnap.data() as any;
-      if ((data.sleeveType ?? '') !== (sleeveType ?? '')) continue;
-      return { id: docSnap.id, barcode: data.barcode };
-    }
+    const exactSleeveMatch = candidates.find((inv) => (inv.sleeveType ?? '') === (sleeveType ?? ''));
+    if (exactSleeveMatch) return { id: exactSleeveMatch.id!, barcode: exactSleeveMatch.barcode };
 
-    for (const docSnap of snap.docs) {
-      const data = docSnap.data() as any;
-      if (!sleeveType || !data.sleeveType) {
-        return { id: docSnap.id, barcode: data.barcode };
-      }
-    }
+    const fallbackMatch = candidates.find((inv) => !sleeveType || !inv.sleeveType);
+    if (fallbackMatch) return { id: fallbackMatch.id!, barcode: fallbackMatch.barcode };
 
     return null;
   }

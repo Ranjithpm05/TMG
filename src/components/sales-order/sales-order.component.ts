@@ -10,7 +10,7 @@ import { SalesOrderService } from '../../services/sales-order.service';
 import { LoadingService } from '../../services/loading.service';
 import Swal from 'sweetalert2';
 import { Timestamp } from '@angular/fire/firestore';
-import jsPDF from 'jspdf';
+import type jsPDF from 'jspdf';
 
 declare const jsQR: any;
 
@@ -714,7 +714,8 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
         // rAF (not setTimeout) lets the spinner paint one frame without eroding the mobile user-activation window before the download below.
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const { default: JsPDF } = await import('jspdf');
+        const doc = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
     // ── CONSTANTS ──────────────────────────────────────────────────────────
     const PW = 210, PH = 297, ML = 10, MR = 10, CW = 190;

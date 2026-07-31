@@ -84,7 +84,6 @@ import { Injectable, inject } from '@angular/core';
 import {
   Firestore,
   collection,
-  collectionData,
   doc,
   addDoc,
   getDocs,
@@ -93,6 +92,7 @@ import {
   query,
   orderBy,
   where,
+  limit,
   serverTimestamp
 } from '@angular/fire/firestore';
 import { from, map, Observable, shareReplay } from 'rxjs';
@@ -107,10 +107,15 @@ export class DesignService {
     // Master data — cached one-time read, invalidated on write (see ClientService for rationale).
     private designsCache$: Observable<Design[]> | null = null;
 
+    // Safety cap, not a real page size — screens still search/filter the full
+    // cached list client-side (see project memory on Firestore cost
+    // optimization). This just stops a single read from growing unbounded.
+    private static readonly MASTER_DATA_CAP = 5000;
+
     // 🔹 GET ALL DESIGNS (cached one-time read)
     getDesigns(): Observable<Design[]> {
         if (!this.designsCache$) {
-            const q = query(this.designRef, orderBy('createdAt', 'desc'));
+            const q = query(this.designRef, orderBy('createdAt', 'desc'), limit(DesignService.MASTER_DATA_CAP));
             this.designsCache$ = from(getDocs(q)).pipe(
                 map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as Design))),
                 shareReplay(1)
@@ -154,14 +159,14 @@ export class DesignService {
         this.invalidateCache();
     }
 
-    findDesignByStyleNo(styleNo: string): Observable<Design | null> {
+    async findDesignByStyleNo(styleNo: string): Promise<Design | null> {
         const q = query(
             collection(this.firestore, 'designs'),
-            where('BARCODE', '==', styleNo)
+            where('BARCODE', '==', styleNo),
+            limit(1)
         );
 
-        return collectionData(q, { idField: 'id' }).pipe(
-            map((designs: any[]) => designs.length ? designs[0] : null)
-        );
+        const snap = await getDocs(q);
+        return snap.empty ? null : ({ id: snap.docs[0].id, ...snap.docs[0].data() } as Design);
     }
 }

@@ -15,6 +15,7 @@ import {
   updateDoc,
   where,
   writeBatch,
+  WriteBatch,
 } from '@angular/fire/firestore';
 import { from, map, Observable } from 'rxjs';
 import { PickListLine } from '../models/pick-list.model';
@@ -108,55 +109,58 @@ export class PackingListService {
 
     const summary = this.buildSummary(normalizedLines, [], input.clientName);
     const packingListDoc = doc(this.packingRef);
-    const batch = writeBatch(this.firestore);
 
-    batch.set(packingListDoc, this.stripUndefined({
-      packingListNo: input.packingListNo,
-      pickListId: pickListIds[0] ?? '',
-      pickListNo: pickListNos[0] ?? '',
-      pickListIds,
-      pickListNos,
-      salesOrderIds: [...new Set(input.salesOrderIds)],
-      salesNos: [...new Set(input.salesNos)],
-      clientId: input.clientId,
-      clientName: input.clientName,
-      packingMode: input.packingMode,
-      remarks: input.remarks,
-      status: summary.status,
-      totalRequiredQty: summary.totalRequiredQty,
-      totalPackedQty: summary.totalPackedQty,
-      lineCount: summary.lineCount,
-      completedLineCount: summary.completedLineCount,
-      cartonCount: summary.cartonCount,
-      partSummaries: summary.partSummaries,
-      partyProgress: summary.partyProgress,
-      cartons: [],
-      items: normalizedLines,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }));
-
-    for (const line of normalizedLines) {
-      batch.set(this.lineDoc(packingListDoc.id, line.lineId), this.stripUndefined({
+    const operations: Array<(batch: WriteBatch) => void> = [
+      (batch) => batch.set(packingListDoc, this.stripUndefined({
+        packingListNo: input.packingListNo,
+        pickListId: pickListIds[0] ?? '',
+        pickListNo: pickListNos[0] ?? '',
+        pickListIds,
+        pickListNos,
+        salesOrderIds: [...new Set(input.salesOrderIds)],
+        salesNos: [...new Set(input.salesNos)],
+        clientId: input.clientId,
+        clientName: input.clientName,
+        packingMode: input.packingMode,
+        remarks: input.remarks,
+        status: summary.status,
+        totalRequiredQty: summary.totalRequiredQty,
+        totalPackedQty: summary.totalPackedQty,
+        lineCount: summary.lineCount,
+        completedLineCount: summary.completedLineCount,
+        cartonCount: summary.cartonCount,
+        partSummaries: summary.partSummaries,
+        partyProgress: summary.partyProgress,
+        cartons: [],
+        items: normalizedLines,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })),
+      ...normalizedLines.map((line) => (batch: WriteBatch) => batch.set(this.lineDoc(packingListDoc.id, line.lineId), this.stripUndefined({
         ...line,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      }));
-    }
+      }))),
+      ...(input.markSourcePickListsPacked
+        ? pickListIds.map((pickListId) => (batch: WriteBatch) => batch.update(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
+            status: 'Packed',
+            packedIntoPackingListId: packingListDoc.id,
+            packedIntoPackingListNo: input.packingListNo,
+            updatedAt: serverTimestamp(),
+          })))
+        : []),
+    ];
 
-    if (input.markSourcePickListsPacked) {
-      for (const pickListId of pickListIds) {
-        batch.update(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
-          status: 'Packed',
-          packedIntoPackingListId: packingListDoc.id,
-          packedIntoPackingListNo: input.packingListNo,
-          updatedAt: serverTimestamp(),
-        }));
-      }
-    }
-
-    await batch.commit();
+    await this.commitInChunks(operations);
     return packingListDoc.id;
+  }
+
+  private async commitInChunks(operations: Array<(batch: WriteBatch) => void>, chunkSize = 450): Promise<void> {
+    for (let i = 0; i < operations.length; i += chunkSize) {
+      const batch = writeBatch(this.firestore);
+      operations.slice(i, i + chunkSize).forEach((op) => op(batch));
+      await batch.commit();
+    }
   }
 
   async processScan(
@@ -208,12 +212,18 @@ export class PackingListService {
         updatedAt: now,
       });
 
-      const updatedItems = (packingList.items ?? []).map((item) =>
-        item.lineId === updatedLine.lineId ? updatedLine : this.normalizeLine(item)
-      );
-
       const { cartons, carton } = this.upsertCartons(packingList.cartons ?? [], updatedLine, trimmedCartonNo, normalizedQty, now);
-      const summary = this.buildSummary(updatedItems, cartons, packingList.clientName);
+
+      const nextTotalPackedQty = Math.min((packingList.totalPackedQty || 0) + normalizedQty, packingList.totalRequiredQty || 0);
+      const nextCompletedLineCount = (packingList.completedLineCount || 0) + (lineCompleted ? 1 : 0);
+      const nextPartSummaries = this.applyPartSummaryDelta(packingList.partSummaries ?? [], updatedLine.partName, normalizedQty);
+      const nextPartyProgress = this.applyPartyProgressDelta(packingList.partyProgress ?? [], updatedLine, normalizedQty, packingList.clientName);
+      const nextStatus = this.computePackingListStatus(
+        packingList.totalRequiredQty || 0,
+        nextTotalPackedQty,
+        packingList.lineCount || 0,
+        nextCompletedLineCount
+      );
 
       transaction.update(lineRef, this.stripUndefined({
         packedQty: updatedLine.packedQty,
@@ -223,15 +233,20 @@ export class PackingListService {
         updatedAt: serverTimestamp(),
       }));
 
+      // Only the small aggregate fields + cartons are rewritten here — the
+      // full `items` array used to be recomputed and rewritten on every single
+      // scan, which meant every scanner on a large packing list contended on a
+      // multi-hundred-line payload. No UI consumer reads `packingList.items`
+      // (they all read the `lines` subcollection via getPackingListLinesOnce),
+      // so it's left untouched after creation — see deductInventoryOnCompletion.
       transaction.update(packingListRef, this.stripUndefined({
-        totalPackedQty: summary.totalPackedQty,
-        completedLineCount: summary.completedLineCount,
-        cartonCount: summary.cartonCount,
-        status: summary.status,
-        partSummaries: summary.partSummaries,
-        partyProgress: summary.partyProgress,
+        totalPackedQty: nextTotalPackedQty,
+        completedLineCount: nextCompletedLineCount,
+        cartonCount: cartons.length,
+        status: nextStatus,
+        partSummaries: nextPartSummaries,
+        partyProgress: nextPartyProgress,
         cartons,
-        items: updatedItems,
         updatedAt: serverTimestamp(),
       }));
 
@@ -239,24 +254,22 @@ export class PackingListService {
         line: updatedLine,
         carton,
         lineCompleted,
-        packingListCompleted: summary.status === 'Completed',
-        totalPackedQty: summary.totalPackedQty,
-        completedLineCount: summary.completedLineCount,
-        cartonCount: summary.cartonCount,
-        status: summary.status,
-        partSummaries: summary.partSummaries,
-        partyProgress: summary.partyProgress,
-        _updatedItems: updatedItems,
+        packingListCompleted: nextStatus === 'Completed',
+        totalPackedQty: nextTotalPackedQty,
+        completedLineCount: nextCompletedLineCount,
+        cartonCount: cartons.length,
+        status: nextStatus,
+        partSummaries: nextPartSummaries,
+        partyProgress: nextPartyProgress,
       };
     });
 
     let stockDeducted = false;
     if (txResult.packingListCompleted) {
-      stockDeducted = await this.deductInventoryOnCompletion(packingListId, txResult._updatedItems);
+      stockDeducted = await this.deductInventoryOnCompletion(packingListId);
     }
 
-    const { _updatedItems: _unused, ...scanResult } = txResult;
-    return { ...scanResult, stockDeducted } satisfies PackingScanResult;
+    return { ...txResult, stockDeducted } satisfies PackingScanResult;
   }
 
   async markLinePacked(
@@ -304,10 +317,21 @@ export class PackingListService {
         cartons = this.removeLineFromCarton(cartons, lineId, liveLine.lastCartonNo);
       }
 
-      const updatedItems = (packingList.items ?? []).map((item) =>
-        item.lineId === lineId ? updatedLine : this.normalizeLine(item)
+      const packedQtyDelta = nextPackedQty - liveLine.packedQty;
+      const wasCompleted = liveLine.remainingQty <= 0;
+      const nowCompleted = nextRemainingQty <= 0;
+      const completedDelta = (nowCompleted ? 1 : 0) - (wasCompleted ? 1 : 0);
+
+      const nextTotalPackedQty = Math.max(0, Math.min((packingList.totalPackedQty || 0) + packedQtyDelta, packingList.totalRequiredQty || 0));
+      const nextCompletedLineCount = Math.max(0, (packingList.completedLineCount || 0) + completedDelta);
+      const nextPartSummaries = this.applyPartSummaryDelta(packingList.partSummaries ?? [], updatedLine.partName, packedQtyDelta);
+      const nextPartyProgress = this.applyPartyProgressDelta(packingList.partyProgress ?? [], updatedLine, packedQtyDelta, packingList.clientName);
+      const nextStatus = this.computePackingListStatus(
+        packingList.totalRequiredQty || 0,
+        nextTotalPackedQty,
+        packingList.lineCount || 0,
+        nextCompletedLineCount
       );
-      const summary = this.buildSummary(updatedItems, cartons, packingList.clientName);
 
       transaction.update(lineRef, this.stripUndefined({
         packedQty: updatedLine.packedQty,
@@ -317,36 +341,85 @@ export class PackingListService {
         updatedAt: serverTimestamp(),
       }));
       transaction.update(packingListRef, this.stripUndefined({
-        totalPackedQty: summary.totalPackedQty,
-        completedLineCount: summary.completedLineCount,
-        cartonCount: summary.cartonCount,
-        status: summary.status,
-        partSummaries: summary.partSummaries,
-        partyProgress: summary.partyProgress,
+        totalPackedQty: nextTotalPackedQty,
+        completedLineCount: nextCompletedLineCount,
+        cartonCount: cartons.length,
+        status: nextStatus,
+        partSummaries: nextPartSummaries,
+        partyProgress: nextPartyProgress,
         cartons,
-        items: updatedItems,
         updatedAt: serverTimestamp(),
       }));
 
       return {
         line: updatedLine,
         cartons,
-        packingListCompleted: summary.status === 'Completed',
-        totalPackedQty: summary.totalPackedQty,
-        completedLineCount: summary.completedLineCount,
-        cartonCount: summary.cartonCount,
-        status: summary.status,
-        partyProgress: summary.partyProgress,
-        _updatedItems: updatedItems,
+        packingListCompleted: nextStatus === 'Completed',
+        totalPackedQty: nextTotalPackedQty,
+        completedLineCount: nextCompletedLineCount,
+        cartonCount: cartons.length,
+        status: nextStatus,
+        partyProgress: nextPartyProgress,
       };
     });
 
     let stockDeducted = false;
     if (txResult.packingListCompleted) {
-      stockDeducted = await this.deductInventoryOnCompletion(packingListId, txResult._updatedItems);
+      stockDeducted = await this.deductInventoryOnCompletion(packingListId);
     }
-    const { _updatedItems: _, ...rest } = txResult;
-    return { ...rest, stockDeducted };
+    return { ...txResult, stockDeducted };
+  }
+
+  private applyPartSummaryDelta(
+    partSummaries: PackingPartSummary[],
+    partName: string,
+    packedQtyDelta: number,
+  ): PackingPartSummary[] {
+    if (packedQtyDelta === 0) return partSummaries;
+    const key = partName || 'General';
+    let found = false;
+    const next = partSummaries.map((entry) => {
+      if (entry.partName !== key) return entry;
+      found = true;
+      return { ...entry, packedQty: Math.max(0, Math.min(entry.requiredQty, entry.packedQty + packedQtyDelta)) };
+    });
+    if (!found && packedQtyDelta > 0) {
+      next.push({ partName: key, requiredQty: 0, packedQty: packedQtyDelta });
+    }
+    return next;
+  }
+
+  private applyPartyProgressDelta(
+    partyProgress: PackingPartyProgress[],
+    line: PackingListLine,
+    packedQtyDelta: number,
+    defaultClientName: string,
+  ): PackingPartyProgress[] {
+    if (packedQtyDelta === 0 || !line.salesOrderIds.length) return partyProgress;
+    const next = [...partyProgress];
+    for (let i = 0; i < line.salesOrderIds.length; i++) {
+      const salesOrderId = line.salesOrderIds[i] ?? '';
+      if (!salesOrderId) continue;
+      const salesNo = line.salesNos[i] ?? '';
+      const idx = next.findIndex((entry) => entry.salesOrderId === salesOrderId);
+      if (idx === -1) {
+        const packedQty = Math.max(0, packedQtyDelta);
+        next.push({
+          salesOrderId,
+          salesNo,
+          clientId: line.clientId || undefined,
+          clientName: line.clientName || defaultClientName,
+          requiredQty: 0,
+          packedQty,
+          pendingQty: -packedQty,
+        });
+        continue;
+      }
+      const existing = next[idx];
+      const packedQty = Math.max(0, Math.min(existing.requiredQty, existing.packedQty + packedQtyDelta));
+      next[idx] = { ...existing, packedQty, pendingQty: existing.requiredQty - packedQty };
+    }
+    return next;
   }
 
   private removeLineFromCarton(cartons: PackingCarton[], lineId: string, cartonNo: string): PackingCarton[] {
@@ -365,7 +438,6 @@ export class PackingListService {
     if (!packingList) return;
 
     const summary = this.buildSummary(lines, packingList.cartons ?? [], packingList.clientName);
-    const normalizedItems = lines.map((line) => this.normalizeLine(line));
 
     await runTransaction(this.firestore, async (transaction) => {
       const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
@@ -378,7 +450,6 @@ export class PackingListService {
         status: summary.status,
         partSummaries: summary.partSummaries,
         partyProgress: summary.partyProgress,
-        items: normalizedItems,
         updatedAt: serverTimestamp(),
       }));
     });
@@ -402,10 +473,8 @@ export class PackingListService {
     await updateDoc(packingListRef, { qcVerifiedAt: serverTimestamp(), updatedAt: serverTimestamp() });
   }
 
-  private async deductInventoryOnCompletion(
-    packingListId: string,
-    items: PackingListLine[],
-  ): Promise<boolean> {
+  private async deductInventoryOnCompletion(packingListId: string): Promise<boolean> {
+    const items = await this.getPackingListLinesOnce(packingListId);
     type Deduction = { ref: ReturnType<typeof doc>; qty: number };
     const deductions = new Map<string, Deduction>();
 

@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { switchMap } from 'rxjs';
-import jsPDF from 'jspdf';
 import Swal from 'sweetalert2';
 
 import { SalesOrderService } from '../../services/sales-order.service';
@@ -282,7 +281,7 @@ export class ReportsComponent {
     }
   }
 
-  exportPdf(): void {
+  async exportPdf(): Promise<void> {
     const tab = this.activeReport();
     const rows = this.buildExportRows(tab);
     if (rows.length <= 1) {
@@ -291,7 +290,8 @@ export class ReportsComponent {
     }
 
     const [header, ...body] = rows;
-    const doc = new jsPDF({ orientation: header.length > 6 ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+    const { default: JsPDF } = await import('jspdf');
+    const doc = new JsPDF({ orientation: header.length > 6 ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
     const margin = 10;

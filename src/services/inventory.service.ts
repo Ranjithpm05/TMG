@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import {
   Firestore, collection, doc,
-  updateDoc, query, orderBy, where, getDocs, serverTimestamp, writeBatch
+  updateDoc, query, orderBy, where, getDocs, serverTimestamp, writeBatch, limit, WriteBatch
 } from '@angular/fire/firestore';
 import { from, map, Observable, shareReplay } from 'rxjs';
 import type { InventoryItem } from '../models/inventory.model';
@@ -18,9 +18,14 @@ export class InventoryService {
   // invalidateCache() instead of every screen holding its own live listener.
   private inventoryCache$: Observable<InventoryItem[]> | null = null;
 
+  // Safety cap, not a real page size — screens still search/filter the full
+  // cached list client-side (see project memory on Firestore cost
+  // optimization). This just stops a single read from growing unbounded.
+  private static readonly MASTER_DATA_CAP = 5000;
+
   getInventory(): Observable<InventoryItem[]> {
     if (!this.inventoryCache$) {
-      const q = query(this.invRef, orderBy('styleNo', 'asc'));
+      const q = query(this.invRef, orderBy('styleNo', 'asc'), limit(InventoryService.MASTER_DATA_CAP));
       this.inventoryCache$ = from(getDocs(q)).pipe(
         map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryItem))),
         shareReplay(1)
@@ -54,12 +59,12 @@ export class InventoryService {
       dedupedItems.map(({ item }) => getDocs(query(this.invRef, where('barcode', '==', item.barcode))))
     );
 
-    // Phase 2: Commit all creates and updates in a single batch (max 500 ops).
-    const batch = writeBatch(this.firestore);
-    snapshots.forEach((snap, idx) => {
+    // Phase 2: Commit all creates and updates, chunked to stay under
+    // Firestore's 500-operation-per-batch limit for large GRNs.
+    const operations: Array<(batch: WriteBatch) => void> = snapshots.map((snap, idx) => {
       const { item, totalQty } = dedupedItems[idx];
       if (snap.empty) {
-        batch.set(doc(this.invRef), {
+        return (batch) => batch.set(doc(this.invRef), {
           barcode: item.barcode, designId: item.designId,
           styleNo: item.styleNo, color: item.color, group: item.group,
           size: item.size, ...(item.sleeveType ? { sleeveType: item.sleeveType } : {}),
@@ -68,19 +73,26 @@ export class InventoryService {
           WSP: item.WSP, price: item.price, lastGrnNo: grnNo,
           createdAt: serverTimestamp(), updatedAt: serverTimestamp()
         });
-      } else {
-        const existing = snap.docs[0];
-        const data = existing.data() as InventoryItem;
-        batch.update(doc(this.firestore, `inventory/${existing.id}`), {
-          currentStock: (Number(data.currentStock) || 0) + totalQty,
-          totalReceived: (Number(data.totalReceived) || 0) + totalQty,
-          WSP: item.WSP, price: item.price, lastGrnNo: grnNo,
-          updatedAt: serverTimestamp()
-        });
       }
+      const existing = snap.docs[0];
+      const data = existing.data() as InventoryItem;
+      return (batch) => batch.update(doc(this.firestore, `inventory/${existing.id}`), {
+        currentStock: (Number(data.currentStock) || 0) + totalQty,
+        totalReceived: (Number(data.totalReceived) || 0) + totalQty,
+        WSP: item.WSP, price: item.price, lastGrnNo: grnNo,
+        updatedAt: serverTimestamp()
+      });
     });
-    await batch.commit();
+    await this.commitInChunks(operations);
     this.invalidateCache();
+  }
+
+  private async commitInChunks(operations: Array<(batch: WriteBatch) => void>, chunkSize = 450): Promise<void> {
+    for (let i = 0; i < operations.length; i += chunkSize) {
+      const batch = writeBatch(this.firestore);
+      operations.slice(i, i + chunkSize).forEach((op) => op(batch));
+      await batch.commit();
+    }
   }
 
   async getInventoryByBarcodes(barcodes: string[]): Promise<InventoryItem[]> {
