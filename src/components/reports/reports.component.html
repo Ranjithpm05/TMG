@@ -88,6 +88,8 @@
                 class="px-4 py-2 rounded-md text-sm font-medium transition-colors">Product Wise</button>
         <button (click)="setTab('exceed')" [class]="activeReport() === 'exceed' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'"
                 class="px-4 py-2 rounded-md text-sm font-medium transition-colors">Exceed Order</button>
+        <button (click)="setTab('salesOrderDetails')" [class]="activeReport() === 'salesOrderDetails' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'"
+                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">Sales Order Details</button>
       </div>
       <div class="flex gap-2">
         <button (click)="exportExcel()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
@@ -229,6 +231,85 @@
                 </tr>
               }
             </tbody>
+          </table>
+        } @else {
+          <div class="text-center py-10">
+            <p class="text-sm text-gray-500">No orders match the current filters.</p>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Sales Order Details: Group -> Design No -> Color -> Size -->
+    @if (activeReport() === 'salesOrderDetails') {
+      @let details = report5();
+      <div class="overflow-x-auto border border-gray-200 rounded-lg">
+        @if (details.groups.length > 0) {
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-800 text-white">
+              <tr>
+                <th class="px-3 py-3 text-center font-medium">#</th>
+                <th class="px-4 py-3 text-left font-medium">Client</th>
+                <th class="px-4 py-3 text-left font-medium">Delivery Date</th>
+                <th class="px-3 py-3 text-center font-medium">Status</th>
+                <th class="px-3 py-3 text-center font-medium">Size</th>
+                <th class="px-3 py-3 text-center font-medium">Sleeve</th>
+                <th class="px-3 py-3 text-center font-medium">Qty</th>
+                <th class="px-4 py-3 text-right font-medium">Price</th>
+                <th class="px-4 py-3 text-right font-medium">Value</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              @for (group of details.groups; track group.group) {
+                <tr class="bg-indigo-100">
+                  <td colspan="9" class="px-4 py-2 font-bold text-indigo-900">
+                    Group: {{ group.group }}
+                    <span class="font-normal text-indigo-700">&nbsp;&middot; Qty {{ group.totalQty }} &middot; Value {{ group.totalValue | number:'1.2-2' }}</span>
+                  </td>
+                </tr>
+                @for (design of group.designs; track design.styleNo) {
+                  <tr class="bg-slate-100">
+                    <td colspan="9" class="px-4 py-2 pl-8 font-semibold text-slate-800">
+                      Design No: {{ design.styleNo }}
+                      <span class="font-normal text-slate-600">&nbsp;&middot; Qty {{ design.totalQty }} &middot; Value {{ design.totalValue | number:'1.2-2' }}</span>
+                    </td>
+                  </tr>
+                  @for (color of design.colors; track color.color) {
+                    <tr class="bg-gray-50">
+                      <td colspan="9" class="px-4 py-2 pl-14 font-medium text-gray-700">
+                        Color: {{ color.color || '-' }}
+                        <span class="font-normal text-gray-500">&nbsp;&middot; Qty {{ color.totalQty }} &middot; Value {{ color.totalValue | number:'1.2-2' }}</span>
+                      </td>
+                    </tr>
+                    @for (line of color.lines; track line.salesNo + '_' + line.size + '_' + $index; let i = $index) {
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-3 py-2 text-center text-gray-500">{{ i + 1 }}</td>
+                        <td class="px-4 py-2 pl-8 text-gray-700">{{ line.clientName }}</td>
+                        <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ line.deliveryDate }}</td>
+                        <td class="px-3 py-2 text-center">
+                          <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" [class]="statusBadgeClass(line.status)">
+                            {{ line.status }}
+                          </span>
+                        </td>
+                        <td class="px-3 py-2 text-center font-medium text-gray-900">{{ line.size }}</td>
+                        <td class="px-3 py-2 text-center text-gray-700">{{ line.sleeveType || '-' }}</td>
+                        <td class="px-3 py-2 text-center text-gray-700">{{ line.qty }}</td>
+                        <td class="px-4 py-2 text-right text-gray-700">{{ line.price | number:'1.2-2' }}</td>
+                        <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ line.value | number:'1.2-2' }}</td>
+                      </tr>
+                    }
+                  }
+                }
+              }
+            </tbody>
+            <tfoot class="bg-gray-100 font-bold">
+              <tr>
+                <td colspan="6" class="px-4 py-3 text-right text-gray-900">Grand Total</td>
+                <td class="px-3 py-3 text-center text-gray-900">{{ details.grandTotal.totalQty }}</td>
+                <td class="px-4 py-3"></td>
+                <td class="px-4 py-3 text-right text-gray-900">{{ details.grandTotal.totalValue | number:'1.2-2' }}</td>
+              </tr>
+            </tfoot>
           </table>
         } @else {
           <div class="text-center py-10">

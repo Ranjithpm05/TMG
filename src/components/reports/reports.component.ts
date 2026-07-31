@@ -9,12 +9,18 @@ import { SalesOrderService } from '../../services/sales-order.service';
 import { ClientService } from '../../services/client.service';
 import { DesignService } from '../../services/design.service';
 import { InventoryService } from '../../services/inventory.service';
+import { LoadingService } from '../../services/loading.service';
 import type { SalesOrder, OrderItem } from '../../models/sales-order.model';
 import type { Client } from '../../models/client.model';
 import type { Design } from '../../models/design.model';
 import type { InventoryItem } from '../../models/inventory.model';
 
-export type ReportTab = 'customer' | 'agent' | 'product' | 'exceed';
+export type ReportTab = 'customer' | 'agent' | 'product' | 'exceed' | 'salesOrderDetails';
+
+// Matches the SIZE_ORDER convention used in pick-list/packing-list/goods-inward
+// components — known apparel sizes sort by garment-size order, anything else
+// (e.g. numeric waist sizes) falls back to a natural string compare.
+const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', '6XL', 'Free Size'];
 
 interface MatrixRow {
   key: string;
@@ -45,6 +51,44 @@ interface ExceedRow {
   exceeds: boolean;
 }
 
+interface SalesOrderDetailLine {
+  salesNo: string;
+  clientName: string;
+  deliveryDate: string;
+  status: SalesOrder['status'];
+  sleeveType: string;
+  size: string;
+  qty: number;
+  price: number;
+  value: number;
+}
+
+interface SalesOrderDetailColorGroup {
+  color: string;
+  lines: SalesOrderDetailLine[];
+  totalQty: number;
+  totalValue: number;
+}
+
+interface SalesOrderDetailDesignGroup {
+  styleNo: string;
+  colors: SalesOrderDetailColorGroup[];
+  totalQty: number;
+  totalValue: number;
+}
+
+interface SalesOrderDetailGroup {
+  group: string;
+  designs: SalesOrderDetailDesignGroup[];
+  totalQty: number;
+  totalValue: number;
+}
+
+interface SalesOrderDetailsReport {
+  groups: SalesOrderDetailGroup[];
+  grandTotal: { totalQty: number; totalValue: number };
+}
+
 const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Shipped'] as const;
 
 @Component({
@@ -59,6 +103,7 @@ export class ReportsComponent {
   private readonly clientService = inject(ClientService);
   private readonly designService = inject(DesignService);
   private readonly inventoryService = inject(InventoryService);
+  protected readonly loadingService = inject(LoadingService);
 
   // ── Filter state ──────────────────────────────────────────────────────
   readonly startDate = signal(this.currentMonthStart());
@@ -161,6 +206,7 @@ export class ReportsComponent {
 
   readonly report3 = computed(() => this.buildProductSummary());
   readonly report4 = computed(() => this.buildExceedReport());
+  readonly report5 = computed<SalesOrderDetailsReport>(() => this.buildSalesOrderDetailsReport());
 
   // ── Filter actions ────────────────────────────────────────────────────
   setTab(tab: ReportTab): void {
@@ -201,6 +247,7 @@ export class ReportsComponent {
       case 'agent': return 'Agent Wise Sales Report';
       case 'product': return 'Product Wise Summary Report';
       case 'exceed': return 'Exceed Order Report';
+      case 'salesOrderDetails': return 'Sales Order Details Report';
     }
   }
 
@@ -225,18 +272,20 @@ export class ReportsComponent {
       return;
     }
 
-    try {
-      const XLSX = await import('xlsx');
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, this.getReportTitle(tab).slice(0, 31));
-      XLSX.writeFile(wb, `${this.getReportTitle(tab).replace(/\s+/g, '_')}_${this.formatTimestamp()}.xlsx`);
-    } catch {
-      Swal.fire({ icon: 'error', title: 'Export Failed', text: 'Could not generate the Excel file.' });
-    }
+    await this.loadingService.run(async () => {
+      try {
+        const XLSX = await import('xlsx');
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, this.getReportTitle(tab).slice(0, 31));
+        XLSX.writeFile(wb, `${this.getReportTitle(tab).replace(/\s+/g, '_')}_${this.formatTimestamp()}.xlsx`);
+      } catch {
+        Swal.fire({ icon: 'error', title: 'Export Failed', text: 'Could not generate the Excel file.' });
+      }
+    });
   }
 
-  printReport(): void {
+  async printReport(): Promise<void> {
     const tab = this.activeReport();
     const rows = this.buildExportRows(tab);
     if (rows.length <= 1) {
@@ -244,41 +293,47 @@ export class ReportsComponent {
       return;
     }
 
-    const [header, ...body] = rows;
-    const isGrandTotalRow = (row: any[]) => String(row[1]).toLowerCase().includes('grand total');
+    await this.loadingService.run(async () => {
+      const [header, ...body] = rows;
+      // Matches "Grand Total" and the Group/Design/Color subtotal rows in the
+      // Sales Order Details report (their label lands in whichever of the first
+      // few columns matches that row's grouping level) so they're all visually
+      // distinguished, not just the final grand total.
+      const isGrandTotalRow = (row: any[]) => [1, 2, 3].some((i) => String(row[i]).toLowerCase().includes('total'));
 
-    const th = (t: any) =>
-      `<th style="padding:6px 10px;border:1px solid #ccc;background:#1e293b;color:#fff;text-align:center">${t}</th>`;
-    const td = (t: any, bold = false) =>
-      `<td style="padding:5px 10px;border:1px solid #ddd;text-align:center;${bold ? 'font-weight:700;background:#f1f5f9' : ''}">${t}</td>`;
+      const th = (t: any) =>
+        `<th style="padding:6px 10px;border:1px solid #ccc;background:#1e293b;color:#fff;text-align:center">${t}</th>`;
+      const td = (t: any, bold = false) =>
+        `<td style="padding:5px 10px;border:1px solid #ddd;text-align:center;${bold ? 'font-weight:700;background:#f1f5f9' : ''}">${t}</td>`;
 
-    const theadHtml = `<tr>${header.map((h) => th(h)).join('')}</tr>`;
-    const bodyHtml = body
-      .map((row) => {
-        const bold = isGrandTotalRow(row);
-        const highlight = tab === 'exceed' && row[row.length - 1] === 'Exceeds';
-        return `<tr style="${highlight ? 'background:#fee2e2;color:#991b1b;font-weight:600' : ''}">${row.map((c) => td(c, bold)).join('')}</tr>`;
-      })
-      .join('');
+      const theadHtml = `<tr>${header.map((h) => th(h)).join('')}</tr>`;
+      const bodyHtml = body
+        .map((row) => {
+          const bold = isGrandTotalRow(row);
+          const highlight = tab === 'exceed' && row[row.length - 1] === 'Exceeds';
+          return `<tr style="${highlight ? 'background:#fee2e2;color:#991b1b;font-weight:600' : ''}">${row.map((c) => td(c, bold)).join('')}</tr>`;
+        })
+        .join('');
 
-    const html = `<!DOCTYPE html><html><head><title>${this.getReportTitle(tab)}</title>
-    <style>
-      body{font-family:Arial,sans-serif;font-size:12px;margin:20px;color:#1e293b}
-      h2{margin:0 0 4px 0} p{margin:0 0 14px 0;color:#64748b;font-size:11px}
-      table{border-collapse:collapse;width:100%}
-      @media print{body{margin:10px}}
-    </style></head><body>
-    <h2>${this.getReportTitle(tab)}</h2>
-    <p>${this.filterSummary()}</p>
-    <table><thead>${theadHtml}</thead><tbody>${bodyHtml}</tbody></table>
-    </body></html>`;
+      const html = `<!DOCTYPE html><html><head><title>${this.getReportTitle(tab)}</title>
+      <style>
+        body{font-family:Arial,sans-serif;font-size:12px;margin:20px;color:#1e293b}
+        h2{margin:0 0 4px 0} p{margin:0 0 14px 0;color:#64748b;font-size:11px}
+        table{border-collapse:collapse;width:100%}
+        @media print{body{margin:10px}}
+      </style></head><body>
+      <h2>${this.getReportTitle(tab)}</h2>
+      <p>${this.filterSummary()}</p>
+      <table><thead>${theadHtml}</thead><tbody>${bodyHtml}</tbody></table>
+      </body></html>`;
 
-    const win = window.open('', '_blank', 'width=1100,height=750');
-    if (win) {
-      win.document.write(html);
-      win.document.close();
-      setTimeout(() => win.print(), 700);
-    }
+      const win = window.open('', '_blank', 'width=1100,height=750');
+      if (win) {
+        win.document.write(html);
+        win.document.close();
+        setTimeout(() => win.print(), 700);
+      }
+    });
   }
 
   async exportPdf(): Promise<void> {
@@ -289,65 +344,67 @@ export class ReportsComponent {
       return;
     }
 
-    const [header, ...body] = rows;
-    const { default: JsPDF } = await import('jspdf');
-    const doc = new JsPDF({ orientation: header.length > 6 ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    const margin = 10;
-    const usableW = pageW - margin * 2;
-    const colW = usableW / header.length;
-    const rowH = 7;
-    let y = margin;
+    await this.loadingService.run(async () => {
+      const [header, ...body] = rows;
+      const { default: JsPDF } = await import('jspdf');
+      const doc = new JsPDF({ orientation: header.length > 6 ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const margin = 10;
+      const usableW = pageW - margin * 2;
+      const colW = usableW / header.length;
+      const rowH = 7;
+      let y = margin;
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.text(this.getReportTitle(tab), margin, y);
-    y += 5;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.text(this.filterSummary(), margin, y);
-    y += 6;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text(this.getReportTitle(tab), margin, y);
+      y += 5;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text(this.filterSummary(), margin, y);
+      y += 6;
 
-    const drawRow = (
-      values: any[],
-      opts: { bold?: boolean; fillColor?: [number, number, number]; textColor?: [number, number, number] } = {}
-    ) => {
-      if (y > pageH - margin - rowH) {
-        doc.addPage();
-        y = margin;
-      }
-      if (opts.fillColor) {
-        doc.setFillColor(opts.fillColor[0], opts.fillColor[1], opts.fillColor[2]);
-        doc.rect(margin, y, usableW, rowH, 'F');
-      }
-      doc.setDrawColor(200, 200, 200);
-      doc.rect(margin, y, usableW, rowH, 'S');
-      doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
-      doc.setFontSize(7.5);
-      const textColor = opts.textColor ?? [0, 0, 0];
-      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-      values.forEach((v, i) => {
-        const x = margin + i * colW;
-        doc.line(x, y, x, y + rowH);
-        doc.text(String(v ?? ''), x + colW / 2, y + rowH / 2 + 1.2, { align: 'center', maxWidth: colW - 2 });
+      const drawRow = (
+        values: any[],
+        opts: { bold?: boolean; fillColor?: [number, number, number]; textColor?: [number, number, number] } = {}
+      ) => {
+        if (y > pageH - margin - rowH) {
+          doc.addPage();
+          y = margin;
+        }
+        if (opts.fillColor) {
+          doc.setFillColor(opts.fillColor[0], opts.fillColor[1], opts.fillColor[2]);
+          doc.rect(margin, y, usableW, rowH, 'F');
+        }
+        doc.setDrawColor(200, 200, 200);
+        doc.rect(margin, y, usableW, rowH, 'S');
+        doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
+        doc.setFontSize(7.5);
+        const textColor = opts.textColor ?? [0, 0, 0];
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        values.forEach((v, i) => {
+          const x = margin + i * colW;
+          doc.line(x, y, x, y + rowH);
+          doc.text(String(v ?? ''), x + colW / 2, y + rowH / 2 + 1.2, { align: 'center', maxWidth: colW - 2 });
+        });
+        doc.line(margin + usableW, y, margin + usableW, y + rowH);
+        y += rowH;
+      };
+
+      drawRow(header, { bold: true, fillColor: [30, 41, 59], textColor: [255, 255, 255] });
+      body.forEach((row) => {
+        const isGrandTotal = [1, 2, 3].some((i) => String(row[i]).toLowerCase().includes('total'));
+        const isExceed = tab === 'exceed' && row[row.length - 1] === 'Exceeds';
+        drawRow(row, {
+          bold: isGrandTotal,
+          fillColor: isGrandTotal ? [241, 245, 249] : isExceed ? [254, 226, 226] : undefined,
+          textColor: isExceed ? [153, 27, 27] : [0, 0, 0],
+        });
       });
-      doc.line(margin + usableW, y, margin + usableW, y + rowH);
-      y += rowH;
-    };
 
-    drawRow(header, { bold: true, fillColor: [30, 41, 59], textColor: [255, 255, 255] });
-    body.forEach((row) => {
-      const isGrandTotal = String(row[1]).toLowerCase().includes('grand total');
-      const isExceed = tab === 'exceed' && row[row.length - 1] === 'Exceeds';
-      drawRow(row, {
-        bold: isGrandTotal,
-        fillColor: isGrandTotal ? [241, 245, 249] : isExceed ? [254, 226, 226] : undefined,
-        textColor: isExceed ? [153, 27, 27] : [0, 0, 0],
-      });
+      doc.save(`${this.getReportTitle(tab).replace(/\s+/g, '_')}_${this.formatTimestamp()}.pdf`);
     });
-
-    doc.save(`${this.getReportTitle(tab).replace(/\s+/g, '_')}_${this.formatTimestamp()}.pdf`);
   }
 
   private buildExportRows(tab: ReportTab): any[][] {
@@ -371,7 +428,36 @@ export class ReportsComponent {
           ...rows.map((r, i) => [i + 1, r.styleNo, r.color, r.orderedQty, r.availableQty, r.exceeds ? 'Exceeds' : 'OK']),
         ];
       }
+      case 'salesOrderDetails':
+        return this.salesOrderDetailsToRows(this.report5());
     }
+  }
+
+  private salesOrderDetailsToRows(report: SalesOrderDetailsReport): any[][] {
+    const header = ['#', 'Group', 'Design No', 'Color', 'Size', 'Sleeve', 'Client', 'Delivery Date', 'Status', 'Qty', 'Price', 'Value'];
+    const body: any[][] = [];
+    let counter = 0;
+
+    for (const group of report.groups) {
+      for (const design of group.designs) {
+        for (const color of design.colors) {
+          for (const line of color.lines) {
+            counter += 1;
+            body.push([
+              counter, group.group, design.styleNo, color.color, line.size, line.sleeveType || '-',
+              line.clientName, line.deliveryDate, line.status,
+              line.qty, this.round2(line.price), this.round2(line.value),
+            ]);
+          }
+          body.push(['', '', '', `Color Total: ${color.color}`, '', '', '', '', '', color.totalQty, '', this.round2(color.totalValue)]);
+        }
+        body.push(['', '', `Design Total: ${design.styleNo}`, '', '', '', '', '', '', design.totalQty, '', this.round2(design.totalValue)]);
+      }
+      body.push(['', `Group Total: ${group.group}`, '', '', '', '', '', '', '', group.totalQty, '', this.round2(group.totalValue)]);
+    }
+
+    body.push(['', 'Grand Total', '', '', '', '', '', '', '', report.grandTotal.totalQty, '', this.round2(report.grandTotal.totalValue)]);
+    return [header, ...body];
   }
 
   private matrixToRows(matrix: MatrixReport, labelHeader: string): any[][] {
@@ -507,6 +593,95 @@ export class ReportsComponent {
     return { rows };
   }
 
+  private buildSalesOrderDetailsReport(): SalesOrderDetailsReport {
+    const clientById = this.clientById();
+    // group -> styleNo -> color -> leaf lines (one per order-item size)
+    const groupMap = new Map<string, Map<string, Map<string, SalesOrderDetailLine[]>>>();
+
+    for (const order of this.filteredOrders()) {
+      const clientName = this.toText(clientById.get(order.clientId)?.clientName) || 'Unknown Client';
+
+      for (const item of order.items ?? []) {
+        if (!this.matchesItemFilters(item)) continue;
+        const group = this.toText(item.design?.group) || 'Other';
+        const styleNo = this.toText(item.design?.styleNo) || 'Unknown';
+        const color = this.toText(item.design?.color) || 'Unspecified';
+
+        let byStyle = groupMap.get(group);
+        if (!byStyle) { byStyle = new Map(); groupMap.set(group, byStyle); }
+        let byColor = byStyle.get(styleNo);
+        if (!byColor) { byColor = new Map(); byStyle.set(styleNo, byColor); }
+        let lines = byColor.get(color);
+        if (!lines) { lines = []; byColor.set(color, lines); }
+
+        for (const size of item.itemSizes ?? []) {
+          const qty = Number(size.quantity) || 0;
+          if (qty <= 0) continue;
+          const price = Number(size.price) || 0;
+          lines.push({
+            salesNo: order.salesNo,
+            clientName,
+            deliveryDate: order.deliveryDate,
+            status: order.status,
+            sleeveType: this.toText(item.sleeveType),
+            size: this.toText(size.size),
+            qty,
+            price,
+            value: qty * price,
+          });
+        }
+      }
+    }
+
+    const sortBySize = (a: SalesOrderDetailLine, b: SalesOrderDetailLine): number => {
+      const aIndex = SIZE_ORDER.indexOf(a.size);
+      const bIndex = SIZE_ORDER.indexOf(b.size);
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      const sizeCompare = a.size.localeCompare(b.size, undefined, { numeric: true });
+      if (sizeCompare !== 0) return sizeCompare;
+      return a.salesNo.localeCompare(b.salesNo, undefined, { numeric: true });
+    };
+
+    const groups: SalesOrderDetailGroup[] = [...groupMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([group, byStyle]) => {
+        const designs: SalesOrderDetailDesignGroup[] = [...byStyle.entries()]
+          .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+          .map(([styleNo, byColor]) => {
+            const colors: SalesOrderDetailColorGroup[] = [...byColor.entries()]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([color, lines]) => {
+                const sortedLines = [...lines].sort(sortBySize);
+                return {
+                  color,
+                  lines: sortedLines,
+                  totalQty: sortedLines.reduce((s, l) => s + l.qty, 0),
+                  totalValue: sortedLines.reduce((s, l) => s + l.value, 0),
+                };
+              });
+            return {
+              styleNo,
+              colors,
+              totalQty: colors.reduce((s, c) => s + c.totalQty, 0),
+              totalValue: colors.reduce((s, c) => s + c.totalValue, 0),
+            };
+          });
+        return {
+          group,
+          designs,
+          totalQty: designs.reduce((s, d) => s + d.totalQty, 0),
+          totalValue: designs.reduce((s, d) => s + d.totalValue, 0),
+        };
+      });
+
+    const grandTotal = {
+      totalQty: groups.reduce((s, g) => s + g.totalQty, 0),
+      totalValue: groups.reduce((s, g) => s + g.totalValue, 0),
+    };
+
+    return { groups, grandTotal };
+  }
+
   private matchesItemFilters(item: OrderItem): boolean {
     const group = this.selectedGroup();
     const search = this.toText(this.designSearch()).toLowerCase();
@@ -520,6 +695,14 @@ export class ReportsComponent {
     if (agent) return agent;
     if (client.clientType === 'Agent') return this.toText(client.clientName) || 'Unassigned';
     return 'Unassigned';
+  }
+
+  statusBadgeClass(status: SalesOrder['status']): string {
+    switch (status) {
+      case 'Shipped': return 'bg-green-100 text-green-800';
+      case 'Confirmed': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-amber-100 text-amber-800';
+    }
   }
 
   /** Firestore documents aren't type-checked — coerce possibly-non-string values before string ops. */
