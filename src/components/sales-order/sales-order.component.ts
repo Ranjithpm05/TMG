@@ -1924,6 +1924,20 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     return Math.max(1, totalItems - Math.round(totalItems * (1 - ratioValue)));
   }
 
+  /**
+   * A ratio below 1 (e.g. "1/4") splits scanned items into a subset, each marked
+   * with quantity 1. A ratio of 1 or greater means "no distribution" — the typed
+   * value is applied directly, as-is, to every item.
+   */
+  private resolveRatioAppliedValue(rawRatio: unknown, itemIndex: number, totalItems: number): string {
+    if (totalItems <= 0 || itemIndex < 0) return '';
+    const ratioValue = this.parseFractionalQuantity(rawRatio);
+    if (ratioValue <= 0) return '';
+    if (ratioValue >= 1) return String(ratioValue);
+    const applyCount = this.getAppliedItemCount(totalItems, ratioValue);
+    return itemIndex < applyCount ? '1' : '';
+  }
+
   private applySizeRatiosToDesign(
     templateQty: Record<string, string>,
     designIndex: number,
@@ -1931,8 +1945,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   ): Record<string, string> {
     const result: Record<string, string> = {};
     for (const [size, ratioValue] of Object.entries(templateQty)) {
-      const applyCount = this.getAppliedItemCount(totalDesigns, ratioValue);
-      result[size] = designIndex < applyCount ? '1' : '';
+      result[size] = this.resolveRatioAppliedValue(ratioValue, designIndex, totalDesigns);
     }
     return result;
   }
@@ -1951,9 +1964,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     for (const size of sizes) {
       const existing = existingQty[size] ?? { full: '', half: '' };
       const template = templateQty[size] ?? { full: '', half: '' };
-      const ratioValue = template[key];
-      const applyCount = this.getAppliedItemCount(totalSleeveDesigns, ratioValue);
-      const appliedValue = sleeveDesignIndex < applyCount ? '1' : '';
+      const appliedValue = this.resolveRatioAppliedValue(template[key], sleeveDesignIndex, totalSleeveDesigns);
       result[size] = {
         full: key === 'full' ? appliedValue : existing.full,
         half: key === 'half' ? appliedValue : existing.half,
@@ -1973,11 +1984,13 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
     for (const size of sizes) {
       const template = templateQty[size] ?? { full: '', half: '' };
-      const fullApplyCount = this.getAppliedItemCount(position.fullCount, template.full);
-      const halfApplyCount = this.getAppliedItemCount(position.halfCount, template.half);
       result[size] = {
-        full: position.fullIndex !== -1 && position.fullIndex < fullApplyCount ? '1' : '',
-        half: position.halfIndex !== -1 && position.halfIndex < halfApplyCount ? '1' : '',
+        full: position.fullIndex !== -1
+          ? this.resolveRatioAppliedValue(template.full, position.fullIndex, position.fullCount)
+          : '',
+        half: position.halfIndex !== -1
+          ? this.resolveRatioAppliedValue(template.half, position.halfIndex, position.halfCount)
+          : '',
       };
     }
 
