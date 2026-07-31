@@ -13,4 +13,13 @@ export class LoadingService {
       this.count.update(n => Math.max(0, n - 1));
     }
   }
+
+  /** Paired start()/stop() for wrapping Observable pipelines (e.g. with tap/finalize) where run()'s Promise-based API doesn't fit. */
+  start(): void {
+    this.count.update(n => n + 1);
+  }
+
+  stop(): void {
+    this.count.update(n => Math.max(0, n - 1));
+  }
 }

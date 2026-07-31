@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, signal, inject, computed } from '@a
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { switchMap } from 'rxjs';
+import { switchMap, tap } from 'rxjs';
 import Swal from 'sweetalert2';
 
 import { SalesOrderService } from '../../services/sales-order.service';
@@ -126,16 +126,40 @@ export class ReportsComponent {
   });
 
   // ── Data sources ──────────────────────────────────────────────────────
+  // Loader ties to each Observable's own subscribe/finalize lifecycle (not a
+  // .then()/.catch() around the whole signal) so it starts exactly when a
+  // request begins and stops on success, error, or cancellation (e.g.
+  // switchMap dropping a stale in-flight request when the date range changes
+  // again before it resolves).
   private readonly ordersInRange = toSignal(
     toObservable(this.dateRange).pipe(
-      switchMap(({ start, end }) => this.salesOrderService.getSalesOrdersInRange(start, end))
+      switchMap(({ start, end }) =>
+        this.salesOrderService.getSalesOrdersInRange(start, end).pipe(
+          tap({ subscribe: () => this.loadingService.start(), finalize: () => this.loadingService.stop() })
+        )
+      )
     ),
     { initialValue: [] as SalesOrder[] }
   );
 
-  readonly clients = toSignal(this.clientService.getClients(), { initialValue: [] as Client[] });
-  readonly designs = toSignal(this.designService.getDesigns(), { initialValue: [] as Design[] });
-  readonly inventory = toSignal(this.inventoryService.getInventory(), { initialValue: [] as InventoryItem[] });
+  readonly clients = toSignal(
+    this.clientService.getClients().pipe(
+      tap({ subscribe: () => this.loadingService.start(), finalize: () => this.loadingService.stop() })
+    ),
+    { initialValue: [] as Client[] }
+  );
+  readonly designs = toSignal(
+    this.designService.getDesigns().pipe(
+      tap({ subscribe: () => this.loadingService.start(), finalize: () => this.loadingService.stop() })
+    ),
+    { initialValue: [] as Design[] }
+  );
+  readonly inventory = toSignal(
+    this.inventoryService.getInventory().pipe(
+      tap({ subscribe: () => this.loadingService.start(), finalize: () => this.loadingService.stop() })
+    ),
+    { initialValue: [] as InventoryItem[] }
+  );
 
   readonly clientById = computed(() => {
     const map = new Map<string, Client>();
@@ -273,6 +297,11 @@ export class ReportsComponent {
     }
 
     await this.loadingService.run(async () => {
+      // rAF (not setTimeout) lets the spinner paint one frame before the
+      // synchronous work below runs — otherwise the browser never gets a
+      // chance to render the loader between count going up and back down.
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
       try {
         const XLSX = await import('xlsx');
         const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -294,6 +323,10 @@ export class ReportsComponent {
     }
 
     await this.loadingService.run(async () => {
+      // rAF (not setTimeout) lets the spinner paint one frame before the
+      // synchronous HTML building + window.open below runs.
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
       const [header, ...body] = rows;
       // Matches "Grand Total" and the Group/Design/Color subtotal rows in the
       // Sales Order Details report (their label lands in whichever of the first
@@ -345,6 +378,10 @@ export class ReportsComponent {
     }
 
     await this.loadingService.run(async () => {
+      // rAF (not setTimeout) lets the spinner paint one frame before the
+      // synchronous PDF generation below runs.
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
       const [header, ...body] = rows;
       const { default: JsPDF } = await import('jspdf');
       const doc = new JsPDF({ orientation: header.length > 6 ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });

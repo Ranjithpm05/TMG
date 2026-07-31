@@ -90,7 +90,6 @@ import {
   updateDoc,
   deleteDoc,
   query,
-  orderBy,
   where,
   limit,
   serverTimestamp
@@ -113,15 +112,33 @@ export class DesignService {
     private static readonly MASTER_DATA_CAP = 5000;
 
     // 🔹 GET ALL DESIGNS (cached one-time read)
+    // No `orderBy('createdAt')` on the query itself: Firestore silently drops any
+    // document missing that field from an orderBy'd result, which was hiding
+    // designs created without a createdAt (e.g. from before that field existed)
+    // from every screen, including this export. Sort client-side instead — the
+    // full list is already loaded into memory for client-side search/filter.
     getDesigns(): Observable<Design[]> {
         if (!this.designsCache$) {
-            const q = query(this.designRef, orderBy('createdAt', 'desc'), limit(DesignService.MASTER_DATA_CAP));
+            const q = query(this.designRef, limit(DesignService.MASTER_DATA_CAP));
             this.designsCache$ = from(getDocs(q)).pipe(
-                map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as Design))),
+                map((snap) => snap.docs
+                    .map((d) => ({ id: d.id, ...d.data() } as Design))
+                    .sort((a, b) => this.toMillis(b.createdAt) - this.toMillis(a.createdAt))
+                ),
                 shareReplay(1)
             );
         }
         return this.designsCache$;
+    }
+
+    private toMillis(value: any): number {
+        if (value?.toMillis) return value.toMillis();
+        if (value?.seconds != null) return value.seconds * 1000;
+        if (value) {
+            const parsed = new Date(value);
+            if (!isNaN(parsed.getTime())) return parsed.getTime();
+        }
+        return 0;
     }
 
     private invalidateCache(): void {
