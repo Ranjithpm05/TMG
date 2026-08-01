@@ -92,6 +92,8 @@ import {
   query,
   where,
   limit,
+  startAfter,
+  QueryDocumentSnapshot,
   serverTimestamp
 } from '@angular/fire/firestore';
 import { from, map, Observable, shareReplay } from 'rxjs';
@@ -106,10 +108,12 @@ export class DesignService {
     // Master data — cached one-time read, invalidated on write (see ClientService for rationale).
     private designsCache$: Observable<Design[]> | null = null;
 
-    // Safety cap, not a real page size — screens still search/filter the full
-    // cached list client-side (see project memory on Firestore cost
-    // optimization). This just stops a single read from growing unbounded.
-    private static readonly MASTER_DATA_CAP = 5000;
+    // Page size for each individual Firestore request, NOT a cap on total
+    // records returned — getDesigns() pages through with startAfter() until a
+    // page comes back short, so the full collection is always returned no
+    // matter how large it grows (a prior fixed limit() here silently
+    // truncated the list once the collection passed that count).
+    private static readonly PAGE_SIZE = 1000;
 
     // 🔹 GET ALL DESIGNS (cached one-time read)
     // No `orderBy('createdAt')` on the query itself: Firestore silently drops any
@@ -119,16 +123,28 @@ export class DesignService {
     // full list is already loaded into memory for client-side search/filter.
     getDesigns(): Observable<Design[]> {
         if (!this.designsCache$) {
-            const q = query(this.designRef, limit(DesignService.MASTER_DATA_CAP));
-            this.designsCache$ = from(getDocs(q)).pipe(
-                map((snap) => snap.docs
-                    .map((d) => ({ id: d.id, ...d.data() } as Design))
-                    .sort((a, b) => this.toMillis(b.createdAt) - this.toMillis(a.createdAt))
-                ),
-                shareReplay(1)
-            );
+            this.designsCache$ = from(this.fetchAllDesigns()).pipe(shareReplay(1));
         }
         return this.designsCache$;
+    }
+
+    private async fetchAllDesigns(): Promise<Design[]> {
+        const results: Design[] = [];
+        let cursor: QueryDocumentSnapshot | undefined;
+
+        while (true) {
+            const constraints = cursor
+                ? [limit(DesignService.PAGE_SIZE), startAfter(cursor)]
+                : [limit(DesignService.PAGE_SIZE)];
+            const snap = await getDocs(query(this.designRef, ...constraints));
+
+            results.push(...snap.docs.map((d) => ({ id: d.id, ...d.data() } as Design)));
+
+            if (snap.docs.length < DesignService.PAGE_SIZE) break;
+            cursor = snap.docs[snap.docs.length - 1];
+        }
+
+        return results.sort((a, b) => this.toMillis(b.createdAt) - this.toMillis(a.createdAt));
     }
 
     private toMillis(value: any): number {

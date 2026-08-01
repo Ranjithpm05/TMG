@@ -15,7 +15,7 @@ import type { Client } from '../../models/client.model';
 import type { Design } from '../../models/design.model';
 import type { InventoryItem } from '../../models/inventory.model';
 
-export type ReportTab = 'customer' | 'agent' | 'product' | 'exceed' | 'salesOrderDetails';
+export type ReportTab = 'customer' | 'agent' | 'product' | 'exceed' | 'styleWise' | 'styleCustomerWise';
 
 // Matches the SIZE_ORDER convention used in pick-list/packing-list/goods-inward
 // components — known apparel sizes sort by garment-size order, anything else
@@ -51,42 +51,46 @@ interface ExceedRow {
   exceeds: boolean;
 }
 
-interface SalesOrderDetailLine {
-  salesNo: string;
-  clientName: string;
-  deliveryDate: string;
-  status: SalesOrder['status'];
-  sleeveType: string;
-  size: string;
-  qty: number;
-  price: number;
+// One row per Design No. + Color combination — the leaf of both pivot reports.
+interface StyleColorRow {
+  color: string;
+  qtyBySize: Record<string, number>;
+  totalQty: number;
+  wsp: number;
   value: number;
 }
 
-interface SalesOrderDetailColorGroup {
-  color: string;
-  lines: SalesOrderDetailLine[];
-  totalQty: number;
-  totalValue: number;
-}
-
-interface SalesOrderDetailDesignGroup {
+interface StyleGroup {
   styleNo: string;
-  colors: SalesOrderDetailColorGroup[];
+  fabricDescription: string;
+  rows: StyleColorRow[];
   totalQty: number;
-  totalValue: number;
+  value: number;
 }
 
-interface SalesOrderDetailGroup {
-  group: string;
-  designs: SalesOrderDetailDesignGroup[];
-  totalQty: number;
-  totalValue: number;
+interface StyleWiseReport {
+  sizes: string[];
+  styles: StyleGroup[];
+  grandTotal: { totalQty: number; value: number };
 }
 
-interface SalesOrderDetailsReport {
-  groups: SalesOrderDetailGroup[];
-  grandTotal: { totalQty: number; totalValue: number };
+interface CustomerStyleGroup {
+  clientName: string;
+  styles: StyleGroup[];
+  totalQty: number;
+  value: number;
+}
+
+interface StyleCustomerWiseReport {
+  sizes: string[];
+  customers: CustomerStyleGroup[];
+  grandTotal: { totalQty: number; value: number };
+}
+
+// Intermediate accumulator shared by both pivot reports while scanning order items.
+interface StyleAccumulatorEntry {
+  fabricDescription: string;
+  colors: Map<string, { qtyBySize: Map<string, number>; value: number }>;
 }
 
 const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Shipped'] as const;
@@ -230,7 +234,8 @@ export class ReportsComponent {
 
   readonly report3 = computed(() => this.buildProductSummary());
   readonly report4 = computed(() => this.buildExceedReport());
-  readonly report5 = computed<SalesOrderDetailsReport>(() => this.buildSalesOrderDetailsReport());
+  readonly report5 = computed<StyleWiseReport>(() => this.buildStyleWiseReport());
+  readonly report6 = computed<StyleCustomerWiseReport>(() => this.buildStyleCustomerWiseReport());
 
   // ── Filter actions ────────────────────────────────────────────────────
   setTab(tab: ReportTab): void {
@@ -271,7 +276,8 @@ export class ReportsComponent {
       case 'agent': return 'Agent Wise Sales Report';
       case 'product': return 'Product Wise Summary Report';
       case 'exceed': return 'Exceed Order Report';
-      case 'salesOrderDetails': return 'Sales Order Details Report';
+      case 'styleWise': return 'Style No. Wise Sales Order Details';
+      case 'styleCustomerWise': return 'Style No. & Customer Wise Sales Order Details';
     }
   }
 
@@ -465,35 +471,57 @@ export class ReportsComponent {
           ...rows.map((r, i) => [i + 1, r.styleNo, r.color, r.orderedQty, r.availableQty, r.exceeds ? 'Exceeds' : 'OK']),
         ];
       }
-      case 'salesOrderDetails':
-        return this.salesOrderDetailsToRows(this.report5());
+      case 'styleWise':
+        return this.styleWiseToRows(this.report5());
+      case 'styleCustomerWise':
+        return this.styleCustomerWiseToRows(this.report6());
     }
   }
 
-  private salesOrderDetailsToRows(report: SalesOrderDetailsReport): any[][] {
-    const header = ['#', 'Group', 'Design No', 'Color', 'Size', 'Sleeve', 'Client', 'Delivery Date', 'Status', 'Qty', 'Price', 'Value'];
+  private styleWiseToRows(report: StyleWiseReport): any[][] {
+    const header = ['#', 'Fabric Description', 'Design No', 'Color', ...report.sizes, 'Total Qty', 'WSP', 'Value'];
+    const blankSizes = report.sizes.map(() => '');
     const body: any[][] = [];
     let counter = 0;
 
-    for (const group of report.groups) {
-      for (const design of group.designs) {
-        for (const color of design.colors) {
-          for (const line of color.lines) {
-            counter += 1;
-            body.push([
-              counter, group.group, design.styleNo, color.color, line.size, line.sleeveType || '-',
-              line.clientName, line.deliveryDate, line.status,
-              line.qty, this.round2(line.price), this.round2(line.value),
-            ]);
-          }
-          body.push(['', '', '', `Color Total: ${color.color}`, '', '', '', '', '', color.totalQty, '', this.round2(color.totalValue)]);
-        }
-        body.push(['', '', `Design Total: ${design.styleNo}`, '', '', '', '', '', '', design.totalQty, '', this.round2(design.totalValue)]);
+    for (const style of report.styles) {
+      for (const row of style.rows) {
+        counter += 1;
+        body.push([
+          counter, style.fabricDescription, style.styleNo, row.color,
+          ...report.sizes.map((s) => row.qtyBySize[s] ?? 0),
+          row.totalQty, this.round2(row.wsp), this.round2(row.value),
+        ]);
       }
-      body.push(['', `Group Total: ${group.group}`, '', '', '', '', '', '', '', group.totalQty, '', this.round2(group.totalValue)]);
+      body.push(['', '', `Design Total: ${style.styleNo}`, '', ...blankSizes, style.totalQty, '', this.round2(style.value)]);
     }
 
-    body.push(['', 'Grand Total', '', '', '', '', '', '', '', report.grandTotal.totalQty, '', this.round2(report.grandTotal.totalValue)]);
+    body.push(['', 'Grand Total', '', '', ...blankSizes, report.grandTotal.totalQty, '', this.round2(report.grandTotal.value)]);
+    return [header, ...body];
+  }
+
+  private styleCustomerWiseToRows(report: StyleCustomerWiseReport): any[][] {
+    const header = ['#', 'Customer Name', 'Fabric Description', 'Design No', 'Color', ...report.sizes, 'Total Qty', 'WSP', 'Value'];
+    const blankSizes = report.sizes.map(() => '');
+    const body: any[][] = [];
+    let counter = 0;
+
+    for (const customer of report.customers) {
+      for (const style of customer.styles) {
+        for (const row of style.rows) {
+          counter += 1;
+          body.push([
+            counter, customer.clientName, style.fabricDescription, style.styleNo, row.color,
+            ...report.sizes.map((s) => row.qtyBySize[s] ?? 0),
+            row.totalQty, this.round2(row.wsp), this.round2(row.value),
+          ]);
+        }
+        body.push(['', '', '', `Design Total: ${style.styleNo}`, '', ...blankSizes, style.totalQty, '', this.round2(style.value)]);
+      }
+      body.push(['', `Customer Total: ${customer.clientName}`, '', '', '', ...blankSizes, customer.totalQty, '', this.round2(customer.value)]);
+    }
+
+    body.push(['', 'Grand Total', '', '', '', ...blankSizes, report.grandTotal.totalQty, '', this.round2(report.grandTotal.value)]);
     return [header, ...body];
   }
 
@@ -630,93 +658,115 @@ export class ReportsComponent {
     return { rows };
   }
 
-  private buildSalesOrderDetailsReport(): SalesOrderDetailsReport {
-    const clientById = this.clientById();
-    // group -> styleNo -> color -> leaf lines (one per order-item size)
-    const groupMap = new Map<string, Map<string, Map<string, SalesOrderDetailLine[]>>>();
+  private buildStyleWiseReport(): StyleWiseReport {
+    const styleMap = new Map<string, StyleAccumulatorEntry>();
+    const sizeSet = new Set<string>();
 
     for (const order of this.filteredOrders()) {
-      const clientName = this.toText(clientById.get(order.clientId)?.clientName) || 'Unknown Client';
-
       for (const item of order.items ?? []) {
-        if (!this.matchesItemFilters(item)) continue;
-        const group = this.toText(item.design?.group) || 'Other';
-        const styleNo = this.toText(item.design?.styleNo) || 'Unknown';
-        const color = this.toText(item.design?.color) || 'Unspecified';
-
-        let byStyle = groupMap.get(group);
-        if (!byStyle) { byStyle = new Map(); groupMap.set(group, byStyle); }
-        let byColor = byStyle.get(styleNo);
-        if (!byColor) { byColor = new Map(); byStyle.set(styleNo, byColor); }
-        let lines = byColor.get(color);
-        if (!lines) { lines = []; byColor.set(color, lines); }
-
-        for (const size of item.itemSizes ?? []) {
-          const qty = Number(size.quantity) || 0;
-          if (qty <= 0) continue;
-          const price = Number(size.price) || 0;
-          lines.push({
-            salesNo: order.salesNo,
-            clientName,
-            deliveryDate: order.deliveryDate,
-            status: order.status,
-            sleeveType: this.toText(item.sleeveType),
-            size: this.toText(size.size),
-            qty,
-            price,
-            value: qty * price,
-          });
-        }
+        this.accumulateOrderItem(item, styleMap, sizeSet);
       }
     }
 
-    const sortBySize = (a: SalesOrderDetailLine, b: SalesOrderDetailLine): number => {
-      const aIndex = SIZE_ORDER.indexOf(a.size);
-      const bIndex = SIZE_ORDER.indexOf(b.size);
-      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-      const sizeCompare = a.size.localeCompare(b.size, undefined, { numeric: true });
-      if (sizeCompare !== 0) return sizeCompare;
-      return a.salesNo.localeCompare(b.salesNo, undefined, { numeric: true });
+    const sizes = this.sortSizes([...sizeSet]);
+    const styles = this.buildStyleGroups(styleMap, sizes);
+    const grandTotal = {
+      totalQty: styles.reduce((s, st) => s + st.totalQty, 0),
+      value: styles.reduce((s, st) => s + st.value, 0),
     };
 
-    const groups: SalesOrderDetailGroup[] = [...groupMap.entries()]
+    return { sizes, styles, grandTotal };
+  }
+
+  private buildStyleCustomerWiseReport(): StyleCustomerWiseReport {
+    const clientById = this.clientById();
+    const customerMap = new Map<string, Map<string, StyleAccumulatorEntry>>();
+    const sizeSet = new Set<string>();
+
+    for (const order of this.filteredOrders()) {
+      const clientName = this.toText(clientById.get(order.clientId)?.clientName) || 'Unknown Client';
+      let styleMap = customerMap.get(clientName);
+      if (!styleMap) { styleMap = new Map(); customerMap.set(clientName, styleMap); }
+
+      for (const item of order.items ?? []) {
+        this.accumulateOrderItem(item, styleMap, sizeSet);
+      }
+    }
+
+    const sizes = this.sortSizes([...sizeSet]);
+    const customers: CustomerStyleGroup[] = [...customerMap.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([group, byStyle]) => {
-        const designs: SalesOrderDetailDesignGroup[] = [...byStyle.entries()]
-          .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
-          .map(([styleNo, byColor]) => {
-            const colors: SalesOrderDetailColorGroup[] = [...byColor.entries()]
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([color, lines]) => {
-                const sortedLines = [...lines].sort(sortBySize);
-                return {
-                  color,
-                  lines: sortedLines,
-                  totalQty: sortedLines.reduce((s, l) => s + l.qty, 0),
-                  totalValue: sortedLines.reduce((s, l) => s + l.value, 0),
-                };
-              });
-            return {
-              styleNo,
-              colors,
-              totalQty: colors.reduce((s, c) => s + c.totalQty, 0),
-              totalValue: colors.reduce((s, c) => s + c.totalValue, 0),
-            };
-          });
+      .map(([clientName, styleMap]) => {
+        const styles = this.buildStyleGroups(styleMap, sizes);
         return {
-          group,
-          designs,
-          totalQty: designs.reduce((s, d) => s + d.totalQty, 0),
-          totalValue: designs.reduce((s, d) => s + d.totalValue, 0),
+          clientName,
+          styles,
+          totalQty: styles.reduce((s, st) => s + st.totalQty, 0),
+          value: styles.reduce((s, st) => s + st.value, 0),
         };
       });
 
     const grandTotal = {
-      totalQty: groups.reduce((s, g) => s + g.totalQty, 0),
-      totalValue: groups.reduce((s, g) => s + g.totalValue, 0),
+      totalQty: customers.reduce((s, c) => s + c.totalQty, 0),
+      value: customers.reduce((s, c) => s + c.value, 0),
     };
 
-    return { groups, grandTotal };
+    return { sizes, customers, grandTotal };
+  }
+
+  /** Folds one order item's per-size quantities into the styleNo -> color accumulator shared by both pivot reports. */
+  private accumulateOrderItem(item: OrderItem, styleMap: Map<string, StyleAccumulatorEntry>, sizeSet: Set<string>): void {
+    if (!this.matchesItemFilters(item)) return;
+    const styleNo = this.toText(item.design?.styleNo) || 'Unknown';
+    const color = this.toText(item.design?.color) || 'Unspecified';
+    // Same convention as the Sales Order "Enter Quantities by Fabric Description" grouping.
+    const fabricDescription = this.toText(item.design?.sizes?.[0]?.fabricType) || 'Uncategorized';
+
+    let style = styleMap.get(styleNo);
+    if (!style) { style = { fabricDescription, colors: new Map() }; styleMap.set(styleNo, style); }
+    let colorEntry = style.colors.get(color);
+    if (!colorEntry) { colorEntry = { qtyBySize: new Map(), value: 0 }; style.colors.set(color, colorEntry); }
+
+    for (const size of item.itemSizes ?? []) {
+      const qty = Number(size.quantity) || 0;
+      if (qty <= 0) continue;
+      const sizeLabel = this.toText(size.size);
+      sizeSet.add(sizeLabel);
+      colorEntry.qtyBySize.set(sizeLabel, (colorEntry.qtyBySize.get(sizeLabel) ?? 0) + qty);
+      colorEntry.value += qty * (Number(size.WSP) || 0);
+    }
+  }
+
+  private buildStyleGroups(styleMap: Map<string, StyleAccumulatorEntry>, sizes: string[]): StyleGroup[] {
+    return [...styleMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+      .map(([styleNo, style]) => {
+        const rows: StyleColorRow[] = [...style.colors.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([color, entry]) => {
+            const qtyBySize = Object.fromEntries(entry.qtyBySize);
+            const totalQty = sizes.reduce((s, size) => s + (qtyBySize[size] ?? 0), 0);
+            const value = this.round2(entry.value);
+            const wsp = totalQty > 0 ? this.round2(entry.value / totalQty) : 0;
+            return { color, qtyBySize, totalQty, wsp, value };
+          });
+        return {
+          styleNo,
+          fabricDescription: style.fabricDescription,
+          rows,
+          totalQty: rows.reduce((s, r) => s + r.totalQty, 0),
+          value: rows.reduce((s, r) => s + r.value, 0),
+        };
+      });
+  }
+
+  private sortSizes(sizes: string[]): string[] {
+    return [...sizes].sort((a, b) => {
+      const aIndex = SIZE_ORDER.indexOf(a);
+      const bIndex = SIZE_ORDER.indexOf(b);
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
   }
 
   private matchesItemFilters(item: OrderItem): boolean {
@@ -732,14 +782,6 @@ export class ReportsComponent {
     if (agent) return agent;
     if (client.clientType === 'Agent') return this.toText(client.clientName) || 'Unassigned';
     return 'Unassigned';
-  }
-
-  statusBadgeClass(status: SalesOrder['status']): string {
-    switch (status) {
-      case 'Shipped': return 'bg-green-100 text-green-800';
-      case 'Confirmed': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-amber-100 text-amber-800';
-    }
   }
 
   /** Firestore documents aren't type-checked — coerce possibly-non-string values before string ops. */
