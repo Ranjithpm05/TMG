@@ -13,19 +13,20 @@ import {
   where,
 } from '@angular/fire/firestore';
 import { from, Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
 import { DCItem, DeliveryChallan } from '../models/delivery-challan.model';
+import { fetchAllDocs } from './firestore-pagination.util';
 
 @Injectable({ providedIn: 'root' })
 export class DeliveryChallanService {
   private firestore = inject(Firestore);
   private dcRef = collection(this.firestore, 'deliveryChallans');
 
-  // One-time read — the Packing List screen snapshots this into a local list.
-  getDeliveryChallans(pageLimit = 100): Observable<DeliveryChallan[]> {
-    const q = query(this.dcRef, orderBy('createdAt', 'desc'), limit(pageLimit));
-    return from(getDocs(q)).pipe(
-      map((snap) => snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() })))
+  // One-time read, paged through in full via fetchAllDocs() — a prior fixed
+  // limit(100) here silently truncated the list once delivery challans passed
+  // that count. The Packing List screen snapshots this into a local list.
+  getDeliveryChallans(): Observable<DeliveryChallan[]> {
+    return from(
+      fetchAllDocs(this.dcRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
     );
   }
 

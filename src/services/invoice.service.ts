@@ -6,7 +6,6 @@ import {
   doc,
   getDoc,
   getDocs,
-  limit,
   orderBy,
   query,
   runTransaction,
@@ -15,20 +14,21 @@ import {
   where,
 } from '@angular/fire/firestore';
 import { from, Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
 import { Invoice, InvoiceItem, InvoiceTaxSummary } from '../models/invoice.model';
+import { fetchAllDocs } from './firestore-pagination.util';
 
 @Injectable({ providedIn: 'root' })
 export class InvoiceService {
   private firestore = inject(Firestore);
   private invoicesRef = collection(this.firestore, 'invoices');
 
-  // One-time read: the e-Invoice and Packing List screens snapshot this into a
-  // local list and reload manually after their own writes.
-  getInvoices(pageLimit = 100): Observable<Invoice[]> {
-    const q = query(this.invoicesRef, orderBy('createdAt', 'desc'), limit(pageLimit));
-    return from(getDocs(q)).pipe(
-      map((snap) => snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() })))
+  // One-time read, paged through in full via fetchAllDocs() — a prior fixed
+  // limit(100) here silently truncated the list once invoices passed that
+  // count. The e-Invoice and Packing List screens snapshot this into a local
+  // list and reload manually after their own writes.
+  getInvoices(): Observable<Invoice[]> {
+    return from(
+      fetchAllDocs(this.invoicesRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
     );
   }
 

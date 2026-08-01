@@ -31,6 +31,7 @@ import type {
 } from '../models/pick-list.model';
 import type { InventoryItem } from '../models/inventory.model';
 import { InventoryService } from './inventory.service';
+import { fetchAllDocs } from './firestore-pagination.util';
 
 type StoredPickList = PickList & {
   orderSummaries?: PickListOrderSummary[];
@@ -49,12 +50,14 @@ export class PickListService {
   private inventoryService = inject(InventoryService);
   private plRef = collection(this.firestore, 'pickLists');
 
-  // One-time read for the list screen — the active picking session for a single
-  // pick list uses getPickListById()/getPickListLines() below, which stay live.
-  getPickLists(pageLimit = 100): Observable<PickList[]> {
-    const q = query(this.plRef, orderBy('createdAt', 'desc'), limit(pageLimit));
-    return from(getDocs(q)).pipe(
-      map((snap) => snap.docs.map((d) => this.normalizePickList({ id: d.id, ...d.data() })))
+  // One-time read for the list screen, paged through in full via
+  // fetchAllDocs() — a prior fixed limit(100) here silently truncated the
+  // list once pick lists passed that count. The active picking session for a
+  // single pick list uses getPickListById()/getPickListLines() below, which
+  // stay live.
+  getPickLists(): Observable<PickList[]> {
+    return from(
+      fetchAllDocs(this.plRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePickList({ id: d.id, ...d.data() }))
     );
   }
 

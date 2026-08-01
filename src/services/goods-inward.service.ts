@@ -7,13 +7,12 @@ import {
   getDocs,
   updateDoc,
   deleteDoc,
-  limit,
-  query,
   orderBy,
   serverTimestamp
 } from '@angular/fire/firestore';
-import { from, map, Observable } from 'rxjs';
+import { from, Observable } from 'rxjs';
 import type { GoodsInward } from '../models/goods-inward.model';
+import { fetchAllDocs } from './firestore-pagination.util';
 
 @Injectable({ providedIn: 'root' })
 export class GoodsInwardService {
@@ -40,13 +39,13 @@ export class GoodsInwardService {
     return obj;
   }
 
-  // 🔹 Get recent GRNs (bounded + one-time, matching the other list services —
-  // an unbounded realtime listener here would re-read the whole collection on
-  // every open and on every remote GRN change from any user).
-  getGoodsInwards(pageLimit = 100): Observable<GoodsInward[]> {
-    const q = query(this.grnRef, orderBy('createdAt', 'desc'), limit(pageLimit));
-    return from(getDocs(q)).pipe(
-      map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as GoodsInward)))
+  // 🔹 Get all GRNs (one-time read, paged through in full via fetchAllDocs() —
+  // a prior fixed limit(100) here silently truncated the list once GRNs
+  // passed that count; Dashboard/Reports need the complete set for correct
+  // totals, not just the most recent page).
+  getGoodsInwards(): Observable<GoodsInward[]> {
+    return from(
+      fetchAllDocs(this.grnRef, [orderBy('createdAt', 'desc')], (d) => ({ id: d.id, ...d.data() } as GoodsInward))
     );
   }
 

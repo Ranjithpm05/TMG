@@ -1,11 +1,12 @@
 import { Injectable, inject } from '@angular/core';
 import {
   Firestore, collection, doc,
-  updateDoc, query, orderBy, where, getDocs, serverTimestamp, writeBatch, limit, WriteBatch
+  updateDoc, query, orderBy, where, getDocs, serverTimestamp, writeBatch, WriteBatch
 } from '@angular/fire/firestore';
 import { from, map, Observable, shareReplay } from 'rxjs';
 import type { InventoryItem } from '../models/inventory.model';
 import type { GoodsInwardItem } from '../models/goods-inward.model';
+import { fetchAllDocs } from './firestore-pagination.util';
 
 @Injectable({ providedIn: 'root' })
 export class InventoryService {
@@ -18,18 +19,14 @@ export class InventoryService {
   // invalidateCache() instead of every screen holding its own live listener.
   private inventoryCache$: Observable<InventoryItem[]> | null = null;
 
-  // Safety cap, not a real page size — screens still search/filter the full
-  // cached list client-side (see project memory on Firestore cost
-  // optimization). This just stops a single read from growing unbounded.
-  private static readonly MASTER_DATA_CAP = 5000;
-
+  // Paged through in full via fetchAllDocs() — a prior fixed limit(5000) here
+  // silently truncated the list once inventory passed that many rows (same
+  // bug class as Design Master's export; see project memory).
   getInventory(): Observable<InventoryItem[]> {
     if (!this.inventoryCache$) {
-      const q = query(this.invRef, orderBy('styleNo', 'asc'), limit(InventoryService.MASTER_DATA_CAP));
-      this.inventoryCache$ = from(getDocs(q)).pipe(
-        map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryItem))),
-        shareReplay(1)
-      );
+      this.inventoryCache$ = from(
+        fetchAllDocs(this.invRef, [orderBy('styleNo', 'asc')], (d) => ({ id: d.id, ...d.data() } as InventoryItem))
+      ).pipe(shareReplay(1));
     }
     return this.inventoryCache$;
   }

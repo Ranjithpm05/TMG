@@ -30,6 +30,7 @@ import {
   PackingScanResult,
 } from '../models/packing-list.model';
 import { InventoryService } from './inventory.service';
+import { fetchAllDocs } from './firestore-pagination.util';
 
 @Injectable({ providedIn: 'root' })
 export class PackingListService {
@@ -38,12 +39,14 @@ export class PackingListService {
   private packingRef = collection(this.firestore, 'packingLists');
   private inventoryRef = collection(this.firestore, 'inventory');
 
-  // One-time read for the list screen — the active packing session for a single
-  // packing list uses getPackingListById()/getPackingListLines() below, which stay live.
-  getPackingLists(pageLimit = 100): Observable<PackingList[]> {
-    const q = query(this.packingRef, orderBy('createdAt', 'desc'), limit(pageLimit));
-    return from(getDocs(q)).pipe(
-      map((snap) => snap.docs.map((d) => this.normalizePackingList({ id: d.id, ...d.data() })))
+  // One-time read for the list screen, paged through in full via
+  // fetchAllDocs() — a prior fixed limit(100) here silently truncated the
+  // list once packing lists passed that count. The active packing session for
+  // a single packing list uses getPackingListById()/getPackingListLines()
+  // below, which stay live.
+  getPackingLists(): Observable<PackingList[]> {
+    return from(
+      fetchAllDocs(this.packingRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePackingList({ id: d.id, ...d.data() }))
     );
   }
 

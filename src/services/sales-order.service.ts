@@ -5,19 +5,17 @@ import {
   doc,
   addDoc,
   setDoc,
-  getDocs,
   updateDoc,
   deleteDoc,
-  query,
   orderBy,
-  limit,
   where,
   Timestamp,
   serverTimestamp
 } from '@angular/fire/firestore';
 
 import type { SalesOrder } from '../models/sales-order.model';
-import { from, map, Observable } from 'rxjs';
+import { from, Observable } from 'rxjs';
+import { fetchAllDocs } from './firestore-pagination.util';
 
 @Injectable({ providedIn: 'root' })
 export class SalesOrderService {
@@ -36,31 +34,37 @@ export class SalesOrderService {
         } as Omit<SalesOrder, 'id'>;
     }
 
-    // One-time read: every screen that lists sales orders just snapshots into a
+    // One-time read, paged through in full via fetchAllDocs() — a prior fixed
+    // limit(100) here silently truncated the list once sales orders passed
+    // that count. Every screen that lists sales orders just snapshots into a
     // signal/array and manually reloads after its own writes, so a standing
     // realtime listener buys nothing but extra reads on every remote change.
-    getSalesOrders(pageLimit = 100): Observable<SalesOrder[]> {
-        const q = query(this.salesOrderRef, orderBy('createdAt', 'desc'), limit(pageLimit));
-        return from(getDocs(q)).pipe(
-            // Spread doc data first, then override with the real Firestore doc id last —
-            // some legacy documents have a stale/blank "id" field stored in their body
-            // (see createSalesOrder), which must never win over the actual doc reference id.
-            map((snap) => snap.docs.map((d) => ({ ...d.data(), id: d.id } as SalesOrder)))
+    getSalesOrders(): Observable<SalesOrder[]> {
+        return from(
+            fetchAllDocs(this.salesOrderRef, [orderBy('createdAt', 'desc')], (d) =>
+                // Spread doc data first, then override with the real Firestore doc id last —
+                // some legacy documents have a stale/blank "id" field stored in their body
+                // (see createSalesOrder), which must never win over the actual doc reference id.
+                ({ ...d.data(), id: d.id } as SalesOrder)
+            )
         );
     }
 
-    // 🔹 Date-bounded one-time query for reports — avoids pulling the full collection
-    // for large datasets and avoids leaving a listener open while a report is viewed.
-    getSalesOrdersInRange(start: Date, end: Date, hardLimit = 5000): Observable<SalesOrder[]> {
-        const q = query(
-            this.salesOrderRef,
-            where('createdAt', '>=', Timestamp.fromDate(start)),
-            where('createdAt', '<=', Timestamp.fromDate(end)),
-            orderBy('createdAt', 'desc'),
-            limit(hardLimit)
-        );
-        return from(getDocs(q)).pipe(
-            map((snap) => snap.docs.map((d) => ({ ...d.data(), id: d.id } as SalesOrder)))
+    // 🔹 Date-bounded one-time query for reports, paged through in full via
+    // fetchAllDocs() — a prior fixed limit(5000) here would have silently
+    // dropped orders from a report's totals once a date range held more rows
+    // than that. Avoids leaving a listener open while a report is viewed.
+    getSalesOrdersInRange(start: Date, end: Date): Observable<SalesOrder[]> {
+        return from(
+            fetchAllDocs(
+                this.salesOrderRef,
+                [
+                    where('createdAt', '>=', Timestamp.fromDate(start)),
+                    where('createdAt', '<=', Timestamp.fromDate(end)),
+                    orderBy('createdAt', 'desc'),
+                ],
+                (d) => ({ ...d.data(), id: d.id } as SalesOrder)
+            )
         );
     }
 
