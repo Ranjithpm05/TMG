@@ -422,6 +422,16 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     );
   });
 
+  /** Total quantity across the currently filtered/displayed orders (matches the on-screen list). */
+  filteredOrdersTotalQuantity = computed(() =>
+    this.filteredSalesOrders().reduce((sum, order) => sum + this.getOrderTotalQuantity(order), 0)
+  );
+
+  /** Total order value across the currently filtered/displayed orders (matches the on-screen list). */
+  filteredOrdersTotalValue = computed(() =>
+    this.filteredSalesOrders().reduce((sum, order) => sum + this.getOrderTotalPrice(order), 0)
+  );
+
   /** Robustly resolves an order's created date, whatever shape it comes back from Firestore as. */
   private getOrderCreatedAtDate(order: SalesOrder): Date {
     const raw: any = order.createdAt;
@@ -534,6 +544,51 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
             next: orders => { this.salesOrders.set(orders); Swal.close(); },
             error: () => { Swal.close(); Swal.fire('Error', 'Failed to load orders', 'error'); }
         });
+    }
+
+    /** Exports exactly what's currently listed (respects the active date filter) to an Excel file. */
+    async exportExcel(): Promise<void> {
+        const orders = this.filteredSalesOrders();
+        if (orders.length === 0) {
+            Swal.fire({ icon: 'info', title: 'No Data', text: 'There are no orders to export for the current filter.' });
+            return;
+        }
+
+        await this.loadingService.run(async () => {
+            // rAF (not setTimeout) lets the spinner paint one frame before the synchronous work below runs.
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+            const header = ['Order ID', 'Client', 'Created Date', 'Delivery Date', 'Quantity', 'Total Price', 'Status'];
+            const rows = orders.map(order => [
+                order.salesNo,
+                this.getClientName(order.clientId),
+                this.getOrderCreatedAtDisplay(order),
+                order.deliveryDate,
+                this.getOrderTotalQuantity(order),
+                this.round2(this.getOrderTotalPrice(order)),
+                order.status,
+            ]);
+            rows.push(['', '', '', 'Grand Total', this.filteredOrdersTotalQuantity(), this.round2(this.filteredOrdersTotalValue()), '']);
+
+            try {
+                const XLSX = await import('xlsx');
+                const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Sales Orders');
+                XLSX.writeFile(wb, `Sales_Orders_${this.formatTimestamp()}.xlsx`);
+            } catch {
+                Swal.fire({ icon: 'error', title: 'Export Failed', text: 'Could not generate the Excel file.' });
+            }
+        });
+    }
+
+    private round2(value: number): number {
+        return Math.round(value * 100) / 100;
+    }
+
+    private formatTimestamp(): string {
+        const d = new Date();
+        return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
     }
 
   ngOnDestroy() {

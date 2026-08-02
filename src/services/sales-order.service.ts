@@ -39,15 +39,73 @@ export class SalesOrderService {
     // that count. Every screen that lists sales orders just snapshots into a
     // signal/array and manually reloads after its own writes, so a standing
     // realtime listener buys nothing but extra reads on every remote change.
+    //
+    // No orderBy() here (deliberately): Firestore excludes any document that
+    // lacks the ordered-by field from the ENTIRE result set, not just from the
+    // ordering — so any legacy/edited-outside-the-app sales order missing
+    // `createdAt` would silently vanish from every screen and report that
+    // reads this method (same bug class as the Design Master export issue).
+    // Sorted client-side instead, which has no such requirement.
     getSalesOrders(): Observable<SalesOrder[]> {
         return from(
-            fetchAllDocs(this.salesOrderRef, [orderBy('createdAt', 'desc')], (d) =>
+            fetchAllDocs(this.salesOrderRef, [], (d) =>
                 // Spread doc data first, then override with the real Firestore doc id last —
                 // some legacy documents have a stale/blank "id" field stored in their body
                 // (see createSalesOrder), which must never win over the actual doc reference id.
                 ({ ...d.data(), id: d.id } as SalesOrder)
-            )
+            ).then(async orders => {
+                await this.healMissingCreatedAt(orders);
+                return orders.sort((a, b) => this.toMillis(b.createdAt) - this.toMillis(a.createdAt));
+            })
         );
+    }
+
+    /** Treats a missing/unparseable createdAt as 0 (oldest) instead of throwing or excluding the doc. */
+    private toMillis(value: unknown): number {
+        const raw: any = value;
+        if (raw && typeof raw.toDate === 'function') return raw.toDate().getTime();
+        if (raw instanceof Date) return raw.getTime();
+        if (raw) {
+            const parsed = new Date(raw).getTime();
+            if (!Number.isNaN(parsed)) return parsed;
+        }
+        return 0;
+    }
+
+    // Self-heal: orders missing (or with an unparseable) `createdAt` are invisible
+    // to getSalesOrdersInRange() — the where('createdAt', ...) queries used by
+    // Reports, Dashboard, and Sales Order's own date-filtered view all silently
+    // exclude any doc that doesn't have the field at all (Firestore inequality
+    // filters require it to exist). This only ever runs from this unbounded "All"
+    // read, which already fetches every doc regardless — so it costs no extra
+    // reads, only repairs the (hopefully rare) broken ones, and patches the
+    // in-memory result too so this same read reflects the fix immediately.
+    private async healMissingCreatedAt(orders: SalesOrder[]): Promise<void> {
+        const broken = orders.filter(o => this.toMillis(o.createdAt) === 0);
+        if (broken.length === 0) return;
+
+        await Promise.all(broken.map(async order => {
+            const timestamp = Timestamp.fromDate(this.bestEffortCreatedAt(order));
+            try {
+                await updateDoc(doc(this.firestore, `salesOrders/${order.id}`), { createdAt: timestamp });
+                (order as unknown as { createdAt: unknown }).createdAt = timestamp;
+            } catch {
+                // Best-effort only — if the write fails (e.g. permissions), leave the
+                // doc as-is; it'll simply be retried the next time this method runs.
+            }
+        }));
+    }
+
+    /** Falls back to the order's own orderDate/deliveryDate before resorting to "now". */
+    private bestEffortCreatedAt(order: SalesOrder): Date {
+        const orderDate = (order as unknown as { orderDate?: string }).orderDate;
+        const parsedOrderDate = orderDate ? new Date(orderDate) : null;
+        if (parsedOrderDate && !Number.isNaN(parsedOrderDate.getTime())) return parsedOrderDate;
+
+        const parsedDeliveryDate = order.deliveryDate ? new Date(order.deliveryDate) : null;
+        if (parsedDeliveryDate && !Number.isNaN(parsedDeliveryDate.getTime())) return parsedDeliveryDate;
+
+        return new Date();
     }
 
     // 🔹 Date-bounded one-time query for reports, paged through in full via

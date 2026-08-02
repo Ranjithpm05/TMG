@@ -189,13 +189,20 @@ export class ReportsDataService {
   }
 
   // ── Aggregation helpers shared by Customer Wise + Agent Wise ──────────
+  // Every order that reaches this point must contribute to some row and to
+  // the grand total — falling back to an "Unassigned" bucket instead of
+  // skipping the order outright (as this used to do via `if (!key) continue`)
+  // is what previously caused Agent Wise (and, in principle, Customer Wise)
+  // totals to under-count whenever an order's client couldn't be resolved
+  // (e.g. a deleted client), silently excluding that order's quantities from
+  // every row AND the grand total instead of just mis-labeling it.
   buildMatrix(keyFn: (order: SalesOrder) => string, labelFn: (key: string) => string): MatrixReport {
     const rows = new Map<string, MatrixRow>();
     const groupSet = new Set<string>();
 
     for (const order of this.filteredOrders()) {
-      const key = keyFn(order);
-      if (!key) continue;
+      const resolvedKey = keyFn(order);
+      const key = resolvedKey || '__unassigned__';
 
       for (const item of order.items ?? []) {
         if (!this.matchesItemFilters(item)) continue;
@@ -204,7 +211,8 @@ export class ReportsDataService {
 
         let row = rows.get(key);
         if (!row) {
-          row = { key, label: labelFn(key), qtyByGroup: {}, totalQty: 0, totalValue: 0 };
+          const label = resolvedKey ? labelFn(resolvedKey) : 'Unassigned';
+          row = { key, label, qtyByGroup: {}, totalQty: 0, totalValue: 0 };
           rows.set(key, row);
         }
 

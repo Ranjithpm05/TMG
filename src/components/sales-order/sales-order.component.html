@@ -685,9 +685,14 @@
       <!-- Header row -->
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4 mb-5">
         <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Sales Orders</h2>
-        <button (click)="showAddForm()" class="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-          + Add Sales Order
-        </button>
+        <div class="flex gap-2">
+          <button (click)="exportExcel()" class="inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Export Excel
+          </button>
+          <button (click)="showAddForm()" class="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            + Add Sales Order
+          </button>
+        </div>
       </div>
 
       <!-- Date Filter Bar -->
@@ -732,10 +737,13 @@
             </button>
           </div>
         </div>
-        <!-- Result count -->
-        <span class="text-xs text-gray-500 whitespace-nowrap self-end pb-1">
-          {{ filteredSalesOrders().length }} of {{ salesOrders().length }} order(s)
-        </span>
+        <!-- Result count + totals -->
+        <div class="text-xs text-gray-500 whitespace-nowrap self-end pb-1 text-right">
+          <div>{{ filteredSalesOrders().length }} of {{ salesOrders().length }} order(s)</div>
+          <div class="font-medium text-gray-700">
+            Total Qty: {{ filteredOrdersTotalQuantity() }} pcs &nbsp;·&nbsp; Total Value: &#8377; {{ filteredOrdersTotalValue() | number:'1.2-2' }}
+          </div>
+        </div>
       </div>
 
       <div class="overflow-x-auto">
