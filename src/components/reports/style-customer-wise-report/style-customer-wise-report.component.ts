@@ -123,7 +123,6 @@ export class StyleCustomerWiseReportComponent {
             row.totalQty, this.round2(row.wsp), this.round2(row.value),
           ]);
         }
-        body.push(['', '', '', `Design Total: ${style.styleNo}`, '', ...blankSizes, style.totalQty, '', this.round2(style.value)]);
       }
       body.push(['', `Customer Total: ${customer.clientName}`, '', '', '', ...blankSizes, customer.totalQty, '', this.round2(customer.value)]);
     }

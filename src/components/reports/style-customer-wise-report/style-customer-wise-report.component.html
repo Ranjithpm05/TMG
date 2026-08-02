@@ -51,16 +51,6 @@
                 <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ row.value | number:'1.2-2' }}</td>
               </tr>
             }
-            <tr class="bg-slate-100 font-semibold">
-              <td class="px-3 py-2" colspan="3"></td>
-              <td colspan="2" class="px-4 py-2 text-slate-800">Design Total: {{ style.styleNo }}</td>
-              @for (size of styleCustomerWise.sizes; track size) {
-                <td class="px-3 py-2"></td>
-              }
-              <td class="px-3 py-2 text-center text-slate-900">{{ style.totalQty }}</td>
-              <td class="px-4 py-2"></td>
-              <td class="px-4 py-2 text-right text-slate-900">{{ style.value | number:'1.2-2' }}</td>
-            </tr>
           }
           <tr class="bg-indigo-100 font-bold">
             <td class="px-3 py-2"></td>

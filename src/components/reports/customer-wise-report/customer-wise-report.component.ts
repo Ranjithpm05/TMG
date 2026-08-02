@@ -31,6 +31,12 @@ export class CustomerWiseReportComponent {
     return this.data.filterSummary();
   }
 
+  /** Matrix rows are keyed by clientId, so the client (and its agent) can be looked up directly. */
+  protected agentNameFor(clientId: string): string {
+    const client = this.data.clientById().get(clientId);
+    return client ? this.data.resolveAgentName(client) : 'Unassigned';
+  }
+
   async exportExcel(): Promise<void> {
     const rows = this.buildExportRows();
     if (rows.length <= 1) {
@@ -74,10 +80,11 @@ export class CustomerWiseReportComponent {
 
   private buildExportRows(): any[][] {
     const matrix = this.report();
-    const header = ['#', 'Customer Name', ...matrix.groups, 'Total Qty', 'Total Order Value'];
+    const header = ['#', 'Customer Name', 'Agent Name', ...matrix.groups, 'Total Qty', 'Total Order Value'];
     const body = matrix.rows.map((r, i) => [
       i + 1,
       r.label,
+      this.agentNameFor(r.key),
       ...matrix.groups.map((g) => r.qtyByGroup[g] ?? 0),
       r.totalQty,
       this.round2(r.totalValue),
@@ -85,6 +92,7 @@ export class CustomerWiseReportComponent {
     body.push([
       '',
       'Grand Total',
+      '',
       ...matrix.groups.map((g) => matrix.grandTotal.qtyByGroup[g] ?? 0),
       matrix.grandTotal.totalQty,
       this.round2(matrix.grandTotal.totalValue),

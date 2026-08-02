@@ -115,7 +115,6 @@ export class StyleWiseReportComponent {
           row.totalQty, this.round2(row.wsp), this.round2(row.value),
         ]);
       }
-      body.push(['', '', `Design Total: ${style.styleNo}`, '', ...blankSizes, style.totalQty, '', this.round2(style.value)]);
     }
 
     body.push(['', 'Grand Total', '', '', ...blankSizes, report.grandTotal.totalQty, '', this.round2(report.grandTotal.value)]);
