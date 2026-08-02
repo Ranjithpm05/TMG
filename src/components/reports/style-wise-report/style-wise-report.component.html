@@ -1,0 +1,81 @@
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+  <h3 class="text-lg font-semibold text-gray-800">Style No. Wise Sales Order Details</h3>
+  <div class="flex gap-2">
+    <button (click)="exportExcel()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+      Export Excel
+    </button>
+    <button (click)="exportPdf()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+      Export PDF
+    </button>
+    <button (click)="printReport()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+      Print
+    </button>
+  </div>
+</div>
+<p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
+
+@let styleWise = report();
+<div class="overflow-x-auto border border-gray-200 rounded-lg">
+  @if (styleWise.styles.length > 0) {
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-800 text-white">
+        <tr>
+          <th class="px-3 py-3 text-center font-medium">#</th>
+          <th class="px-4 py-3 text-left font-medium">Fabric Description</th>
+          <th class="px-4 py-3 text-left font-medium">Design No</th>
+          <th class="px-4 py-3 text-left font-medium">Color</th>
+          @for (size of styleWise.sizes; track size) {
+            <th class="px-3 py-3 text-center font-medium whitespace-nowrap">{{ size }}</th>
+          }
+          <th class="px-3 py-3 text-center font-medium">Total Qty</th>
+          <th class="px-4 py-3 text-right font-medium">WSP</th>
+          <th class="px-4 py-3 text-right font-medium">Value</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        @for (style of styleWise.styles; track style.styleNo) {
+          @for (row of style.rows; track row.color; let i = $index) {
+            <tr class="hover:bg-gray-50">
+              <td class="px-3 py-2 text-center text-gray-500">{{ i + 1 }}</td>
+              <td class="px-4 py-2 text-gray-700">{{ style.fabricDescription }}</td>
+              <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ style.styleNo }}</td>
+              <td class="px-4 py-2 text-gray-700">{{ row.color }}</td>
+              @for (size of styleWise.sizes; track size) {
+                <td class="px-3 py-2 text-center text-gray-700">{{ row.qtyBySize[size] ?? 0 }}</td>
+              }
+              <td class="px-3 py-2 text-center font-semibold text-gray-900">{{ row.totalQty }}</td>
+              <td class="px-4 py-2 text-right text-gray-700">{{ row.wsp | number:'1.2-2' }}</td>
+              <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ row.value | number:'1.2-2' }}</td>
+            </tr>
+          }
+          <tr class="bg-slate-100 font-semibold">
+            <td class="px-3 py-2"></td>
+            <td class="px-4 py-2"></td>
+            <td colspan="2" class="px-4 py-2 text-slate-800">Design Total: {{ style.styleNo }}</td>
+            @for (size of styleWise.sizes; track size) {
+              <td class="px-3 py-2"></td>
+            }
+            <td class="px-3 py-2 text-center text-slate-900">{{ style.totalQty }}</td>
+            <td class="px-4 py-2"></td>
+            <td class="px-4 py-2 text-right text-slate-900">{{ style.value | number:'1.2-2' }}</td>
+          </tr>
+        }
+      </tbody>
+      <tfoot class="bg-gray-100 font-bold">
+        <tr>
+          <td colspan="4" class="px-4 py-3 text-gray-900">Grand Total</td>
+          @for (size of styleWise.sizes; track size) {
+            <td class="px-3 py-3"></td>
+          }
+          <td class="px-3 py-3 text-center text-gray-900">{{ styleWise.grandTotal.totalQty }}</td>
+          <td class="px-4 py-3"></td>
+          <td class="px-4 py-3 text-right text-gray-900">{{ styleWise.grandTotal.value | number:'1.2-2' }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  } @else {
+    <div class="text-center py-10">
+      <p class="text-sm text-gray-500">No orders match the current filters.</p>
+    </div>
+  }
+</div>

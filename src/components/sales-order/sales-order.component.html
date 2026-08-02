@@ -704,14 +704,14 @@
             <input type="date"
                    class="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                    [ngModel]="filterFromDate()"
-                   (ngModelChange)="filterFromDate.set($event)">
+                   (ngModelChange)="onFilterFromDateChange($event)">
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1">To</label>
             <input type="date"
                    class="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                    [ngModel]="filterToDate()"
-                   (ngModelChange)="filterToDate.set($event)">
+                   (ngModelChange)="onFilterToDateChange($event)">
           </div>
           <div class="flex gap-2">
             <button (click)="resetToCurrentMonth()" type="button"

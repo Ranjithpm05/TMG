@@ -461,11 +461,44 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   resetToCurrentMonth() {
     this.filterFromDate.set(this.currentMonthStart());
     this.filterToDate.set(this.currentMonthEnd());
+    this.loadSalesOrders();
   }
 
   clearDateFilter() {
     this.filterFromDate.set('');
     this.filterToDate.set('');
+    this.loadSalesOrders();
+  }
+
+  onFilterFromDateChange(value: string) {
+    this.filterFromDate.set(value);
+    this.loadSalesOrders();
+  }
+
+  onFilterToDateChange(value: string) {
+    this.filterToDate.set(value);
+    this.loadSalesOrders();
+  }
+
+  /**
+   * Scopes the Firestore read to the currently selected date filter (default: this
+   * month) instead of always pulling the entire sales order history — only "All"
+   * (both dates cleared) falls back to the full collection read.
+   */
+  private fetchOrdersForCurrentFilter() {
+    const from = this.filterFromDate();
+    const to = this.filterToDate();
+
+    if (!from && !to) {
+      return this.salesOrderService.getSalesOrders();
+    }
+
+    const start = from ? new Date(from) : new Date(0);
+    start.setHours(0, 0, 0, 0);
+    const end = to ? new Date(to) : new Date();
+    end.setHours(23, 59, 59, 999);
+
+    return this.salesOrderService.getSalesOrdersInRange(start, end);
   }
 
     ngOnInit() {
@@ -489,7 +522,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
             error: () => { designsLoaded = true; tryClose(); Swal.fire('Error', 'Failed to load designs', 'error'); }
         });
 
-        this.salesOrderService.getSalesOrders().subscribe({
+        this.fetchOrdersForCurrentFilter().subscribe({
             next: orders => { this.salesOrders.set(orders); ordersLoaded = true; tryClose(); },
             error: () => { ordersLoaded = true; tryClose(); Swal.fire('Error', 'Failed to load orders', 'error'); }
         });
@@ -497,7 +530,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
     loadSalesOrders() {
         Swal.fire({ title: 'Refreshing orders...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        this.salesOrderService.getSalesOrders().subscribe({
+        this.fetchOrdersForCurrentFilter().subscribe({
             next: orders => { this.salesOrders.set(orders); Swal.close(); },
             error: () => { Swal.close(); Swal.fire('Error', 'Failed to load orders', 'error'); }
         });

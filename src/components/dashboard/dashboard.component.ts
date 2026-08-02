@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { switchMap } from 'rxjs';
 import { ClientService } from '../../services/client.service';
 import { SalesOrderService } from '../../services/sales-order.service';
 import { GoodsInwardService } from '../../services/goods-inward.service';
@@ -76,7 +77,6 @@ export class DashboardComponent {
   private readonly packingListService = inject(PackingListService);
 
   private readonly clients = toSignal(this.clientService.getClients(), { initialValue: [] });
-  private readonly salesOrders = toSignal(this.salesOrderService.getSalesOrders(), { initialValue: [] });
   private readonly goodsInwards = toSignal(this.goodsInwardService.getGoodsInwards(), { initialValue: [] });
   private readonly inventory = toSignal(this.inventoryService.getInventory(), { initialValue: [] });
   private readonly pickLists = toSignal(this.pickListService.getPickLists(), { initialValue: [] });
@@ -97,7 +97,7 @@ export class DashboardComponent {
 
   // Default to current month start → today
   readonly startDate = signal(this.currentMonthStart());
-  readonly endDate = signal(this.formatDateInput(new Date()));
+  readonly endDate = signal(this.currentMonthEnd());
 
   readonly dateRange = computed(() => {
     const rawStart = this.parseInputDate(this.startDate()) ?? this.parseInputDate(this.currentMonthStart())!;
@@ -110,9 +110,19 @@ export class DashboardComponent {
     };
   });
 
+  // Scoped to the selected date range (default: this month) instead of pulling the
+  // entire sales order history on every dashboard load — refetches whenever the
+  // range changes.
+  private readonly salesOrders = toSignal(
+    toObservable(this.dateRange).pipe(
+      switchMap(({ start, end }) => this.salesOrderService.getSalesOrdersInRange(start, end))
+    ),
+    { initialValue: [] as SalesOrder[] }
+  );
+
   readonly isCurrentMonthFilter = computed(() =>
     this.startDate() === this.currentMonthStart() &&
-    this.endDate() === this.formatDateInput(new Date())
+    this.endDate() === this.currentMonthEnd()
   );
 
   readonly clientNameMap = computed(() => {
@@ -337,7 +347,7 @@ export class DashboardComponent {
 
   resetToCurrentMonth(): void {
     this.startDate.set(this.currentMonthStart());
-    this.endDate.set(this.formatDateInput(new Date()));
+    this.endDate.set(this.currentMonthEnd());
   }
 
   setPreset(days: number): void {
@@ -502,6 +512,12 @@ export class DashboardComponent {
   private currentMonthStart(): string {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  }
+
+  private currentMonthEnd(): string {
+    const d = new Date();
+    const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
   }
 
   private formatDateInput(date: Date): string {
