@@ -60,11 +60,20 @@ export class SalesOrderService {
         );
     }
 
-    /** Treats a missing/unparseable createdAt as 0 (oldest) instead of throwing or excluding the doc. */
+    /**
+     * Treats a missing/unparseable createdAt as 0 (oldest) instead of throwing or
+     * excluding the doc. Also recovers the exact original instant from a corrupted
+     * {seconds, nanoseconds, ...} map (see updateSalesOrder) rather than treating
+     * it as unparseable — that map still holds the true original value, it's just
+     * no longer a real Timestamp type as far as Firestore is concerned.
+     */
     private toMillis(value: unknown): number {
         const raw: any = value;
         if (raw && typeof raw.toDate === 'function') return raw.toDate().getTime();
         if (raw instanceof Date) return raw.getTime();
+        if (raw && typeof raw.seconds === 'number') {
+            return raw.seconds * 1000 + Math.round((raw.nanoseconds ?? 0) / 1e6);
+        }
         if (raw) {
             const parsed = new Date(raw).getTime();
             if (!Number.isNaN(parsed)) return parsed;
@@ -72,20 +81,31 @@ export class SalesOrderService {
         return 0;
     }
 
-    // Self-heal: orders missing (or with an unparseable) `createdAt` are invisible
-    // to getSalesOrdersInRange() — the where('createdAt', ...) queries used by
-    // Reports, Dashboard, and Sales Order's own date-filtered view all silently
-    // exclude any doc that doesn't have the field at all (Firestore inequality
-    // filters require it to exist). This only ever runs from this unbounded "All"
-    // read, which already fetches every doc regardless — so it costs no extra
-    // reads, only repairs the (hopefully rare) broken ones, and patches the
-    // in-memory result too so this same read reflects the fix immediately.
+    /** True only for a real Firestore Timestamp or JS Date — false for a missing value or a corrupted plain map/string/number, which Firestore can't range-query the same way. */
+    private isValidTimestampType(value: unknown): boolean {
+        const raw: any = value;
+        return !!raw && (typeof raw.toDate === 'function' || raw instanceof Date);
+    }
+
+    // Self-heal: any order whose createdAt is missing, or has been corrupted into a
+    // plain {seconds, nanoseconds} map (see updateSalesOrder), is invisible to
+    // getSalesOrdersInRange() — the where('createdAt', ...) queries used by Reports,
+    // Dashboard, and Sales Order's own date-filtered view require a real Timestamp
+    // to match against, and silently exclude any doc where the field is absent or
+    // the wrong type. This only ever runs from this unbounded "All" read, which
+    // already fetches every doc regardless — so it costs no extra reads, only
+    // repairs the (hopefully rare) broken ones, and patches the in-memory result
+    // too so this same read reflects the fix immediately.
     private async healMissingCreatedAt(orders: SalesOrder[]): Promise<void> {
-        const broken = orders.filter(o => this.toMillis(o.createdAt) === 0);
+        const broken = orders.filter(o => !this.isValidTimestampType(o.createdAt));
         if (broken.length === 0) return;
 
         await Promise.all(broken.map(async order => {
-            const timestamp = Timestamp.fromDate(this.bestEffortCreatedAt(order));
+            // A corrupted map still carries the true original value — recover it
+            // exactly rather than falling back to an approximation.
+            const recoveredMillis = this.toMillis(order.createdAt);
+            const repairedDate = recoveredMillis > 0 ? new Date(recoveredMillis) : this.bestEffortCreatedAt(order);
+            const timestamp = Timestamp.fromDate(repairedDate);
             try {
                 await updateDoc(doc(this.firestore, `salesOrders/${order.id}`), { createdAt: timestamp });
                 (order as unknown as { createdAt: unknown }).createdAt = timestamp;
@@ -165,8 +185,19 @@ export class SalesOrderService {
             if (!order.id) {
                 throw new Error('Cannot update sales order: missing document ID.');
             }
+            // createdAt must never be part of an update payload. The caller's `order`
+            // came from a previously-fetched doc, so its createdAt is a real Firestore
+            // Timestamp instance — but Timestamp defines toJSON() (for SSR/serialization
+            // support), so round-tripping the WHOLE order through JSON.stringify/parse
+            // below silently turns that Timestamp into a plain {seconds, nanoseconds,
+            // type} object. Writing that back stores createdAt as an ordinary Firestore
+            // map instead of a Timestamp, which then fails to match every subsequent
+            // where('createdAt', ...) range query used by date filtering/sorting/Reports
+            // — exactly the "createdAt sometimes wrong" bug reported against this app.
+            // createdAt is immutable after creation, so it's simply never touched here.
+            const { createdAt, ...updatable } = order;
             // Strip any stray undefined values (Firestore rejects them) before writing.
-            const sanitized = JSON.parse(JSON.stringify(order));
+            const sanitized = JSON.parse(JSON.stringify(updatable));
             await updateDoc(doc(this.firestore, `salesOrders/${order.id}`), {
                 ...sanitized,
                 updatedAt: serverTimestamp()
