@@ -24,6 +24,7 @@
           <th class="px-4 py-3 text-left font-medium">Fabric Description</th>
           <th class="px-4 py-3 text-left font-medium">Design No</th>
           <th class="px-4 py-3 text-left font-medium">Color</th>
+          <th class="px-4 py-3 text-left font-medium">Sleeve Type</th>
           @for (size of styleWise.sizes; track size) {
             <th class="px-3 py-3 text-center font-medium whitespace-nowrap">{{ size }}</th>
           }
@@ -40,6 +41,7 @@
               <td class="px-4 py-2 text-gray-700">{{ style.fabricDescription }}</td>
               <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ style.styleNo }}</td>
               <td class="px-4 py-2 text-gray-700">{{ row.color }}</td>
+              <td class="px-4 py-2 text-gray-700">{{ row.sleeveType }}</td>
               @for (size of styleWise.sizes; track size) {
                 <td class="px-3 py-2 text-center text-gray-700">{{ row.qtyBySize[size] ?? 0 }}</td>
               }
@@ -52,7 +54,7 @@
       </tbody>
       <tfoot class="bg-gray-100 font-bold">
         <tr>
-          <td colspan="4" class="px-4 py-3 text-gray-900">Grand Total</td>
+          <td colspan="5" class="px-4 py-3 text-gray-900">Grand Total</td>
           @for (size of styleWise.sizes; track size) {
             <td class="px-3 py-3"></td>
           }

@@ -60,6 +60,25 @@ const EMPTY_GRN: Omit<GoodsInward, 'id'> = {
 
 const SIZE_ORDER = ['XS','S','M','L','XL','XXL','XXXL','2XL','3XL','4XL','5XL','6XL','Free Size'];
 
+// ── Excel Import ──────────────────────────────────────────────────────────────
+const EXCEL_HEADERS    = ['SupplierName', 'InvoiceNo', 'InvoiceDate', 'ReceivedDate', 'StyleNo', 'Color', 'Size', 'Barcode', 'ReceivedQty', 'Remarks'];
+const REQUIRED_HEADERS = ['SupplierName', 'InvoiceNo', 'Barcode', 'ReceivedQty'];
+
+type ImportRow = {
+  rowNum:       number;
+  barcode:      string;
+  qty:          number;
+};
+
+type ImportGroup = {
+  supplierName: string;
+  invoiceNo:    string;
+  invoiceDate:  string;
+  receivedDate: string;
+  remarks:      string;
+  rows:         ImportRow[];
+};
+
 @Component({
   selector:        'app-goods-inward',
   standalone:      true,
@@ -370,6 +389,217 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
 
   private refreshGrns() {
     this.grnService.getGoodsInwards().subscribe({ next: g => this.grns.set(g) });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // EXCEL IMPORT
+  // ═══════════════════════════════════════════════════════════════════════════════
+  async downloadSampleExcel() {
+    try {
+      const XLSX = await import('xlsx');
+      const rows = [
+        EXCEL_HEADERS,
+        ['Regent Creation Pvt Ltd', 'INV-2025-101', '2026-08-01', '2026-08-03', 'STYLE001', 'Red',   'M',  '1234567890128', 20, 'First batch'],
+        ['Regent Creation Pvt Ltd', 'INV-2025-101', '2026-08-01', '2026-08-03', 'STYLE001', 'Red',   'L',  '1234567890142', 15, 'First batch'],
+        ['Regent Creation Pvt Ltd', 'INV-2025-101', '2026-08-01', '2026-08-03', 'STYLE002', 'Blue',  '32', '9876543210987', 10, 'First batch'],
+        ['Fabtex Textiles',         'INV-2025-205', '2026-08-02', '2026-08-03', 'STYLE003', 'Black', 'XL', '1112223334445', 25, ''],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 24 }, { wch: 16 }, { wch: 12 }, { wch: 12 },
+        { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 16 }, { wch: 11 }, { wch: 20 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Goods Inward');
+      XLSX.writeFile(wb, 'Goods_Inward_Import_Template.xlsx');
+    } catch {
+      Swal.fire({ icon: 'error', title: 'Download Failed', text: 'Could not generate sample file.' });
+    }
+  }
+
+  async onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files?.length) return;
+
+    const file = input.files[0];
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      Swal.fire({ icon: 'error', title: 'Invalid File', text: 'Please upload a valid Excel file (.xlsx or .xls).' });
+      return;
+    }
+
+    Swal.fire({ title: 'Reading file…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+    try {
+      const XLSX = await import('xlsx');
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rawData: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      Swal.close();
+
+      if (rawData.length < 2) {
+        Swal.fire({ icon: 'error', title: 'Empty File', text: 'The Excel file has no data rows.' });
+        return;
+      }
+
+      const { groups, errors, totalDataRows } = this.parseImportData(rawData);
+
+      if (groups.length === 0) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Validation Failed',
+          html: `<div class="text-left"><p class="font-semibold mb-2">No valid rows found:</p><ul class="list-disc pl-4 space-y-1 text-sm max-h-60 overflow-y-auto">${errors.map(e => `<li>${e}</li>`).join('')}</ul></div>`,
+        });
+        return;
+      }
+
+      const totalLineItems = groups.reduce((s, g) => s + g.rows.length, 0);
+      const errorSection = errors.length > 0
+        ? `<div class="mt-3 text-left border-t pt-3"><p class="text-yellow-700 font-semibold text-sm">${errors.length} row(s) will be skipped:</p><ul class="list-disc pl-4 space-y-1 text-xs text-yellow-600 max-h-32 overflow-y-auto mt-1">${errors.map(e => `<li>${e}</li>`).join('')}</ul></div>`
+        : '';
+
+      const result = await Swal.fire({
+        icon: 'info',
+        title: 'Import Preview',
+        html: `<div class="text-center"><p class="text-lg font-semibold text-green-700">${groups.length} Inward record(s) ready to import</p><p class="text-sm text-gray-500 mt-1">${totalLineItems} total line item(s)</p>${errorSection}</div>`,
+        showCancelButton: true,
+        confirmButtonText: 'Import Now',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#4f46e5',
+        cancelButtonColor: '#6b7280',
+      });
+
+      if (result.isConfirmed) {
+        await this.processImportGroups(groups, errors.length, totalDataRows);
+      }
+    } catch (err: any) {
+      Swal.close();
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to read the Excel file. ' + (err?.message ?? '') });
+    }
+  }
+
+  // Required columns: SupplierName, InvoiceNo, Barcode, ReceivedQty. StyleNo/Color/Size
+  // are accepted for readability only — the Barcode column is the sole identifier used
+  // to resolve each row to a Design + SizePrice (same barcode map used by the scanner).
+  private parseImportData(rawData: any[][]): { groups: ImportGroup[]; errors: string[]; totalDataRows: number } {
+    const errors: string[] = [];
+    const headerRow   = rawData[0].map((h: any) => String(h).trim());
+    const headerLower = headerRow.map(h => h.toLowerCase());
+    const col = (name: string) => headerLower.indexOf(name.toLowerCase());
+
+    const missingHeaders = REQUIRED_HEADERS.filter(h => col(h) === -1);
+    if (missingHeaders.length > 0) {
+      errors.push(`Missing required columns: ${missingHeaders.join(', ')}. Please use the sample template.`);
+      return { groups: [], errors, totalDataRows: 0 };
+    }
+
+    const iSupplier = col('SupplierName'), iInvoice = col('InvoiceNo'),
+          iInvDate  = col('InvoiceDate'),  iRecDate  = col('ReceivedDate'),
+          iBarcode  = col('Barcode'),      iQty      = col('ReceivedQty'),
+          iRemarks  = col('Remarks');
+
+    const barcodeMap = this.getBarcodeMap();
+    const groupMap    = new Map<string, ImportGroup>();
+    let totalDataRows  = 0;
+
+    for (let i = 1; i < rawData.length; i++) {
+      const row = rawData[i];
+      if (row.every((cell: any) => String(cell ?? '').trim() === '')) continue;
+      totalDataRows++;
+      const rowNum = i + 1;
+
+      const supplierName = String(row[iSupplier] ?? '').trim();
+      const invoiceNo     = String(row[iInvoice] ?? '').trim();
+      const barcode       = String(row[iBarcode] ?? '').trim();
+      const qtyRaw        = row[iQty];
+
+      if (!supplierName) { errors.push(`Row ${rowNum}: SupplierName is required.`); continue; }
+      if (!invoiceNo)     { errors.push(`Row ${rowNum}: InvoiceNo is required.`);    continue; }
+      if (!barcode)       { errors.push(`Row ${rowNum}: Barcode is required.`);      continue; }
+
+      const qty = parseInt(String(qtyRaw ?? ''), 10);
+      if (qtyRaw === '' || qtyRaw == null || isNaN(qty)) { errors.push(`Row ${rowNum}: ReceivedQty must be a valid number.`); continue; }
+      if (qty <= 0) { errors.push(`Row ${rowNum}: ReceivedQty must be greater than 0.`); continue; }
+
+      if (!barcodeMap.has(barcode)) { errors.push(`Row ${rowNum}: Barcode '${barcode}' not found in Design Master.`); continue; }
+
+      const invoiceDate  = iInvDate  >= 0 ? String(row[iInvDate]  ?? '').trim() : '';
+      const receivedDate = iRecDate  >= 0 ? String(row[iRecDate]  ?? '').trim() : '';
+      const remarks      = iRemarks  >= 0 ? String(row[iRemarks]  ?? '').trim() : '';
+
+      const key = `${supplierName.toLowerCase()}||${invoiceNo.toLowerCase()}`;
+      let group = groupMap.get(key);
+      if (!group) {
+        group = { supplierName, invoiceNo, invoiceDate, receivedDate, remarks, rows: [] };
+        groupMap.set(key, group);
+      }
+      group.rows.push({ rowNum, barcode, qty });
+    }
+
+    return { groups: Array.from(groupMap.values()), errors, totalDataRows };
+  }
+
+  private async processImportGroups(groups: ImportGroup[], invalidRowCount: number, totalDataRows: number) {
+    Swal.fire({ title: `Importing ${groups.length} Inward record(s)…`, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+    const barcodeMap = this.getBarcodeMap();
+    let successRows = 0;
+    const failedGroups: { label: string; reason: string; rowCount: number }[] = [];
+
+    for (let gi = 0; gi < groups.length; gi++) {
+      const group = groups[gi];
+      try {
+        const itemsByBarcode = new Map<string, GoodsInwardItem>();
+        for (const row of group.rows) {
+          const found = barcodeMap.get(row.barcode)!;
+          const existing = itemsByBarcode.get(row.barcode);
+          if (existing) {
+            existing.receivedQty += row.qty;
+          } else {
+            itemsByBarcode.set(row.barcode, {
+              designId: found.design.id ?? '', styleNo: found.design.styleNo, color: found.design.color ?? '',
+              group: found.design.group ?? '', size: found.size.size, sleeveType: found.size.sleeveType ?? undefined,
+              barcode: row.barcode, fabricType: found.size.fabricType ?? '', receivedQty: row.qty,
+              WSP: found.size.WSP, price: found.size.price,
+            });
+          }
+        }
+
+        const payload: Omit<GoodsInward, 'id'> = {
+          grnNo:        `GRN-${Date.now()}-${gi}`,
+          supplierName: group.supplierName,
+          invoiceNo:    group.invoiceNo,
+          invoiceDate:  group.invoiceDate,
+          receivedDate: group.receivedDate || new Date().toISOString().split('T')[0],
+          items:        Array.from(itemsByBarcode.values()),
+          status:       'Pending',
+          remarks:      group.remarks,
+        };
+
+        await this.grnService.createGoodsInward(payload);
+        successRows += group.rows.length;
+      } catch (err: any) {
+        failedGroups.push({ label: `${group.supplierName} / ${group.invoiceNo}`, reason: err?.message ?? 'Unknown error', rowCount: group.rows.length });
+      }
+    }
+
+    const failedRows = invalidRowCount + failedGroups.reduce((s, f) => s + f.rowCount, 0);
+
+    const summaryHtml = `
+      <div class="text-left text-sm">
+        <p>Total records processed: <strong>${totalDataRows}</strong></p>
+        <p class="text-green-700">Successfully imported: <strong>${successRows}</strong></p>
+        <p class="text-red-600">Failed: <strong>${failedRows}</strong></p>
+        ${failedGroups.length ? `<div class="mt-2 border-t pt-2"><p class="font-semibold text-red-600">Failed Inward record(s):</p><ul class="list-disc pl-4 text-xs max-h-32 overflow-y-auto mt-1">${failedGroups.map(f => `<li><strong>${f.label}</strong> (${f.rowCount} row(s)): ${f.reason}</li>`).join('')}</ul></div>` : ''}
+      </div>`;
+
+    await Swal.fire({
+      icon:  failedGroups.length === 0 ? 'success' : 'warning',
+      title: failedGroups.length === 0 ? 'Import Complete!' : 'Import Completed With Errors',
+      html:  summaryHtml,
+    });
+
+    this.refreshGrns();
   }
 
   // ── Display helpers ───────────────────────────────────────────────────────────

@@ -410,7 +410,18 @@
           <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Goods Inward </h2>
           <p class="text-sm text-gray-500 mt-1">Track received stock from suppliers</p>
         </div>
-        <button (click)="showAddForm()" class="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">+ New Inward</button>
+        <div class="flex flex-wrap items-center gap-2">
+          <button (click)="downloadSampleExcel()" type="button" class="inline-flex items-center justify-center px-3 py-2 border border-emerald-600 shadow-sm text-sm font-medium rounded-md text-emerald-700 bg-white hover:bg-emerald-50">
+            <svg class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+            Sample Template
+          </button>
+          <button (click)="importFileInput.value=''; importFileInput.click()" type="button" class="inline-flex items-center justify-center px-3 py-2 border border-teal-600 shadow-sm text-sm font-medium rounded-md text-teal-700 bg-white hover:bg-teal-50">
+            <svg class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M17 8l-5-5-5 5M12 3v12"/></svg>
+            Import from Excel
+          </button>
+          <input #importFileInput type="file" accept=".xlsx,.xls" class="hidden" (change)="onFileSelected($event)">
+          <button (click)="showAddForm()" class="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">+ New Inward</button>
+        </div>
       </div>
 
       <!-- Date Filter -->

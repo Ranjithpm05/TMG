@@ -17,6 +17,7 @@ const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL
 // One row per Design No. + Color combination — the leaf of the pivot report.
 interface StyleColorRow {
   color: string;
+  sleeveType: string;
   qtyBySize: Record<string, number>;
   totalQty: number;
   wsp: number;
@@ -47,7 +48,7 @@ interface StyleCustomerWiseReport {
 // Intermediate accumulator while scanning order items.
 interface StyleAccumulatorEntry {
   fabricDescription: string;
-  colors: Map<string, { qtyBySize: Map<string, number>; value: number }>;
+  colors: Map<string, { color: string; sleeveType: string; qtyBySize: Map<string, number>; value: number }>;
 }
 
 @Component({
@@ -108,7 +109,7 @@ export class StyleCustomerWiseReportComponent {
 
   private buildExportRows(): any[][] {
     const report = this.report();
-    const header = ['#', 'Customer Name', 'Fabric Description', 'Design No', 'Color', ...report.sizes, 'Total Qty', 'WSP', 'Value'];
+    const header = ['#', 'Customer Name', 'Fabric Description', 'Design No', 'Color', 'Sleeve Type', ...report.sizes, 'Total Qty', 'WSP', 'Value'];
     const blankSizes = report.sizes.map(() => '');
     const body: any[][] = [];
     let counter = 0;
@@ -118,16 +119,16 @@ export class StyleCustomerWiseReportComponent {
         for (const row of style.rows) {
           counter += 1;
           body.push([
-            counter, customer.clientName, style.fabricDescription, style.styleNo, row.color,
+            counter, customer.clientName, style.fabricDescription, style.styleNo, row.color, row.sleeveType,
             ...report.sizes.map((s) => row.qtyBySize[s] ?? 0),
             row.totalQty, this.round2(row.wsp), this.round2(row.value),
           ]);
         }
       }
-      body.push(['', `Customer Total: ${customer.clientName}`, '', '', '', ...blankSizes, customer.totalQty, '', this.round2(customer.value)]);
+      body.push(['', `Customer Total: ${customer.clientName}`, '', '', '', '', ...blankSizes, customer.totalQty, '', this.round2(customer.value)]);
     }
 
-    body.push(['', 'Grand Total', '', '', '', ...blankSizes, report.grandTotal.totalQty, '', this.round2(report.grandTotal.value)]);
+    body.push(['', 'Grand Total', '', '', '', '', ...blankSizes, report.grandTotal.totalQty, '', this.round2(report.grandTotal.value)]);
     return [header, ...body];
   }
 
@@ -172,13 +173,15 @@ export class StyleCustomerWiseReportComponent {
     if (!this.data.matchesItemFilters(item)) return;
     const styleNo = this.data.toText(item.design?.styleNo) || 'Unknown';
     const color = this.data.toText(item.design?.color) || 'Unspecified';
+    const sleeveType = this.data.toText(item.sleeveType) || '-';
     // Same convention as the Sales Order "Enter Quantities by Fabric Description" grouping.
     const fabricDescription = this.data.toText(item.design?.sizes?.[0]?.fabricType) || 'Uncategorized';
 
     let style = styleMap.get(styleNo);
     if (!style) { style = { fabricDescription, colors: new Map() }; styleMap.set(styleNo, style); }
-    let colorEntry = style.colors.get(color);
-    if (!colorEntry) { colorEntry = { qtyBySize: new Map(), value: 0 }; style.colors.set(color, colorEntry); }
+    const colorKey = `${color}||${sleeveType}`;
+    let colorEntry = style.colors.get(colorKey);
+    if (!colorEntry) { colorEntry = { color, sleeveType, qtyBySize: new Map(), value: 0 }; style.colors.set(colorKey, colorEntry); }
 
     for (const size of item.itemSizes ?? []) {
       const qty = Number(size.quantity) || 0;
@@ -194,14 +197,14 @@ export class StyleCustomerWiseReportComponent {
     return [...styleMap.entries()]
       .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
       .map(([styleNo, style]) => {
-        const rows: StyleColorRow[] = [...style.colors.entries()]
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([color, entry]) => {
+        const rows: StyleColorRow[] = [...style.colors.values()]
+          .sort((a, b) => a.color.localeCompare(b.color) || a.sleeveType.localeCompare(b.sleeveType))
+          .map((entry) => {
             const qtyBySize = Object.fromEntries(entry.qtyBySize);
             const totalQty = sizes.reduce((s, size) => s + (qtyBySize[size] ?? 0), 0);
             const value = this.round2(entry.value);
             const wsp = totalQty > 0 ? this.round2(entry.value / totalQty) : 0;
-            return { color, qtyBySize, totalQty, wsp, value };
+            return { color: entry.color, sleeveType: entry.sleeveType, qtyBySize, totalQty, wsp, value };
           });
         return {
           styleNo,
