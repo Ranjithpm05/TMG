@@ -1,0 +1,11 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // This app uses custom session-based authentication (not Firebase Auth).
+    // request.auth is always null, so rules cannot be tied to Firebase Auth identity.
+    // Access control is enforced at the application layer (see firestore.rules).
+    match /{allPaths=**} {
+      allow read, write: if true;
+    }
+  }
+}

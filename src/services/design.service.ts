@@ -96,6 +96,7 @@ import {
   QueryDocumentSnapshot,
   serverTimestamp
 } from '@angular/fire/firestore';
+import { Storage, ref, uploadBytes, getDownloadURL, deleteObject } from '@angular/fire/storage';
 import { from, map, Observable, shareReplay } from 'rxjs';
 import type { Design } from '../models/design.model';
 
@@ -103,6 +104,7 @@ import type { Design } from '../models/design.model';
 export class DesignService {
 
     private firestore = inject(Firestore);
+    private storage = inject(Storage);
     private designRef = collection(this.firestore, 'designs');
 
     // Master data — cached one-time read, invalidated on write (see ClientService for rationale).
@@ -138,7 +140,10 @@ export class DesignService {
                 : [limit(DesignService.PAGE_SIZE)];
             const snap = await getDocs(query(this.designRef, ...constraints));
 
-            results.push(...snap.docs.map((d) => ({ id: d.id, ...d.data() } as Design)));
+            // Spread order matters: the real document ID must win over any stray
+            // `id` field that ended up inside the document's own data (see the
+            // id-stripping note on createDesign/updateDesign below).
+            results.push(...snap.docs.map((d) => ({ ...d.data(), id: d.id } as Design)));
 
             if (snap.docs.length < DesignService.PAGE_SIZE) break;
             cursor = snap.docs[snap.docs.length - 1];
@@ -161,27 +166,41 @@ export class DesignService {
         this.designsCache$ = null;
     }
 
-    // 🔹 CREATE DESIGN (no id)
+    // 🔹 CREATE DESIGN (no id) — returns the new document's id
     async createDesign(
         design: Omit<Design, 'id'>
-    ): Promise<void> {
-        await addDoc(this.designRef, {
-        ...design,
+    ): Promise<string> {
+        // Never persist `id` as a data field — it's redundant with the doc path and,
+        // if it ever drifts from the real doc id, silently redirects future reads/
+        // writes to the wrong document (see fetchAllDesigns).
+        const { id, ...data } = design as Design;
+        const docRef = await addDoc(this.designRef, {
+        ...data,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
         });
         this.invalidateCache();
+        return docRef.id;
     }
 
     // 🔹 UPDATE DESIGN (id required)
     async updateDesign(design: Design): Promise<void> {
         if (!design.id) return;
 
-        const designDoc = doc(this.firestore, `designs/${design.id}`);
+        const { id, ...data } = design;
+        const designDoc = doc(this.firestore, `designs/${id}`);
         await updateDoc(designDoc, {
-        ...design,
+        ...data,
         updatedAt: serverTimestamp()
         });
+        this.invalidateCache();
+    }
+
+    // 🔹 UPDATE JUST THE IMAGE URL — used after an image upload completes so a slow
+    // or failing Storage upload never blocks/loses the rest of the design's details.
+    async updateDesignImageUrl(designId: string, imageUrl: string): Promise<void> {
+        const designDoc = doc(this.firestore, `designs/${designId}`);
+        await updateDoc(designDoc, { imageUrl, updatedAt: serverTimestamp() });
         this.invalidateCache();
     }
 
@@ -192,6 +211,22 @@ export class DesignService {
         this.invalidateCache();
     }
 
+    // 🔹 UPLOAD DESIGN IMAGE — returns the public download URL to store on the Design doc
+    async uploadDesignImage(file: File): Promise<string> {
+        const path = `design-images/${Date.now()}_${file.name}`;
+        const storageRef = ref(this.storage, path);
+        await uploadBytes(storageRef, file);
+        return getDownloadURL(storageRef);
+    }
+
+    async deleteDesignImage(imageUrl: string): Promise<void> {
+        try {
+            await deleteObject(ref(this.storage, imageUrl));
+        } catch {
+            // Ignore failures (e.g. already deleted or URL isn't a Storage ref) — non-critical cleanup.
+        }
+    }
+
     async findDesignByStyleNo(styleNo: string): Promise<Design | null> {
         const q = query(
             collection(this.firestore, 'designs'),
@@ -200,6 +235,6 @@ export class DesignService {
         );
 
         const snap = await getDocs(q);
-        return snap.empty ? null : ({ id: snap.docs[0].id, ...snap.docs[0].data() } as Design);
+        return snap.empty ? null : ({ ...snap.docs[0].data(), id: snap.docs[0].id } as Design);
     }
 }

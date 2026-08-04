@@ -5,9 +5,9 @@ import { Design, SizePrice } from '../../models/design.model';
 import { DesignService } from '../../services/design.service';
 import Swal from 'sweetalert2';
 
-const EXCEL_HEADERS = ['StyleNo', 'Color', 'Group', 'Size', 'MRP', 'WSP', 'Barcode', 'SleeveType', 'FabricDescription'];
+const EXCEL_HEADERS = ['StyleNo', 'Color', 'Group', 'SupplierName', 'SupplierCode', 'Size', 'MRP', 'WSP', 'Barcode', 'SleeveType', 'FabricDescription'];
 const REQUIRED_HEADERS = ['StyleNo', 'Size', 'MRP', 'WSP', 'Barcode'];
-const EXPORT_HEADERS = ['ID', 'StyleNo', 'Color', 'Group', 'Size', 'MRP', 'WSP', 'Barcode', 'SleeveType', 'FabricDescription', 'CreatedAt', 'UpdatedAt'];
+const EXPORT_HEADERS = ['ID', 'StyleNo', 'Color', 'Group', 'SupplierName', 'SupplierCode', 'Size', 'MRP', 'WSP', 'Barcode', 'SleeveType', 'FabricDescription', 'CreatedAt', 'UpdatedAt'];
 
 type ViewMode = 'list' | 'form';
 
@@ -15,7 +15,10 @@ const EMPTY_DESIGN: Omit<Design, 'id'> = {
   styleNo: '',
   color: '',
   sizes: [{ size: 'M', price: 0, WSP: 0, BARCODE: '', sleeveType: null, fabricType: ''}],
-  group: ''
+  group: '',
+  supplierName: '',
+  supplierCode: '',
+  imageUrl: ''
 };
 
 @Component({
@@ -33,6 +36,11 @@ export class DesignMasterComponent implements OnInit {
     editableDesign = signal<Design | Omit<Design, 'id'>>(EMPTY_DESIGN);
     isEditMode = computed(() => 'id' in this.editableDesign());
 
+    // --- Image Upload State ---
+    selectedImageFile = signal<File | null>(null);
+    imagePreviewUrl = signal<string | null>(null);
+    isSaving = signal(false);
+
     // --- Pagination and Filtering State ---
     searchTerm = signal('');
     currentPage = signal(1);
@@ -46,7 +54,9 @@ export class DesignMasterComponent implements OnInit {
         return this.designs().filter(design =>
             this.safeLower(design.styleNo).includes(term) ||
             this.safeLower(design.color).includes(term) ||
-            this.safeLower(design.group).includes(term)
+            this.safeLower(design.group).includes(term) ||
+            this.safeLower(design.supplierName).includes(term) ||
+            this.safeLower(design.supplierCode).includes(term)
         );
     });
 
@@ -92,60 +102,99 @@ export class DesignMasterComponent implements OnInit {
 
     showAddForm() {
         this.editableDesign.set(JSON.parse(JSON.stringify(EMPTY_DESIGN))); // Deep copy
+        this.selectedImageFile.set(null);
+        this.imagePreviewUrl.set(null);
         this.mode.set('form');
     }
 
     showEditForm(design: Design) {
         this.editableDesign.set(JSON.parse(JSON.stringify(design))); // Deep copy to isolate form state
+        this.selectedImageFile.set(null);
+        this.imagePreviewUrl.set(design.imageUrl ?? null);
         this.mode.set('form');
     }
 
-    async saveDesign() 
+    onImageSelected(event: Event) {
+        const input = event.target as HTMLInputElement;
+        const file = input.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            Swal.fire({ icon: 'error', title: 'Invalid File', text: 'Please select an image file.' });
+            input.value = '';
+            return;
+        }
+
+        this.selectedImageFile.set(file);
+        this.imagePreviewUrl.set(URL.createObjectURL(file));
+    }
+
+    removeImage() {
+        this.selectedImageFile.set(null);
+        this.imagePreviewUrl.set(null);
+        this.editableDesign.update(design => ({ ...design, imageUrl: '' }));
+    }
+
+    async saveDesign()
     {
+        if (this.isSaving()) return; // guard against duplicate submits from a slow save still in flight
+        this.isSaving.set(true);
+
         const designData = this.editableDesign();
+        const wasEditMode = this.isEditMode();
+        const imageFile = this.selectedImageFile();
+
         try
         {
             Swal.fire({
-                title: this.isEditMode() ? 'Updating Design...' : 'Creating Design...',
+                title: wasEditMode ? 'Updating Design...' : 'Creating Design...',
                 allowOutsideClick: false,
                 didOpen: () => Swal.showLoading()
             })
 
-            if (this.isEditMode()) 
-            {
-                await this.designService.updateDesign(designData as Design)
-                await Swal.fire({
-                    icon: 'success',
-                    title: 'Updated!',
-                    text: 'Design updated successfully',
-                    timer: 2000,
-                    showConfirmButton: false
-                });
-                this.loadDesigns();
-                this.switchToListView();
-            } 
-            else 
-            {
-                await this.designService.createDesign(designData);
-                await Swal.fire({
-                    icon: 'success',
-                    title: 'Created!',
-                    text: 'Design created successfully',
-                    timer: 2000,
-                    showConfirmButton: false
-                });
-                this.loadDesigns();
-                this.switchToListView();
-                
+            // Save the design's own fields first — this must not block on (or be lost
+            // to) a slow/failing image upload, which goes to a separate Storage service
+            // and can legitimately take much longer or fail independently of Firestore.
+            let designId: string;
+            if (wasEditMode) {
+                designId = (designData as Design).id!;
+                await this.designService.updateDesign(designData as Design);
+            } else {
+                designId = await this.designService.createDesign(designData);
             }
+
+            let imageWarning = '';
+            if (imageFile) {
+                Swal.update({ title: 'Uploading Image...' });
+                try {
+                    const imageUrl = await this.designService.uploadDesignImage(imageFile);
+                    await this.designService.updateDesignImageUrl(designId, imageUrl);
+                } catch (imgErr: any) {
+                    imageWarning = 'Design saved, but the image could not be uploaded. You can try again from Edit.';
+                }
+            }
+
+            await Swal.fire({
+                icon: imageWarning ? 'warning' : 'success',
+                title: imageWarning ? 'Saved' : (wasEditMode ? 'Updated!' : 'Created!'),
+                text: imageWarning || `Design ${wasEditMode ? 'updated' : 'created'} successfully`,
+                timer: imageWarning ? undefined : 2000,
+                showConfirmButton: !!imageWarning
+            });
+            this.loadDesigns();
+            this.switchToListView();
         }
-        catch (error) 
+        catch (error)
         {
             Swal.fire({
             icon: 'error',
             title: 'Error',
             text: error.message
             });
+        }
+        finally
+        {
+            this.isSaving.set(false);
         }
     }
 
@@ -200,6 +249,8 @@ export class DesignMasterComponent implements OnInit {
 
     private switchToListView() {
         this.editableDesign.set(EMPTY_DESIGN);
+        this.selectedImageFile.set(null);
+        this.imagePreviewUrl.set(null);
         this.mode.set('list');
     }
 
@@ -237,15 +288,15 @@ export class DesignMasterComponent implements OnInit {
             const XLSX = await import('xlsx');
             const rows = [
                 EXCEL_HEADERS,
-                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'S', 500, 350, '1234567890128', 'Full', 'CASUALSHIRT CHECKS FS'],
-                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'M', 500, 350, '1234567890135', 'Full', 'CASUALSHIRT CHECKS FS'],
-                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'L', 500, 350, '1234567890142', 'Half', 'CASUALSHIRT CHECKS FS'],
-                ['STYLE002', 'Blue', 'Jeans', '32', 1200, 900, '9876543210987', '', 'DENIM JEANS SLIM FIT'],
-                ['STYLE002', 'Blue', 'Jeans', '34', 1200, 900, '9876543210994', '', 'DENIM JEANS SLIM FIT'],
+                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'ABC Textiles', 'SUP001', 'S', 500, 350, '1234567890128', 'Full', 'CASUALSHIRT CHECKS FS'],
+                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'ABC Textiles', 'SUP001', 'M', 500, 350, '1234567890135', 'Full', 'CASUALSHIRT CHECKS FS'],
+                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'ABC Textiles', 'SUP001', 'L', 500, 350, '1234567890142', 'Half', 'CASUALSHIRT CHECKS FS'],
+                ['STYLE002', 'Blue', 'Jeans', 'XYZ Denim Co', 'SUP002', '32', 1200, 900, '9876543210987', '', 'DENIM JEANS SLIM FIT'],
+                ['STYLE002', 'Blue', 'Jeans', 'XYZ Denim Co', 'SUP002', '34', 1200, 900, '9876543210994', '', 'DENIM JEANS SLIM FIT'],
             ];
             const ws = XLSX.utils.aoa_to_sheet(rows);
             ws['!cols'] = [
-                { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 8 },
+                { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 8 },
                 { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 30 },
             ];
             const wb = XLSX.utils.book_new();
@@ -275,6 +326,8 @@ export class DesignMasterComponent implements OnInit {
                         design.styleNo ?? '',
                         design.color ?? '',
                         design.group ?? '',
+                        design.supplierName ?? '',
+                        design.supplierCode ?? '',
                         size.size ?? '',
                         size.price ?? '',
                         size.WSP ?? '',
@@ -289,7 +342,7 @@ export class DesignMasterComponent implements OnInit {
 
             const ws = XLSX.utils.aoa_to_sheet(rows);
             ws['!cols'] = [
-                { wch: 22 }, { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 8 },
+                { wch: 22 }, { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 8 },
                 { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 30 },
                 { wch: 20 }, { wch: 20 },
             ];
@@ -403,6 +456,7 @@ export class DesignMasterComponent implements OnInit {
         }
 
         const iStyleNo = col('StyleNo'), iColor = col('Color'), iGroup = col('Group');
+        const iSupplierName = col('SupplierName'), iSupplierCode = col('SupplierCode');
         const iSize = col('Size'), iMRP = col('MRP'), iWSP = col('WSP');
         const iBarcode = col('Barcode'), iSleeve = col('SleeveType'), iFabric = col('FabricDescription');
 
@@ -453,6 +507,8 @@ export class DesignMasterComponent implements OnInit {
 
             const color = iColor >= 0 ? String(row[iColor] ?? '').trim() : '';
             const group = iGroup >= 0 ? String(row[iGroup] ?? '').trim() : '';
+            const supplierName = iSupplierName >= 0 ? String(row[iSupplierName] ?? '').trim() : '';
+            const supplierCode = iSupplierCode >= 0 ? String(row[iSupplierCode] ?? '').trim() : '';
             // Group by StyleNo + Color (+ Group) so distinct colors of the same style
             // become separate design records instead of collapsing into one.
             const designKey = `${styleNo}|${color}|${group}`;
@@ -464,6 +520,8 @@ export class DesignMasterComponent implements OnInit {
                     styleNo,
                     color,
                     group,
+                    supplierName,
+                    supplierCode,
                     sizes: [sizeObj],
                 });
             }
@@ -527,6 +585,8 @@ export class DesignMasterComponent implements OnInit {
                         ...existing,
                         color: design.color,
                         group: design.group,
+                        supplierName: design.supplierName || existing.supplierName,
+                        supplierCode: design.supplierCode || existing.supplierCode,
                         sizes: this.mergeSizes(existing.sizes, design.sizes),
                     };
                     await this.designService.updateDesign(merged);

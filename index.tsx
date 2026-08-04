@@ -4,6 +4,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
+import { provideStorage, getStorage } from '@angular/fire/storage';
 
 import { AppComponent } from './src/app.component';
 
@@ -23,5 +24,6 @@ bootstrapApplication(AppComponent, {
     provideHttpClient(),
     provideFirebaseApp(() => initializeApp(firebaseConfig)),
     provideFirestore(() => getFirestore()),
+    provideStorage(() => getStorage()),
   ],
 }).catch(err => console.error(err));

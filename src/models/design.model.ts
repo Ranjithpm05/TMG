@@ -12,9 +12,12 @@ export interface Design {
   styleNo: string;
   color?: string;
   group?: string;
+  supplierName?: string;
+  supplierCode?: string;
+  imageUrl?: string;
   sizes: SizePrice[];
 
   createdAt?: any;
   updatedAt?: any;
-  
+
 }
