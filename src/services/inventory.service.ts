@@ -1,12 +1,21 @@
 import { Injectable, inject } from '@angular/core';
 import {
   Firestore, collection, doc,
-  updateDoc, query, orderBy, where, getDocs, serverTimestamp, writeBatch, WriteBatch
+  updateDoc, query, orderBy, where, getDocs, serverTimestamp, writeBatch, WriteBatch, increment
 } from '@angular/fire/firestore';
 import { from, map, Observable, shareReplay } from 'rxjs';
 import type { InventoryItem } from '../models/inventory.model';
 import type { GoodsInwardItem } from '../models/goods-inward.model';
 import { fetchAllDocs } from './firestore-pagination.util';
+
+export type InventoryBatchOp = (batch: WriteBatch) => void;
+
+export interface CommitChunksOptions {
+  /** Adds extra writes (e.g. a GRN progress bump) into the SAME batch as a chunk's inventory writes. */
+  augmentBatch?: (batch: WriteBatch, chunkIndex: number) => void;
+  /** Fires right after a chunk's batch.commit() succeeds, so callers know how far a partial failure got. */
+  onChunkCommitted?: (chunkIndex: number) => void;
+}
 
 @Injectable({ providedIn: 'root' })
 export class InventoryService {
@@ -35,9 +44,15 @@ export class InventoryService {
     this.inventoryCache$ = null;
   }
 
-  async upsertFromGrn(items: GoodsInwardItem[], grnNo: string): Promise<void> {
+  /**
+   * Builds the per-item inventory write operations for a GRN, using atomic Firestore
+   * increment() so concurrent writers touching the same barcode can't lose an update
+   * to a stale read. Pass direction: -1 to build the exact reverse (compensation) of a
+   * previously-applied +1 call for the same items/grnNo.
+   */
+  async buildInventoryOps(items: GoodsInwardItem[], grnNo: string, direction: 1 | -1 = 1): Promise<InventoryBatchOp[]> {
     const validItems = items.filter(item => (Number(item.receivedQty) || 0) > 0);
-    if (!validItems.length) return;
+    if (!validItems.length) return [];
 
     // Aggregate by barcode so duplicate entries in one GRN are combined before writing.
     const byBarcode = new Map<string, { item: GoodsInwardItem; totalQty: number }>();
@@ -51,17 +66,21 @@ export class InventoryService {
     }
     const dedupedItems = [...byBarcode.values()];
 
-    // Phase 1: Run all inventory lookups in parallel instead of sequentially.
+    // Run all inventory lookups in parallel instead of sequentially.
     const snapshots = await Promise.all(
       dedupedItems.map(({ item }) => getDocs(query(this.invRef, where('barcode', '==', item.barcode))))
     );
 
-    // Phase 2: Commit all creates and updates, chunked to stay under
-    // Firestore's 500-operation-per-batch limit for large GRNs.
-    const operations: Array<(batch: WriteBatch) => void> = snapshots.map((snap, idx) => {
+    return snapshots.map((snap, idx) => {
       const { item, totalQty } = dedupedItems[idx];
+      const signedQty = direction * totalQty;
       if (snap.empty) {
-        return (batch) => batch.set(doc(this.invRef), {
+        if (direction === -1) {
+          // Compensating a chunk whose target doc no longer exists — nothing to revert.
+          console.warn(`Inventory compensation skipped: no inventory doc for barcode ${item.barcode}`);
+          return (_batch: WriteBatch) => {};
+        }
+        return (batch: WriteBatch) => batch.set(doc(this.invRef), {
           barcode: item.barcode, designId: item.designId,
           styleNo: item.styleNo, color: item.color, group: item.group,
           size: item.size, ...(item.sleeveType ? { sleeveType: item.sleeveType } : {}),
@@ -72,23 +91,36 @@ export class InventoryService {
         });
       }
       const existing = snap.docs[0];
-      const data = existing.data() as InventoryItem;
-      return (batch) => batch.update(doc(this.firestore, `inventory/${existing.id}`), {
-        currentStock: (Number(data.currentStock) || 0) + totalQty,
-        totalReceived: (Number(data.totalReceived) || 0) + totalQty,
-        WSP: item.WSP, price: item.price, lastGrnNo: grnNo,
+      return (batch: WriteBatch) => batch.update(doc(this.firestore, `inventory/${existing.id}`), {
+        currentStock: increment(signedQty),
+        totalReceived: increment(signedQty),
+        ...(direction === 1 ? { WSP: item.WSP, price: item.price, lastGrnNo: grnNo } : {}),
         updatedAt: serverTimestamp()
       });
     });
+  }
+
+  async upsertFromGrn(items: GoodsInwardItem[], grnNo: string): Promise<void> {
+    const operations = await this.buildInventoryOps(items, grnNo, 1);
     await this.commitInChunks(operations);
     this.invalidateCache();
   }
 
-  private async commitInChunks(operations: Array<(batch: WriteBatch) => void>, chunkSize = 450): Promise<void> {
+  /**
+   * Commits operations in chunks to stay under Firestore's 500-operation-per-batch
+   * limit for large GRNs. Each chunk's batch.commit() is atomic on its own; this
+   * function does NOT guarantee the whole call is atomic — a caller that needs
+   * whole-operation safety must track onChunkCommitted progress and compensate
+   * on failure itself (see GoodsInwardService.approveGrn).
+   */
+  async commitInChunks(operations: InventoryBatchOp[], chunkSize = 450, opts?: CommitChunksOptions): Promise<void> {
     for (let i = 0; i < operations.length; i += chunkSize) {
+      const chunkIndex = i / chunkSize;
       const batch = writeBatch(this.firestore);
       operations.slice(i, i + chunkSize).forEach((op) => op(batch));
+      opts?.augmentBatch?.(batch, chunkIndex);
       await batch.commit();
+      opts?.onChunkCommitted?.(chunkIndex);
     }
   }
 

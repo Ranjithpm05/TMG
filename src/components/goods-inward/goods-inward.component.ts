@@ -8,7 +8,6 @@ import { Design, SizePrice } from '../../models/design.model';
 import { GoodsInward, GoodsInwardItem } from '../../models/goods-inward.model';
 import { DesignService } from '../../services/design.service';
 import { GoodsInwardService } from '../../services/goods-inward.service';
-import { InventoryService } from '../../services/inventory.service';
 import Swal from 'sweetalert2';
 
 declare const jsQR: any;
@@ -90,7 +89,6 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
 
   private designService    = inject(DesignService);
   private grnService       = inject(GoodsInwardService);
-  private inventoryService = inject(InventoryService);
 
   @ViewChild('video')  videoElement?: ElementRef<HTMLVideoElement>;
   @ViewChild('canvas') canvasElement?: ElementRef<HTMLCanvasElement>;
@@ -374,21 +372,35 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
     if (!confirmed.isConfirmed) return;
     this.isApproving.set(true);
     try {
-      const approved: GoodsInward = { ...grn, status: 'Approved', approvedAt: new Date().toISOString() };
-      await this.grnService.updateGoodsInward(approved);
-      await this.inventoryService.upsertFromGrn(grn.items, grn.grnNo);
-      this.viewGrn.set(approved);
-      this.refreshGrns();
-      await Swal.fire({ icon: 'success', title: 'Approved!', text: 'Inventory has been updated.', timer: 2000, showConfirmButton: false });
+      // approveGrn() re-reads live status inside a transaction rather than trusting
+      // this (possibly stale) `grn` object — safe to call even on a double-click or
+      // from a second browser tab; it will not double-apply inventory.
+      const outcome = await this.grnService.approveGrn(grn.id!);
+      if (outcome === 'approved') {
+        await Swal.fire({ icon: 'success', title: 'Approved!', text: 'Inventory has been updated.', timer: 2000, showConfirmButton: false });
+      } else if (outcome === 'already-approved') {
+        await Swal.fire({ icon: 'info', title: 'Already Approved', text: 'This GRN was already approved.', timer: 2000, showConfirmButton: false });
+      } else if (outcome === 'in-progress') {
+        await Swal.fire({ icon: 'warning', title: 'Approval In Progress', text: 'Another approval attempt for this GRN is already running.' });
+      }
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Approval Failed', text: err?.message ?? 'Failed to approve GRN.' });
     } finally {
       this.isApproving.set(false);
+      // Always resync with Firestore's actual state — success, no-op, or failure alike —
+      // so the list/detail view never shows a status that contradicts what's stored.
+      this.refreshGrns();
     }
   }
 
   private refreshGrns() {
-    this.grnService.getGoodsInwards().subscribe({ next: g => this.grns.set(g) });
+    this.grnService.getGoodsInwards().subscribe({
+      next: g => {
+        this.grns.set(g);
+        const viewing = this.viewGrn();
+        if (viewing) this.viewGrn.set(g.find(x => x.id === viewing.id) ?? null);
+      }
+    });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════
@@ -604,8 +616,9 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
 
   // ── Display helpers ───────────────────────────────────────────────────────────
   getStatusClass(status: string): string {
-    if (status === 'Approved') return 'bg-green-100 text-green-800';
-    if (status === 'Pending')  return 'bg-yellow-100 text-yellow-800';
+    if (status === 'Approved')  return 'bg-green-100 text-green-800';
+    if (status === 'Pending')   return 'bg-yellow-100 text-yellow-800';
+    if (status === 'Approving') return 'bg-blue-100 text-blue-800';
     return 'bg-gray-100 text-gray-600';
   }
 

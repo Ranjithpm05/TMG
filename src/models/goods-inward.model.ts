@@ -21,7 +21,15 @@ export interface GoodsInward {
   invoiceDate: string;
   receivedDate: string;
   items: GoodsInwardItem[];
-  status: 'Pending' | 'Approved';
+  status: 'Pending' | 'Approving' | 'Approved';
+  // Set while an approval is applying inventory in chunks; lets a concurrent/retried
+  // approval attempt detect the in-flight lock instead of double-applying inventory.
+  approvalLock?: {
+    lockId: string;
+    chunksDone: number;
+    totalChunks: number;
+    lastProgressAt: any;
+  };
   approvedBy?: string;
   approvedAt?: any;
   remarks?: string;
