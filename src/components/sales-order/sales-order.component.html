@@ -1041,12 +1041,12 @@
                         <td class="py-2 px-2 text-left align-top border border-black">{{ i + 1 }}</td>
                         <td class="py-2 px-2 text-left align-top border border-black">
                           @if (item.design) {
-                            <div>{{ item.design.styleNo }}</div>
-                            @if (item.design.color) {
-                              <div class="text-gray-500 text-xs">{{ item.design.color }}</div>
+                            <span class="font-semibold">{{ item.design.styleNo }}</span>
+                            @if (printGetFabricDescription(item)) {
+                              <span> - {{ printGetFabricDescription(item) }}</span>
                             }
                             @if (item.sleeveType) {
-                              <div class="text-gray-500 text-xs">{{ printGetSleeveTypeAbbreviation(item.sleeveType) }}</div>
+                              <span> - {{ printGetSleeveTypeAbbreviation(item.sleeveType) }}</span>
                             }
                           }
                       </td>

@@ -922,11 +922,13 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
     // Draw item rows
     items.forEach((item, idx) => {
-      const descLines: string[] = [item.design?.styleNo ?? ''];
-      if (item.design?.color)  descLines.push(item.design.color);
-      if (item.sleeveType)     descLines.push(this.printGetSleeveTypeAbbreviation(item.sleeveType));
+      const descParts: string[] = [item.design?.styleNo ?? ''];
+      const fabricDescription = this.printGetFabricDescription(item);
+      if (fabricDescription)   descParts.push(fabricDescription);
+      if (item.sleeveType)     descParts.push(this.printGetSleeveTypeAbbreviation(item.sleeveType));
+      const descLine = descParts.filter(Boolean).join(' - ');
 
-      const rowH = Math.max(ROW_H, 3.5 + descLines.length * 2.5 + 1);
+      const rowH = ROW_H;
 
       if (Y > PH - 50) { doc.addPage(); Y = 12; }
 
@@ -935,7 +937,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
       const rowVals: string[] = [
         String(idx + 1),
-        descLines.join('\n'),
+        descLine,
         ...sizes.map(s => String(this.printGetItemQtyForSize(item, s))),
         String(this.printGetItemTotalQty(item)),
         this.printGetItemPrice(item).toFixed(2),
@@ -947,13 +949,8 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       COLS.forEach((col, ci) => {
         const val = rowVals[ci] ?? '';
         if (ci === 1) {
-          const lines = val.split('\n');
           sf('bold', 6.5, BLACK);
-          txt(lines[0], cx + 1.5, Y + 3.5);
-          lines.slice(1).forEach((ln, li) => {
-            sf('normal', 5.5, [100,100,100]);
-            txt(ln, cx + 1.5, Y + 3.5 + (li + 1) * 2.5);
-          });
+          txt(val, cx + 1.5, Y + rowH / 2 + 1);
         } else {
           sf('normal', 6.5, BLACK);
           const tx2 = col.align === 'right'  ? cx + col.width - 1.5
@@ -1092,6 +1089,13 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     if (sleeveType === 'Full') return 'F/s';
     if (sleeveType === 'Half') return 'H/s';
     return '';
+  }
+
+  /** The catalog Fabric Description for the size variant matching this item's sleeve type. */
+  printGetFabricDescription(item: OrderItem): string {
+    const sizes = item.design?.sizes || [];
+    const match = sizes.find(s => s.sleeveType === item.sleeveType && s.fabricType?.trim());
+    return (match?.fabricType ?? sizes[0]?.fabricType ?? '').trim();
   }
 
   printGetItemQtyForSize(item: OrderItem, size: string): number | string {
