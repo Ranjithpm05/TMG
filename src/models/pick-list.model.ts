@@ -65,9 +65,12 @@ export interface PickListLine {
   sortOrder?: number;
   createdAt?: any;
   updatedAt?: any;
+  // True only for lines created ad-hoc during Party-wise scanning of a
+  // barcode that wasn't part of the originally generated pick list.
+  isAdditional?: boolean;
 }
 
-export type PickListType = 'direct' | 'combined' | 'itemwise';
+export type PickListType = 'direct' | 'combined' | 'itemwise' | 'party';
 
 export interface PickList {
   id?: string;
@@ -81,6 +84,9 @@ export interface PickList {
   totalRequiredQty?: number;
   totalPickedQty?: number;
   totalPendingQty?: number;
+  // Sum of pickedQty across isAdditional lines — kept separate from
+  // totalPickedQty so completion % still reflects genuine SO fulfillment.
+  totalAdditionalPickedQty?: number;
   pickableLineCount?: number;
   completedLineCount?: number;
   orderSummaries?: PickListOrderSummary[];
@@ -92,6 +98,11 @@ export interface PickList {
   // so it can't be picked again for another packing list.
   packedIntoPackingListId?: string;
   packedIntoPackingListNo?: string;
+  // Stamped by the explicit "Complete Pick List" action (Party-wise type),
+  // which force-closes a list regardless of remaining pending quantity.
+  finalizedAt?: number;
+  finalizedByUserId?: string;
+  finalizedByUsername?: string;
   createdAt?: any;
   updatedAt?: any;
 }

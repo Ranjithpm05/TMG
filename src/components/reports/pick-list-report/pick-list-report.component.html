@@ -1,0 +1,65 @@
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+  <h3 class="text-lg font-semibold text-gray-800">Party-wise Pick List Report</h3>
+  <div class="flex gap-2">
+    <button (click)="exportExcel()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+      Export Excel
+    </button>
+    <button (click)="exportPdf()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+      Export PDF
+    </button>
+    <button (click)="printReport()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+      Print
+    </button>
+  </div>
+</div>
+<p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
+
+@let rows = report();
+<div class="overflow-x-auto border border-gray-200 rounded-lg">
+  @if (rows.length > 0) {
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-800 text-white">
+        <tr>
+          <th class="px-4 py-3 text-left font-medium">Pick List No</th>
+          <th class="px-4 py-3 text-left font-medium">Date</th>
+          <th class="px-4 py-3 text-left font-medium">Client</th>
+          <th class="px-4 py-3 text-left font-medium">Sales No</th>
+          <th class="px-4 py-3 text-left font-medium">Style No</th>
+          <th class="px-4 py-3 text-left font-medium">Color</th>
+          <th class="px-3 py-3 text-center font-medium">Size</th>
+          <th class="px-4 py-3 text-left font-medium">Sleeve</th>
+          <th class="px-4 py-3 text-left font-medium">Item Type</th>
+          <th class="px-3 py-3 text-center font-medium">Required</th>
+          <th class="px-3 py-3 text-center font-medium">Picked</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        @for (row of rows; track $index) {
+          <tr class="hover:bg-gray-50" [class.bg-pink-50]="row.itemType === 'Additional'">
+            <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ row.pickListNo }}</td>
+            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ formatDate(row.createdAt) }}</td>
+            <td class="px-4 py-2 text-gray-700">{{ row.clientName }}</td>
+            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.salesNo }}</td>
+            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.styleNo }}</td>
+            <td class="px-4 py-2 text-gray-700">{{ row.color }}</td>
+            <td class="px-3 py-2 text-center text-gray-700">{{ row.size }}</td>
+            <td class="px-4 py-2 text-gray-700">{{ row.sleeveType || '-' }}</td>
+            <td class="px-4 py-2">
+              @if (row.itemType === 'Additional') {
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-pink-100 text-pink-700">Additional</span>
+              } @else {
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Requested</span>
+              }
+            </td>
+            <td class="px-3 py-2 text-center text-gray-700">{{ row.itemType === 'Additional' ? '-' : row.requiredQty }}</td>
+            <td class="px-3 py-2 text-center font-semibold text-gray-900">{{ row.pickedQty }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <div class="text-center py-10">
+      <p class="text-sm text-gray-500">No Party-wise Pick Lists match the current filters.</p>
+    </div>
+  }
+</div>

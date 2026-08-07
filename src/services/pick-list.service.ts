@@ -131,6 +131,7 @@ export class PickListService {
         totalRequiredQty: summary.totalRequiredQty,
         totalPickedQty: summary.totalPickedQty,
         totalPendingQty: summary.totalPendingQty,
+        totalAdditionalPickedQty: summary.totalAdditionalPickedQty,
         pickableLineCount: summary.pickableLineCount,
         completedLineCount: summary.completedLineCount,
         orderSummaries: summary.orderSummaries,
@@ -590,12 +591,233 @@ export class PickListService {
       totalRequiredQty: summary.totalRequiredQty,
       totalPickedQty: summary.totalPickedQty,
       totalPendingQty: summary.totalPendingQty,
+      totalAdditionalPickedQty: summary.totalAdditionalPickedQty,
       pickableLineCount: summary.pickableLineCount,
       completedLineCount: summary.completedLineCount,
       orderSummaries: summary.orderSummaries,
       items: summary.items,
       updatedAt: serverTimestamp(),
     }));
+  }
+
+  /**
+   * Explicit "Complete Pick List" action for Party-wise lists — force-closes
+   * the list as 'Completed' regardless of remaining pending quantity, since
+   * Packing List generation only pulls from pick lists already in that
+   * status (see packing-list.component.ts eligiblePickLists filter).
+   */
+  async finalizePickList(pickListId: string, user: PickListClaimUser): Promise<PickList | null> {
+    const [pickList, lines] = await Promise.all([
+      this.getPickListByIdOnce(pickListId),
+      this.getPickListLinesOnce(pickListId),
+    ]);
+    if (!pickList) return null;
+    if (pickList.status === 'Packed') return pickList;
+
+    const summary = this.buildSummary(lines);
+    const now = Date.now();
+
+    await updateDoc(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
+      status: 'Completed',
+      totalRequiredQty: summary.totalRequiredQty,
+      totalPickedQty: summary.totalPickedQty,
+      totalPendingQty: summary.totalPendingQty,
+      totalAdditionalPickedQty: summary.totalAdditionalPickedQty,
+      pickableLineCount: summary.pickableLineCount,
+      completedLineCount: summary.completedLineCount,
+      orderSummaries: summary.orderSummaries,
+      items: summary.items,
+      finalizedAt: now,
+      finalizedByUserId: user.id,
+      finalizedByUsername: user.username,
+      updatedAt: serverTimestamp(),
+    }));
+
+    await Promise.all(
+      summary.orderSummaries
+        .filter((entry) => entry.requiredQty > 0 && entry.pickedQty >= entry.requiredQty)
+        .map((entry) => this.syncSalesOrderShipment(pickListId, entry.salesOrderId))
+    );
+
+    return this.getPickListByIdOnce(pickListId);
+  }
+
+  /**
+   * Scan handler for Party-wise pick lists. Unlike processScan(), this has no
+   * claim/next-line assignment — any barcode may be scanned in any order. A
+   * barcode matching a requested line with remaining capacity tops that line
+   * up first; anything else (an unlisted barcode, or extra units of an
+   * already-fulfilled requested line) lands in a separate "additional" line
+   * keyed by barcode, so a Packing List built from this pick list never loses
+   * over-picked quantity (buildPackableLines() caps a line's pickedQty at its
+   * own requiredQty).
+   */
+  async processPartyScan(
+    pickListId: string,
+    barcode: string,
+    user: PickListClaimUser
+  ): Promise<PickListScanResult> {
+    const trimmedBarcode = barcode.trim();
+    if (!trimmedBarcode) {
+      throw new Error('barcode_not_found');
+    }
+
+    const existingSnap = await getDocs(query(this.linesCollection(pickListId), where('barcode', '==', trimmedBarcode)));
+    const existingLines = existingSnap.docs.map((docSnap) => this.normalizeLine({ lineId: docSnap.id, ...docSnap.data() }));
+
+    const requestedLine = existingLines.find(
+      (line) => !line.isAdditional && line.status !== 'blocked' && line.pickedQty < line.requiredQty
+    );
+    const additionalLine = existingLines.find((line) => line.isAdditional);
+
+    let targetLineId: string;
+    let newLineSeed: PickListLine | null = null;
+
+    if (requestedLine) {
+      targetLineId = requestedLine.lineId;
+    } else if (additionalLine) {
+      targetLineId = additionalLine.lineId;
+    } else {
+      targetLineId = `ADD-${this.sanitizeLineIdPart(trimmedBarcode)}`;
+
+      const [inventoryMatches, pickList] = await Promise.all([
+        this.inventoryService.getInventoryByBarcodes([trimmedBarcode]),
+        this.getPickListByIdOnce(pickListId),
+      ]);
+      const inventory = inventoryMatches[0];
+      if (!inventory?.id) throw new Error('barcode_not_found');
+      if (!pickList) throw new Error('picklist_not_found');
+
+      newLineSeed = this.normalizeLine({
+        lineId: targetLineId,
+        salesOrderId: pickList.salesOrderIds[0] ?? '',
+        salesNo: pickList.salesNos[0] ?? '',
+        clientId: pickList.clientId,
+        clientName: pickList.clientName,
+        designId: inventory.designId,
+        styleNo: inventory.styleNo,
+        color: inventory.color,
+        group: inventory.group,
+        size: inventory.size,
+        sleeveType: inventory.sleeveType,
+        barcode: trimmedBarcode,
+        inventoryId: inventory.id,
+        orderedQty: 0,
+        requiredQty: 0,
+        pickedQty: 0,
+        remainingQty: 0,
+        balanceQty: 0,
+        pendingQty: 0,
+        status: 'ready',
+        isAdditional: true,
+        sortOrder: 1_000_000,
+      });
+    }
+
+    const result = await runTransaction(this.firestore, async (transaction) => {
+      const lineRef = this.lineDoc(pickListId, targetLineId);
+      const pickListRef = doc(this.firestore, `pickLists/${pickListId}`);
+      const [lineSnap, pickListSnap] = await Promise.all([
+        transaction.get(lineRef),
+        transaction.get(pickListRef),
+      ]);
+
+      if (!pickListSnap.exists()) throw new Error('picklist_not_found');
+      const pickList = this.normalizePickList({ id: pickListSnap.id, ...pickListSnap.data() });
+
+      const liveLine = lineSnap.exists()
+        ? this.normalizeLine({ lineId: lineSnap.id, ...lineSnap.data() })
+        : newLineSeed;
+      if (!liveLine) throw new Error('barcode_not_found');
+      if (String(liveLine.barcode ?? '').trim() !== trimmedBarcode) throw new Error('barcode_mismatch');
+      if (liveLine.status === 'blocked') throw new Error('blocked');
+      if (!liveLine.inventoryId) throw new Error('blocked');
+
+      const inventoryRef = doc(this.firestore, `inventory/${liveLine.inventoryId}`);
+      const inventorySnap = await transaction.get(inventoryRef);
+      if (!inventorySnap.exists()) throw new Error('blocked');
+
+      const inventory = inventorySnap.data() as any;
+      const currentStock = Number(inventory.currentStock) || 0;
+      const inventoryReserved = !!pickList.inventoryReserved;
+      if (!inventoryReserved && currentStock <= 0) throw new Error('stock_exhausted');
+
+      const nextPickedQty = liveLine.pickedQty + 1;
+      if (!liveLine.isAdditional && nextPickedQty > liveLine.requiredQty) throw new Error('line_completed');
+
+      const nextRequiredQty = liveLine.isAdditional ? nextPickedQty : liveLine.requiredQty;
+      const nextRemainingQty = Math.max(0, nextRequiredQty - nextPickedQty);
+      const lineCompleted = !liveLine.isAdditional && nextRemainingQty === 0;
+      const now = Date.now();
+
+      const updatedLine = this.normalizeLine({
+        ...liveLine,
+        requiredQty: nextRequiredQty,
+        pickedQty: nextPickedQty,
+        remainingQty: nextRemainingQty,
+        balanceQty: nextRemainingQty + (liveLine.pendingQty || 0),
+        status: liveLine.isAdditional ? 'in_progress' : (lineCompleted ? 'completed' : 'in_progress'),
+        completedAt: lineCompleted ? now : undefined,
+        completedByUserId: lineCompleted ? user.id : undefined,
+        completedByUsername: lineCompleted ? user.username : undefined,
+      });
+
+      transaction.set(lineRef, this.stripUndefined({
+        ...updatedLine,
+        createdAt: lineSnap.exists() ? (lineSnap.data() as any)?.createdAt ?? serverTimestamp() : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+
+      if (!inventoryReserved) {
+        transaction.update(inventoryRef, {
+          currentStock: currentStock - 1,
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      const nextTotalPickedQty = liveLine.isAdditional
+        ? (pickList.totalPickedQty || 0)
+        : Math.min((pickList.totalPickedQty || 0) + 1, pickList.totalRequiredQty || 0);
+      const nextTotalAdditionalPickedQty = (pickList.totalAdditionalPickedQty || 0) + (liveLine.isAdditional ? 1 : 0);
+      const nextCompletedLineCount = (pickList.completedLineCount || 0) + (lineCompleted ? 1 : 0);
+      const nextOrderSummaries = liveLine.isAdditional
+        ? (pickList.orderSummaries ?? [])
+        : (pickList.orderSummaries ?? []).map((summary) => {
+            if (summary.salesOrderId !== liveLine.salesOrderId) return summary;
+            return {
+              ...summary,
+              pickedQty: Math.min(summary.requiredQty, (summary.pickedQty || 0) + 1),
+            };
+          });
+
+      const nextStatus = this.computePickListStatus(
+        pickList.totalRequiredQty || 0,
+        nextTotalPickedQty,
+        pickList.pickableLineCount || 0,
+        nextCompletedLineCount
+      );
+
+      transaction.update(pickListRef, this.stripUndefined({
+        totalPickedQty: nextTotalPickedQty,
+        totalAdditionalPickedQty: nextTotalAdditionalPickedQty,
+        completedLineCount: nextCompletedLineCount,
+        orderSummaries: nextOrderSummaries,
+        status: nextStatus,
+        updatedAt: serverTimestamp(),
+      }));
+
+      const updatedOrderSummary = nextOrderSummaries.find((summary) => summary.salesOrderId === liveLine.salesOrderId);
+      return {
+        line: updatedLine,
+        lineCompleted,
+        pickListCompleted: !liveLine.isAdditional && nextStatus === 'Completed',
+        orderCompleted: !liveLine.isAdditional && !!updatedOrderSummary && updatedOrderSummary.requiredQty > 0 && updatedOrderSummary.pickedQty >= updatedOrderSummary.requiredQty,
+        salesOrderId: liveLine.salesOrderId,
+      } satisfies PickListScanResult;
+    });
+
+    this.inventoryService.invalidateCache();
+    return result;
   }
 
   async syncSalesOrderShipment(_pickListId: string, salesOrderId: string): Promise<void> {
@@ -729,6 +951,7 @@ export class PickListService {
       totalRequiredQty: Number(raw?.totalRequiredQty) || fallbackSummary.totalRequiredQty || 0,
       totalPickedQty: Number(raw?.totalPickedQty) || fallbackSummary.totalPickedQty || 0,
       totalPendingQty: Number(raw?.totalPendingQty) || fallbackSummary.totalPendingQty || 0,
+      totalAdditionalPickedQty: Number(raw?.totalAdditionalPickedQty) || 0,
       pickableLineCount: Number(raw?.pickableLineCount) || this.countPickableLines(items),
       completedLineCount: Number(raw?.completedLineCount) || this.countCompletedPickableLines(items),
       orderSummaries: orderSummaries.length ? orderSummaries : this.buildOrderSummaries(items),
@@ -736,6 +959,11 @@ export class PickListService {
       legacyPickingPending,
       items,
       remarks: raw?.remarks ?? '',
+      packedIntoPackingListId: raw?.packedIntoPackingListId,
+      packedIntoPackingListNo: raw?.packedIntoPackingListNo,
+      finalizedAt: raw?.finalizedAt != null ? Number(raw.finalizedAt) || 0 : undefined,
+      finalizedByUserId: raw?.finalizedByUserId,
+      finalizedByUsername: raw?.finalizedByUsername,
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,
     };
@@ -785,6 +1013,7 @@ export class PickListService {
       sortOrder: raw?.sortOrder != null ? Number(raw.sortOrder) || 0 : 0,
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,
+      isAdditional: raw?.isAdditional === true,
     };
 
     return {
@@ -847,6 +1076,9 @@ export class PickListService {
     const totalRequiredQty = pickableLines.reduce((sum, line) => sum + line.requiredQty, 0);
     const totalPickedQty = pickableLines.reduce((sum, line) => sum + Math.min(line.pickedQty, line.requiredQty), 0);
     const totalPendingQty = normalizedLines.reduce((sum, line) => sum + (line.pendingQty || 0), 0);
+    const totalAdditionalPickedQty = normalizedLines
+      .filter((line) => line.isAdditional)
+      .reduce((sum, line) => sum + line.pickedQty, 0);
     const pickableLineCount = pickableLines.length;
     const completedLineCount = pickableLines.filter((line) => line.remainingQty <= 0).length;
 
@@ -854,6 +1086,7 @@ export class PickListService {
       totalRequiredQty,
       totalPickedQty,
       totalPendingQty,
+      totalAdditionalPickedQty,
       pickableLineCount,
       completedLineCount,
       status: this.computePickListStatus(totalRequiredQty, totalPickedQty, pickableLineCount, completedLineCount),
@@ -888,7 +1121,11 @@ export class PickListService {
   }
 
   private isSummaryPickable(line: PickListLine): boolean {
-    return line.requiredQty > 0 && line.status !== 'blocked' && line.status !== 'pending_stock';
+    return !line.isAdditional && line.requiredQty > 0 && line.status !== 'blocked' && line.status !== 'pending_stock';
+  }
+
+  private sanitizeLineIdPart(value: string): string {
+    return value.replace(/[^a-zA-Z0-9_-]/g, '_');
   }
 
   private countPickableLines(lines: PickListLine[]): number {

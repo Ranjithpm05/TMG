@@ -28,10 +28,11 @@ import { InventoryService } from '../../services/inventory.service';
 import { PickListService } from '../../services/pick-list.service';
 import { ClientService } from '../../services/client.service';
 import { AuthService } from '../../services/auth.service';
+import { LoadingService } from '../../services/loading.service';
 
 declare const jsQR: any;
 
-type ViewMode = 'list' | 'select-type' | 'select-orders' | 'select-items' | 'preview' | 'live-pick' | 'view';
+type ViewMode = 'list' | 'select-type' | 'select-party' | 'select-orders' | 'select-items' | 'preview' | 'live-pick' | 'view';
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', '6XL', 'Free Size'];
 
@@ -51,6 +52,7 @@ export class PickListComponent implements OnInit, OnDestroy {
   private pickListService = inject(PickListService);
   private clientService = inject(ClientService);
   private authService = inject(AuthService);
+  private loadingService = inject(LoadingService);
 
   private liveSubscriptions: Subscription[] = [];
   private claimHeartbeat: ReturnType<typeof setInterval> | null = null;
@@ -88,12 +90,30 @@ export class PickListComponent implements OnInit, OnDestroy {
   listTab = signal<'orders' | 'picklists'>('orders');
   searchTerm = signal('');
   statusFilter = signal<'all' | 'Pending' | 'Confirmed' | 'Shipped'>('all');
-  plTypeFilter = signal<'all' | 'direct' | 'combined' | 'itemwise'>('all');
+  plTypeFilter = signal<'all' | 'direct' | 'combined' | 'itemwise' | 'party'>('all');
   pickType = signal<PickListType>('direct');
   selectedOrderIds = signal<Set<string>>(new Set());
   orderSearchTerm = signal('');
+  selectedPartyId = signal<string | null>(null);
+  partySearchTerm = signal('');
 
   currentUser = computed(() => this.authService.currentUser());
+
+  // Indexes inventory by styleNo|color|size so findInventoryMatch() below is an
+  // O(1) map lookup instead of scanning the full inventory list (11k+ rows in
+  // production) twice per size-entry — with 270 sales orders, one of them
+  // carrying 688 items, that linear scan was O(orders * items * sizes *
+  // inventory), which froze the Sales Orders tab's render for minutes.
+  private inventoryIndex = computed(() => {
+    const map = new Map<string, InventoryItem[]>();
+    for (const item of this.inventory()) {
+      const key = `${item.styleNo}||${item.color}||${String(item.size)}`;
+      const bucket = map.get(key);
+      if (bucket) bucket.push(item);
+      else map.set(key, [item]);
+    }
+    return map;
+  });
 
   filteredOrders = computed(() => {
     const term = this.searchTerm().toLowerCase();
@@ -109,12 +129,25 @@ export class PickListComponent implements OnInit, OnDestroy {
 
   filteredOrdersForSelection = computed(() => {
     const term = this.orderSearchTerm().toLowerCase();
+    const partyId = this.pickType() === 'party' ? this.selectedPartyId() : null;
     return this.salesOrders().filter((order) => {
       if (this.getOrderRemainingQty(order.id) <= 0) return false;
+      if (partyId && order.clientId !== partyId) return false;
       return !term
         || order.salesNo.toLowerCase().includes(term)
         || this.getClientName(order.clientId).toLowerCase().includes(term);
     });
+  });
+
+  partiesWithOpenOrders = computed(() => {
+    const term = this.partySearchTerm().toLowerCase();
+    const clientIdsWithOrders = new Set(
+      this.salesOrders().filter((order) => this.getOrderRemainingQty(order.id) > 0).map((order) => order.clientId)
+    );
+    return this.clients()
+      .filter((client) => !!client.id && clientIdsWithOrders.has(client.id))
+      .filter((client) => !term || client.clientName.toLowerCase().includes(term))
+      .sort((a, b) => a.clientName.localeCompare(b.clientName));
   });
 
   visiblePickLists = computed(() => this.pickLists().filter((pickList) => this.isDisplayablePickList(pickList)));
@@ -274,6 +307,22 @@ export class PickListComponent implements OnInit, OnDestroy {
     return [...designMap.values()];
   });
 
+  partyLiveLines = computed(() => {
+    return [...this.liveLines()].sort((a, b) => {
+      if (!!a.isAdditional !== !!b.isAdditional) return a.isAdditional ? 1 : -1;
+      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+    });
+  });
+
+  partyLiveTotals = computed(() => {
+    const pickList = this.livePickList();
+    return {
+      requiredQty: pickList?.totalRequiredQty ?? 0,
+      pickedQty: pickList?.totalPickedQty ?? 0,
+      additionalPickedQty: pickList?.totalAdditionalPickedQty ?? 0,
+    };
+  });
+
   partyWiseTotals = computed(() =>
     this.customerWiseViewLines().map((customer) => ({
       clientId: customer.clientId,
@@ -332,10 +381,21 @@ export class PickListComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.isLoading.set(true);
+    // Same global "Processing…" overlay Reports uses for exports — this screen's
+    // initial fetch (salesOrders/inventory/clients/pickLists, 11k+ inventory rows
+    // in production) plus rendering the Sales Orders table can take a visible
+    // moment, and this makes that unmistakable rather than looking stuck.
+    this.loadingService.start();
     let doneCount = 0;
     const done = () => {
       doneCount += 1;
-      if (doneCount === 4) this.isLoading.set(false);
+      if (doneCount === 4) {
+        this.isLoading.set(false);
+        // Hold the overlay through the paint that follows this data arriving —
+        // signals flipping doesn't mean the (potentially large) table has
+        // actually rendered/painted yet.
+        requestAnimationFrame(() => requestAnimationFrame(() => this.loadingService.stop()));
+      }
     };
 
     this.salesOrderService.getSalesOrders().subscribe({ next: (orders) => { this.salesOrders.set(orders); done(); }, error: done });
@@ -461,17 +521,24 @@ export class PickListComponent implements OnInit, OnDestroy {
     return !!pickList.legacyPickingPending || (pickList.totalRequiredQty ?? 0) > 0 || (pickList.totalPickedQty ?? 0) > 0;
   }
 
+  // Rebuilding a flatMap of every pick list's items on every single call (once
+  // per size-entry — tens of thousands across all orders) was the same O(n)
+  // hot-path problem as findInventoryMatch(). Indexed once per
+  // effectivePickedLists() change instead.
+  private alreadyPickedIndex = computed(() => {
+    const map = new Map<string, number>();
+    for (const pickList of this.effectivePickedLists()) {
+      for (const line of pickList.items ?? []) {
+        const key = `${line.salesOrderId}||${line.styleNo}||${line.color}||${String(line.size)}||${line.sleeveType ?? ''}`;
+        map.set(key, (map.get(key) ?? 0) + (line.pickedQty || 0));
+      }
+    }
+    return map;
+  });
+
   getAlreadyPickedQty(orderId: string, styleNo: string, color: string, size: string, sleeveType?: string): number {
-    return this.effectivePickedLists()
-      .flatMap((pickList) => pickList.items ?? [])
-      .filter((line) =>
-        line.salesOrderId === orderId
-        && line.styleNo === styleNo
-        && line.color === color
-        && String(line.size) === String(size)
-        && (line.sleeveType ?? '') === (sleeveType ?? '')
-      )
-      .reduce((sum, line) => sum + (line.pickedQty || 0), 0);
+    const key = `${orderId}||${styleNo}||${color}||${String(size)}||${sleeveType ?? ''}`;
+    return this.alreadyPickedIndex().get(key) ?? 0;
   }
 
   formatDate(raw: any): string {
@@ -485,11 +552,11 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   plTypeBadge(type: PickListType): string {
-    return ({ direct: 'bg-indigo-100 text-indigo-800', combined: 'bg-purple-100 text-purple-800', itemwise: 'bg-teal-100 text-teal-800' } as Record<PickListType, string>)[type];
+    return ({ direct: 'bg-indigo-100 text-indigo-800', combined: 'bg-purple-100 text-purple-800', itemwise: 'bg-teal-100 text-teal-800', party: 'bg-pink-100 text-pink-800' } as Record<PickListType, string>)[type];
   }
 
   plTypeLabel(type: PickListType): string {
-    return ({ direct: 'Direct', combined: 'Combined', itemwise: 'Item-wise' } as Record<PickListType, string>)[type];
+    return ({ direct: 'Direct', combined: 'Combined', itemwise: 'Item-wise', party: 'Party-wise' } as Record<PickListType, string>)[type];
   }
 
   orderPickBadge(orderId: string): string {
@@ -517,7 +584,17 @@ export class PickListComponent implements OnInit, OnDestroy {
 
   selectType(type: PickListType) {
     this.pickType.set(type);
+    this.mode.set(type === 'party' ? 'select-party' : 'select-orders');
+  }
+
+  selectParty(clientId: string) {
+    this.selectedPartyId.set(clientId);
+    this.selectedOrderIds.set(new Set());
     this.mode.set('select-orders');
+  }
+
+  isPartySelected(clientId: string): boolean {
+    return this.selectedPartyId() === clientId;
   }
 
   async cancel() {
@@ -814,17 +891,10 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   private findInventoryMatch(styleNo: string, color: string, size: string, sleeveType?: string): InventoryItem | undefined {
-    return this.inventory().find((item) =>
-      item.styleNo === styleNo
-      && item.color === color
-      && String(item.size) === String(size)
-      && (item.sleeveType ?? '') === (sleeveType ?? '')
-    ) ?? this.inventory().find((item) =>
-      item.styleNo === styleNo
-      && item.color === color
-      && String(item.size) === String(size)
-      && (!item.sleeveType || !sleeveType)
-    );
+    const candidates = this.inventoryIndex().get(`${styleNo}||${color}||${String(size)}`);
+    if (!candidates?.length) return undefined;
+    return candidates.find((item) => (item.sleeveType ?? '') === (sleeveType ?? ''))
+      ?? candidates.find((item) => !item.sleeveType || !sleeveType);
   }
 
   private buildLineId(orderId: string, styleNo: string, size: string, index: number): string {
@@ -895,6 +965,14 @@ export class PickListComponent implements OnInit, OnDestroy {
       })
     );
 
+    if (freshPickList.type === 'party') {
+      // Party-wise picking has no claim/next-line assignment — any barcode
+      // may be scanned in any order, so there's nothing to claim on start.
+      this.scannerMessage.set('Scan any item');
+      this.focusScanInput();
+      return;
+    }
+
     this.claimHeartbeat = setInterval(() => {
       const assignedLine = this.currentAssignedLine();
       const livePickList = this.livePickList();
@@ -935,7 +1013,7 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   async submitCurrentInput() {
-    await this.submitScan(this.manualScanValue().trim());
+    await this.submitBarcode(this.manualScanValue().trim());
   }
 
   onManualScanChange(value: string) {
@@ -968,6 +1046,88 @@ export class PickListComponent implements OnInit, OnDestroy {
     } catch (err: any) {
       this.currentLineId.set(null);
       return null;
+    }
+  }
+
+  private async submitBarcode(rawBarcode: string) {
+    if (this.livePickList()?.type === 'party') {
+      await this.submitPartyScan(rawBarcode);
+      return;
+    }
+    await this.submitScan(rawBarcode);
+  }
+
+  private async submitPartyScan(rawBarcode: string) {
+    const barcode = rawBarcode.trim();
+    if (!barcode || this.isSubmittingScan()) return;
+
+    const pickList = this.livePickList();
+    const user = this.asClaimUser();
+    if (!pickList?.id || !user) return;
+
+    this.isSubmittingScan.set(true);
+
+    try {
+      const result = await this.pickListService.processPartyScan(pickList.id, barcode, user);
+      this.manualScanValue.set('');
+      this.lastCameraBarcodeAt = Date.now();
+      const label = result.line.isAdditional
+        ? `Extra item · ${result.line.styleNo} ${result.line.size} · ${result.line.pickedQty} scanned`
+        : `${result.line.styleNo} ${result.line.size} · ${result.line.pickedQty}/${result.line.requiredQty}`;
+      this.flashScanFeedback('success', label);
+    } catch (error: any) {
+      const code = error?.message ?? '';
+      const { title, text } = code === 'barcode_not_found'
+        ? { title: 'Barcode not found', text: 'This barcode has no matching inventory item, so it cannot be added.' }
+        : this.mapScanError(code);
+      this.flashScanFeedback('error', text ?? title);
+      await this.showToast('error', title, text);
+    } finally {
+      this.isSubmittingScan.set(false);
+      this.focusScanInput();
+    }
+  }
+
+  async completePartyPickList() {
+    const pickList = this.livePickList();
+    const user = this.asClaimUser();
+    if (!pickList?.id || !user) return;
+
+    const totalPicked = (pickList.totalPickedQty || 0) + (pickList.totalAdditionalPickedQty || 0);
+    if (totalPicked <= 0) {
+      await Swal.fire({ icon: 'warning', title: 'Nothing Picked Yet', text: 'Scan at least one item before completing this Pick List.' });
+      return;
+    }
+
+    const pending = Math.max(0, (pickList.totalRequiredQty || 0) - (pickList.totalPickedQty || 0));
+    const confirmResult = await Swal.fire({
+      icon: pending > 0 ? 'warning' : 'question',
+      title: 'Complete Pick List?',
+      html: pending > 0
+        ? `<p>${pending} requested unit(s) are still not picked.</p><p class="mt-2 text-sm text-gray-500">Completing now freezes the picked quantities as final and sends this Pick List to Packing.</p>`
+        : '<p>All requested items are picked. Completing now freezes the picked quantities as final and sends this Pick List to Packing.</p>',
+      showCancelButton: true,
+      confirmButtonText: 'Complete Pick List',
+      confirmButtonColor: '#16a34a',
+    });
+    if (!confirmResult.isConfirmed) return;
+
+    this.isSaving.set(true);
+    try {
+      await this.pickListService.finalizePickList(pickList.id, user);
+      this.completionHandled = true;
+      await this.stopLivePicking({ keepMode: true, releaseClaim: false });
+      const freshPickList = await this.pickListService.getPickListByIdOnce(pickList.id);
+      await this.showToast('success', 'Pick List Completed');
+      if (freshPickList) {
+        await this.openView(freshPickList);
+      } else {
+        this.mode.set('list');
+      }
+    } catch (error: any) {
+      await Swal.fire({ icon: 'error', title: 'Could Not Complete', text: error?.message ?? 'Unable to complete this Pick List.' });
+    } finally {
+      this.isSaving.set(false);
     }
   }
 
@@ -1134,7 +1294,7 @@ export class PickListComponent implements OnInit, OnDestroy {
         if (barcode === this.lastCameraBarcode && now - this.lastCameraBarcodeAt < 3000) return;
         this.lastCameraBarcode = barcode;
         this.lastCameraBarcodeAt = now;
-        void this.submitScan(barcode);
+        void this.submitBarcode(barcode);
       })
       .finally(() => {
         this.cameraLoopBusy = false;
@@ -1242,6 +1402,8 @@ export class PickListComponent implements OnInit, OnDestroy {
     this.selectedOrderIds.set(new Set());
     this.orderSearchTerm.set('');
     this.draftLines.set([]);
+    this.selectedPartyId.set(null);
+    this.partySearchTerm.set('');
   }
 
   private asClaimUser(): PickListClaimUser | null {
@@ -1255,7 +1417,11 @@ export class PickListComponent implements OnInit, OnDestroy {
     if (type === 'success') this.playSuccessBeep();
     setTimeout(() => {
       this.scanFeedback.set('idle');
-      this.scannerMessage.set(this.currentAssignedLine() ? 'Scan the assigned item' : 'Waiting for an available item');
+      this.scannerMessage.set(
+        this.livePickList()?.type === 'party'
+          ? 'Scan any item'
+          : this.currentAssignedLine() ? 'Scan the assigned item' : 'Waiting for an available item'
+      );
     }, 800);
   }
 
