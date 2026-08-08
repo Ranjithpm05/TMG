@@ -1133,7 +1133,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
       this.packingListService.getPackingListByIdOnce(packingList.id),
       this.packingListService.getPackingListLinesOnce(packingList.id),
     ]);
-    const html = this.buildPrintHtml(fresh ?? packingList, lines);
+    const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean))] as string[];
+    const invItems = barcodes.length ? await this.inventoryService.getInventoryByBarcodes(barcodes) : [];
+    const mrpByBarcode = new Map<string, number>();
+    for (const inv of invItems) mrpByBarcode.set(inv.barcode, Number(inv.price) || 0);
+    const html = this.buildPrintHtml(fresh ?? packingList, lines, mrpByBarcode);
     const win = window.open('', '_blank', 'width=1100,height=780');
     if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
   }
@@ -1450,7 +1454,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
     transport: string,
   ): Promise<DeliveryChallan> {
     const packedLines = lines.filter((l) => l.packedQty > 0 || l.requiredQty > 0);
-    const rowMap = new Map<string, { partName: string; styleNo: string; color: string; sizeQty: Record<string, number>; total: number }>();
+
+    const barcodes = [...new Set(packedLines.map((l) => l.barcode).filter(Boolean))] as string[];
+    const invItems = barcodes.length ? await this.inventoryService.getInventoryByBarcodes(barcodes) : [];
+    const mrpByBarcode = new Map<string, number>();
+    for (const inv of invItems) mrpByBarcode.set(inv.barcode, Number(inv.price) || 0);
+
+    const rowMap = new Map<string, { partName: string; styleNo: string; color: string; sizeQty: Record<string, number>; total: number; mrp: number }>();
     const sizeSet = new Set<string>();
 
     for (const line of packedLines) {
@@ -1459,7 +1469,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
       sizeSet.add(line.size);
       const key = `${line.partName}||${line.styleNo}||${line.color}`;
       if (!rowMap.has(key)) {
-        rowMap.set(key, { partName: line.partName, styleNo: line.styleNo, color: line.color, sizeQty: {}, total: 0 });
+        rowMap.set(key, {
+          partName: line.partName,
+          styleNo: line.styleNo,
+          color: line.color,
+          sizeQty: {},
+          total: 0,
+          mrp: mrpByBarcode.get(line.barcode ?? '') ?? 0,
+        });
       }
       const row = rowMap.get(key)!;
       row.sizeQty[line.size] = (row.sizeQty[line.size] ?? 0) + qty;
@@ -1578,7 +1595,7 @@ ${allDCHtml}
           ${td2('NOS')}
           ${td2(item.styleNo, 'font-weight:700;text-align:left')}
           ${td2(item.color || '-')}
-          ${td2('-')}
+          ${td2(item.mrp > 0 ? item.mrp.toFixed(2) : '-')}
           ${sizeCells}
           ${td2(item.total, 'font-weight:700')}
         </tr>`);
@@ -1703,7 +1720,7 @@ ${allDCHtml}
     }
   }
 
-  private buildPrintHtml(packingList: PackingList, lines: PackingListLine[]): string {
+  private buildPrintHtml(packingList: PackingList, lines: PackingListLine[], mrpByBarcode: Map<string, number>): string {
     const rankSize = (size: string) => {
       const idx = SIZE_ORDER.indexOf(size);
       return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
@@ -1741,6 +1758,7 @@ ${allDCHtml}
         : l.status === 'in_progress'
           ? { bg: '#dbeafe', fg: '#1d4ed8' }
           : { bg: '#e0e7ff', fg: '#3730a3' };
+      const mrp = mrpByBarcode.get(l.barcode ?? '') ?? 0;
       return `
         <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}">
           <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:#64748b">${i + 1}</td>
@@ -1750,6 +1768,7 @@ ${allDCHtml}
           <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${l.size}</td>
           <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${l.sleeveType ?? '-'}</td>
           <td style="padding:8px 10px;border:1px solid #d7deea;font-family:monospace;font-size:11px">${l.barcode ?? '-'}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:right">${mrp > 0 ? mrp.toFixed(2) : '-'}</td>
           <td style="padding:8px 10px;border:1px solid #d7deea;font-size:11px">${l.salesText}</td>
           <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700">${l.requiredQty}</td>
           <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#15803d">${l.packedQty}</td>
@@ -1822,6 +1841,7 @@ ${allDCHtml}
             <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Size</th>
             <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Sleeve</th>
             <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Barcode</th>
+            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">MRP</th>
             <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Orders</th>
             <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">To Pack</th>
             <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Packed</th>

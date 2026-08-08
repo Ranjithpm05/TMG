@@ -106,6 +106,7 @@ export class DeliveryChallanService {
             color: String(item?.color ?? ''),
             sizeQty: item?.sizeQty && typeof item.sizeQty === 'object' ? item.sizeQty : {},
             total: Number(item?.total) || 0,
+            mrp: Number(item?.mrp) || 0,
           }))
         : [],
       sizes: Array.isArray(raw?.sizes) ? raw.sizes.map((s: any) => String(s)) : [],

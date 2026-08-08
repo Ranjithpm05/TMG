@@ -4,6 +4,7 @@ export interface DCItem {
   color: string;
   sizeQty: Record<string, number>;
   total: number;
+  mrp: number;
 }
 
 export interface DeliveryChallan {
