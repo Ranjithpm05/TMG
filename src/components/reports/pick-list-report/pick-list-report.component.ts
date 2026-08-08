@@ -14,6 +14,7 @@ const REPORT_TITLE = 'Party-wise Pick List Report';
 
 interface PickListReportRow {
   pickListNo: string;
+  pickListStatus: PickList['status'];
   createdAt: Date | null;
   clientName: string;
   salesNo: string;
@@ -24,6 +25,7 @@ interface PickListReportRow {
   itemType: 'Requested' | 'Additional';
   requiredQty: number;
   pickedQty: number;
+  pendingQty: number;
 }
 
 @Component({
@@ -84,6 +86,7 @@ export class PickListReportComponent {
       for (const line of lines) {
         rows.push({
           pickListNo: pickList.pickListNo,
+          pickListStatus: pickList.status,
           createdAt: this.toDate(pickList.createdAt),
           clientName: pickList.clientName,
           salesNo: line.salesNo,
@@ -94,6 +97,7 @@ export class PickListReportComponent {
           itemType: line.isAdditional ? 'Additional' : 'Requested',
           requiredQty: line.isAdditional ? 0 : line.requiredQty,
           pickedQty: line.pickedQty,
+          pendingQty: line.isAdditional ? 0 : Math.max(0, line.requiredQty - line.pickedQty),
         });
       }
     }
@@ -149,9 +153,10 @@ export class PickListReportComponent {
   }
 
   private buildExportRows(): any[][] {
-    const header = ['Pick List No', 'Date', 'Client', 'Sales No', 'Style No', 'Color', 'Size', 'Sleeve', 'Item Type', 'Required Qty', 'Picked Qty'];
+    const header = ['Pick List No', 'Status', 'Date', 'Client', 'Sales No', 'Style No', 'Color', 'Size', 'Sleeve', 'Item Type', 'Required Qty', 'Picked Qty', 'Pending Qty'];
     const body = this.report().map((row) => [
       row.pickListNo,
+      row.pickListStatus,
       this.formatDate(row.createdAt),
       row.clientName,
       row.salesNo,
@@ -162,6 +167,7 @@ export class PickListReportComponent {
       row.itemType,
       row.itemType === 'Additional' ? '-' : row.requiredQty,
       row.pickedQty,
+      row.itemType === 'Additional' ? '-' : row.pendingQty,
     ]);
     return [header, ...body];
   }

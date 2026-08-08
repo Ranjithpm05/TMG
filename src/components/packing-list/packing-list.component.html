@@ -86,7 +86,7 @@
                   </td>
                   <td class="px-4 py-3 text-xs text-gray-600">{{(pickList.salesNos ?? []).join(', ')}}</td>
                   <td class="px-4 py-3 text-gray-700 font-medium">{{pickList.clientName}}</td>
-                  <td class="px-4 py-3 text-center font-bold text-green-700">{{pickList.totalPickedQty ?? 0}}</td>
+                  <td class="px-4 py-3 text-center font-bold text-green-700">{{getEffectivePickedQty(pickList)}}</td>
                   <td class="px-4 py-3 text-center font-semibold text-teal-700">{{getPartCountFromPickList(pickList)}}</td>
                   <!-- Packing status column — per-customer when multiple packing lists exist -->
                   <td class="px-4 py-3">
@@ -363,7 +363,7 @@
                     <div class="text-xs text-gray-400 mt-0.5">{{formatDate(pickList.createdAt)}}</div>
                   </td>
                   <td class="px-4 py-3 text-xs text-gray-600">{{(pickList.salesNos ?? []).join(', ')}}</td>
-                  <td class="px-4 py-3 text-center font-bold text-green-700">{{pickList.totalPickedQty ?? 0}}</td>
+                  <td class="px-4 py-3 text-center font-bold text-green-700">{{getEffectivePickedQty(pickList)}}</td>
                   <td class="px-4 py-3 text-center font-semibold text-teal-700">{{getPartCountFromPickList(pickList)}}</td>
                 </tr>
               } @empty {

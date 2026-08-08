@@ -822,9 +822,12 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5" [class.sm:grid-cols-5]="pl.type === 'party'">
           <div class="bg-gray-50 p-4 rounded-xl border text-center"><p class="text-xs text-gray-500 uppercase font-semibold">Required</p><p class="text-xl font-bold text-gray-800 mt-1">{{pl.totalRequiredQty ?? 0}}</p></div>
           <div class="bg-green-50 p-4 rounded-xl border border-green-200 text-center"><p class="text-xs text-green-600 uppercase font-semibold">Picked</p><p class="text-xl font-bold text-green-700 mt-1">{{pl.totalPickedQty ?? 0}}</p></div>
+          @if (pl.type === 'party') {
+            <div class="bg-pink-50 p-4 rounded-xl border border-pink-200 text-center"><p class="text-xs text-pink-600 uppercase font-semibold">Additional</p><p class="text-xl font-bold text-pink-700 mt-1">{{pl.totalAdditionalPickedQty ?? 0}}</p></div>
+          }
           <div class="bg-amber-50 p-4 rounded-xl border border-amber-200 text-center"><p class="text-xs text-amber-600 uppercase font-semibold">Pending Stock</p><p class="text-xl font-bold text-amber-700 mt-1">{{pl.totalPendingQty ?? 0}}</p></div>
           <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-200 text-center"><p class="text-xs text-indigo-600 uppercase font-semibold">Completed Lines</p><p class="text-xl font-bold text-indigo-700 mt-1">{{pl.completedLineCount ?? 0}}</p></div>
         </div>

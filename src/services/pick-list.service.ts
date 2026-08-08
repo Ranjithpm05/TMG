@@ -601,10 +601,25 @@ export class PickListService {
   }
 
   /**
-   * Explicit "Complete Pick List" action for Party-wise lists — force-closes
-   * the list as 'Completed' regardless of remaining pending quantity, since
-   * Packing List generation only pulls from pick lists already in that
-   * status (see packing-list.component.ts eligiblePickLists filter).
+   * Explicit "Complete Pick List" action for Party-wise lists — snapshots
+   * whatever quantity has actually been scanned as the picked total and
+   * marks the list ready for Packing, regardless of remaining pending
+   * quantity. Unlike the old behavior, this does NOT force status to
+   * 'Completed': the real completion state (Completed only when every
+   * pickable line's requiredQty was met, Partial otherwise) is preserved
+   * so downstream screens report and pack the true picked quantity, not
+   * the original Sales Order quantity.
+   *
+   * `finalizedAt` is an eligibility/audit marker only — it does NOT lock
+   * the list from further scanning (see packing-list.component.ts
+   * completedPickLists filter, which uses it to gate Packing readiness).
+   * A 'Partial' list, finalized or not, stays fully resumable — a user may
+   * come back later and pick more of the pending Sales Order items or scan
+   * new additional items; each scan updates totals/status live regardless
+   * of finalizedAt. The only true terminal state is 'Packed' (the list has
+   * already been copied into a Packing List, whose line snapshot can never
+   * see later scans) — see the `pickList.status === 'Packed'` guard inside
+   * processPartyScan() and pick-list.component.ts hasPickableQty().
    */
   async finalizePickList(pickListId: string, user: PickListClaimUser): Promise<PickList | null> {
     const [pickList, lines] = await Promise.all([
@@ -616,9 +631,10 @@ export class PickListService {
 
     const summary = this.buildSummary(lines);
     const now = Date.now();
+    const finalStatus = summary.status === 'Completed' ? 'Completed' : 'Partial';
 
     await updateDoc(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
-      status: 'Completed',
+      status: finalStatus,
       totalRequiredQty: summary.totalRequiredQty,
       totalPickedQty: summary.totalPickedQty,
       totalPendingQty: summary.totalPendingQty,
@@ -724,6 +740,10 @@ export class PickListService {
 
       if (!pickListSnap.exists()) throw new Error('picklist_not_found');
       const pickList = this.normalizePickList({ id: pickListSnap.id, ...pickListSnap.data() });
+      // 'Partial' — even after the explicit "Complete Pick List" action — stays
+      // scannable; only a Pick List already converted into a Packing List
+      // ('Packed') is a true dead end, since that snapshot can't see new scans.
+      if (pickList.status === 'Packed') throw new Error('picklist_packed');
 
       const liveLine = lineSnap.exists()
         ? this.normalizeLine({ lineId: lineSnap.id, ...lineSnap.data() })

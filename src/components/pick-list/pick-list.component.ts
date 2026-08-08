@@ -465,8 +465,13 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   getOpenPickListForOrder(orderId: string): PickList | null {
+    // 'Partial' stays "open" even after the explicit Party-wise "Complete Pick
+    // List" action (finalizedAt) — only 'Packed' (already converted into a
+    // Packing List) truly closes an order's pick list for further picking.
     return this.visiblePickLists().find((pickList) =>
-      pickList.salesOrderIds.includes(orderId) && (pickList.status !== 'Completed' || !!pickList.legacyPickingPending)
+      pickList.salesOrderIds.includes(orderId)
+      && pickList.status !== 'Packed'
+      && (pickList.status !== 'Completed' || !!pickList.legacyPickingPending)
     ) ?? null;
   }
 
@@ -497,7 +502,13 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   hasPickableQty(pickList: PickList | null | undefined): boolean {
-    return !!pickList && (pickList.totalRequiredQty ?? 0) > 0 && pickList.status !== 'Pending' && pickList.status !== 'Completed';
+    // 'Partial' stays resumable — including after the explicit Party-wise
+    // "Complete Pick List" action — so the user can keep scanning pending
+    // Sales Order items and additional items across sessions. Only 'Packed'
+    // (already converted into a Packing List, whose line snapshot won't see
+    // further scans) truly closes a Pick List for picking.
+    return !!pickList && (pickList.totalRequiredQty ?? 0) > 0
+      && pickList.status !== 'Pending' && pickList.status !== 'Completed' && pickList.status !== 'Packed';
   }
 
   canStartPicking(pickList: PickList | null | undefined): boolean {
@@ -1104,8 +1115,8 @@ export class PickListComponent implements OnInit, OnDestroy {
       icon: pending > 0 ? 'warning' : 'question',
       title: 'Complete Pick List?',
       html: pending > 0
-        ? `<p>${pending} requested unit(s) are still not picked.</p><p class="mt-2 text-sm text-gray-500">Completing now freezes the picked quantities as final and sends this Pick List to Packing.</p>`
-        : '<p>All requested items are picked. Completing now freezes the picked quantities as final and sends this Pick List to Packing.</p>',
+        ? `<p>${pending} requested unit(s) are still not picked.</p><p class="mt-2 text-sm text-gray-500">This sends the currently picked quantity to Packing as Partial. You can still come back later to pick the remaining items.</p>`
+        : '<p>All requested items are picked. This sends the Pick List to Packing.</p>',
       showCancelButton: true,
       confirmButtonText: 'Complete Pick List',
       confirmButtonColor: '#16a34a',
@@ -1118,7 +1129,7 @@ export class PickListComponent implements OnInit, OnDestroy {
       this.completionHandled = true;
       await this.stopLivePicking({ keepMode: true, releaseClaim: false });
       const freshPickList = await this.pickListService.getPickListByIdOnce(pickList.id);
-      await this.showToast('success', 'Pick List Completed');
+      await this.showToast('success', freshPickList?.status === 'Partial' ? 'Pick List Completed as Partial' : 'Pick List Completed');
       if (freshPickList) {
         await this.openView(freshPickList);
       } else {
@@ -1460,6 +1471,8 @@ export class PickListComponent implements OnInit, OnDestroy {
         return { title: 'This line cannot be picked right now' };
       case 'line_completed':
         return { title: 'Quantity already completed' };
+      case 'picklist_packed':
+        return { title: 'Pick List already packed', text: 'This Pick List has been converted into a Packing List and can no longer accept scans.' };
       default:
         return { title: 'Scan failed', text: 'Please try again.' };
     }

@@ -21,6 +21,7 @@
       <thead class="bg-gray-800 text-white">
         <tr>
           <th class="px-4 py-3 text-left font-medium">Pick List No</th>
+          <th class="px-4 py-3 text-left font-medium">Status</th>
           <th class="px-4 py-3 text-left font-medium">Date</th>
           <th class="px-4 py-3 text-left font-medium">Client</th>
           <th class="px-4 py-3 text-left font-medium">Sales No</th>
@@ -31,12 +32,20 @@
           <th class="px-4 py-3 text-left font-medium">Item Type</th>
           <th class="px-3 py-3 text-center font-medium">Required</th>
           <th class="px-3 py-3 text-center font-medium">Picked</th>
+          <th class="px-3 py-3 text-center font-medium">Pending</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-200">
         @for (row of rows; track $index) {
           <tr class="hover:bg-gray-50" [class.bg-pink-50]="row.itemType === 'Additional'">
             <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ row.pickListNo }}</td>
+            <td class="px-4 py-2 whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded-full text-xs font-semibold"
+                [class.bg-green-100]="row.pickListStatus === 'Completed'" [class.text-green-800]="row.pickListStatus === 'Completed'"
+                [class.bg-yellow-100]="row.pickListStatus === 'Partial'" [class.text-yellow-800]="row.pickListStatus === 'Partial'"
+                [class.bg-orange-100]="row.pickListStatus === 'Pending'" [class.text-orange-700]="row.pickListStatus === 'Pending'"
+                [class.bg-gray-100]="row.pickListStatus === 'Draft' || row.pickListStatus === 'Packed'" [class.text-gray-600]="row.pickListStatus === 'Draft' || row.pickListStatus === 'Packed'">{{ row.pickListStatus }}</span>
+            </td>
             <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ formatDate(row.createdAt) }}</td>
             <td class="px-4 py-2 text-gray-700">{{ row.clientName }}</td>
             <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.salesNo }}</td>
@@ -53,6 +62,7 @@
             </td>
             <td class="px-3 py-2 text-center text-gray-700">{{ row.itemType === 'Additional' ? '-' : row.requiredQty }}</td>
             <td class="px-3 py-2 text-center font-semibold text-gray-900">{{ row.pickedQty }}</td>
+            <td class="px-3 py-2 text-center font-semibold text-amber-700">{{ row.itemType === 'Additional' ? '-' : row.pendingQty }}</td>
           </tr>
         }
       </tbody>

@@ -94,8 +94,18 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   // ─── Computed ──────────────────────────────────────────────────────────────
 
+  // A Pick List is ready to pack once it's actually 'Completed', or once a
+  // Party-wise "Complete Pick List" click marked it 'Partial' + finalizedAt —
+  // the user has explicitly said "pack what's picked so far", so it must flow
+  // to Packing/DC/Invoice even though not every requested unit was picked.
+  // This does NOT stop the source Pick List from being resumed for further
+  // scanning afterwards (see pick-list.component.ts hasPickableQty()) — only
+  // 'Packed' (already converted) is a true dead end. See finalizePickList().
   completedPickLists = computed(() =>
-    this.pickLists().filter((pl) => pl.status === 'Completed' && (pl.totalPickedQty ?? 0) > 0)
+    this.pickLists().filter((pl) =>
+      (pl.status === 'Completed' || (pl.status === 'Partial' && !!pl.finalizedAt))
+      && ((pl.totalPickedQty ?? 0) + (pl.totalAdditionalPickedQty ?? 0)) > 0
+    )
   );
 
   // Completed pick lists not yet referenced by any packing list (old single-flow
@@ -129,9 +139,15 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const selected = this.selectedPickListsForCombine();
     return {
       count: selected.length,
-      totalQty: selected.reduce((sum, pl) => sum + (pl.totalPickedQty ?? 0), 0),
+      totalQty: selected.reduce((sum, pl) => sum + this.getEffectivePickedQty(pl), 0),
     };
   });
+
+  // Actual packable quantity for a Pick List: SO-requested units picked plus
+  // any additional/non-requested barcodes scanned — both flow into Packing.
+  getEffectivePickedQty(pl: PickList): number {
+    return (pl.totalPickedQty ?? 0) + (pl.totalAdditionalPickedQty ?? 0);
+  }
 
   filteredReadyPickLists = computed(() => {
     const term = this.searchTerm().trim().toLowerCase();
@@ -401,7 +417,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
       const totalQty = allLines.reduce((s, l) => s + (l.pickedQty || 0), 0);
       const pickListRows = pickLists.map((pl) => {
-        const qty = pl.totalPickedQty ?? 0;
+        const qty = this.getEffectivePickedQty(pl);
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:8px;background:#f8fafc;margin-top:6px">
           <span style="font-size:12px;font-weight:600">${pl.pickListNo}</span>
           <span style="font-size:11px;color:#0f766e;font-weight:700">${qty} pcs</span>
