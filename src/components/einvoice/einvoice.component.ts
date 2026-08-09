@@ -16,7 +16,9 @@ import { CANCEL_REASONS, CompanySettings, INDIA_STATE_CODES } from '../../models
 import { InvoiceService } from '../../services/invoice.service';
 import { EInvoiceService } from '../../services/einvoice.service';
 import { CompanySettingsService } from '../../services/company-settings.service';
+import { ClientService } from '../../services/client.service';
 import { LoadingService } from '../../services/loading.service';
+import { exportInvoicesToTally } from './tally-export.util';
 
 type FilterTab = 'all' | 'pending' | 'generated' | 'cancelled';
 
@@ -31,8 +33,12 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   private invoiceService = inject(InvoiceService);
   private einvoiceService = inject(EInvoiceService);
   private companySettingsService = inject(CompanySettingsService);
+  private clientService = inject(ClientService);
   protected loadingService = inject(LoadingService);
   private subs: Subscription[] = [];
+
+  clientCodeByClientId = signal<Map<string, string>>(new Map());
+  isExportingTally = signal(false);
 
   mode = signal<'list' | 'view'>('list');
   filterTab = signal<FilterTab>('all');
@@ -115,6 +121,13 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     this.subs.push(
       this.companySettingsService.getCompanySettings().subscribe((s) => {
         this.companySettings.set(s);
+      })
+    );
+    this.subs.push(
+      this.clientService.getClients().subscribe((clients) => {
+        const map = new Map<string, string>();
+        for (const c of clients) if (c.id) map.set(c.id, c.clientCode || '');
+        this.clientCodeByClientId.set(map);
       })
     );
   }
@@ -283,6 +296,24 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       win.document.write(html);
       win.document.close();
       setTimeout(() => win.print(), 700);
+    }
+  }
+
+  async exportInvoiceTally(invoice: Invoice): Promise<void> {
+    await exportInvoicesToTally([invoice], this.clientCodeByClientId(), `TallyInvoice_${invoice.invoiceNo}`);
+  }
+
+  async exportAllInvoicesTally(): Promise<void> {
+    const eligible = this.invoices().filter((i) => i.eInvoiceStatus !== 'cancelled');
+    if (!eligible.length) {
+      Swal.fire('No Invoices', 'There are no eligible invoices to export.', 'info');
+      return;
+    }
+    this.isExportingTally.set(true);
+    try {
+      await exportInvoicesToTally(eligible, this.clientCodeByClientId(), 'TallyInvoice_All');
+    } finally {
+      this.isExportingTally.set(false);
     }
   }
 
