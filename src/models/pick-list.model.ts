@@ -68,6 +68,12 @@ export interface PickListLine {
   // True only for lines created ad-hoc during Party-wise scanning of a
   // barcode that wasn't part of the originally generated pick list.
   isAdditional?: boolean;
+  // Cumulative quantity from this line already carried into some Packing
+  // List (a Pick List — Party-wise in particular — can be packed in several
+  // batches over time, so this can be less than pickedQty). Used to compute
+  // how much is still "picked but not yet packed" when generating the next
+  // Packing List, so the same physical units are never packed twice.
+  packedIntoPackingListsQty?: number;
 }
 
 export type PickListType = 'direct' | 'combined' | 'itemwise' | 'party';
@@ -80,13 +86,23 @@ export interface PickList {
   salesNos: string[];
   clientId: string;
   clientName: string;
-  status: 'Draft' | 'Pending' | 'Partial' | 'Completed' | 'Packed';
+  // A Pick List may be packed in several batches, generating many Packing
+  // Lists over time (see PackingListService.createGeneratedPackingList) — so
+  // 'Completed' here means every required unit has actually flowed through
+  // to a Packing List, not merely that one Packing List was made. There is
+  // no "already packed, can't pack again" terminal state for a Pick List.
+  status: 'Draft' | 'Pending' | 'Partial' | 'Completed';
   totalRequiredQty?: number;
   totalPickedQty?: number;
   totalPendingQty?: number;
   // Sum of pickedQty across isAdditional lines — kept separate from
   // totalPickedQty so completion % still reflects genuine SO fulfillment.
   totalAdditionalPickedQty?: number;
+  // Sum of packedIntoPackingListsQty across lines — how much of this Pick
+  // List's picked quantity has actually been carried into some Packing List
+  // so far. Drives Party-wise status: Completed only once this reaches
+  // totalRequiredQty, not merely once picking itself is done.
+  totalPackedIntoPackingListsQty?: number;
   pickableLineCount?: number;
   completedLineCount?: number;
   orderSummaries?: PickListOrderSummary[];
@@ -94,10 +110,6 @@ export interface PickList {
   legacyPickingPending?: boolean;
   items: PickListLine[];
   remarks?: string;
-  // Set once this pick list has been combined/converted into a Packing List,
-  // so it can't be picked again for another packing list.
-  packedIntoPackingListId?: string;
-  packedIntoPackingListNo?: string;
   // Stamped by the explicit "Complete Pick List" action (Party-wise type),
   // which force-closes a list regardless of remaining pending quantity.
   finalizedAt?: number;

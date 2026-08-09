@@ -7,6 +7,7 @@ import {
   docData,
   getDoc,
   getDocs,
+  increment,
   limit,
   orderBy,
   query,
@@ -30,12 +31,14 @@ import {
   PackingScanResult,
 } from '../models/packing-list.model';
 import { InventoryService } from './inventory.service';
+import { PickListService } from './pick-list.service';
 import { fetchAllDocs } from './firestore-pagination.util';
 
 @Injectable({ providedIn: 'root' })
 export class PackingListService {
   private firestore = inject(Firestore);
   private inventoryService = inject(InventoryService);
+  private pickListService = inject(PickListService);
   private packingRef = collection(this.firestore, 'packingLists');
   private inventoryRef = collection(this.firestore, 'inventory');
 
@@ -84,6 +87,33 @@ export class PackingListService {
     return snap.docs.map((docSnap) => this.normalizePackingList({ id: docSnap.id, ...docSnap.data() }));
   }
 
+  // Matches on both the singular `pickListId` (single-flow / legacy) and the
+  // `pickListIds` array (combine flow, where a source Pick List may not be
+  // pickListIds[0]) — a fresh Firestore read, always current, unlike the
+  // component's cached `packingLists` signal.
+  async getPackingListsReferencingPickListOnce(pickListId: string): Promise<PackingList[]> {
+    const [bySingular, byArray] = await Promise.all([
+      getDocs(query(this.packingRef, where('pickListId', '==', pickListId))),
+      getDocs(query(this.packingRef, where('pickListIds', 'array-contains', pickListId))),
+    ]);
+    const byId = new Map<string, PackingList>();
+    for (const docSnap of [...bySingular.docs, ...byArray.docs]) {
+      byId.set(docSnap.id, this.normalizePackingList({ id: docSnap.id, ...docSnap.data() }));
+    }
+    return [...byId.values()];
+  }
+
+  // A Pick List may be packed in several batches over time (many Packing
+  // Lists from one Pick List is expected, not a bug — see
+  // PickListService.computeEffectiveStatus). So there is no "claim the whole
+  // Pick List" guard here. What must still never happen is packing the SAME
+  // physical units twice: each source line carries `sourcePickListId` (which
+  // Pick List it came from) so buildPackableLines() can compute how much of
+  // that line's picked quantity is still un-packed (pickedQty minus
+  // packedIntoPackingListsQty), and this method bumps that counter on the
+  // source line right alongside creating the Packing List content, so a
+  // later "Generate Packing List" call against the same still-open Pick List
+  // only ever offers the newly-picked remainder.
   async createGeneratedPackingList(input: {
     packingListNo: string;
     pickListIds: string[];
@@ -94,13 +124,7 @@ export class PackingListService {
     clientName: string;
     packingMode: PackingMode;
     remarks?: string;
-    lines: PickListLine[];
-    // When true, every source pick list is atomically flipped to status
-    // 'Packed' in the same batch as the packing-list creation — used by the
-    // "combine multiple pick lists" flow so a pick list can't be combined
-    // twice. The original single-pick-list-to-N-packing-lists flow leaves
-    // this false, preserving its existing behavior.
-    markSourcePickListsPacked?: boolean;
+    lines: Array<PickListLine & { sourcePickListId: string }>;
   }): Promise<string> {
     const normalizedLines = this.buildPackableLines(input.lines);
     if (!normalizedLines.length) {
@@ -112,6 +136,21 @@ export class PackingListService {
 
     const summary = this.buildSummary(normalizedLines, [], input.clientName);
     const packingListDoc = doc(this.packingRef);
+
+    // How much of each source Pick List line's picked quantity is being
+    // claimed into this Packing List, keyed by (pickListId, lineId).
+    const claimedBySourceLine = new Map<string, { pickListId: string; lineId: string; qty: number }>();
+    for (const source of input.lines) {
+      const cappedPickedQty = Math.max(0, Math.min(Number(source.pickedQty) || 0, Number(source.requiredQty) || Number(source.pickedQty) || 0));
+      const remaining = Math.max(0, cappedPickedQty - (Number(source.packedIntoPackingListsQty) || 0));
+      const barcode = String(source.barcode ?? '').trim();
+      if (!barcode || remaining <= 0 || !source.sourcePickListId || !source.lineId) continue;
+      claimedBySourceLine.set(`${source.sourcePickListId}||${source.lineId}`, {
+        pickListId: source.sourcePickListId,
+        lineId: source.lineId,
+        qty: remaining,
+      });
+    }
 
     const operations: Array<(batch: WriteBatch) => void> = [
       (batch) => batch.set(packingListDoc, this.stripUndefined({
@@ -144,17 +183,22 @@ export class PackingListService {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }))),
-      ...(input.markSourcePickListsPacked
-        ? pickListIds.map((pickListId) => (batch: WriteBatch) => batch.update(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
-            status: 'Packed',
-            packedIntoPackingListId: packingListDoc.id,
-            packedIntoPackingListNo: input.packingListNo,
-            updatedAt: serverTimestamp(),
-          })))
-        : []),
+      ...[...claimedBySourceLine.values()].map(({ pickListId, lineId, qty }) => (batch: WriteBatch) =>
+        batch.update(doc(this.firestore, `pickLists/${pickListId}/lines/${lineId}`), {
+          packedIntoPackingListsQty: increment(qty),
+          updatedAt: serverTimestamp(),
+        })),
     ];
 
     await this.commitInChunks(operations);
+
+    // Recompute each affected Pick List's own totals/status now that its
+    // lines' packedIntoPackingListsQty changed — see computeEffectiveStatus:
+    // a 'party' Pick List only reaches 'Completed' once fully packed, so this
+    // is often the actual trigger for that transition, not a scan.
+    const affectedPickListIds = [...new Set([...claimedBySourceLine.values()].map((c) => c.pickListId))];
+    await Promise.all(affectedPickListIds.map((id) => this.pickListService.recalculatePickListStatus(id)));
+
     return packingListDoc.id;
   }
 
@@ -637,7 +681,12 @@ export class PackingListService {
     const aggregated = new Map<string, PackingListLine>();
 
     for (const source of lines) {
-      const pickedQty = Math.max(0, Math.min(Number(source.pickedQty) || 0, Number(source.requiredQty) || Number(source.pickedQty) || 0));
+      const cappedPickedQty = Math.max(0, Math.min(Number(source.pickedQty) || 0, Number(source.requiredQty) || Number(source.pickedQty) || 0));
+      // A Pick List can be packed in several batches over time — only the
+      // portion picked since the last Packing List was generated from this
+      // line goes into the new one, so the same physical units are never
+      // packed twice. See PickListLine.packedIntoPackingListsQty.
+      const pickedQty = Math.max(0, cappedPickedQty - (Number(source.packedIntoPackingListsQty) || 0));
       const barcode = String(source.barcode ?? '').trim();
       if (!barcode || pickedQty <= 0) continue;
 
@@ -804,6 +853,8 @@ export class PackingListService {
       qcVerifiedAt: raw?.qcVerifiedAt,
       stockDeducted: raw?.stockDeducted === true,
       remarks: raw?.remarks,
+      dcGeneratedKeys: Array.isArray(raw?.dcGeneratedKeys) ? raw.dcGeneratedKeys.map((k: any) => String(k)) : [],
+      invoiceId: raw?.invoiceId ? String(raw.invoiceId) : undefined,
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,
     };

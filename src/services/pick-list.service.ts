@@ -28,6 +28,7 @@ import type {
   PickListLineItem,
   PickListOrderSummary,
   PickListScanResult,
+  PickListType,
 } from '../models/pick-list.model';
 import type { InventoryItem } from '../models/inventory.model';
 import { InventoryService } from './inventory.service';
@@ -111,7 +112,7 @@ export class PickListService {
       throw new Error('no_scannable_lines');
     }
 
-    const summary = this.buildSummary(normalizedLines);
+    const summary = this.buildSummary(normalizedLines, input.type);
     const pickListDoc = doc(this.plRef);
     const salesOrderIds = [...new Set(normalizedLines.map((line) => line.salesOrderId))];
     const salesNos = [...new Set(normalizedLines.map((line) => line.salesNo))];
@@ -252,7 +253,7 @@ export class PickListService {
       }));
     }
 
-    const summary = this.buildSummary(resetLines);
+    const summary = this.buildSummary(resetLines, pickList.type);
     const operations: Array<(batch: WriteBatch) => void> = [
       ...resetLines.map((line) => (batch: WriteBatch) => batch.set(this.lineDoc(pickListId, line.lineId), this.stripUndefined({
         ...line,
@@ -581,17 +582,15 @@ export class PickListService {
       this.getPickListLinesOnce(pickListId),
     ]);
     if (!pickList) return;
-    // Once combined into a Packing List, a pick list's status must not be
-    // recomputed back to 'Completed' — 'Packed' is a one-way terminal state.
-    if (pickList.status === 'Packed') return;
 
-    const summary = this.buildSummary(lines);
+    const summary = this.buildSummary(lines, pickList.type);
     await updateDoc(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
       status: summary.status,
       totalRequiredQty: summary.totalRequiredQty,
       totalPickedQty: summary.totalPickedQty,
       totalPendingQty: summary.totalPendingQty,
       totalAdditionalPickedQty: summary.totalAdditionalPickedQty,
+      totalPackedIntoPackingListsQty: summary.totalPackedIntoPackingListsQty,
       pickableLineCount: summary.pickableLineCount,
       completedLineCount: summary.completedLineCount,
       orderSummaries: summary.orderSummaries,
@@ -604,22 +603,20 @@ export class PickListService {
    * Explicit "Complete Pick List" action for Party-wise lists — snapshots
    * whatever quantity has actually been scanned as the picked total and
    * marks the list ready for Packing, regardless of remaining pending
-   * quantity. Unlike the old behavior, this does NOT force status to
-   * 'Completed': the real completion state (Completed only when every
-   * pickable line's requiredQty was met, Partial otherwise) is preserved
-   * so downstream screens report and pack the true picked quantity, not
-   * the original Sales Order quantity.
+   * quantity. This does NOT force status to 'Completed': the real
+   * completion state is preserved (via computeEffectiveStatus — for a
+   * 'party' list, Completed only once every required unit has actually
+   * flowed into a Packing List, Partial otherwise) so downstream screens
+   * report and pack the true picked quantity, not the original Sales Order
+   * quantity.
    *
-   * `finalizedAt` is an eligibility/audit marker only — it does NOT lock
-   * the list from further scanning (see packing-list.component.ts
-   * completedPickLists filter, which uses it to gate Packing readiness).
-   * A 'Partial' list, finalized or not, stays fully resumable — a user may
-   * come back later and pick more of the pending Sales Order items or scan
-   * new additional items; each scan updates totals/status live regardless
-   * of finalizedAt. The only true terminal state is 'Packed' (the list has
-   * already been copied into a Packing List, whose line snapshot can never
-   * see later scans) — see the `pickList.status === 'Packed'` guard inside
-   * processPartyScan() and pick-list.component.ts hasPickableQty().
+   * `finalizedAt` is an eligibility marker only — it does NOT lock the list
+   * from further scanning, and does NOT prevent generating more Packing
+   * Lists from it later (a Pick List may be packed in several batches — see
+   * PackingListService.createGeneratedPackingList). A 'Partial' list,
+   * finalized or not, stays fully resumable — a user may come back later
+   * and pick more of the pending Sales Order items or scan new additional
+   * items; each scan updates totals/status live regardless of finalizedAt.
    */
   async finalizePickList(pickListId: string, user: PickListClaimUser): Promise<PickList | null> {
     const [pickList, lines] = await Promise.all([
@@ -627,9 +624,8 @@ export class PickListService {
       this.getPickListLinesOnce(pickListId),
     ]);
     if (!pickList) return null;
-    if (pickList.status === 'Packed') return pickList;
 
-    const summary = this.buildSummary(lines);
+    const summary = this.buildSummary(lines, pickList.type);
     const now = Date.now();
     const finalStatus = summary.status === 'Completed' ? 'Completed' : 'Partial';
 
@@ -639,6 +635,7 @@ export class PickListService {
       totalPickedQty: summary.totalPickedQty,
       totalPendingQty: summary.totalPendingQty,
       totalAdditionalPickedQty: summary.totalAdditionalPickedQty,
+      totalPackedIntoPackingListsQty: summary.totalPackedIntoPackingListsQty,
       pickableLineCount: summary.pickableLineCount,
       completedLineCount: summary.completedLineCount,
       orderSummaries: summary.orderSummaries,
@@ -740,10 +737,6 @@ export class PickListService {
 
       if (!pickListSnap.exists()) throw new Error('picklist_not_found');
       const pickList = this.normalizePickList({ id: pickListSnap.id, ...pickListSnap.data() });
-      // 'Partial' — even after the explicit "Complete Pick List" action — stays
-      // scannable; only a Pick List already converted into a Packing List
-      // ('Packed') is a true dead end, since that snapshot can't see new scans.
-      if (pickList.status === 'Packed') throw new Error('picklist_packed');
 
       const liveLine = lineSnap.exists()
         ? this.normalizeLine({ lineId: lineSnap.id, ...lineSnap.data() })
@@ -810,9 +803,11 @@ export class PickListService {
             };
           });
 
-      const nextStatus = this.computePickListStatus(
+      const nextStatus = this.computeEffectiveStatus(
+        pickList.type,
         pickList.totalRequiredQty || 0,
         nextTotalPickedQty,
+        pickList.totalPackedIntoPackingListsQty || 0,
         pickList.pickableLineCount || 0,
         nextCompletedLineCount
       );
@@ -953,7 +948,7 @@ export class PickListService {
           totalPickedQty: orderSummaries.reduce((sum, summary) => sum + summary.pickedQty, 0),
           totalPendingQty: orderSummaries.reduce((sum, summary) => sum + summary.pendingQty, 0),
         }
-      : this.buildSummary(items);
+      : this.buildSummary(items, raw?.type);
 
     return {
       id: raw?.id,
@@ -972,6 +967,7 @@ export class PickListService {
       totalPickedQty: Number(raw?.totalPickedQty) || fallbackSummary.totalPickedQty || 0,
       totalPendingQty: Number(raw?.totalPendingQty) || fallbackSummary.totalPendingQty || 0,
       totalAdditionalPickedQty: Number(raw?.totalAdditionalPickedQty) || 0,
+      totalPackedIntoPackingListsQty: Number(raw?.totalPackedIntoPackingListsQty) || 0,
       pickableLineCount: Number(raw?.pickableLineCount) || this.countPickableLines(items),
       completedLineCount: Number(raw?.completedLineCount) || this.countCompletedPickableLines(items),
       orderSummaries: orderSummaries.length ? orderSummaries : this.buildOrderSummaries(items),
@@ -979,8 +975,6 @@ export class PickListService {
       legacyPickingPending,
       items,
       remarks: raw?.remarks ?? '',
-      packedIntoPackingListId: raw?.packedIntoPackingListId,
-      packedIntoPackingListNo: raw?.packedIntoPackingListNo,
       finalizedAt: raw?.finalizedAt != null ? Number(raw.finalizedAt) || 0 : undefined,
       finalizedByUserId: raw?.finalizedByUserId,
       finalizedByUsername: raw?.finalizedByUsername,
@@ -1034,6 +1028,7 @@ export class PickListService {
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,
       isAdditional: raw?.isAdditional === true,
+      packedIntoPackingListsQty: Math.max(0, Number(raw?.packedIntoPackingListsQty) || 0),
     };
 
     return {
@@ -1089,7 +1084,7 @@ export class PickListService {
     return line.claimedByUserId === userId;
   }
 
-  private buildSummary(lines: PickListLine[]) {
+  private buildSummary(lines: PickListLine[], type?: PickListType) {
     const normalizedLines = lines.map((line) => this.normalizeLine(line));
     const orderSummaries = this.buildOrderSummaries(normalizedLines);
     const pickableLines = normalizedLines.filter((line) => this.isSummaryPickable(line));
@@ -1099,6 +1094,8 @@ export class PickListService {
     const totalAdditionalPickedQty = normalizedLines
       .filter((line) => line.isAdditional)
       .reduce((sum, line) => sum + line.pickedQty, 0);
+    const totalPackedIntoPackingListsQty = normalizedLines
+      .reduce((sum, line) => sum + Math.min(line.packedIntoPackingListsQty || 0, line.pickedQty || 0), 0);
     const pickableLineCount = pickableLines.length;
     const completedLineCount = pickableLines.filter((line) => line.remainingQty <= 0).length;
 
@@ -1107,9 +1104,10 @@ export class PickListService {
       totalPickedQty,
       totalPendingQty,
       totalAdditionalPickedQty,
+      totalPackedIntoPackingListsQty,
       pickableLineCount,
       completedLineCount,
-      status: this.computePickListStatus(totalRequiredQty, totalPickedQty, pickableLineCount, completedLineCount),
+      status: this.computeEffectiveStatus(type, totalRequiredQty, totalPickedQty, totalPackedIntoPackingListsQty, pickableLineCount, completedLineCount),
       orderSummaries,
       items: normalizedLines.map((line) => this.normalizeLine(line)),
     };
@@ -1168,6 +1166,31 @@ export class PickListService {
     if (pickableLineCount <= 0 || totalRequiredQty <= 0) return 'Pending';
     if (completedLineCount >= pickableLineCount || totalPickedQty >= totalRequiredQty) return 'Completed';
     if (totalPickedQty <= 0) return 'Draft';
+    return 'Partial';
+  }
+
+  // Party-wise Pick Lists can be packed in several batches (many Packing
+  // Lists over time — see PackingListService.createGeneratedPackingList), so
+  // finishing the scanning/picking step alone must not report 'Completed':
+  // that would suggest the whole Pick List is done and ready to ship when
+  // most of it might still be sitting unpacked. For type 'party', 'Completed'
+  // is reserved for "every required unit has actually been carried into a
+  // Packing List" — everything short of that is 'Partial' (or the normal
+  // Pending/Draft "nothing happened yet" states). Other pick list types keep
+  // the original picking-only status, since they don't support multi-batch
+  // packing today.
+  private computeEffectiveStatus(
+    type: PickListType | undefined,
+    totalRequiredQty: number,
+    totalPickedQty: number,
+    totalPackedIntoPackingListsQty: number,
+    pickableLineCount: number,
+    completedLineCount: number
+  ): PickList['status'] {
+    const pickingStatus = this.computePickListStatus(totalRequiredQty, totalPickedQty, pickableLineCount, completedLineCount);
+    if (type !== 'party') return pickingStatus;
+    if (pickingStatus === 'Pending' || pickingStatus === 'Draft') return pickingStatus;
+    if (totalPackedIntoPackingListsQty >= totalRequiredQty) return 'Completed';
     return 'Partial';
   }
 

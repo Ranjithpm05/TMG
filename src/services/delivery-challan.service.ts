@@ -1,7 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import {
   Firestore,
-  addDoc,
   collection,
   doc,
   getDocs,
@@ -35,37 +34,66 @@ export class DeliveryChallanService {
     return snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() }));
   }
 
+  // Atomically enforces "at most one DC per (Packing List, Sales Order)" —
+  // a plain check-then-create (even with a fresh Firestore read right before)
+  // still has a race window between two near-simultaneous calls (double
+  // click, two tabs). A transaction closes it: the packing list doc's
+  // `dcGeneratedKeys` array is read and verified inside the same transaction
+  // that creates the DC and appends the key, so Firestore aborts/retries one
+  // of two concurrent attempts instead of letting both succeed. Throws
+  // 'already_has_dc' if this (packingListId, salesOrderId) combination was
+  // already issued a DC — callers should surface a clear message rather than
+  // silently creating a duplicate. Pass `allowDuplicate: true` only for an
+  // explicit, user-confirmed "Generate New DC" override (past a warning
+  // dialog) — the default stays guarded so an accidental double-click can't
+  // silently create a second DC.
   async createDC(
     input: Omit<DeliveryChallan, 'id' | 'dcNo' | 'dcSeq' | 'packedOn' | 'createdAt' | 'updatedAt'>,
+    options?: { allowDuplicate?: boolean },
   ): Promise<DeliveryChallan> {
-    const { dcNo, dcSeq } = await this.generateNextDcNo();
-    const data = {
-      ...input,
-      dcNo,
-      dcSeq,
-      packedOn: serverTimestamp(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    const docRef = await addDoc(this.dcRef, data);
-    return { id: docRef.id, ...data };
-  }
-
-  private async generateNextDcNo(): Promise<{ dcNo: string; dcSeq: number }> {
+    const dcKey = input.salesOrderId || '__all__';
+    const packingListRef = doc(this.firestore, `packingLists/${input.packingListId}`);
     const counterRef = doc(this.firestore, 'counters/dcCounter');
+    const dcDocRef = doc(this.dcRef);
     const fyCode = this.getFyCode();
 
-    return runTransaction(this.firestore, async (transaction) => {
-      const snap = await transaction.get(counterRef);
-      const currentSeq = snap.exists() ? (Number(snap.data()?.['seq']) || 0) : 0;
+    const data = await runTransaction(this.firestore, async (transaction) => {
+      const packingSnap = await transaction.get(packingListRef);
+      if (!packingSnap.exists()) throw new Error('packinglist_not_found');
+
+      const existingKeys: string[] = Array.isArray(packingSnap.data()?.['dcGeneratedKeys'])
+        ? packingSnap.data()!['dcGeneratedKeys']
+        : [];
+      if (existingKeys.includes(dcKey) && !options?.allowDuplicate) throw new Error('already_has_dc');
+
+      const counterSnap = await transaction.get(counterRef);
+      const currentSeq = counterSnap.exists() ? (Number(counterSnap.data()?.['seq']) || 0) : 0;
       const nextSeq = currentSeq + 1;
-      if (snap.exists()) {
+
+      const dcData = {
+        ...input,
+        dcNo: `DCC${fyCode}-${String(nextSeq).padStart(4, '0')}`,
+        dcSeq: nextSeq,
+        packedOn: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      transaction.set(dcDocRef, dcData);
+      transaction.update(packingListRef, {
+        dcGeneratedKeys: [...new Set([...existingKeys, dcKey])],
+        updatedAt: serverTimestamp(),
+      });
+      if (counterSnap.exists()) {
         transaction.update(counterRef, { seq: nextSeq, updatedAt: serverTimestamp() });
       } else {
         transaction.set(counterRef, { seq: nextSeq, fy: fyCode, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
       }
-      return { dcNo: `DCC${fyCode}-${String(nextSeq).padStart(4, '0')}`, dcSeq: nextSeq };
+
+      return dcData;
     });
+
+    return { id: dcDocRef.id, ...data };
   }
 
   private getFyCode(): string {

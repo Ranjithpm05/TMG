@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { firstValueFrom, Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
 import { PickList, PickListLine } from '../../models/pick-list.model';
 import { PackingCarton, PackingList, PackingListLine, PackingPartyProgress } from '../../models/packing-list.model';
@@ -59,6 +59,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   // ─── Live-pack state ───────────────────────────────────────────────────────
   livePackingList = signal<PackingList | null>(null);
   liveLines = signal<PackingListLine[]>([]);
+  liveMrpByBarcode = signal<Map<string, number>>(new Map());
 
   isLoading = signal(true);
   isSubmitting = signal(false);
@@ -94,25 +95,31 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   // ─── Computed ──────────────────────────────────────────────────────────────
 
+  // How much of a Pick List's picked quantity hasn't been carried into any
+  // Packing List yet. A Pick List may be packed in several batches over
+  // time (many Packing Lists from one Pick List is normal — see
+  // PickListService.computeEffectiveStatus), so having existing Packing
+  // Lists does NOT make a Pick List ineligible; only running out of
+  // un-packed quantity does.
+  getRemainingToPackQty(pl: PickList): number {
+    return Math.max(0, this.getEffectivePickedQty(pl) - (pl.totalPackedIntoPackingListsQty ?? 0));
+  }
+
   // A Pick List is ready to pack once it's actually 'Completed', or once a
   // Party-wise "Complete Pick List" click marked it 'Partial' + finalizedAt —
   // the user has explicitly said "pack what's picked so far", so it must flow
-  // to Packing/DC/Invoice even though not every requested unit was picked.
-  // This does NOT stop the source Pick List from being resumed for further
-  // scanning afterwards (see pick-list.component.ts hasPickableQty()) — only
-  // 'Packed' (already converted) is a true dead end. See finalizePickList().
+  // to Packing/DC/Invoice even though not every requested unit was picked —
+  // AND it still has some picked-but-not-yet-packed quantity to offer.
   completedPickLists = computed(() =>
     this.pickLists().filter((pl) =>
       (pl.status === 'Completed' || (pl.status === 'Partial' && !!pl.finalizedAt))
-      && ((pl.totalPickedQty ?? 0) + (pl.totalAdditionalPickedQty ?? 0)) > 0
+      && this.getRemainingToPackQty(pl) > 0
     )
   );
 
-  // Completed pick lists not yet referenced by any packing list (old single-flow
-  // or new combine-flow) — the only ones safe to offer for combining.
-  combineEligiblePickLists = computed(() =>
-    this.completedPickLists().filter((pl) => this.getPackingListsForPickList(pl.id ?? '').length === 0)
-  );
+  // Same eligibility as "Ready to Pack" — a Pick List with existing Packing
+  // Lists can still be combined again for its remaining un-packed quantity.
+  combineEligiblePickLists = computed(() => this.completedPickLists());
 
   combineEligibleCustomers = computed((): { clientId: string; clientName: string }[] => {
     const map = new Map<string, string>();
@@ -330,9 +337,37 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.subscriptions.forEach((s) => s.unsubscribe());
   }
 
+  // getPickLists()/getPackingLists()/getDeliveryChallans()/getInvoices() are
+  // one-time reads (see their service-level comments) subscribed once in
+  // ngOnInit — they never update on their own after a mutation elsewhere in
+  // this component. Call the relevant refresh after any write that should be
+  // reflected immediately (e.g. Packing List generation, DC generation)
+  // instead of relying on a browser refresh to pick up the new state.
+  private async refreshPickListsAndPackingLists(): Promise<void> {
+    const [pickLists, packingLists] = await Promise.all([
+      firstValueFrom(this.pickListService.getPickLists()),
+      firstValueFrom(this.packingListService.getPackingLists()),
+    ]);
+    this.pickLists.set(pickLists);
+    this.packingLists.set(packingLists);
+  }
+
+  private async refreshDeliveryChallans(): Promise<void> {
+    this.deliveryChallans.set(await firstValueFrom(this.dcService.getDeliveryChallans()));
+  }
+
+  private async refreshInvoices(): Promise<void> {
+    this.invoices.set(await firstValueFrom(this.invoiceService.getInvoices()));
+  }
+
   // ─── Navigation helpers ────────────────────────────────────────────────────
 
   cancel() {
+    // Leaving a view/live-pack session is exactly when packing progress may
+    // have changed (cartons sealed, packing completed) without the list-level
+    // `packingLists`/`pickLists` signals (one-time reads) knowing about it.
+    // Fire-and-forget so the mode switch below isn't delayed by the read.
+    void this.refreshPickListsAndPackingLists();
     this.mode.set('list');
     this.viewPackingList.set(null);
     this.viewLines.set([]);
@@ -402,20 +437,23 @@ export class PackingListComponent implements OnInit, OnDestroy {
       const linesPerPickList = await Promise.all(pickLists.map(async (pl) => {
         await this.pickListService.ensureLegacyPickListLines(pl);
         const lines = await this.pickListService.getPickListLinesOnce(pl.id!);
-        return lines.filter((l) => (l.pickedQty || 0) > 0 && !!l.barcode);
+        return lines
+          .filter((l) => !!l.barcode && ((l.pickedQty || 0) - (l.packedIntoPackingListsQty || 0)) > 0)
+          .map((l) => ({ ...l, sourcePickListId: pl.id! }));
       }));
       const allLines = linesPerPickList.flat();
 
       if (!allLines.length) {
         await Swal.fire({
-          icon: 'warning',
-          title: 'No Packable Items',
-          text: 'The selected Pick Lists have no scanned barcode items ready to pack.',
+          icon: 'info',
+          title: 'Nothing New to Pack',
+          text: 'Every picked unit on the selected Pick Lists has already been carried into a Packing List.',
         });
         return;
       }
 
-      const totalQty = allLines.reduce((s, l) => s + (l.pickedQty || 0), 0);
+      const remainingQty = (l: PickListLine) => Math.max(0, (l.pickedQty || 0) - (l.packedIntoPackingListsQty || 0));
+      const totalQty = allLines.reduce((s, l) => s + remainingQty(l), 0);
       const pickListRows = pickLists.map((pl) => {
         const qty = this.getEffectivePickedQty(pl);
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:8px;background:#f8fafc;margin-top:6px">
@@ -464,10 +502,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
         clientName,
         packingMode: 'customer',
         lines: allLines,
-        markSourcePickListsPacked: true,
       });
 
       const created = await this.packingListService.getPackingListByIdOnce(packingListId);
+      await this.refreshPickListsAndPackingLists();
       this.combineClientId.set(null);
       this.selectedPickListIdsForCombine.set(new Set());
       this.listTab.set('packing');
@@ -501,54 +539,27 @@ export class PackingListComponent implements OnInit, OnDestroy {
   async initiateGenerate(pickList: PickList) {
     if (!pickList.id) return;
 
-    // Check for existing packing lists (may be multiple — one per customer)
-    const existingPackingLists = this.packingLists().filter((pl) => pl.pickListId === pickList.id);
-    if (existingPackingLists.length) {
-      const firstIncomplete = existingPackingLists.find((pl) => pl.status !== 'Completed');
-      const customerRows = existingPackingLists.map((pl) => {
-        const statusColor = pl.status === 'Completed' ? '#047857' : pl.status === 'Partial' ? '#b45309' : '#3730a3';
-        const statusBg = pl.status === 'Completed' ? '#d1fae5' : pl.status === 'Partial' ? '#fef3c7' : '#e0e7ff';
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:8px;background:#f8fafc;margin-top:6px">
-          <span style="font-size:12px;font-weight:600">${(pl.salesNos ?? []).join(', ')} — ${pl.clientName}</span>
-          <span style="font-size:10px;padding:2px 8px;border-radius:999px;background:${statusBg};color:${statusColor};font-weight:700">${pl.status}</span>
-        </div>`;
-      }).join('');
-      const result = await Swal.fire({
-        icon: 'info',
-        title: 'Packing Lists Already Exist',
-        html: `<div style="text-align:left;font-size:13px">
-          <p><strong>${pickList.pickListNo}</strong> has ${existingPackingLists.length} packing list${existingPackingLists.length !== 1 ? 's' : ''} generated.</p>
-          ${customerRows}
-        </div>`,
-        showCancelButton: true,
-        confirmButtonText: firstIncomplete
-          ? (firstIncomplete.totalPackedQty > 0 ? 'Continue Packing' : 'Start Packing')
-          : 'View Packing Lists',
-        cancelButtonText: 'Close',
-        confirmButtonColor: firstIncomplete ? '#16a34a' : '#4f46e5',
-      });
-      if (result.isConfirmed) {
-        if (firstIncomplete) await this.startPacking(firstIncomplete);
-        else await this.openView(existingPackingLists[0]);
-      }
-      return;
-    }
-
+    // A Pick List can be packed in several batches, so existing Packing
+    // Lists (shown separately via getPackingListsForPickList in the
+    // template) do NOT block generating another one — only how much picked
+    // quantity is still un-packed determines what's offered here.
     await this.pickListService.ensureLegacyPickListLines(pickList);
     const lines = await this.pickListService.getPickListLinesOnce(pickList.id);
-    const packableLines = lines.filter((l) => (l.pickedQty || 0) > 0 && !!l.barcode);
+    const packableLines = lines
+      .filter((l) => !!l.barcode && ((l.pickedQty || 0) - (l.packedIntoPackingListsQty || 0)) > 0)
+      .map((l) => ({ ...l, sourcePickListId: pickList.id! }));
 
     if (!packableLines.length) {
       await Swal.fire({
-        icon: 'warning',
-        title: 'No Packable Items',
-        text: 'This Pick List has no scanned barcode items ready to pack.',
+        icon: 'info',
+        title: 'Nothing New to Pack',
+        text: 'Every picked unit on this Pick List has already been carried into a Packing List. Pick more items to generate another batch.',
       });
       return;
     }
 
     // Group packable lines by customer (salesOrderId) — one packing list will be created per group
-    const customerGroupMap = new Map<string, { salesOrderId: string; salesNo: string; clientId: string; clientName: string; lines: PickListLine[] }>();
+    const customerGroupMap = new Map<string, { salesOrderId: string; salesNo: string; clientId: string; clientName: string; lines: Array<PickListLine & { sourcePickListId: string }> }>();
     for (const line of packableLines) {
       const key = line.salesOrderId;
       if (!customerGroupMap.has(key)) {
@@ -563,11 +574,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
       customerGroupMap.get(key)!.lines.push(line);
     }
     const customerGroups = [...customerGroupMap.values()];
+    const remainingQty = (l: PickListLine) => Math.max(0, (l.pickedQty || 0) - (l.packedIntoPackingListsQty || 0));
 
-    const totalQty = packableLines.reduce((s, l) => s + (l.pickedQty || 0), 0);
+    const totalQty = packableLines.reduce((s, l) => s + remainingQty(l), 0);
     const partCount = new Set(packableLines.map((l) => String(l.group ?? '').trim() || 'General')).size;
     const customerRows = customerGroups.map((g) => {
-      const qty = g.lines.reduce((s, l) => s + (l.pickedQty || 0), 0);
+      const qty = g.lines.reduce((s, l) => s + remainingQty(l), 0);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:8px;background:#f8fafc;margin-top:6px">
         <span style="font-size:12px;font-weight:600">${g.clientName} — ${g.salesNo}</span>
         <span style="font-size:11px;color:#0f766e;font-weight:700">${g.lines.length} lines · ${qty} pcs</span>
@@ -624,6 +636,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
       this.listTab.set('packing');
       const firstCreated = await this.packingListService.getPackingListByIdOnce(createdIds[0]);
+      await this.refreshPickListsAndPackingLists();
       if (!firstCreated) { this.mode.set('list'); return; }
 
       const nextStep = await Swal.fire({
@@ -681,6 +694,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const loaded = fresh ?? packingList;
     this.livePackingList.set(loaded);
     this.liveLines.set(lines);
+
+    const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean))] as string[];
+    const invItems = barcodes.length ? await this.inventoryService.getInventoryByBarcodes(barcodes) : [];
+    this.liveMrpByBarcode.set(new Map(invItems.map((inv) => [inv.barcode, Number(inv.price) || 0])));
+
     let agentName = loaded.agentName ?? '';
     if (!agentName && loaded.clientId) {
       const client = await this.clientService.getClientByIdOnce(loaded.clientId);
@@ -699,6 +717,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const firstPending = groups.findIndex((g) => g.lines.some((l) => l.status !== 'completed'));
     this.currentCustomerIndex.set(firstPending >= 0 ? firstPending : 0);
     this.scannerMessage.set('Scan carton box no to begin packing.');
+  }
+
+  getLineMrp(line: PackingListLine): number {
+    return this.liveMrpByBarcode().get(line.barcode ?? '') ?? 0;
   }
 
   // ─── Carton & scan actions ─────────────────────────────────────────────────
@@ -879,6 +901,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
   async generateInvoice(packingList: PackingList): Promise<void> {
     if (!packingList.id || this.isGeneratingInvoice()) return;
 
+    // Set only on an explicit "Generate New Invoice" override below —
+    // createInvoice() otherwise atomically rejects a second invoice for the
+    // same Packing List, closing the double-click/two-tab race a plain
+    // pre-check can't.
+    let allowDuplicateInvoice = false;
+
     const existingInvoices = await this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id);
     if (existingInvoices.length > 0) {
       const result = await Swal.fire({
@@ -896,6 +924,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
       });
       if (result.isConfirmed) { await this.reprintInvoice(existingInvoices[0]); return; }
       if (!result.isDenied) return;
+      allowDuplicateInvoice = true;
     }
 
     const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id);
@@ -1007,7 +1036,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
         igstRate: 0, igstAmount: 0, totalTaxAmount, roundOff, totalAmount,
         amountInWords: this.amountToWords(totalAmount),
         taxSummary: [{ hsnSac, taxableValue, cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount, igstRate: 0, igstAmount: 0 }],
-      });
+      }, { allowDuplicate: allowDuplicateInvoice });
+
+      await this.refreshInvoices();
 
       await Swal.fire({
         icon: 'success',
@@ -1026,7 +1057,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
         if (res.isDenied) this.downloadInvoiceExcel(invoice);
       });
     } catch (err: any) {
-      await Swal.fire({ icon: 'error', title: 'Invoice Generation Failed', text: err?.message ?? 'Unable to generate invoice.' });
+      const text = err?.message === 'already_has_invoice'
+        ? 'An invoice has already been generated for this Packing List.'
+        : err?.message ?? 'Unable to generate invoice.';
+      await Swal.fire({ icon: 'error', title: 'Invoice Generation Failed', text });
+      await this.refreshInvoices();
     } finally {
       this.isGeneratingInvoice.set(false);
     }
@@ -1200,6 +1235,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
     const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id);
 
+    // Set only when the user explicitly overrides an existing DC via
+    // "Generate New DC" below — createDC() otherwise atomically rejects a
+    // second DC for the same (Packing List, Sales Order), which is what
+    // stops an accidental duplicate (e.g. a double-click firing two
+    // near-simultaneous first-time generate calls before either completes).
+    let allowDuplicate = false;
+
     if (existingDCs.length > 0) {
       const result = await Swal.fire({
         icon: 'info',
@@ -1219,6 +1261,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         return;
       }
       if (!result.isDenied) return;
+      allowDuplicate = true;
     }
 
     this.isGeneratingDC.set(true);
@@ -1240,7 +1283,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
       if (partyProgress.length === 0) {
         const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
-        const dc = await this.createDCForParty(loaded, lines, client, '', '', loaded.clientName, agentName, transport);
+        const dc = await this.createDCForParty(loaded, lines, client, '', '', loaded.clientName, agentName, transport, allowDuplicate);
         generatedDCs.push(dc);
       } else {
         for (const party of partyProgress) {
@@ -1249,15 +1292,20 @@ export class PackingListComponent implements OnInit, OnDestroy {
           const clientName = party.clientName || loaded.clientName;
           const clientId = party.clientId || loaded.clientId;
           const client = await this.clientService.getClientForDC(clientId, clientName);
-          const dc = await this.createDCForParty(loaded, partyLines, client, party.salesOrderId, party.salesNo, clientName, agentName, transport);
+          const dc = await this.createDCForParty(loaded, partyLines, client, party.salesOrderId, party.salesNo, clientName, agentName, transport, allowDuplicate);
           generatedDCs.push(dc);
         }
       }
 
+      await this.refreshDeliveryChallans();
       await this.printDCsWithLabels(generatedDCs, loaded);
       this.cancel();
     } catch (err: any) {
-      await Swal.fire({ icon: 'error', title: 'DC Generation Failed', text: err?.message ?? 'Unable to generate Delivery Challan.' });
+      const text = err?.message === 'already_has_dc'
+        ? 'A DC has already been generated for this Packing List.'
+        : err?.message ?? 'Unable to generate Delivery Challan.';
+      await Swal.fire({ icon: 'error', title: 'DC Generation Failed', text });
+      await this.refreshDeliveryChallans();
     } finally {
       this.isGeneratingDC.set(false);
     }
@@ -1452,6 +1500,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     clientName: string,
     agentName: string,
     transport: string,
+    allowDuplicate = false,
   ): Promise<DeliveryChallan> {
     const packedLines = lines.filter((l) => l.packedQty > 0 || l.requiredQty > 0);
 
@@ -1508,7 +1557,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
       transport,
       items: [...rowMap.values()],
       sizes,
-    });
+    }, { allowDuplicate });
   }
 
   private async printDCsWithLabels(dcs: DeliveryChallan[], packingList: PackingList): Promise<void> {

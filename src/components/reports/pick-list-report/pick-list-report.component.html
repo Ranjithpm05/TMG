@@ -44,7 +44,7 @@
                 [class.bg-green-100]="row.pickListStatus === 'Completed'" [class.text-green-800]="row.pickListStatus === 'Completed'"
                 [class.bg-yellow-100]="row.pickListStatus === 'Partial'" [class.text-yellow-800]="row.pickListStatus === 'Partial'"
                 [class.bg-orange-100]="row.pickListStatus === 'Pending'" [class.text-orange-700]="row.pickListStatus === 'Pending'"
-                [class.bg-gray-100]="row.pickListStatus === 'Draft' || row.pickListStatus === 'Packed'" [class.text-gray-600]="row.pickListStatus === 'Draft' || row.pickListStatus === 'Packed'">{{ row.pickListStatus }}</span>
+                [class.bg-gray-100]="row.pickListStatus === 'Draft'" [class.text-gray-600]="row.pickListStatus === 'Draft'">{{ row.pickListStatus }}</span>
             </td>
             <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ formatDate(row.createdAt) }}</td>
             <td class="px-4 py-2 text-gray-700">{{ row.clientName }}</td>

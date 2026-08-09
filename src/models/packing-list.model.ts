@@ -96,6 +96,14 @@ export interface PackingList {
   qcVerifiedAt?: any;
   stockDeducted?: boolean;
   remarks?: string;
+  // Keys ("salesOrderId" or "__all__" for the no-party single-DC case) that
+  // already have a DC generated — checked-and-appended atomically inside
+  // DeliveryChallanService.createDC()'s transaction to prevent duplicate DCs
+  // for the same (Packing List, Sales Order) combination.
+  dcGeneratedKeys?: string[];
+  // Set atomically inside InvoiceService.createInvoice()'s transaction to
+  // prevent generating more than one Invoice per Packing List.
+  invoiceId?: string;
   createdAt?: any;
   updatedAt?: any;
 }

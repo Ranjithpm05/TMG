@@ -1,7 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import {
   Firestore,
-  addDoc,
   collection,
   doc,
   getDoc,
@@ -37,20 +36,52 @@ export class InvoiceService {
     return snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() }));
   }
 
+  // Atomically enforces "at most one Invoice per Packing List" the same way
+  // DeliveryChallanService.createDC() enforces at most one DC per (Packing
+  // List, Sales Order) — a transaction reads the packing list's `invoiceId`
+  // and aborts if already set, closing the double-click/two-tab race that a
+  // plain pre-check can't. Throws 'already_has_invoice' unless
+  // `options.allowDuplicate` is set (an explicit, user-confirmed "Generate
+  // New Invoice" override).
   async createInvoice(
-    input: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceSeq' | 'invoiceDate' | 'createdAt' | 'updatedAt'>
+    input: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceSeq' | 'invoiceDate' | 'createdAt' | 'updatedAt'>,
+    options?: { allowDuplicate?: boolean },
   ): Promise<Invoice> {
-    const { invoiceNo, invoiceSeq } = await this.generateNextInvoiceNo();
-    const data = {
-      ...input,
-      invoiceNo,
-      invoiceSeq,
-      invoiceDate: serverTimestamp(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    const docRef = await addDoc(this.invoicesRef, this.stripUndefined(data));
-    return { id: docRef.id, ...data };
+    const packingListRef = doc(this.firestore, `packingLists/${input.packingListId}`);
+    const counterRef = doc(this.firestore, 'counters/invoiceCounter');
+    const invoiceDocRef = doc(this.invoicesRef);
+    const fyCode = this.getFyCode();
+
+    const data = await runTransaction(this.firestore, async (transaction) => {
+      const packingSnap = await transaction.get(packingListRef);
+      if (!packingSnap.exists()) throw new Error('packinglist_not_found');
+      if (packingSnap.data()?.['invoiceId'] && !options?.allowDuplicate) throw new Error('already_has_invoice');
+
+      const counterSnap = await transaction.get(counterRef);
+      const currentSeq = counterSnap.exists() ? (Number(counterSnap.data()?.['seq']) || 0) : 0;
+      const nextSeq = currentSeq + 1;
+
+      const invoiceData = {
+        ...input,
+        invoiceNo: 'TMGC' + fyCode + '-' + String(nextSeq).padStart(4, '0'),
+        invoiceSeq: nextSeq,
+        invoiceDate: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      transaction.set(invoiceDocRef, this.stripUndefined(invoiceData));
+      transaction.update(packingListRef, { invoiceId: invoiceDocRef.id, updatedAt: serverTimestamp() });
+      if (counterSnap.exists()) {
+        transaction.update(counterRef, { seq: nextSeq, updatedAt: serverTimestamp() });
+      } else {
+        transaction.set(counterRef, { seq: nextSeq, fy: fyCode, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      }
+
+      return invoiceData;
+    });
+
+    return { id: invoiceDocRef.id, ...data };
   }
 
   async getInvoiceByIdOnce(invoiceId: string): Promise<Invoice | null> {
@@ -62,22 +93,6 @@ export class InvoiceService {
   async updateInvoice(invoiceId: string, updates: Partial<Invoice>): Promise<void> {
     const invoiceRef = doc(this.firestore, 'invoices', invoiceId);
     await updateDoc(invoiceRef, this.stripUndefined({ ...updates, updatedAt: serverTimestamp() }));
-  }
-
-  private async generateNextInvoiceNo(): Promise<{ invoiceNo: string; invoiceSeq: number }> {
-    const counterRef = doc(this.firestore, 'counters/invoiceCounter');
-    const fyCode = this.getFyCode();
-    return runTransaction(this.firestore, async (transaction) => {
-      const snap = await transaction.get(counterRef);
-      const currentSeq = snap.exists() ? (Number(snap.data()?.['seq']) || 0) : 0;
-      const nextSeq = currentSeq + 1;
-      if (snap.exists()) {
-        transaction.update(counterRef, { seq: nextSeq, updatedAt: serverTimestamp() });
-      } else {
-        transaction.set(counterRef, { seq: nextSeq, fy: fyCode, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-      }
-      return { invoiceNo: 'TMGC' + fyCode + '-' + String(nextSeq).padStart(4, '0'), invoiceSeq: nextSeq };
-    });
   }
 
   private getFyCode(): string {

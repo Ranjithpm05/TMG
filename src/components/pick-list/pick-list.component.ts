@@ -465,12 +465,8 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   getOpenPickListForOrder(orderId: string): PickList | null {
-    // 'Partial' stays "open" even after the explicit Party-wise "Complete Pick
-    // List" action (finalizedAt) — only 'Packed' (already converted into a
-    // Packing List) truly closes an order's pick list for further picking.
     return this.visiblePickLists().find((pickList) =>
       pickList.salesOrderIds.includes(orderId)
-      && pickList.status !== 'Packed'
       && (pickList.status !== 'Completed' || !!pickList.legacyPickingPending)
     ) ?? null;
   }
@@ -503,12 +499,12 @@ export class PickListComponent implements OnInit, OnDestroy {
 
   hasPickableQty(pickList: PickList | null | undefined): boolean {
     // 'Partial' stays resumable — including after the explicit Party-wise
-    // "Complete Pick List" action — so the user can keep scanning pending
-    // Sales Order items and additional items across sessions. Only 'Packed'
-    // (already converted into a Packing List, whose line snapshot won't see
-    // further scans) truly closes a Pick List for picking.
+    // "Complete Pick List" action, and even after Packing Lists have already
+    // been generated from it (a Pick List may be packed in several batches
+    // over time) — so the user can keep scanning pending Sales Order items
+    // and additional items across sessions.
     return !!pickList && (pickList.totalRequiredQty ?? 0) > 0
-      && pickList.status !== 'Pending' && pickList.status !== 'Completed' && pickList.status !== 'Packed';
+      && pickList.status !== 'Pending' && pickList.status !== 'Completed';
   }
 
   canStartPicking(pickList: PickList | null | undefined): boolean {
@@ -1471,8 +1467,6 @@ export class PickListComponent implements OnInit, OnDestroy {
         return { title: 'This line cannot be picked right now' };
       case 'line_completed':
         return { title: 'Quantity already completed' };
-      case 'picklist_packed':
-        return { title: 'Pick List already packed', text: 'This Pick List has been converted into a Packing List and can no longer accept scans.' };
       default:
         return { title: 'Scan failed', text: 'Please try again.' };
     }
