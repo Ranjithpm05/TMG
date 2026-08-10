@@ -923,6 +923,8 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     // Draw item rows
     items.forEach((item, idx) => {
       const descParts: string[] = [item.design?.styleNo ?? ''];
+      const color = item.design?.color?.trim();
+      if (color && color !== '-') descParts.push(color);
       const fabricDescription = this.printGetFabricDescription(item);
       if (fabricDescription)   descParts.push(fabricDescription);
       if (item.sleeveType)     descParts.push(this.printGetSleeveTypeAbbreviation(item.sleeveType));

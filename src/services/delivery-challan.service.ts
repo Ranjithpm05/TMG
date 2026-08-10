@@ -9,6 +9,7 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  updateDoc,
   where,
 } from '@angular/fire/firestore';
 import { from, Observable } from 'rxjs';
@@ -70,14 +71,14 @@ export class DeliveryChallanService {
       const currentSeq = counterSnap.exists() ? (Number(counterSnap.data()?.['seq']) || 0) : 0;
       const nextSeq = currentSeq + 1;
 
-      const dcData = {
+      const dcData = this.stripUndefined({
         ...input,
         dcNo: `DCC${fyCode}-${String(nextSeq).padStart(4, '0')}`,
         dcSeq: nextSeq,
         packedOn: serverTimestamp(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      };
+      });
 
       transaction.set(dcDocRef, dcData);
       transaction.update(packingListRef, {
@@ -94,6 +95,29 @@ export class DeliveryChallanService {
     });
 
     return { id: dcDocRef.id, ...data };
+  }
+
+  // Corrects data-quality gaps (e.g. sleeveType missing on DCs generated
+  // before that field existed) without touching quantities/totals — callers
+  // pass back the same items array with only the gap fields filled in.
+  async updateDCItems(dcId: string, items: DCItem[]): Promise<void> {
+    await updateDoc(doc(this.dcRef, dcId), this.stripUndefined({ items, updatedAt: serverTimestamp() }));
+  }
+
+  private stripUndefined<T>(value: T): T {
+    if (Array.isArray(value)) {
+      return value.filter((entry) => entry !== undefined).map((entry) => this.stripUndefined(entry)) as T;
+    }
+    if (value && typeof value === 'object') {
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) return value;
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([, entry]) => entry !== undefined)
+          .map(([key, entry]) => [key, this.stripUndefined(entry)])
+      ) as T;
+    }
+    return value;
   }
 
   private getFyCode(): string {
@@ -132,6 +156,7 @@ export class DeliveryChallanService {
             partName: String(item?.partName ?? ''),
             styleNo: String(item?.styleNo ?? ''),
             color: String(item?.color ?? ''),
+            sleeveType: item?.sleeveType ? String(item.sleeveType) : undefined,
             sizeQty: item?.sizeQty && typeof item.sizeQty === 'object' ? item.sizeQty : {},
             total: Number(item?.total) || 0,
             mrp: Number(item?.mrp) || 0,

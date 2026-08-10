@@ -2,6 +2,7 @@ export interface DCItem {
   partName: string;
   styleNo: string;
   color: string;
+  sleeveType?: string;
   sizeQty: Record<string, number>;
   total: number;
   mrp: number;

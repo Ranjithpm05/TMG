@@ -13,7 +13,7 @@ import { firstValueFrom, Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
 import { PickList, PickListLine } from '../../models/pick-list.model';
 import { PackingCarton, PackingList, PackingListLine, PackingPartyProgress } from '../../models/packing-list.model';
-import { DeliveryChallan } from '../../models/delivery-challan.model';
+import { DCItem, DeliveryChallan } from '../../models/delivery-challan.model';
 import { PickListService } from '../../services/pick-list.service';
 import { PackingListService } from '../../services/packing-list.service';
 import { ClientService } from '../../services/client.service';
@@ -1162,6 +1162,142 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   // ─── Print ─────────────────────────────────────────────────────────────────
 
+  async printReadyPickList(pickList: PickList) {
+    const lines = pickList.id ? await this.pickListService.getPickListLinesOnce(pickList.id) : pickList.items;
+    const html = this.buildReadyPickListPrintHtml(pickList, lines);
+    const win = window.open('', '_blank', 'width=1050,height=750');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+  }
+
+  private buildReadyPickListPrintHtml(pickList: PickList, lines: PickListLine[]): string {
+    const rankSize = (size: string) => {
+      const index = SIZE_ORDER.indexOf(size);
+      return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+    };
+
+    const printLines = lines
+      .map((line) => {
+        const pickedQty = Math.max(0, Number(line.pickedQty ?? 0) || 0);
+        const packedQty = Math.max(0, Number(line.packedIntoPackingListsQty ?? 0) || 0);
+        const toPackQty = Math.max(0, pickedQty - packedQty);
+        return {
+          salesNo: line.salesNo,
+          styleNo: line.styleNo,
+          color: line.color,
+          part: String(line.group ?? '').trim() || 'General',
+          size: String(line.size),
+          sleeveType: line.sleeveType ?? '',
+          barcode: line.barcode ?? '-',
+          pickedQty,
+          packedQty,
+          toPackQty,
+        };
+      })
+      .filter((line) => line.toPackQty > 0)
+      .sort((left, right) => {
+        const salesNoCompare = left.salesNo.localeCompare(right.salesNo, undefined, { numeric: true });
+        if (salesNoCompare !== 0) return salesNoCompare;
+        const styleCompare = left.styleNo.localeCompare(right.styleNo, undefined, { numeric: true });
+        if (styleCompare !== 0) return styleCompare;
+        const colorCompare = left.color.localeCompare(right.color, undefined, { numeric: true });
+        if (colorCompare !== 0) return colorCompare;
+        return rankSize(left.size) - rankSize(right.size);
+      });
+
+    const totals = printLines.reduce((sum, line) => ({
+      picked: sum.picked + line.pickedQty,
+      packed: sum.packed + line.packedQty,
+      toPack: sum.toPack + line.toPackQty,
+    }), { picked: 0, packed: 0, toPack: 0 });
+
+    const buildHeaderCell = (label: string, align: 'left' | 'center' | 'right' = 'left') =>
+      `<th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#ffffff;font-size:10px;font-weight:700;text-transform:uppercase;text-align:${align};letter-spacing:0.04em">${label}</th>`;
+
+    const htmlRows = printLines.map((line, index) => `
+        <tr style="background:${index % 2 === 0 ? '#ffffff' : '#f8fafc'}">
+          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:#64748b">${index + 1}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;font-weight:600;color:#334155">${line.salesNo}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;font-weight:700;color:#111827">${line.styleNo}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;color:#475569">${line.part}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;color:#475569">${line.color || '-'}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:#334155">${line.size}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;color:#475569">${line.sleeveType || '-'}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;font-family:'Courier New',monospace;font-size:10px;color:#334155">${line.barcode}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#15803d">${line.pickedQty}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:#64748b">${line.packedQty}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#0f766e">${line.toPackQty}</td>
+        </tr>`).join('');
+
+    const printedAtLabel = new Date().toLocaleString('en-IN');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Ready to Pack - ${pickList.pickListNo}</title>
+          <style>
+            body { font-family: Arial, sans-serif; font-size: 12px; margin: 18px; color: #0f172a; }
+            h1, p { margin: 0; }
+            .header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 12px; }
+            .meta { margin-top: 4px; color: #64748b; font-size: 11px; line-height: 1.5; }
+            .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 10px; }
+            .box { border: 1px solid #d7deea; background: #f8fafc; border-radius: 10px; padding: 10px 12px; }
+            .label { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: 0.04em; }
+            .value { margin-top: 5px; font-size: 20px; font-weight: 700; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            tfoot td { background: #eff6ff; font-weight: 700; }
+            @media print { body { margin: 10px; } .summary { gap: 8px; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 style="font-size:24px">Ready to Pack — ${pickList.pickListNo}</h1>
+              <p class="meta">${(pickList.salesNos ?? []).join(', ')} · ${pickList.clientName}</p>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase">Printed At</div>
+              <div style="margin-top:4px;font-size:12px;color:#0f172a">${printedAtLabel}</div>
+            </div>
+          </div>
+
+          <div class="summary">
+            <div class="box"><div class="label">Picked Qty</div><div class="value" style="color:#15803d">${totals.picked}</div></div>
+            <div class="box"><div class="label">Already Packed</div><div class="value" style="color:#64748b">${totals.packed}</div></div>
+            <div class="box"><div class="label">To Pack Now</div><div class="value" style="color:#0f766e">${totals.toPack}</div></div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                ${buildHeaderCell('#', 'center')}
+                ${buildHeaderCell('Order')}
+                ${buildHeaderCell('Style No')}
+                ${buildHeaderCell('Part')}
+                ${buildHeaderCell('Color')}
+                ${buildHeaderCell('Size', 'center')}
+                ${buildHeaderCell('Sleeve')}
+                ${buildHeaderCell('Barcode')}
+                ${buildHeaderCell('Picked', 'center')}
+                ${buildHeaderCell('Already Packed', 'center')}
+                ${buildHeaderCell('To Pack', 'center')}
+              </tr>
+            </thead>
+            <tbody>${htmlRows}</tbody>
+            <tfoot>
+              <tr>
+                <td colspan="8" style="padding:9px 10px;border:1px solid #d7deea;text-align:right">Totals</td>
+                <td style="padding:9px 10px;border:1px solid #d7deea;text-align:center;color:#15803d">${totals.picked}</td>
+                <td style="padding:9px 10px;border:1px solid #d7deea;text-align:center;color:#64748b">${totals.packed}</td>
+                <td style="padding:9px 10px;border:1px solid #d7deea;text-align:center;color:#0f766e">${totals.toPack}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </body>
+      </html>`;
+  }
+
   async printPackingList(packingList: PackingList) {
     if (!packingList.id) return;
     const [fresh, lines] = await Promise.all([
@@ -1257,7 +1393,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
         denyButtonColor: '#d97706',
       });
       if (result.isConfirmed) {
-        await this.printDCsWithLabels(existingDCs.sort((a, b) => a.dcSeq - b.dcSeq), packingList);
+        const refreshedDCs = await this.backfillDCSleeveTypes(existingDCs, packingList.id);
+        await this.printDCsWithLabels(refreshedDCs.sort((a, b) => a.dcSeq - b.dcSeq), packingList);
         return;
       }
       if (!result.isDenied) return;
@@ -1491,6 +1628,38 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   // ─── Private helpers ───────────────────────────────────────────────────────
 
+  // DCs generated before the Sleeve column existed have items with no
+  // sleeveType in their stored data (the pick list/packing list lines they
+  // were built from do carry it). Rather than silently recomputing an
+  // already-issued DC's quantities, this only fills the missing sleeveType
+  // per (partName, styleNo, color) from the current packing list lines and
+  // persists that one field back onto the same DC document/number.
+  private async backfillDCSleeveTypes(dcs: DeliveryChallan[], packingListId: string): Promise<DeliveryChallan[]> {
+    const needsBackfill = dcs.some((dc) => dc.items.some((item) => !item.sleeveType));
+    if (!needsBackfill) return dcs;
+
+    const lines = await this.packingListService.getPackingListLinesOnce(packingListId);
+    const sleeveByKey = new Map<string, string>();
+    for (const line of lines) {
+      if (!line.sleeveType) continue;
+      sleeveByKey.set(`${line.partName}||${line.styleNo}||${line.color}`, line.sleeveType);
+    }
+    if (!sleeveByKey.size) return dcs;
+
+    return Promise.all(dcs.map(async (dc) => {
+      let changed = false;
+      const items: DCItem[] = dc.items.map((item) => {
+        if (item.sleeveType) return item;
+        const sleeveType = sleeveByKey.get(`${item.partName}||${item.styleNo}||${item.color}`);
+        if (!sleeveType) return item;
+        changed = true;
+        return { ...item, sleeveType };
+      });
+      if (changed && dc.id) await this.dcService.updateDCItems(dc.id, items);
+      return changed ? { ...dc, items } : dc;
+    }));
+  }
+
   private async createDCForParty(
     packingList: PackingList,
     lines: PackingListLine[],
@@ -1509,19 +1678,20 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const mrpByBarcode = new Map<string, number>();
     for (const inv of invItems) mrpByBarcode.set(inv.barcode, Number(inv.price) || 0);
 
-    const rowMap = new Map<string, { partName: string; styleNo: string; color: string; sizeQty: Record<string, number>; total: number; mrp: number }>();
+    const rowMap = new Map<string, { partName: string; styleNo: string; color: string; sleeveType?: string; sizeQty: Record<string, number>; total: number; mrp: number }>();
     const sizeSet = new Set<string>();
 
     for (const line of packedLines) {
       const qty = line.packedQty > 0 ? line.packedQty : line.requiredQty;
       if (qty <= 0) continue;
       sizeSet.add(line.size);
-      const key = `${line.partName}||${line.styleNo}||${line.color}`;
+      const key = `${line.partName}||${line.styleNo}||${line.color}||${line.sleeveType ?? ''}`;
       if (!rowMap.has(key)) {
         rowMap.set(key, {
           partName: line.partName,
           styleNo: line.styleNo,
           color: line.color,
+          sleeveType: line.sleeveType,
           sizeQty: {},
           total: 0,
           mrp: mrpByBarcode.get(line.barcode ?? '') ?? 0,
@@ -1613,15 +1783,15 @@ ${allDCHtml}
       }
     }
 
-    // Two-row header: Description | UOM | Design | Shade | MRP | Size(colspan) | Total
+    // Two-row header: Description | Design | Sleeve | Shade | MRP | Size(colspan) | Total
     const sizeHeaderCells = dc.sizes.map((s) => th2(s)).join('');
     const rs2 = (label: string, extra = '') =>
       `<th rowspan="2" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center;vertical-align:middle;${extra}">${label}</th>`;
     const thead = `<thead>
     <tr>
       ${rs2('Description', 'text-align:left')}
-      ${rs2('UOM')}
       ${rs2('Design', 'text-align:left')}
+      ${rs2('Sleeve')}
       ${rs2('Shade')}
       ${rs2('MRP')}
       ${dc.sizes.length > 0 ? `<th colspan="${dc.sizes.length}" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center">Size</th>` : ''}
@@ -1641,8 +1811,8 @@ ${allDCHtml}
           ${isFirst
             ? `<td rowspan="${items.length}" style="padding:5px 7px;${B}font-size:10px;text-align:left;vertical-align:middle;font-weight:600">${partName}</td>`
             : ''}
-          ${td2('NOS')}
           ${td2(item.styleNo, 'font-weight:700;text-align:left')}
+          ${td2(item.sleeveType || '-')}
           ${td2(item.color || '-')}
           ${td2(item.mrp > 0 ? item.mrp.toFixed(2) : '-')}
           ${sizeCells}

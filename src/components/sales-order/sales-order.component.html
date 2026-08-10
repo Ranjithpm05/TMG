@@ -1042,6 +1042,9 @@
                         <td class="py-2 px-2 text-left align-top border border-black">
                           @if (item.design) {
                             <span class="font-semibold">{{ item.design.styleNo }}</span>
+                            @if (item.design.color && item.design.color.trim() !== '-') {
+                              <span> - {{ item.design.color }}</span>
+                            }
                             @if (printGetFabricDescription(item)) {
                               <span> - {{ printGetFabricDescription(item) }}</span>
                             }
