@@ -36,34 +36,51 @@ export class InvoiceService {
     return snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() }));
   }
 
-  // Atomically enforces "at most one Invoice per Packing List" the same way
-  // DeliveryChallanService.createDC() enforces at most one DC per (Packing
-  // List, Sales Order) — a transaction reads the packing list's `invoiceId`
-  // and aborts if already set, closing the double-click/two-tab race that a
-  // plain pre-check can't. Throws 'already_has_invoice' unless
+  // Chunked (Firestore 'in' caps at 30 values) lookup of every invoice
+  // already generated for a set of DCs — lets callers figure out which of a
+  // Packing List's (possibly several, one per Sales Order) DCs still need an
+  // invoice without a full collection scan.
+  async getInvoicesByDCIdsOnce(dcIds: string[]): Promise<Invoice[]> {
+    const uniqueIds = [...new Set(dcIds.filter(Boolean))];
+    if (!uniqueIds.length) return [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += 30) chunks.push(uniqueIds.slice(i, i + 30));
+    const results = await Promise.all(
+      chunks.map((chunk) => getDocs(query(this.invoicesRef, where('dcId', 'in', chunk))))
+    );
+    return results.flatMap((snap) => snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() })));
+  }
+
+  // Atomically enforces "at most one Invoice per Delivery Challan" — a
+  // Packing List can now produce several DCs (one per Sales Order), each of
+  // which is invoiced independently so the Invoice always mirrors exactly
+  // one DC's items. A transaction reads the DC's `invoiceId` and aborts if
+  // already set, closing the double-click/two-tab race that a plain
+  // pre-check can't. Throws 'already_has_invoice' unless
   // `options.allowDuplicate` is set (an explicit, user-confirmed "Generate
   // New Invoice" override).
   async createInvoice(
-    input: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceSeq' | 'invoiceDate' | 'createdAt' | 'updatedAt'>,
+    input: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceSeq' | 'invoiceDate' | 'createdAt' | 'updatedAt'> & { dcId: string },
     options?: { allowDuplicate?: boolean },
   ): Promise<Invoice> {
-    const packingListRef = doc(this.firestore, `packingLists/${input.packingListId}`);
+    const dcRef = doc(this.firestore, `deliveryChallans/${input.dcId}`);
     const counterRef = doc(this.firestore, 'counters/invoiceCounter');
     const invoiceDocRef = doc(this.invoicesRef);
     const fyCode = this.getFyCode();
 
     const data = await runTransaction(this.firestore, async (transaction) => {
-      const packingSnap = await transaction.get(packingListRef);
-      if (!packingSnap.exists()) throw new Error('packinglist_not_found');
-      if (packingSnap.data()?.['invoiceId'] && !options?.allowDuplicate) throw new Error('already_has_invoice');
+      const dcSnap = await transaction.get(dcRef);
+      if (!dcSnap.exists()) throw new Error('dc_not_found');
+      if (dcSnap.data()?.['invoiceId'] && !options?.allowDuplicate) throw new Error('already_has_invoice');
 
       const counterSnap = await transaction.get(counterRef);
       const currentSeq = counterSnap.exists() ? (Number(counterSnap.data()?.['seq']) || 0) : 0;
       const nextSeq = currentSeq + 1;
 
+      const invoiceNo = 'TMGC' + fyCode + '-' + String(nextSeq).padStart(4, '0');
       const invoiceData = {
         ...input,
-        invoiceNo: 'TMGC' + fyCode + '-' + String(nextSeq).padStart(4, '0'),
+        invoiceNo,
         invoiceSeq: nextSeq,
         invoiceDate: serverTimestamp(),
         createdAt: serverTimestamp(),
@@ -71,7 +88,7 @@ export class InvoiceService {
       };
 
       transaction.set(invoiceDocRef, this.stripUndefined(invoiceData));
-      transaction.update(packingListRef, { invoiceId: invoiceDocRef.id, updatedAt: serverTimestamp() });
+      transaction.update(dcRef, { invoiceId: invoiceDocRef.id, invoiceNo, updatedAt: serverTimestamp() });
       if (counterSnap.exists()) {
         transaction.update(counterRef, { seq: nextSeq, updatedAt: serverTimestamp() });
       } else {

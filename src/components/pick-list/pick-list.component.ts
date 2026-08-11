@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { firstValueFrom, Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
 import { SalesOrder } from '../../models/sales-order.model';
 import { InventoryItem } from '../../models/inventory.model';
@@ -32,7 +32,7 @@ import { LoadingService } from '../../services/loading.service';
 
 declare const jsQR: any;
 
-type ViewMode = 'list' | 'select-type' | 'select-party' | 'select-orders' | 'select-items' | 'preview' | 'live-pick' | 'view';
+type ViewMode = 'list' | 'select-type' | 'select-party' | 'select-orders' | 'select-items' | 'preview' | 'live-pick' | 'view' | 'edit';
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', '6XL', 'Free Size'];
 
@@ -73,6 +73,9 @@ export class PickListComponent implements OnInit, OnDestroy {
   draftLines = signal<PickListLineItem[]>([]);
   viewPickList = signal<PickList | null>(null);
   viewLines = signal<PickListLine[]>([]);
+  editPickList = signal<PickList | null>(null);
+  editableLines = signal<PickListLine[]>([]);
+  addOrderSearchTerm = signal('');
   livePickList = signal<PickList | null>(null);
   liveLines = signal<PickListLine[]>([]);
   currentLineId = signal<string | null>(null);
@@ -612,6 +615,9 @@ export class PickListComponent implements OnInit, OnDestroy {
     this.resetBuilderState();
     this.viewPickList.set(null);
     this.viewLines.set([]);
+    this.editPickList.set(null);
+    this.editableLines.set([]);
+    this.addOrderSearchTerm.set('');
   }
 
   toggleOrderSelection(orderId: string) {
@@ -847,54 +853,243 @@ export class PickListComponent implements OnInit, OnDestroy {
     this.mode.set('view');
   }
 
+  // Backend-enforced too (PickListService.assertPickListEditable) — this is
+  // only the button-visibility hint, not the real guard. Reads a field
+  // already present on the loaded PickList (no extra query needed):
+  // totalPackedIntoPackingListsQty means exactly "how much of this list has
+  // actually been carried into a Packing List".
+  canEditOrDeletePickList(pickList: PickList | null | undefined): boolean {
+    return !!pickList?.id && (pickList.totalPackedIntoPackingListsQty ?? 0) <= 0;
+  }
+
+  editLinesByOrder = computed(() => {
+    const groups = new Map<string, { salesOrderId: string; salesNo: string; lines: PickListLine[] }>();
+    for (const line of this.editableLines()) {
+      if (line.isAdditional) continue;
+      const existing = groups.get(line.salesOrderId);
+      if (existing) existing.lines.push(line);
+      else groups.set(line.salesOrderId, { salesOrderId: line.salesOrderId, salesNo: line.salesNo, lines: [line] });
+    }
+    return [...groups.values()];
+  });
+
+  editAdditionalLines = computed(() => this.editableLines().filter((line) => line.isAdditional));
+
+  editEligibleOrders = computed(() => {
+    const pl = this.editPickList();
+    if (!pl || (pl.type !== 'party' && pl.type !== 'combined')) return [];
+    const includedIds = new Set(this.editableLines().map((line) => line.salesOrderId));
+    const term = this.addOrderSearchTerm().toLowerCase();
+    return this.salesOrders().filter((order) =>
+      order.clientId === pl.clientId
+      && !includedIds.has(order.id)
+      && !this.getOpenPickListForOrder(order.id)
+      && (!term || order.salesNo.toLowerCase().includes(term))
+    );
+  });
+
+  async openEdit(pickList: PickList) {
+    if (!pickList.id) return;
+    const [fresh, lines] = await Promise.all([
+      this.pickListService.getPickListByIdOnce(pickList.id),
+      this.pickListService.getPickListLinesOnce(pickList.id),
+    ]);
+    if (!fresh || !this.canEditOrDeletePickList(fresh)) {
+      await Swal.fire({ icon: 'warning', title: 'Cannot Edit', text: 'Packing has already started for this Pick List — it can no longer be edited.' });
+      await this.refreshPickLists();
+      return;
+    }
+    this.editPickList.set(fresh);
+    this.editableLines.set(lines);
+    this.addOrderSearchTerm.set('');
+    this.mode.set('edit');
+  }
+
+  updateEditRequiredQty(lineId: string, value: string | number) {
+    const qty = Math.max(0, Math.floor(Number(value) || 0));
+    this.editableLines.update((lines) => lines.map((line) => line.lineId === lineId ? { ...line, requiredQty: qty } : line));
+  }
+
+  updateEditAdditionalQty(lineId: string, value: string | number) {
+    const qty = Math.max(0, Math.floor(Number(value) || 0));
+    this.editableLines.update((lines) => lines.map((line) => line.lineId === lineId ? { ...line, pickedQty: qty } : line));
+  }
+
+  removeEditLine(lineId: string) {
+    this.editableLines.update((lines) => lines.filter((line) => line.lineId !== lineId));
+  }
+
+  removeEditOrder(salesOrderId: string) {
+    this.editableLines.update((lines) => lines.filter((line) => line.salesOrderId !== salesOrderId));
+  }
+
+  addOrderToEdit(order: SalesOrder) {
+    const existing = this.editableLines();
+    const startSort = existing.length ? Math.max(...existing.map((line) => line.sortOrder ?? 0)) + 1 : 0;
+    const computedLines = this.computeOrderLines(order, startSort)
+      .filter((line) => line.requiredQty > 0 && !!line.inventoryId && !!line.barcode);
+
+    if (!computedLines.length) {
+      Swal.fire({ icon: 'info', title: 'Nothing To Add', text: 'This order has no in-stock, barcoded items to add.' });
+      return;
+    }
+
+    const newLines: PickListLine[] = computedLines.map((line, index) => ({
+      lineId: line.lineId,
+      salesOrderId: line.salesOrderId,
+      salesNo: line.salesNo,
+      clientId: line.clientId,
+      clientName: line.clientName,
+      designId: line.designId,
+      styleNo: line.styleNo,
+      color: line.color,
+      group: line.group,
+      size: String(line.size),
+      sleeveType: line.sleeveType,
+      barcode: line.barcode,
+      inventoryId: line.inventoryId,
+      orderedQty: line.orderedQty,
+      requiredQty: line.requiredQty,
+      pickedQty: 0,
+      remainingQty: line.requiredQty,
+      balanceQty: line.requiredQty + line.pendingQty,
+      pendingQty: line.pendingQty,
+      status: 'ready',
+      sortOrder: startSort + index,
+    }));
+
+    this.editableLines.update((lines) => [...lines, ...newLines]);
+    this.addOrderSearchTerm.set('');
+  }
+
+  async saveEdit() {
+    const pickList = this.editPickList();
+    if (!pickList?.id || this.isSaving()) return;
+
+    const result = await Swal.fire({
+      title: 'Save Changes?',
+      text: 'This updates the Pick List and restores inventory for any reduced or removed quantity.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Save',
+      confirmButtonColor: '#4f46e5',
+    });
+    if (!result.isConfirmed) return;
+
+    this.isSaving.set(true);
+    try {
+      await this.pickListService.updatePickList(pickList.id, { lines: this.editableLines() });
+      await this.refreshPickLists();
+      await Swal.fire({ icon: 'success', title: 'Pick List Updated', timer: 1800, showConfirmButton: false });
+      const updated = await this.pickListService.getPickListByIdOnce(pickList.id);
+      if (updated) await this.openView(updated); else await this.cancel();
+    } catch (error: any) {
+      const message = error?.message === 'picklist_packing_started'
+        ? 'Packing has already started for this Pick List — it can no longer be edited.'
+        : error?.message ?? 'Unable to update Pick List.';
+      await Swal.fire({ icon: 'error', title: 'Update Failed', text: message });
+      await this.refreshPickLists();
+    } finally {
+      this.isSaving.set(false);
+    }
+  }
+
+  async deletePickList(pickList: PickList) {
+    if (!pickList.id) return;
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: 'Are you sure you want to delete this Pick List?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete it',
+      cancelButtonText: 'Cancel',
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      await this.pickListService.deletePickList(pickList.id);
+      await this.refreshPickLists();
+      if (this.viewPickList()?.id === pickList.id || this.editPickList()?.id === pickList.id) {
+        await this.cancel();
+      }
+      await Swal.fire({ icon: 'success', title: 'Deleted!', text: 'Pick List deleted successfully.', timer: 2000, showConfirmButton: false });
+    } catch (error: any) {
+      const message = error?.message === 'picklist_packing_started'
+        ? 'Packing has already started for this Pick List — it can no longer be deleted.'
+        : 'Failed to delete Pick List.';
+      await Swal.fire({ icon: 'error', title: 'Error', text: message });
+      await this.refreshPickLists();
+    }
+  }
+
+  private async refreshPickLists(): Promise<void> {
+    const lists = await firstValueFrom(this.pickListService.getPickLists());
+    this.pickLists.set(lists);
+  }
+
   private buildDraftLines(orders: SalesOrder[]) {
     const lines: PickListLineItem[] = [];
     let sortOrder = 0;
-
     for (const order of orders) {
-      for (const item of order.items) {
-        for (const sizeEntry of item.itemSizes) {
-          const orderedQty = Number(sizeEntry.quantity) || 0;
-          const size = String(sizeEntry.size);
-          const alreadyPickedQty = this.getAlreadyPickedQty(order.id, item.design.styleNo, item.design.color ?? '', size, item.sleeveType);
-          const balanceQty = Math.max(0, orderedQty - alreadyPickedQty);
-          if (balanceQty <= 0) continue;
+      const orderLines = this.computeOrderLines(order, sortOrder);
+      lines.push(...orderLines);
+      sortOrder += orderLines.length;
+    }
+    this.draftLines.set(lines);
+  }
 
-          const inventoryMatch = this.findInventoryMatch(item.design.styleNo, item.design.color ?? '', size, item.sleeveType);
-          const stockAvailable = Number(inventoryMatch?.currentStock) || 0;
-          const requiredQty = Math.min(balanceQty, stockAvailable);
-          const pendingQty = Math.max(0, balanceQty - requiredQty);
+  // Pure per-order line computation, shared by the "New Pick List" wizard
+  // (buildDraftLines) and the Edit screen's "Add Sales Order" action — so
+  // balance/inventory-matching logic never diverges between create and edit.
+  private computeOrderLines(order: SalesOrder, sortOrderStart: number): PickListLineItem[] {
+    const lines: PickListLineItem[] = [];
+    let sortOrder = sortOrderStart;
 
-          lines.push({
-            lineId: this.buildLineId(order.id, item.design.styleNo, size, sortOrder),
-            salesOrderId: order.id,
-            salesNo: order.salesNo,
-            clientId: order.clientId,
-            clientName: this.getClientName(order.clientId),
-            designId: item.design.id ?? '',
-            styleNo: item.design.styleNo,
-            color: item.design.color ?? '',
-            group: item.design.group ?? '',
-            size,
-            sleeveType: item.sleeveType,
-            orderedQty,
-            alreadyPickedQty,
-            balanceQty,
-            stockAvailable,
-            requiredQty,
-            pendingQty,
-            barcode: inventoryMatch?.barcode,
-            inventoryId: inventoryMatch?.id,
-            selected: requiredQty > 0,
-            status: requiredQty > 0 ? 'ready' : inventoryMatch?.id ? 'pending_stock' : 'blocked',
-          });
+    for (const item of order.items) {
+      for (const sizeEntry of item.itemSizes) {
+        const orderedQty = Number(sizeEntry.quantity) || 0;
+        const size = String(sizeEntry.size);
+        const alreadyPickedQty = this.getAlreadyPickedQty(order.id, item.design.styleNo, item.design.color ?? '', size, item.sleeveType);
+        const balanceQty = Math.max(0, orderedQty - alreadyPickedQty);
+        if (balanceQty <= 0) continue;
 
-          sortOrder += 1;
-        }
+        const inventoryMatch = this.findInventoryMatch(item.design.styleNo, item.design.color ?? '', size, item.sleeveType);
+        const stockAvailable = Number(inventoryMatch?.currentStock) || 0;
+        const requiredQty = Math.min(balanceQty, stockAvailable);
+        const pendingQty = Math.max(0, balanceQty - requiredQty);
+
+        lines.push({
+          lineId: this.buildLineId(order.id, item.design.styleNo, size, sortOrder),
+          salesOrderId: order.id,
+          salesNo: order.salesNo,
+          clientId: order.clientId,
+          clientName: this.getClientName(order.clientId),
+          designId: item.design.id ?? '',
+          styleNo: item.design.styleNo,
+          color: item.design.color ?? '',
+          group: item.design.group ?? '',
+          size,
+          sleeveType: item.sleeveType,
+          orderedQty,
+          alreadyPickedQty,
+          balanceQty,
+          stockAvailable,
+          requiredQty,
+          pendingQty,
+          barcode: inventoryMatch?.barcode,
+          inventoryId: inventoryMatch?.id,
+          selected: requiredQty > 0,
+          status: requiredQty > 0 ? 'ready' : inventoryMatch?.id ? 'pending_stock' : 'blocked',
+        });
+
+        sortOrder += 1;
       }
     }
 
-    this.draftLines.set(lines);
+    return lines;
   }
 
   private findInventoryMatch(styleNo: string, color: string, size: string, sleeveType?: string): InventoryItem | undefined {

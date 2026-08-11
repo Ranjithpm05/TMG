@@ -21,6 +21,7 @@ import { DeliveryChallanService } from '../../services/delivery-challan.service'
 import { Invoice } from '../../models/invoice.model';
 import { InvoiceService } from '../../services/invoice.service';
 import { InventoryService } from '../../services/inventory.service';
+import { InventoryItem } from '../../models/inventory.model';
 
 type ViewMode = 'list' | 'view' | 'live-pack' | 'combine';
 
@@ -898,17 +899,32 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   // ─── Invoice Generation ────────────────────────────────────────────────────
 
+  // A Packing List can produce several DCs (one per Sales Order — see
+  // generateAndPrintDC). Each DC is invoiced independently, one Invoice per
+  // DC, built directly from that DC's own items — so an Invoice's items and
+  // quantities always exactly mirror the DC it came from, including any
+  // additional/extra scanned items the DC already carries. A single click
+  // here generates an invoice for every DC on this Packing List that doesn't
+  // have one yet.
   async generateInvoice(packingList: PackingList): Promise<void> {
     if (!packingList.id || this.isGeneratingInvoice()) return;
 
+    const dcs = await this.dcService.getDCsByPackingListIdOnce(packingList.id);
+    if (!dcs.length) {
+      await Swal.fire({ icon: 'warning', title: 'No Delivery Challan Yet', text: 'Generate the Delivery Challan before creating an Invoice.' });
+      return;
+    }
+
     // Set only on an explicit "Generate New Invoice" override below —
     // createInvoice() otherwise atomically rejects a second invoice for the
-    // same Packing List, closing the double-click/two-tab race a plain
-    // pre-check can't.
+    // same DC, closing the double-click/two-tab race a plain pre-check can't.
     let allowDuplicateInvoice = false;
 
-    const existingInvoices = await this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id);
-    if (existingInvoices.length > 0) {
+    const existingInvoices = await this.invoiceService.getInvoicesByDCIdsOnce(dcs.map((d) => d.id!));
+    const invoicedDcIds = new Set(existingInvoices.map((inv) => inv.dcId).filter(Boolean));
+    let dcsToInvoice = dcs.filter((dc) => !invoicedDcIds.has(dc.id));
+
+    if (!dcsToInvoice.length) {
       const result = await Swal.fire({
         icon: 'info',
         title: 'Invoice Already Generated',
@@ -922,13 +938,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
         confirmButtonColor: '#4f46e5',
         denyButtonColor: '#d97706',
       });
-      if (result.isConfirmed) { await this.reprintInvoice(existingInvoices[0]); return; }
+      if (result.isConfirmed) { for (const inv of existingInvoices) await this.reprintInvoice(inv); return; }
       if (!result.isDenied) return;
       allowDuplicateInvoice = true;
+      dcsToInvoice = dcs;
     }
 
-    const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id);
-    const dc = existingDCs.length > 0 ? existingDCs[0] : null;
+    const primaryDc = dcsToInvoice[0];
 
     const { value: formValues } = await Swal.fire({
       title: 'Invoice Settings',
@@ -944,7 +960,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Document No.</label>'
         + '<input id="inv-docno" class="swal2-input" style="margin:0;width:100%" value=""></div>'
         + '<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Destination</label>'
-        + '<input id="inv-dest" class="swal2-input" style="margin:0;width:100%" value="' + (dc?.place || packingList.clientName || '') + '"></div>'
+        + '<input id="inv-dest" class="swal2-input" style="margin:0;width:100%" value="' + (primaryDc?.place || packingList.clientName || '') + '"></div>'
         + '</div>',
       showCancelButton: true,
       confirmButtonText: 'Generate Invoice',
@@ -962,109 +978,114 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
     this.isGeneratingInvoice.set(true);
     try {
-      const [fresh, lines] = await Promise.all([
-        this.packingListService.getPackingListByIdOnce(packingList.id),
-        this.packingListService.getPackingListLinesOnce(packingList.id),
-      ]);
-      const loaded = fresh ?? packingList;
-
-      const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean))] as string[];
-      const invItems = await this.inventoryService.getInventoryByBarcodes(barcodes);
-      const invMap = new Map<string, { wsp: number; mrp: number }>();
-      for (const inv of invItems) {
-        invMap.set(inv.barcode, { wsp: Number(inv.WSP) || 0, mrp: Number(inv.price) || 0 });
-      }
-
-      const rowMap = new Map<string, { description: string; mrp: number; wsp: number; qty: number }>();
-      for (const line of lines) {
-        const qty = line.packedQty > 0 ? line.packedQty : line.requiredQty;
-        if (qty <= 0) continue;
-        const inv = invMap.get(line.barcode ?? '') ?? { wsp: 0, mrp: 0 };
-        const key = line.partName + '||' + Math.round((inv.mrp || 0) * 100);
-        if (!rowMap.has(key)) {
-          rowMap.set(key, { description: line.partName, mrp: inv.mrp, wsp: inv.wsp, qty: 0 });
-        }
-        rowMap.get(key)!.qty += qty;
-      }
-
+      const loaded = (await this.packingListService.getPackingListByIdOnce(packingList.id)) ?? packingList;
+      const inventoryList = await firstValueFrom(this.inventoryService.getInventory());
       const { discountPct, taxRate, hsnSac } = formValues;
       const halfTax = taxRate / 2;
 
-      const invoiceItems = [...rowMap.values()].map((row) => {
-        const amount = Math.round(row.qty * row.wsp * 100) / 100;
-        return { description: row.description, hsnSac, discountPct, taxRate, mrp: row.mrp, uom: 'NOS', quantity: row.qty, price: row.wsp, amount };
-      });
+      const generatedInvoices: Invoice[] = [];
+      for (const dc of dcsToInvoice) {
+        const clientName = dc.clientName || loaded.clientName;
+        const clientId = loaded.clientId;
+        const client = await this.clientService.getClientForDC(clientId, clientName);
 
-      const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
-      const discountAmount = Math.round(grossAmount * discountPct / 100 * 100) / 100;
-      const taxableValue = Math.round((grossAmount - discountAmount) * 100) / 100;
-      const cgstAmount = Math.round(taxableValue * halfTax / 100 * 100) / 100;
-      const sgstAmount = cgstAmount;
-      const totalTaxAmount = Math.round((cgstAmount + sgstAmount) * 100) / 100;
-      const rawTotal = taxableValue + totalTaxAmount;
-      const totalAmount = Math.round(rawTotal);
-      const roundOff = Math.round((totalAmount - rawTotal) * 100) / 100;
+        // Mirrors the DC exactly: one InvoiceItem per DCItem, same quantity.
+        const invoiceItems = dc.items.map((dcItem) => {
+          const wsp = this.findWspForDCItem(inventoryList, dcItem);
+          const amount = Math.round(dcItem.total * wsp * 100) / 100;
+          return { description: dcItem.partName, hsnSac, discountPct, taxRate, mrp: dcItem.mrp, uom: 'NOS', quantity: dcItem.total, price: wsp, amount };
+        });
 
-      const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
+        const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+        const discountAmount = Math.round(grossAmount * discountPct / 100 * 100) / 100;
+        const taxableValue = Math.round((grossAmount - discountAmount) * 100) / 100;
+        const cgstAmount = Math.round(taxableValue * halfTax / 100 * 100) / 100;
+        const sgstAmount = cgstAmount;
+        const totalTaxAmount = Math.round((cgstAmount + sgstAmount) * 100) / 100;
+        const rawTotal = taxableValue + totalTaxAmount;
+        const totalAmount = Math.round(rawTotal);
+        const roundOff = Math.round((totalAmount - rawTotal) * 100) / 100;
 
-      const invoice = await this.invoiceService.createInvoice({
-        dcNo: dc?.dcNo ?? '',
-        dcId: dc?.id,
-        packingListId: loaded.id!,
-        packingListNo: loaded.packingListNo,
-        salesOrderIds: loaded.salesOrderIds,
-        salesNos: loaded.salesNos,
-        orderNo: (loaded.salesNos ?? []).join(', '),
-        clientId: loaded.clientId,
-        clientName: loaded.clientName,
-        clientAddress: client?.billingAddress ?? '',
-        clientPlace: client?.place ?? '',
-        clientState: client?.state ?? '',
-        clientZipCode: client?.zipCode ?? '',
-        clientPhone: client?.mobile ?? '',
-        clientGstin: client?.gstNo ?? '',
-        destination: formValues.destination,
-        transport: dc?.transport ?? loaded.transport ?? '',
-        vehicleNo: formValues.vehicleNo,
-        docNo: formValues.docNo,
-        shipmentDate: dc?.createdAt ?? null,
-        totalPkgs: loaded.cartonCount,
-        agentName: dc?.agentName ?? loaded.agentName ?? '',
-        items: invoiceItems,
-        grossAmount, discountPct, discountAmount, taxableValue,
-        cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount,
-        igstRate: 0, igstAmount: 0, totalTaxAmount, roundOff, totalAmount,
-        amountInWords: this.amountToWords(totalAmount),
-        taxSummary: [{ hsnSac, taxableValue, cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount, igstRate: 0, igstAmount: 0 }],
-      }, { allowDuplicate: allowDuplicateInvoice });
+        const invoice = await this.invoiceService.createInvoice({
+          dcId: dc.id!,
+          dcNo: dc.dcNo,
+          packingListId: loaded.id!,
+          packingListNo: loaded.packingListNo,
+          salesOrderIds: dc.salesOrderId ? [dc.salesOrderId] : loaded.salesOrderIds,
+          salesNos: dc.salesNo ? [dc.salesNo] : loaded.salesNos,
+          orderNo: dc.salesNo || (loaded.salesNos ?? []).join(', '),
+          clientId,
+          clientName,
+          clientAddress: client?.billingAddress ?? '',
+          clientPlace: client?.place ?? '',
+          clientState: client?.state ?? '',
+          clientZipCode: client?.zipCode ?? '',
+          clientPhone: client?.mobile ?? '',
+          clientGstin: client?.gstNo ?? '',
+          destination: formValues.destination,
+          transport: dc.transport ?? loaded.transport ?? '',
+          vehicleNo: formValues.vehicleNo,
+          docNo: formValues.docNo,
+          shipmentDate: dc.createdAt ?? null,
+          totalPkgs: dc.boxCount,
+          agentName: dc.agentName ?? loaded.agentName ?? '',
+          items: invoiceItems,
+          grossAmount, discountPct, discountAmount, taxableValue,
+          cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount,
+          igstRate: 0, igstAmount: 0, totalTaxAmount, roundOff, totalAmount,
+          amountInWords: this.amountToWords(totalAmount),
+          taxSummary: [{ hsnSac, taxableValue, cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount, igstRate: 0, igstAmount: 0 }],
+        }, { allowDuplicate: allowDuplicateInvoice });
+        generatedInvoices.push(invoice);
+      }
 
       await this.refreshInvoices();
 
+      const title = generatedInvoices.length > 1
+        ? generatedInvoices.length + ' Invoices Generated!'
+        : 'Invoice ' + generatedInvoices[0].invoiceNo + ' Generated!';
+      const html = '<p style="font-size:13px">' + generatedInvoices
+        .map((inv) => inv.invoiceNo + ': <strong>&#x20B9;' + inv.totalAmount.toLocaleString('en-IN') + '</strong>')
+        .join('<br>') + '</p>';
+
       await Swal.fire({
         icon: 'success',
-        title: 'Invoice ' + invoice.invoiceNo + ' Generated!',
-        html: '<p style="font-size:13px">Total: <strong>&#x20B9;' + invoice.totalAmount.toLocaleString('en-IN') + '</strong></p>',
+        title,
+        html,
         showConfirmButton: true,
         showDenyButton: true,
         showCancelButton: true,
-        confirmButtonText: 'Print Invoice',
+        confirmButtonText: generatedInvoices.length > 1 ? 'Print Invoices' : 'Print Invoice',
         denyButtonText: 'Download Excel',
         cancelButtonText: 'Close',
         confirmButtonColor: '#4f46e5',
         denyButtonColor: '#059669',
-      }).then((res) => {
-        if (res.isConfirmed) this.reprintInvoice(invoice);
-        if (res.isDenied) this.downloadInvoiceExcel(invoice);
+      }).then(async (res) => {
+        if (res.isConfirmed) { for (const inv of generatedInvoices) await this.reprintInvoice(inv); }
+        if (res.isDenied) { for (const inv of generatedInvoices) await this.downloadInvoiceExcel(inv); }
       });
     } catch (err: any) {
       const text = err?.message === 'already_has_invoice'
-        ? 'An invoice has already been generated for this Packing List.'
+        ? 'An invoice has already been generated for one of these Delivery Challans.'
         : err?.message ?? 'Unable to generate invoice.';
       await Swal.fire({ icon: 'error', title: 'Invoice Generation Failed', text });
       await this.refreshInvoices();
     } finally {
       this.isGeneratingInvoice.set(false);
     }
+  }
+
+  // DCItem is grouped by style/color/sleeve, not by barcode, so its selling
+  // price is resolved the same way pick-list.service.ts's inventory matching
+  // does: exact styleNo+color+sleeveType match preferred, falling back to any
+  // sleeve variant of that styleNo+color.
+  private findWspForDCItem(inventoryList: InventoryItem[], dcItem: DCItem): number {
+    const candidates = inventoryList.filter((inv) => inv.styleNo === dcItem.styleNo && inv.color === dcItem.color);
+    const exact = candidates.find((inv) => (inv.sleeveType ?? '') === (dcItem.sleeveType ?? ''));
+    if (exact) return Number(exact.WSP) || 0;
+    const fallback = candidates.find((inv) => !dcItem.sleeveType || !inv.sleeveType);
+    if (fallback) return Number(fallback.WSP) || 0;
+    return candidates[0] ? Number(candidates[0].WSP) || 0 : 0;
   }
 
   async reprintInvoice(invoice: Invoice): Promise<void> {
@@ -1170,63 +1191,90 @@ export class PackingListComponent implements OnInit, OnDestroy {
   }
 
   private buildReadyPickListPrintHtml(pickList: PickList, lines: PickListLine[]): string {
-    const rankSize = (size: string) => {
-      const index = SIZE_ORDER.indexOf(size);
-      return index === -1 ? Number.MAX_SAFE_INTEGER : index;
-    };
-
-    const printLines = lines
+    const toPackLines = lines
       .map((line) => {
         const pickedQty = Math.max(0, Number(line.pickedQty ?? 0) || 0);
         const packedQty = Math.max(0, Number(line.packedIntoPackingListsQty ?? 0) || 0);
         const toPackQty = Math.max(0, pickedQty - packedQty);
         return {
-          salesNo: line.salesNo,
           styleNo: line.styleNo,
-          color: line.color,
+          color: line.color || '',
           part: String(line.group ?? '').trim() || 'General',
           size: String(line.size),
           sleeveType: line.sleeveType ?? '',
-          barcode: line.barcode ?? '-',
           pickedQty,
           packedQty,
           toPackQty,
         };
       })
-      .filter((line) => line.toPackQty > 0)
-      .sort((left, right) => {
-        const salesNoCompare = left.salesNo.localeCompare(right.salesNo, undefined, { numeric: true });
-        if (salesNoCompare !== 0) return salesNoCompare;
-        const styleCompare = left.styleNo.localeCompare(right.styleNo, undefined, { numeric: true });
-        if (styleCompare !== 0) return styleCompare;
-        const colorCompare = left.color.localeCompare(right.color, undefined, { numeric: true });
-        if (colorCompare !== 0) return colorCompare;
-        return rankSize(left.size) - rankSize(right.size);
-      });
+      .filter((line) => line.toPackQty > 0);
 
-    const totals = printLines.reduce((sum, line) => ({
+    const totals = toPackLines.reduce((sum, line) => ({
       picked: sum.picked + line.pickedQty,
       packed: sum.packed + line.packedQty,
       toPack: sum.toPack + line.toPackQty,
     }), { picked: 0, packed: 0, toPack: 0 });
 
+    // Pivot into one row per product (style/part/color/sleeve) with one
+    // column per size, instead of one row per item+size — matches the
+    // packer's physical picking sheet layout (product rows × size columns).
+    interface ProductRow {
+      styleNo: string;
+      part: string;
+      color: string;
+      sleeveType: string;
+      qtyBySize: Map<string, number>;
+      total: number;
+    }
+    const productMap = new Map<string, ProductRow>();
+    const sizeSet = new Set<string>();
+
+    for (const line of toPackLines) {
+      sizeSet.add(line.size);
+      const key = `${line.styleNo}||${line.part}||${line.color}||${line.sleeveType}`;
+      const existing = productMap.get(key);
+      if (existing) {
+        existing.qtyBySize.set(line.size, (existing.qtyBySize.get(line.size) ?? 0) + line.toPackQty);
+        existing.total += line.toPackQty;
+      } else {
+        productMap.set(key, {
+          styleNo: line.styleNo,
+          part: line.part,
+          color: line.color,
+          sleeveType: line.sleeveType,
+          qtyBySize: new Map([[line.size, line.toPackQty]]),
+          total: line.toPackQty,
+        });
+      }
+    }
+
+    const sizes = [...sizeSet].sort((a, b) => this.rankSize(a) - this.rankSize(b));
+    const productRows = [...productMap.values()].sort((a, b) => {
+      const styleCompare = a.styleNo.localeCompare(b.styleNo, undefined, { numeric: true });
+      if (styleCompare !== 0) return styleCompare;
+      return a.color.localeCompare(b.color, undefined, { numeric: true });
+    });
+    const sizeTotals = sizes.map((size) => productRows.reduce((sum, row) => sum + (row.qtyBySize.get(size) ?? 0), 0));
+    const grandTotal = productRows.reduce((sum, row) => sum + row.total, 0);
+    const productLabel = (row: ProductRow) => [row.styleNo, row.part, row.color, row.sleeveType].filter(Boolean).join(' - ');
+
     const buildHeaderCell = (label: string, align: 'left' | 'center' | 'right' = 'left') =>
       `<th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#ffffff;font-size:10px;font-weight:700;text-transform:uppercase;text-align:${align};letter-spacing:0.04em">${label}</th>`;
 
-    const htmlRows = printLines.map((line, index) => `
+    const htmlRows = productRows.map((row, index) => `
         <tr style="background:${index % 2 === 0 ? '#ffffff' : '#f8fafc'}">
           <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:#64748b">${index + 1}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;font-weight:600;color:#334155">${line.salesNo}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;font-weight:700;color:#111827">${line.styleNo}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;color:#475569">${line.part}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;color:#475569">${line.color || '-'}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:#334155">${line.size}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;color:#475569">${line.sleeveType || '-'}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;font-family:'Courier New',monospace;font-size:10px;color:#334155">${line.barcode}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#15803d">${line.pickedQty}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:#64748b">${line.packedQty}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#0f766e">${line.toPackQty}</td>
+          <td style="padding:8px 10px;border:1px solid #d7deea;font-weight:700;color:#111827">${productLabel(row)}</td>
+          ${sizes.map((size) => `<td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:#334155">${row.qtyBySize.get(size) || '-'}</td>`).join('')}
+          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#0f766e">${row.total}</td>
         </tr>`).join('');
+
+    const footerRow = `
+        <tr>
+          <td colspan="2" style="padding:9px 10px;border:1px solid #d7deea;text-align:right">Totals</td>
+          ${sizeTotals.map((t) => `<td style="padding:9px 10px;border:1px solid #d7deea;text-align:center">${t}</td>`).join('')}
+          <td style="padding:9px 10px;border:1px solid #d7deea;text-align:center">${grandTotal}</td>
+        </tr>`;
 
     const printedAtLabel = new Date().toLocaleString('en-IN');
 
@@ -1272,27 +1320,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
             <thead>
               <tr>
                 ${buildHeaderCell('#', 'center')}
-                ${buildHeaderCell('Order')}
-                ${buildHeaderCell('Style No')}
-                ${buildHeaderCell('Part')}
-                ${buildHeaderCell('Color')}
-                ${buildHeaderCell('Size', 'center')}
-                ${buildHeaderCell('Sleeve')}
-                ${buildHeaderCell('Barcode')}
-                ${buildHeaderCell('Picked', 'center')}
-                ${buildHeaderCell('Already Packed', 'center')}
-                ${buildHeaderCell('To Pack', 'center')}
+                ${buildHeaderCell('Product')}
+                ${sizes.map((size) => buildHeaderCell(size, 'center')).join('')}
+                ${buildHeaderCell('Qty (Pcs)', 'center')}
               </tr>
             </thead>
             <tbody>${htmlRows}</tbody>
-            <tfoot>
-              <tr>
-                <td colspan="8" style="padding:9px 10px;border:1px solid #d7deea;text-align:right">Totals</td>
-                <td style="padding:9px 10px;border:1px solid #d7deea;text-align:center;color:#15803d">${totals.picked}</td>
-                <td style="padding:9px 10px;border:1px solid #d7deea;text-align:center;color:#64748b">${totals.packed}</td>
-                <td style="padding:9px 10px;border:1px solid #d7deea;text-align:center;color:#0f766e">${totals.toPack}</td>
-              </tr>
-            </tfoot>
+            <tfoot>${footerRow}</tfoot>
           </table>
         </body>
       </html>`;
@@ -1423,8 +1457,18 @@ export class PackingListComponent implements OnInit, OnDestroy {
         const dc = await this.createDCForParty(loaded, lines, client, '', '', loaded.clientName, agentName, transport, allowDuplicate);
         generatedDCs.push(dc);
       } else {
+        // A line can end up with no salesOrderId at all only in an edge case
+        // (a source Pick List line with no Sales Order attribution) — rather
+        // than let it match no party and vanish from every DC, it's billed
+        // under the Packing List's primary Sales Order, same as where
+        // PickListService.processPartyScan attributes an additional scan
+        // with no explicit order of its own.
+        const primarySalesOrderId = partyProgress[0]?.salesOrderId ?? '';
         for (const party of partyProgress) {
-          const partyLines = lines.filter((l) => l.salesOrderIds.includes(party.salesOrderId));
+          const partyLines = lines.filter((l) =>
+            l.salesOrderIds.includes(party.salesOrderId) ||
+            (l.salesOrderIds.length === 0 && party.salesOrderId === primarySalesOrderId)
+          );
           if (!partyLines.length) continue;
           const clientName = party.clientName || loaded.clientName;
           const clientId = party.clientId || loaded.clientId;

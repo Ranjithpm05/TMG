@@ -33,6 +33,9 @@
           <th class="px-3 py-3 text-center font-medium">Required</th>
           <th class="px-3 py-3 text-center font-medium">Picked</th>
           <th class="px-3 py-3 text-center font-medium">Pending</th>
+          <th class="px-3 py-3 text-center font-medium">Packed</th>
+          <th class="px-3 py-3 text-center font-medium">DC Qty</th>
+          <th class="px-3 py-3 text-center font-medium">Invoice Qty</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-200">
@@ -63,6 +66,9 @@
             <td class="px-3 py-2 text-center text-gray-700">{{ row.itemType === 'Additional' ? '-' : row.requiredQty }}</td>
             <td class="px-3 py-2 text-center font-semibold text-gray-900">{{ row.pickedQty }}</td>
             <td class="px-3 py-2 text-center font-semibold text-amber-700">{{ row.itemType === 'Additional' ? '-' : row.pendingQty }}</td>
+            <td class="px-3 py-2 text-center text-gray-700">{{ row.packedQty }}</td>
+            <td class="px-3 py-2 text-center text-gray-700">{{ row.dcQty }}</td>
+            <td class="px-3 py-2 text-center text-gray-700">{{ row.invoiceQty }}</td>
           </tr>
         }
       </tbody>

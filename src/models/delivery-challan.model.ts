@@ -31,6 +31,12 @@ export interface DeliveryChallan {
   transport: string;
   items: DCItem[];
   sizes: string[];
+  // Set atomically inside InvoiceService.createInvoice()'s transaction to
+  // prevent generating more than one Invoice per DC (a Packing List can now
+  // produce several DCs — one per Sales Order — so the one-invoice guard
+  // lives here, not on the Packing List).
+  invoiceId?: string;
+  invoiceNo?: string;
   createdAt: any;
   updatedAt: any;
 }

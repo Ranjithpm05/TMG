@@ -163,6 +163,8 @@ export class DeliveryChallanService {
           }))
         : [],
       sizes: Array.isArray(raw?.sizes) ? raw.sizes.map((s: any) => String(s)) : [],
+      invoiceId: raw?.invoiceId ? String(raw.invoiceId) : undefined,
+      invoiceNo: raw?.invoiceNo ? String(raw.invoiceNo) : undefined,
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,
     };

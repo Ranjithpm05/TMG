@@ -9,6 +9,7 @@ import {
   docData,
   getDoc,
   getDocs,
+  increment,
   limit,
   orderBy,
   query,
@@ -149,6 +150,189 @@ export class PickListService {
 
     await this.commitInChunks(operations);
     return pickListDoc.id;
+  }
+
+  // A Pick List may be edited/deleted only before any Packing List has been
+  // generated from it — totalPackedIntoPackingListsQty (and the per-line
+  // packedIntoPackingListsQty it's rolled up from) already means exactly
+  // "how much of this Pick List has actually been carried into a Packing
+  // List" (see createGeneratedPackingList/recalculatePickListStatus), so it
+  // doubles as the "packing started" lock with no new field needed. Always
+  // called against a freshly-read pickList/lines, never a caller-supplied
+  // (possibly stale) copy — this is the real backend guard, not just a
+  // frontend button hide.
+  private assertPickListEditable(pickList: PickList, lines: PickListLine[]): void {
+    const packed = (pickList.totalPackedIntoPackingListsQty ?? 0) > 0
+      || lines.some((line) => (line.packedIntoPackingListsQty ?? 0) > 0);
+    if (packed) throw new Error('picklist_packing_started');
+  }
+
+  async deletePickList(pickListId: string): Promise<void> {
+    const [pickList, lines] = await Promise.all([
+      this.getPickListByIdOnce(pickListId),
+      this.getPickListLinesOnce(pickListId),
+    ]);
+    if (!pickList) return;
+    this.assertPickListEditable(pickList, lines);
+
+    // Any already-scanned quantity was deducted from inventory at scan time
+    // (unless this Pick List's stock was pre-reserved) — deleting the list
+    // must give that stock back rather than silently losing it from the count.
+    const restoreByInventoryId = new Map<string, number>();
+    if (!pickList.inventoryReserved) {
+      for (const line of lines) {
+        if (line.pickedQty > 0 && line.inventoryId) {
+          restoreByInventoryId.set(line.inventoryId, (restoreByInventoryId.get(line.inventoryId) ?? 0) + line.pickedQty);
+        }
+      }
+    }
+
+    const operations: Array<(batch: WriteBatch) => void> = [
+      ...lines.map((line) => (batch: WriteBatch) => batch.delete(this.lineDoc(pickListId, line.lineId))),
+      (batch) => batch.delete(doc(this.firestore, `pickLists/${pickListId}`)),
+      ...[...restoreByInventoryId.entries()].map(([inventoryId, qty]) => (batch: WriteBatch) =>
+        batch.update(doc(this.firestore, `inventory/${inventoryId}`), { currentStock: increment(qty), updatedAt: serverTimestamp() })),
+    ];
+
+    await this.commitInChunks(operations);
+    if (restoreByInventoryId.size > 0) this.inventoryService.invalidateCache();
+  }
+
+  // input.lines is the caller's complete desired end-state for the lines
+  // subcollection (existing lines with an edited requiredQty, additional
+  // lines with a possibly-lowered pickedQty, plus any newly-added order
+  // lines with pickedQty 0). Diffed here against a fresh read of the current
+  // subcollection — scan-derived truth (pickedQty on non-additional lines)
+  // is never taken from the caller, only requiredQty/removal/addition are.
+  async updatePickList(pickListId: string, input: { lines: PickListLine[] }): Promise<void> {
+    const [pickList, currentLines] = await Promise.all([
+      this.getPickListByIdOnce(pickListId),
+      this.getPickListLinesOnce(pickListId),
+    ]);
+    if (!pickList) throw new Error('picklist_not_found');
+    this.assertPickListEditable(pickList, currentLines);
+
+    const currentById = new Map(currentLines.map((line) => [line.lineId, line]));
+    const finalById = new Map(input.lines.map((line) => [line.lineId, line]));
+    const canRestore = !pickList.inventoryReserved;
+    const restoreByInventoryId = new Map<string, number>();
+    const addRestore = (inventoryId: string | undefined, qty: number) => {
+      if (!canRestore || !inventoryId || qty <= 0) return;
+      restoreByInventoryId.set(inventoryId, (restoreByInventoryId.get(inventoryId) ?? 0) + qty);
+    };
+
+    const operations: Array<(batch: WriteBatch) => void> = [];
+    const finalLines: PickListLine[] = [];
+
+    // Removed entirely (whole line/order dropped) — restore its full picked qty.
+    for (const line of currentLines) {
+      if (finalById.has(line.lineId)) continue;
+      addRestore(line.inventoryId, line.pickedQty);
+      operations.push((batch) => batch.delete(this.lineDoc(pickListId, line.lineId)));
+    }
+
+    for (const requested of input.lines) {
+      const current = currentById.get(requested.lineId);
+
+      if (!current) {
+        // New line — added via "Add Sales Order", never yet picked.
+        const created = this.normalizeLine({ ...requested, pickedQty: 0, remainingQty: requested.requiredQty });
+        finalLines.push(created);
+        operations.push((batch) => batch.set(this.lineDoc(pickListId, created.lineId), this.stripUndefined({
+          ...created,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })));
+        continue;
+      }
+
+      if (current.isAdditional) {
+        // Additional lines can only be reduced or removed here — never
+        // increased (a genuine new extra item must be scanned, not typed).
+        const newPickedQty = Math.max(0, Math.min(Number(requested.pickedQty) || 0, current.pickedQty));
+        if (newPickedQty <= 0) {
+          addRestore(current.inventoryId, current.pickedQty);
+          operations.push((batch) => batch.delete(this.lineDoc(pickListId, current.lineId)));
+          continue;
+        }
+        addRestore(current.inventoryId, current.pickedQty - newPickedQty);
+        const updated = this.normalizeLine({
+          ...current,
+          pickedQty: newPickedQty,
+          requiredQty: newPickedQty,
+          remainingQty: 0,
+          claimedByUserId: undefined,
+          claimedByUsername: undefined,
+          claimExpiresAt: undefined,
+        });
+        finalLines.push(updated);
+        operations.push((batch) => batch.update(this.lineDoc(pickListId, current.lineId), this.stripUndefined({
+          pickedQty: updated.pickedQty,
+          requiredQty: updated.requiredQty,
+          remainingQty: updated.remainingQty,
+          status: updated.status,
+          claimedByUserId: null,
+          claimedByUsername: null,
+          claimExpiresAt: null,
+          updatedAt: serverTimestamp(),
+        })));
+        continue;
+      }
+
+      // Existing Sales-Order-derived line — client controls requiredQty
+      // only; pickedQty is read live and only ever lowered here (never
+      // raised — that only happens via scanning), restoring the difference.
+      const newRequiredQty = Math.max(0, Number(requested.requiredQty) || 0);
+      let pickedQty = current.pickedQty;
+      if (newRequiredQty < current.pickedQty) {
+        addRestore(current.inventoryId, current.pickedQty - newRequiredQty);
+        pickedQty = newRequiredQty;
+      }
+      const remainingQty = Math.max(0, newRequiredQty - pickedQty);
+      const updated = this.normalizeLine({
+        ...current,
+        requiredQty: newRequiredQty,
+        pickedQty,
+        remainingQty,
+        balanceQty: remainingQty + (current.pendingQty || 0),
+        // normalizeLineStatus() short-circuits and keeps 'blocked' /
+        // 'pending_stock' / 'completed' as-is rather than re-deriving — pass
+        // a non-terminal status so a qty change (e.g. re-raising a
+        // previously-completed line's requiredQty) actually re-derives
+        // ready/in_progress/completed instead of being stuck on the old one.
+        status: 'ready',
+        claimedByUserId: undefined,
+        claimedByUsername: undefined,
+        claimExpiresAt: undefined,
+      });
+      finalLines.push(updated);
+      operations.push((batch) => batch.update(this.lineDoc(pickListId, current.lineId), this.stripUndefined({
+        requiredQty: updated.requiredQty,
+        pickedQty: updated.pickedQty,
+        remainingQty: updated.remainingQty,
+        balanceQty: updated.balanceQty,
+        status: updated.status,
+        claimedByUserId: null,
+        claimedByUsername: null,
+        claimExpiresAt: null,
+        updatedAt: serverTimestamp(),
+      })));
+    }
+
+    const salesOrderIds = [...new Set(finalLines.map((line) => line.salesOrderId).filter(Boolean))];
+    const salesNos = [...new Set(finalLines.map((line) => line.salesNo).filter(Boolean))];
+
+    operations.push((batch) => batch.update(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
+      salesOrderIds,
+      salesNos,
+      updatedAt: serverTimestamp(),
+    })));
+    operations.push(...[...restoreByInventoryId.entries()].map(([inventoryId, qty]) => (batch: WriteBatch) =>
+      batch.update(doc(this.firestore, `inventory/${inventoryId}`), { currentStock: increment(qty), updatedAt: serverTimestamp() })));
+
+    await this.commitInChunks(operations);
+    await this.recalculatePickListStatus(pickListId);
+    if (restoreByInventoryId.size > 0) this.inventoryService.invalidateCache();
   }
 
   private async commitInChunks(operations: Array<(batch: WriteBatch) => void>, chunkSize = 450): Promise<void> {

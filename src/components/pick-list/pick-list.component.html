@@ -146,6 +146,10 @@
                       }
                       <button (click)="openView(pl)" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">View</button>
                       <button (click)="printSavedPickList(pl)" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">Print</button>
+                      @if (canEditOrDeletePickList(pl)) {
+                        <button (click)="openEdit(pl)" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-indigo-300 text-indigo-600 text-xs rounded-lg hover:bg-indigo-50 transition-colors">Edit</button>
+                        <button (click)="deletePickList(pl)" class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-red-300 text-red-600 text-xs rounded-lg hover:bg-red-50 transition-colors">Delete</button>
+                      }
                     </div>
                   </td>
                 </tr>
@@ -820,6 +824,10 @@
               <button (click)="startPicking(pl)" class="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">{{getPickActionLabel(pl)}}</button>
             }
             <button (click)="printSavedPickList(pl)" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Print</button>
+            @if (canEditOrDeletePickList(pl)) {
+              <button (click)="openEdit(pl)" class="px-3 py-1.5 border border-indigo-300 text-indigo-600 rounded-lg text-sm hover:bg-indigo-50">Edit</button>
+              <button (click)="deletePickList(pl)" class="px-3 py-1.5 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50">Delete</button>
+            }
             <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Back</button>
           </div>
         </div>
@@ -863,6 +871,111 @@
             </tbody>
           </table>
         </div>
+      </div>
+    }
+  }
+
+  @else if (mode() === 'edit') {
+    @let pl = editPickList();
+    @if (pl) {
+      <div class="bg-white shadow-lg rounded-xl p-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start gap-4 border-b pb-4 mb-5">
+          <div>
+            <div class="flex items-center gap-3 flex-wrap">
+              <h2 class="text-2xl font-bold text-gray-800">Edit {{pl.pickListNo}}</h2>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="plTypeBadge(pl.type)">{{plTypeLabel(pl.type)}}</span>
+            </div>
+            <p class="text-sm text-gray-500 mt-1">{{pl.clientName}}</p>
+          </div>
+          <div class="flex gap-2">
+            <button (click)="saveEdit()" [disabled]="isSaving()" class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">{{isSaving() ? 'Saving...' : 'Save Changes'}}</button>
+            <button (click)="cancel()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+          </div>
+        </div>
+
+        @for (group of editLinesByOrder(); track group.salesOrderId) {
+          <div class="mb-6 border border-gray-200 rounded-xl overflow-hidden">
+            <div class="flex items-center justify-between bg-gray-50 px-4 py-2.5 border-b border-gray-200">
+              <div class="font-semibold text-gray-700 text-sm">{{group.salesNo}}</div>
+              <button (click)="removeEditOrder(group.salesOrderId)" class="text-xs text-red-600 hover:text-red-700 font-medium">Remove Order</button>
+            </div>
+            <table class="min-w-full text-sm">
+              <thead class="bg-white">
+                <tr>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Product</th>
+                  <th class="px-4 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Picked</th>
+                  <th class="px-4 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Required Qty</th>
+                  <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Remove</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                @for (line of group.lines; track line.lineId) {
+                  <tr>
+                    <td class="px-4 py-2"><div class="font-semibold text-gray-800">{{line.styleNo}}</div><div class="text-xs text-gray-500">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</div></td>
+                    <td class="px-4 py-2 text-center font-bold text-green-700">{{line.pickedQty}}</td>
+                    <td class="px-4 py-2 text-center">
+                      <input type="number" min="0" [ngModel]="line.requiredQty" (ngModelChange)="updateEditRequiredQty(line.lineId, $event)" class="w-20 border border-gray-300 rounded-lg px-2 py-1 text-center text-sm" />
+                    </td>
+                    <td class="px-4 py-2 text-right">
+                      <button (click)="removeEditLine(line.lineId)" class="text-xs text-red-600 hover:text-red-700 font-medium">Remove</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        @if (editAdditionalLines().length > 0) {
+          <div class="mb-6 border border-pink-200 rounded-xl overflow-hidden">
+            <div class="bg-pink-50 px-4 py-2.5 border-b border-pink-200">
+              <div class="font-semibold text-pink-700 text-sm">Additional / Extra Items</div>
+              <div class="text-xs text-pink-600 mt-0.5">These can only be reduced or removed here — scan a new extra item during live picking to add one.</div>
+            </div>
+            <table class="min-w-full text-sm">
+              <thead class="bg-white">
+                <tr>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Product</th>
+                  <th class="px-4 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Qty</th>
+                  <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Remove</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                @for (line of editAdditionalLines(); track line.lineId) {
+                  <tr>
+                    <td class="px-4 py-2"><div class="font-semibold text-gray-800">{{line.styleNo}}</div><div class="text-xs text-gray-500">{{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}</div></td>
+                    <td class="px-4 py-2 text-center">
+                      <input type="number" min="0" [max]="line.pickedQty" [ngModel]="line.pickedQty" (ngModelChange)="updateEditAdditionalQty(line.lineId, $event)" class="w-20 border border-gray-300 rounded-lg px-2 py-1 text-center text-sm" />
+                    </td>
+                    <td class="px-4 py-2 text-right">
+                      <button (click)="removeEditLine(line.lineId)" class="text-xs text-red-600 hover:text-red-700 font-medium">Remove</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        @if (pl.type === 'party' || pl.type === 'combined') {
+          <div class="border border-gray-200 rounded-xl p-4">
+            <div class="font-semibold text-gray-700 text-sm mb-2">Add Sales Order</div>
+            <input type="text" [ngModel]="addOrderSearchTerm()" (ngModelChange)="addOrderSearchTerm.set($event)" placeholder="Search by Sales No..." class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3" />
+            <div class="max-h-56 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-lg">
+              @for (order of editEligibleOrders(); track order.id) {
+                <div class="flex items-center justify-between px-3 py-2">
+                  <div>
+                    <div class="text-sm font-medium text-gray-800">{{order.salesNo}}</div>
+                    <div class="text-xs text-gray-500">{{getClientName(order.clientId)}}</div>
+                  </div>
+                  <button (click)="addOrderToEdit(order)" class="px-2.5 py-1 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700">Add</button>
+                </div>
+              } @empty {
+                <div class="px-3 py-4 text-xs text-gray-400 text-center">No other eligible orders for this client.</div>
+              }
+            </div>
+          </div>
+        }
       </div>
     }
   }

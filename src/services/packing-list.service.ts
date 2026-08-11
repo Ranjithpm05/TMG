@@ -677,7 +677,7 @@ export class PackingListService {
     return [...map.values()].sort((a, b) => a.salesNo.localeCompare(b.salesNo, undefined, { numeric: true }));
   }
 
-  private buildPackableLines(lines: PickListLine[]): PackingListLine[] {
+  private buildPackableLines(lines: Array<PickListLine & { sourcePickListId: string }>): PackingListLine[] {
     const aggregated = new Map<string, PackingListLine>();
 
     for (const source of lines) {
@@ -702,11 +702,14 @@ export class PackingListService {
       const clientId = String(source.clientId ?? '').trim();
       const clientName = String(source.clientName ?? '').trim();
       const key = `${salesOrderId}||${styleNo}||${color}||${partName}||${size}||${sleeveType}||${barcode}||${inventoryId}`;
+      const sourcePickListId = String(source.sourcePickListId ?? '').trim();
+      const sourceLineId = String(source.lineId ?? '').trim();
+      const sourceEntry = sourcePickListId && sourceLineId ? [{ pickListId: sourcePickListId, pickListLineId: sourceLineId, qty: pickedQty }] : [];
 
       if (!aggregated.has(key)) {
         aggregated.set(key, this.normalizeLine({
           lineId: this.buildPackingLineId(styleNo, color, partName, size, sleeveType, aggregated.size),
-          pickListLineId: String(source.lineId ?? '').trim() || this.buildPackingLineId(styleNo, color, partName, size, sleeveType, aggregated.size),
+          pickListLineId: sourceLineId || this.buildPackingLineId(styleNo, color, partName, size, sleeveType, aggregated.size),
           salesOrderIds: salesOrderId ? [salesOrderId] : [],
           salesNos: salesNo ? [salesNo] : [],
           clientId: clientId || undefined,
@@ -725,6 +728,7 @@ export class PackingListService {
           remainingQty: pickedQty,
           status: 'ready',
           sortOrder: Number(source.sortOrder) || aggregated.size,
+          sources: sourceEntry,
         }));
         continue;
       }
@@ -738,6 +742,7 @@ export class PackingListService {
       if (salesNo && !existing.salesNos.includes(salesNo)) {
         existing.salesNos.push(salesNo);
       }
+      existing.sources = [...(existing.sources ?? []), ...sourceEntry];
       aggregated.set(key, existing);
     }
 
@@ -889,6 +894,13 @@ export class PackingListService {
       status: this.normalizeLineStatus(raw?.status, packedQty, remainingQty),
       lastCartonNo: raw?.lastCartonNo ? String(raw.lastCartonNo) : undefined,
       sortOrder: Number(raw?.sortOrder) || 0,
+      sources: Array.isArray(raw?.sources)
+        ? raw.sources.map((s: any) => ({
+            pickListId: String(s?.pickListId ?? ''),
+            pickListLineId: String(s?.pickListLineId ?? ''),
+            qty: Math.max(0, Number(s?.qty) || 0),
+          }))
+        : undefined,
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,
     };

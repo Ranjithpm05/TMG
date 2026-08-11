@@ -1,6 +1,12 @@
 export type PackingListLineStatus = 'ready' | 'in_progress' | 'completed';
 export type PackingMode = 'customer' | 'order';
 
+export interface PackingListLineSource {
+  pickListId: string;
+  pickListLineId: string;
+  qty: number;
+}
+
 export interface PackingListLine {
   lineId: string;
   pickListLineId: string;
@@ -25,6 +31,12 @@ export interface PackingListLine {
   sortOrder?: number;
   createdAt?: any;
   updatedAt?: any;
+  // Exactly which Pick List line(s) — possibly from more than one Pick List
+  // (the "combine" flow) and across multiple packing batches over time —
+  // contributed how much quantity to this line. Lets reports trace Packed
+  // Qty back to a specific Sales Order/additional Pick List line without
+  // re-deriving a guess from style/color/size alone.
+  sources?: PackingListLineSource[];
 }
 
 export interface PackingCartonEntry {
