@@ -559,22 +559,31 @@ export class PackingListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Group packable lines by customer (salesOrderId) — one packing list will be created per group
-    const customerGroupMap = new Map<string, { salesOrderId: string; salesNo: string; clientId: string; clientName: string; lines: Array<PickListLine & { sourcePickListId: string }> }>();
+    // Group packable lines by customer (clientId) — one packing list per customer,
+    // even when that customer spans multiple Sales Orders within this Pick List.
+    const customerGroupMap = new Map<string, { salesOrderIds: Set<string>; salesNos: Set<string>; clientId: string; clientName: string; lines: Array<PickListLine & { sourcePickListId: string }> }>();
     for (const line of packableLines) {
-      const key = line.salesOrderId;
+      const clientId = line.clientId ?? pickList.clientId;
+      const key = clientId;
       if (!customerGroupMap.has(key)) {
         customerGroupMap.set(key, {
-          salesOrderId: line.salesOrderId,
-          salesNo: line.salesNo,
-          clientId: line.clientId ?? pickList.clientId,
+          salesOrderIds: new Set(),
+          salesNos: new Set(),
+          clientId,
           clientName: line.clientName ?? pickList.clientName,
           lines: [],
         });
       }
-      customerGroupMap.get(key)!.lines.push(line);
+      const group = customerGroupMap.get(key)!;
+      if (line.salesOrderId) group.salesOrderIds.add(line.salesOrderId);
+      if (line.salesNo) group.salesNos.add(line.salesNo);
+      group.lines.push(line);
     }
-    const customerGroups = [...customerGroupMap.values()];
+    const customerGroups = [...customerGroupMap.values()].map((g) => ({
+      ...g,
+      salesOrderIds: [...g.salesOrderIds],
+      salesNos: [...g.salesNos],
+    }));
     const remainingQty = (l: PickListLine) => Math.max(0, (l.pickedQty || 0) - (l.packedIntoPackingListsQty || 0));
 
     const totalQty = packableLines.reduce((s, l) => s + remainingQty(l), 0);
@@ -582,7 +591,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const customerRows = customerGroups.map((g) => {
       const qty = g.lines.reduce((s, l) => s + remainingQty(l), 0);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:8px;background:#f8fafc;margin-top:6px">
-        <span style="font-size:12px;font-weight:600">${g.clientName} — ${g.salesNo}</span>
+        <span style="font-size:12px;font-weight:600">${g.clientName} — ${g.salesNos.join(', ')}</span>
         <span style="font-size:11px;color:#0f766e;font-weight:700">${g.lines.length} lines · ${qty} pcs</span>
       </div>`;
     }).join('');
@@ -625,8 +634,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
           packingListNo: `PK-${Date.now()}`,
           pickListIds: [pickList.id],
           pickListNos: [pickList.pickListNo],
-          salesOrderIds: [group.salesOrderId],
-          salesNos: [group.salesNo],
+          salesOrderIds: group.salesOrderIds,
+          salesNos: group.salesNos,
           clientId: group.clientId,
           clientName: group.clientName,
           packingMode: 'customer',
@@ -644,7 +653,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         icon: 'success',
         title: `${createdIds.length} Packing List${createdIds.length > 1 ? 's' : ''} Generated`,
         text: customerGroups.length > 1
-          ? `One packing list per customer. Starting with ${customerGroups[0].clientName} — ${customerGroups[0].salesNo}.`
+          ? `One packing list per customer. Starting with ${customerGroups[0].clientName} — ${customerGroups[0].salesNos.join(', ')}.`
           : 'Start carton packing now or review the list first.',
         showCancelButton: true,
         confirmButtonText: 'Start Packing Now',
