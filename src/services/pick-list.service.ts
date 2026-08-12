@@ -33,6 +33,7 @@ import type {
 } from '../models/pick-list.model';
 import type { InventoryItem } from '../models/inventory.model';
 import { InventoryService } from './inventory.service';
+import { DesignService } from './design.service';
 import { fetchAllDocs } from './firestore-pagination.util';
 
 type StoredPickList = PickList & {
@@ -50,7 +51,9 @@ export class PickListService {
 
   private firestore = inject(Firestore);
   private inventoryService = inject(InventoryService);
+  private designService = inject(DesignService);
   private plRef = collection(this.firestore, 'pickLists');
+  private inventoryRef = collection(this.firestore, 'inventory');
 
   // One-time read for the list screen, paged through in full via
   // fetchAllDocs() — a prior fixed limit(100) here silently truncated the
@@ -104,9 +107,12 @@ export class PickListService {
     remarks?: string;
     lines: PickListLine[];
   }): Promise<string> {
+    // Design Master (barcode present) is what makes a line scannable — stock/
+    // inventoryId is no longer required: a barcode with no inventory doc yet
+    // (never received via GRN) is still picked, going negative at scan time.
     const normalizedLines = input.lines
       .map((line, index) => this.normalizeLine({ ...line, sortOrder: line.sortOrder ?? index }))
-      .filter((line) => line.requiredQty > 0 && !!line.inventoryId && !!line.barcode && line.status !== 'blocked' && line.status !== 'pending_stock')
+      .filter((line) => line.requiredQty > 0 && !!line.barcode && line.status !== 'blocked' && line.status !== 'pending_stock')
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
     if (!normalizedLines.length) {
@@ -644,6 +650,16 @@ export class PickListService {
       throw new Error(currentLineId ? 'barcode_mismatch' : 'barcode_not_found');
     }
 
+    // Design Master (via computeOrderLines at draft time) is what makes this
+    // barcode valid to pick — a line missing inventoryId just means no
+    // `inventory` doc exists yet for it (never received via GRN), not that
+    // the barcode itself is invalid. Resolved outside the transaction since
+    // it may need a query + a Design Master read; reuse the line's own
+    // inventoryId when already known to avoid that extra cost on every scan.
+    const inventoryLookup = line.inventoryId
+      ? { ref: doc(this.firestore, `inventory/${line.inventoryId}`), seed: null }
+      : await this.resolveInventoryRefForBarcode(trimmedBarcode);
+
     const result = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(pickListId, line.lineId);
       const pickListRef = doc(this.firestore, `pickLists/${pickListId}`);
@@ -666,18 +682,15 @@ export class PickListService {
       if (liveLine.status === 'completed' || liveLine.remainingQty <= 0) throw new Error('line_completed');
       if (liveLine.status === 'blocked') throw new Error('blocked');
       if (liveLine.status === 'pending_stock' || liveLine.requiredQty <= 0) throw new Error('pending_stock');
-      if (!liveLine.inventoryId) throw new Error('blocked');
       if (claimActive && liveLine.claimedByUserId && liveLine.claimedByUserId !== user.id) {
         throw new Error('line_claimed');
       }
 
-      const inventoryRef = doc(this.firestore, `inventory/${liveLine.inventoryId}`);
-      const inventorySnap = await transaction.get(inventoryRef);
-      if (!inventorySnap.exists()) throw new Error('blocked');
-
-      const inventory = inventorySnap.data() as any;
-      const currentStock = Number(inventory.currentStock) || 0;
-      if (!inventoryReserved && currentStock <= 0) throw new Error('stock_exhausted');
+      // Stock is checked (and, below, decremented — possibly negative) but no
+      // longer gates the scan: Design Master already validated the barcode,
+      // and zero/no stock must not block picking.
+      const inventorySnap = inventoryReserved ? null : await transaction.get(inventoryLookup.ref);
+      const currentStock = inventorySnap?.exists() ? (Number(inventorySnap.data()?.['currentStock']) || 0) : 0;
 
       const nextPickedQty = liveLine.pickedQty + 1;
       if (nextPickedQty > liveLine.requiredQty) throw new Error('line_completed');
@@ -690,6 +703,7 @@ export class PickListService {
         remainingQty: nextRemainingQty,
         balanceQty: nextRemainingQty + (liveLine.pendingQty || 0),
         status: lineCompleted ? 'completed' : 'in_progress',
+        inventoryId: liveLine.inventoryId || inventoryLookup.ref.id,
         claimedByUserId: lineCompleted ? undefined : user.id,
         claimedByUsername: lineCompleted ? undefined : user.username,
         claimExpiresAt: lineCompleted ? undefined : now + this.CLAIM_TTL_MS,
@@ -703,6 +717,7 @@ export class PickListService {
         remainingQty: updatedLine.remainingQty,
         balanceQty: updatedLine.balanceQty,
         status: updatedLine.status,
+        inventoryId: updatedLine.inventoryId,
         claimedByUserId: lineCompleted ? null : user.id,
         claimedByUsername: lineCompleted ? null : user.username,
         claimExpiresAt: lineCompleted ? null : now + this.CLAIM_TTL_MS,
@@ -713,10 +728,32 @@ export class PickListService {
       }));
 
       if (!inventoryReserved) {
-        transaction.update(inventoryRef, {
-          currentStock: currentStock - 1,
-          updatedAt: serverTimestamp(),
-        });
+        if (inventorySnap?.exists()) {
+          transaction.update(inventoryLookup.ref, {
+            currentStock: currentStock - 1,
+            updatedAt: serverTimestamp(),
+          });
+        } else if (inventoryLookup.seed) {
+          // No inventory doc exists at all for this barcode (never received
+          // via GRN) — create one now, going straight to -1, rather than
+          // blocking a Design-Master-valid barcode for lack of a stock record.
+          transaction.set(inventoryLookup.ref, this.stripUndefined({
+            barcode: trimmedBarcode,
+            designId: liveLine.designId,
+            styleNo: liveLine.styleNo,
+            color: liveLine.color,
+            group: liveLine.group,
+            size: liveLine.size,
+            sleeveType: liveLine.sleeveType,
+            fabricType: inventoryLookup.seed.fabricType,
+            currentStock: -1,
+            totalReceived: 0,
+            WSP: inventoryLookup.seed.wsp,
+            price: inventoryLookup.seed.price,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }));
+        }
       }
 
       const nextTotalPickedQty = Math.min((pickList.totalPickedQty || 0) + 1, pickList.totalRequiredQty || 0);
@@ -877,13 +914,18 @@ export class PickListService {
     } else {
       targetLineId = `ADD-${this.sanitizeLineIdPart(trimmedBarcode)}`;
 
-      const [inventoryMatches, pickList] = await Promise.all([
-        this.inventoryService.getInventoryByBarcodes([trimmedBarcode]),
+      // Design Master is the source of truth for whether this barcode is
+      // valid to pick at all — Inventory is only consulted afterward, purely
+      // for its current stock level/doc id (which may not exist yet).
+      const [designMatch, pickList] = await Promise.all([
+        this.designService.findDesignSizeByBarcode(trimmedBarcode),
         this.getPickListByIdOnce(pickListId),
       ]);
-      const inventory = inventoryMatches[0];
-      if (!inventory?.id) throw new Error('barcode_not_found');
+      if (!designMatch) throw new Error('barcode_not_found');
       if (!pickList) throw new Error('picklist_not_found');
+
+      const inventoryMatches = await this.inventoryService.getInventoryByBarcodes([trimmedBarcode]);
+      const inventory = inventoryMatches[0];
 
       newLineSeed = this.normalizeLine({
         lineId: targetLineId,
@@ -891,14 +933,14 @@ export class PickListService {
         salesNo: pickList.salesNos[0] ?? '',
         clientId: pickList.clientId,
         clientName: pickList.clientName,
-        designId: inventory.designId,
-        styleNo: inventory.styleNo,
-        color: inventory.color,
-        group: inventory.group,
-        size: inventory.size,
-        sleeveType: inventory.sleeveType,
+        designId: designMatch.design.id ?? '',
+        styleNo: designMatch.design.styleNo,
+        color: designMatch.design.color ?? '',
+        group: designMatch.design.group ?? '',
+        size: designMatch.sizeEntry.size,
+        sleeveType: designMatch.sizeEntry.sleeveType ?? undefined,
         barcode: trimmedBarcode,
-        inventoryId: inventory.id,
+        inventoryId: inventory?.id,
         orderedQty: 0,
         requiredQty: 0,
         pickedQty: 0,
@@ -910,6 +952,13 @@ export class PickListService {
         sortOrder: 1_000_000,
       });
     }
+
+    // Resolved outside the transaction — see processScan for why (may need a
+    // query + a Design Master read when no inventory doc exists yet).
+    const knownInventoryId = requestedLine?.inventoryId ?? additionalLine?.inventoryId ?? newLineSeed?.inventoryId;
+    const inventoryLookup = knownInventoryId
+      ? { ref: doc(this.firestore, `inventory/${knownInventoryId}`), seed: null }
+      : await this.resolveInventoryRefForBarcode(trimmedBarcode);
 
     const result = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(pickListId, targetLineId);
@@ -928,16 +977,13 @@ export class PickListService {
       if (!liveLine) throw new Error('barcode_not_found');
       if (String(liveLine.barcode ?? '').trim() !== trimmedBarcode) throw new Error('barcode_mismatch');
       if (liveLine.status === 'blocked') throw new Error('blocked');
-      if (!liveLine.inventoryId) throw new Error('blocked');
 
-      const inventoryRef = doc(this.firestore, `inventory/${liveLine.inventoryId}`);
-      const inventorySnap = await transaction.get(inventoryRef);
-      if (!inventorySnap.exists()) throw new Error('blocked');
-
-      const inventory = inventorySnap.data() as any;
-      const currentStock = Number(inventory.currentStock) || 0;
+      // Stock is checked (and, below, decremented — possibly negative) but no
+      // longer gates the scan: Design Master already validated the barcode,
+      // and zero/no stock must not block picking.
       const inventoryReserved = !!pickList.inventoryReserved;
-      if (!inventoryReserved && currentStock <= 0) throw new Error('stock_exhausted');
+      const inventorySnap = inventoryReserved ? null : await transaction.get(inventoryLookup.ref);
+      const currentStock = inventorySnap?.exists() ? (Number(inventorySnap.data()?.['currentStock']) || 0) : 0;
 
       const nextPickedQty = liveLine.pickedQty + 1;
       if (!liveLine.isAdditional && nextPickedQty > liveLine.requiredQty) throw new Error('line_completed');
@@ -954,6 +1000,7 @@ export class PickListService {
         remainingQty: nextRemainingQty,
         balanceQty: nextRemainingQty + (liveLine.pendingQty || 0),
         status: liveLine.isAdditional ? 'in_progress' : (lineCompleted ? 'completed' : 'in_progress'),
+        inventoryId: liveLine.inventoryId || inventoryLookup.ref.id,
         completedAt: lineCompleted ? now : undefined,
         completedByUserId: lineCompleted ? user.id : undefined,
         completedByUsername: lineCompleted ? user.username : undefined,
@@ -966,10 +1013,32 @@ export class PickListService {
       }));
 
       if (!inventoryReserved) {
-        transaction.update(inventoryRef, {
-          currentStock: currentStock - 1,
-          updatedAt: serverTimestamp(),
-        });
+        if (inventorySnap?.exists()) {
+          transaction.update(inventoryLookup.ref, {
+            currentStock: currentStock - 1,
+            updatedAt: serverTimestamp(),
+          });
+        } else if (inventoryLookup.seed) {
+          // No inventory doc exists at all for this barcode (never received
+          // via GRN) — create one now, going straight to -1, rather than
+          // blocking a Design-Master-valid barcode for lack of a stock record.
+          transaction.set(inventoryLookup.ref, this.stripUndefined({
+            barcode: trimmedBarcode,
+            designId: liveLine.designId,
+            styleNo: liveLine.styleNo,
+            color: liveLine.color,
+            group: liveLine.group,
+            size: liveLine.size,
+            sleeveType: liveLine.sleeveType,
+            fabricType: inventoryLookup.seed.fabricType,
+            currentStock: -1,
+            totalReceived: 0,
+            WSP: inventoryLookup.seed.wsp,
+            price: inventoryLookup.seed.price,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }));
+        }
       }
 
       const nextTotalPickedQty = liveLine.isAdditional
@@ -1059,6 +1128,36 @@ export class PickListService {
       status: nextStatus,
       updatedAt: serverTimestamp(),
     });
+  }
+
+  // Resolves the `inventory` doc to decrement stock against for a barcode
+  // during picking. Design Master is what makes a barcode valid to pick (see
+  // findDesignSizeByBarcode) — Inventory only tracks its stock level, which
+  // may legitimately not exist yet (never received via GRN). When no
+  // inventory doc exists, this returns a deterministic barcode-derived doc id
+  // (rather than an auto-generated one) so two concurrent first-time scans of
+  // the same never-before-seen barcode converge on the same document instead
+  // of each creating their own — the transaction re-checks existence with its
+  // own transaction.get() regardless, so this is a concurrency safety net,
+  // not the authoritative check.
+  private async resolveInventoryRefForBarcode(barcode: string): Promise<{
+    ref: ReturnType<typeof doc>;
+    seed: { wsp: number; price: number; fabricType: string } | null;
+  }> {
+    const existing = await this.inventoryService.getInventoryByBarcodes([barcode]);
+    if (existing[0]?.id) {
+      return { ref: doc(this.firestore, `inventory/${existing[0].id}`), seed: null };
+    }
+    const designMatch = await this.designService.findDesignSizeByBarcode(barcode);
+    const safeId = `bc-${barcode.trim().replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+    return {
+      ref: doc(this.firestore, `inventory/${safeId}`),
+      seed: {
+        wsp: Number(designMatch?.sizeEntry.WSP) || 0,
+        price: Number(designMatch?.sizeEntry.price) || 0,
+        fabricType: designMatch?.sizeEntry.fabricType ?? '',
+      },
+    };
   }
 
   private async resolveScannableLine(
@@ -1233,19 +1332,24 @@ export class PickListService {
     };
   }
 
+  // Barcode (Design Master) is what makes a line valid to pick — inventoryId
+  // is deliberately NOT part of this check: a line can have a barcode but no
+  // inventory doc yet (never received via GRN) and must still be 'ready',
+  // not 'blocked'. See processScan/processPartyScan for the negative-stock
+  // decrement/auto-create logic that follows from this.
   private normalizeLineStatus(line: PickListLine): PickListLine['status'] {
     if (line.status === 'blocked' || line.status === 'pending_stock' || line.status === 'completed') {
       return line.status;
     }
     if (line.remainingQty <= 0) return 'completed';
-    if (!line.inventoryId || !line.barcode) return line.requiredQty > 0 ? 'blocked' : 'pending_stock';
+    if (!line.barcode) return line.requiredQty > 0 ? 'blocked' : 'pending_stock';
     if (line.requiredQty <= 0) return 'pending_stock';
     return this.deriveOpenStatus(line);
   }
 
   private deriveOpenStatus(line: PickListLine): PickListLine['status'] {
     if (line.remainingQty <= 0) return 'completed';
-    if (!line.inventoryId || !line.barcode) return line.requiredQty > 0 ? 'blocked' : 'pending_stock';
+    if (!line.barcode) return line.requiredQty > 0 ? 'blocked' : 'pending_stock';
     if (line.requiredQty <= 0) return 'pending_stock';
     return line.pickedQty > 0 ? 'in_progress' : 'ready';
   }

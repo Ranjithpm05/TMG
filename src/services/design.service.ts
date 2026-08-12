@@ -97,8 +97,8 @@ import {
   serverTimestamp
 } from '@angular/fire/firestore';
 import { Storage, ref, uploadBytes, getDownloadURL, deleteObject } from '@angular/fire/storage';
-import { from, map, Observable, shareReplay } from 'rxjs';
-import type { Design } from '../models/design.model';
+import { firstValueFrom, from, map, Observable, shareReplay } from 'rxjs';
+import type { Design, SizePrice } from '../models/design.model';
 
 @Injectable({ providedIn: 'root' })
 export class DesignService {
@@ -225,6 +225,26 @@ export class DesignService {
         } catch {
             // Ignore failures (e.g. already deleted or URL isn't a Storage ref) — non-critical cleanup.
         }
+    }
+
+    // Barcode → Design/Size lookup — the single source of truth for barcode
+    // identity during Pick List scanning (see PickListService.processScan /
+    // processPartyScan and PickListComponent.computeOrderLines). BARCODE lives
+    // nested per-size inside each Design's `sizes[]`, so Firestore can't query
+    // it directly (no querying a sub-field inside an array of maps) — this is
+    // a client-side scan over the same cached list every other Design Master
+    // read already uses. Inventory must NOT be used for this lookup: a
+    // barcode is valid the moment it's defined here, regardless of whether an
+    // `inventory` document (i.e. stock) exists for it yet.
+    async findDesignSizeByBarcode(barcode: string): Promise<{ design: Design; sizeEntry: SizePrice } | null> {
+        const trimmed = String(barcode ?? '').trim();
+        if (!trimmed) return null;
+        const designs = await firstValueFrom(this.getDesigns());
+        for (const design of designs) {
+            const sizeEntry = (design.sizes ?? []).find((s) => String(s.BARCODE ?? '').trim() === trimmed);
+            if (sizeEntry) return { design, sizeEntry };
+        }
+        return null;
     }
 
     async findDesignByStyleNo(styleNo: string): Promise<Design | null> {

@@ -127,7 +127,7 @@
                       }
                       <button (click)="printReadyPickList(pickList)"
                         class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">
-                        Print
+                        Download PDF
                       </button>
                     </div>
                   </td>
@@ -856,6 +856,9 @@
                     <th class="px-4 py-3 text-center text-xs font-semibold">Remaining</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold">Last Carton</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold">Status</th>
+                    @if (canEditPackingListLines(packingList)) {
+                      <th class="px-4 py-3 text-center text-xs font-semibold">Actions</th>
+                    }
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 bg-white">
@@ -874,6 +877,14 @@
                         [class.text-gray-400]="line.remainingQty === 0">{{line.remainingQty}}</td>
                       <td class="px-4 py-3 text-xs text-gray-600">{{line.lastCartonNo || '-'}}</td>
                       <td class="px-4 py-3"><span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="lineStatusBadge(line)">{{lineStatusLabel(line)}}</span></td>
+                      @if (canEditPackingListLines(packingList)) {
+                        <td class="px-4 py-3 text-center">
+                          <button (click)="editPackingListLine(packingList, line)"
+                            class="px-2.5 py-1 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 transition-colors">
+                            Edit
+                          </button>
+                        </td>
+                      }
                     </tr>
                   }
                 </tbody>

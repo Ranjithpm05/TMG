@@ -15,6 +15,7 @@ import { firstValueFrom, Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
 import { SalesOrder } from '../../models/sales-order.model';
 import { InventoryItem } from '../../models/inventory.model';
+import { Design } from '../../models/design.model';
 import {
   PickList,
   PickListClaimUser,
@@ -25,6 +26,7 @@ import {
 import { Client } from '../../models/client.model';
 import { SalesOrderService } from '../../services/sales-order.service';
 import { InventoryService } from '../../services/inventory.service';
+import { DesignService } from '../../services/design.service';
 import { PickListService } from '../../services/pick-list.service';
 import { ClientService } from '../../services/client.service';
 import { AuthService } from '../../services/auth.service';
@@ -49,6 +51,7 @@ export class PickListComponent implements OnInit, OnDestroy {
 
   private salesOrderService = inject(SalesOrderService);
   private inventoryService = inject(InventoryService);
+  private designService = inject(DesignService);
   private pickListService = inject(PickListService);
   private clientService = inject(ClientService);
   private authService = inject(AuthService);
@@ -68,6 +71,7 @@ export class PickListComponent implements OnInit, OnDestroy {
   mode = signal<ViewMode>('list');
   salesOrders = signal<SalesOrder[]>([]);
   inventory = signal<InventoryItem[]>([]);
+  designs = signal<Design[]>([]);
   clients = signal<Client[]>([]);
   pickLists = signal<PickList[]>([]);
   draftLines = signal<PickListLineItem[]>([]);
@@ -114,6 +118,28 @@ export class PickListComponent implements OnInit, OnDestroy {
       const bucket = map.get(key);
       if (bucket) bucket.push(item);
       else map.set(key, [item]);
+    }
+    return map;
+  });
+
+  // Barcode IDENTITY for a Pick List line comes from Design Master, not
+  // Inventory — a barcode is valid to pick the moment it's defined here,
+  // regardless of whether Inventory currently has a stock record for it (see
+  // computeOrderLines below). Indexed the same way as inventoryIndex, keyed
+  // by styleNo|color|size, one entry per (design, size-row) pair since
+  // BARCODE/sleeveType live nested inside each Design's `sizes[]`.
+  private designIndex = computed(() => {
+    const map = new Map<string, Array<{ barcode: string; designId: string; sleeveType?: string }>>();
+    for (const design of this.designs()) {
+      for (const sizeEntry of design.sizes ?? []) {
+        const barcode = String(sizeEntry.BARCODE ?? '').trim();
+        if (!barcode) continue;
+        const key = `${design.styleNo}||${design.color ?? ''}||${String(sizeEntry.size)}`;
+        const entry = { barcode, designId: design.id ?? '', sleeveType: sizeEntry.sleeveType ?? undefined };
+        const bucket = map.get(key);
+        if (bucket) bucket.push(entry);
+        else map.set(key, [entry]);
+      }
     }
     return map;
   });
@@ -392,7 +418,7 @@ export class PickListComponent implements OnInit, OnDestroy {
     let doneCount = 0;
     const done = () => {
       doneCount += 1;
-      if (doneCount === 4) {
+      if (doneCount === 5) {
         this.isLoading.set(false);
         // Hold the overlay through the paint that follows this data arriving —
         // signals flipping doesn't mean the (potentially large) table has
@@ -403,6 +429,10 @@ export class PickListComponent implements OnInit, OnDestroy {
 
     this.salesOrderService.getSalesOrders().subscribe({ next: (orders) => { this.salesOrders.set(orders); done(); }, error: done });
     this.inventoryService.getInventory().subscribe({ next: (inventory) => { this.inventory.set(inventory); done(); }, error: done });
+    // Design Master — the source of truth for barcode identity when drafting
+    // Pick List lines (see computeOrderLines); Inventory is consulted
+    // separately, only for stock level/id.
+    this.designService.getDesigns().subscribe({ next: (designs) => { this.designs.set(designs); done(); }, error: done });
     this.clientService.getClients().subscribe({ next: (clients) => { this.clients.set(clients); done(); }, error: done });
     this.pickListService.getPickLists().subscribe({
       next: (pickLists) => {
@@ -693,13 +723,16 @@ export class PickListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const scannableLines = selectedLines.filter((line) => line.requiredQty > 0 && !!line.inventoryId && !!line.barcode);
+    // Design Master (barcode present) is the only requirement to be scannable
+    // now — stock/inventoryId is no longer a gate, so a never-received or
+    // zero-stock item is still included and can go negative when picked.
+    const scannableLines = selectedLines.filter((line) => line.requiredQty > 0 && !!line.barcode);
     const skippedLines = selectedLines.filter((line) => !scannableLines.includes(line));
     if (!scannableLines.length) {
       await Swal.fire({
         icon: 'warning',
         title: 'No Scannable Items',
-        text: 'Pick List was not created because all selected items are out of stock or missing a barcode.',
+        text: 'Pick List was not created because none of the selected items have a barcode defined in Design Master.',
       });
       return;
     }
@@ -737,7 +770,8 @@ export class PickListComponent implements OnInit, OnDestroy {
       remainingQty: line.requiredQty,
       balanceQty: line.requiredQty + line.pendingQty,
       pendingQty: line.pendingQty,
-      status: line.requiredQty > 0 ? 'ready' : line.inventoryId ? 'pending_stock' : 'blocked',
+      // Already filtered to requiredQty > 0 && barcode present (scannableLines above).
+      status: 'ready',
       sortOrder: index,
     }));
 
@@ -759,7 +793,7 @@ export class PickListComponent implements OnInit, OnDestroy {
     const requiredQty = scannableLines.reduce((sum, line) => sum + line.requiredQty, 0);
     const result = await Swal.fire({
       title: 'Generate Pick List?',
-      html: `<div style="text-align:left;font-size:13px"><p><strong>Type:</strong> ${this.plTypeLabel(type)}</p><p><strong>Orders:</strong> ${includedSalesNos.join(', ')}</p><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px"><div style="background:#eef2ff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#4338ca;font-weight:700;text-transform:uppercase">Ready To Pick</div><div style="font-size:24px;font-weight:700;color:#4338ca">${requiredQty}</div></div><div style="background:#ffedd5;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#c2410c;font-weight:700;text-transform:uppercase">Skipped Lines</div><div style="font-size:24px;font-weight:700;color:#ea580c">${skippedLines.length}</div></div><div style="background:#ecfdf5;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#047857;font-weight:700;text-transform:uppercase">Scannable Lines</div><div style="font-size:24px;font-weight:700;color:#047857">${scannableLines.length}</div></div></div><p style="margin-top:10px;color:#64748b">${skippedLines.length > 0 ? 'Out-of-stock or barcode-missing items will not be generated.' : 'All selected items are ready for scanning.'}</p></div>`,
+      html: `<div style="text-align:left;font-size:13px"><p><strong>Type:</strong> ${this.plTypeLabel(type)}</p><p><strong>Orders:</strong> ${includedSalesNos.join(', ')}</p><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px"><div style="background:#eef2ff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#4338ca;font-weight:700;text-transform:uppercase">Ready To Pick</div><div style="font-size:24px;font-weight:700;color:#4338ca">${requiredQty}</div></div><div style="background:#ffedd5;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#c2410c;font-weight:700;text-transform:uppercase">Skipped Lines</div><div style="font-size:24px;font-weight:700;color:#ea580c">${skippedLines.length}</div></div><div style="background:#ecfdf5;border-radius:10px;padding:10px;text-align:center"><div style="font-size:11px;color:#047857;font-weight:700;text-transform:uppercase">Scannable Lines</div><div style="font-size:24px;font-weight:700;color:#047857">${scannableLines.length}</div></div></div><p style="margin-top:10px;color:#64748b">${skippedLines.length > 0 ? 'Items with no barcode defined in Design Master will not be generated.' : 'All selected items are ready for scanning.'}</p></div>`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Generate',
@@ -926,11 +960,13 @@ export class PickListComponent implements OnInit, OnDestroy {
   addOrderToEdit(order: SalesOrder) {
     const existing = this.editableLines();
     const startSort = existing.length ? Math.max(...existing.map((line) => line.sortOrder ?? 0)) + 1 : 0;
+    // Design Master (barcode present) is the only requirement now — see
+    // generatePickList's scannableLines filter for the same reasoning.
     const computedLines = this.computeOrderLines(order, startSort)
-      .filter((line) => line.requiredQty > 0 && !!line.inventoryId && !!line.barcode);
+      .filter((line) => line.requiredQty > 0 && !!line.barcode);
 
     if (!computedLines.length) {
-      Swal.fire({ icon: 'info', title: 'Nothing To Add', text: 'This order has no in-stock, barcoded items to add.' });
+      Swal.fire({ icon: 'info', title: 'Nothing To Add', text: 'This order has no barcoded items (per Design Master) to add.' });
       return;
     }
 
@@ -1056,10 +1092,17 @@ export class PickListComponent implements OnInit, OnDestroy {
         const balanceQty = Math.max(0, orderedQty - alreadyPickedQty);
         if (balanceQty <= 0) continue;
 
+        // Barcode identity comes from Design Master — a barcode is valid to
+        // pick regardless of whether Inventory currently has stock for it.
+        // Inventory is still consulted, but purely for `stockAvailable`
+        // (informational) and `inventoryId` (where to decrement, possibly
+        // into negative, at scan time) — it no longer caps requiredQty or
+        // gates the line's status.
+        const designMatch = this.findDesignMatch(item.design.styleNo, item.design.color ?? '', size, item.sleeveType);
         const inventoryMatch = this.findInventoryMatch(item.design.styleNo, item.design.color ?? '', size, item.sleeveType);
         const stockAvailable = Number(inventoryMatch?.currentStock) || 0;
-        const requiredQty = Math.min(balanceQty, stockAvailable);
-        const pendingQty = Math.max(0, balanceQty - requiredQty);
+        const requiredQty = balanceQty;
+        const pendingQty = Math.max(0, balanceQty - stockAvailable);
 
         lines.push({
           lineId: this.buildLineId(order.id, item.design.styleNo, size, sortOrder),
@@ -1079,10 +1122,10 @@ export class PickListComponent implements OnInit, OnDestroy {
           stockAvailable,
           requiredQty,
           pendingQty,
-          barcode: inventoryMatch?.barcode,
+          barcode: designMatch?.barcode,
           inventoryId: inventoryMatch?.id,
-          selected: requiredQty > 0,
-          status: requiredQty > 0 ? 'ready' : inventoryMatch?.id ? 'pending_stock' : 'blocked',
+          selected: !!designMatch,
+          status: designMatch ? 'ready' : 'blocked',
         });
 
         sortOrder += 1;
@@ -1097,6 +1140,13 @@ export class PickListComponent implements OnInit, OnDestroy {
     if (!candidates?.length) return undefined;
     return candidates.find((item) => (item.sleeveType ?? '') === (sleeveType ?? ''))
       ?? candidates.find((item) => !item.sleeveType || !sleeveType);
+  }
+
+  private findDesignMatch(styleNo: string, color: string, size: string, sleeveType?: string): { barcode: string; designId: string } | undefined {
+    const candidates = this.designIndex().get(`${styleNo}||${color}||${String(size)}`);
+    if (!candidates?.length) return undefined;
+    return candidates.find((entry) => (entry.sleeveType ?? '') === (sleeveType ?? ''))
+      ?? candidates.find((entry) => !entry.sleeveType || !sleeveType);
   }
 
   private buildLineId(orderId: string, styleNo: string, size: string, index: number): string {

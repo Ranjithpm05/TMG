@@ -22,6 +22,8 @@ import { Invoice } from '../../models/invoice.model';
 import { InvoiceService } from '../../services/invoice.service';
 import { InventoryService } from '../../services/inventory.service';
 import { InventoryItem } from '../../models/inventory.model';
+import { LoadingService } from '../../services/loading.service';
+import { exportRowsToPdf } from '../reports/report-export.util';
 
 type ViewMode = 'list' | 'view' | 'live-pack' | 'combine';
 
@@ -41,6 +43,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   private dcService = inject(DeliveryChallanService);
   private invoiceService = inject(InvoiceService);
   private inventoryService = inject(InventoryService);
+  private loadingService = inject(LoadingService);
   private subscriptions: Subscription[] = [];
 
   // ─── Navigation ────────────────────────────────────────────────────────────
@@ -300,8 +303,19 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.isLoading.set(true);
+    // Same global "Processing…" overlay the Pick List screen uses — this
+    // screen's initial fetch (pickLists/packingLists/deliveryChallans/invoices)
+    // can take a visible moment, so make that unmistakable rather than looking stuck.
+    this.loadingService.start();
     let doneCount = 0;
-    const done = () => { if (++doneCount >= 4) this.isLoading.set(false); };
+    const done = () => {
+      if (++doneCount >= 4) {
+        this.isLoading.set(false);
+        // Hold the overlay through the paint that follows this data arriving —
+        // signals flipping doesn't mean the table has actually rendered yet.
+        requestAnimationFrame(() => requestAnimationFrame(() => this.loadingService.stop()));
+      }
+    };
 
     this.subscriptions.push(
       this.pickListService.getPickLists().subscribe({ next: (v) => { this.pickLists.set(v); done(); }, error: done })
@@ -1098,10 +1112,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
   }
 
   async reprintInvoice(invoice: Invoice): Promise<void> {
-    const logoDataUri = await this.fetchLogoDataUri();
-    const html = this.buildInvoiceHtml(invoice, logoDataUri);
+    // Opened synchronously, before any await — see printEnhancedBoxLabels.
     const win = window.open('', '_blank', 'width=1100,height=820');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+    await this.loadingService.run(async () => {
+      const logoDataUri = await this.fetchLogoDataUri();
+      const html = this.buildInvoiceHtml(invoice, logoDataUri);
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+      else await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
+    });
   }
 
   private async fetchLogoDataUri(): Promise<string> {
@@ -1122,47 +1140,49 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   async downloadInvoiceExcel(invoice: Invoice): Promise<void> {
     try {
-      const XLSX = await import('xlsx');
-      const rows: any[][] = [
-        ['TMG Clothings', '', '', '', 'GSTIN: 33AAYFT2559B1ZY'],
-        ['Door No.334/2, Serayampalaym, Vellanaipatti Post, Coimbatore - 641048'],
-        ['Phone: 9842211787 | Email: order@tmggarments.in'],
-        [],
-        ['TAX INVOICE'],
-        [],
-        ['Invoice No:', invoice.invoiceNo, '', 'Invoice Date:', this.formatDate(invoice.invoiceDate)],
-        ['DC No:', invoice.dcNo, '', 'Order No:', invoice.orderNo],
-        ['Vehicle No:', invoice.vehicleNo, '', 'Total Pkgs:', invoice.totalPkgs],
-        ['Transport:', invoice.transport, '', 'Destination:', invoice.destination],
-        ['Agent:', invoice.agentName],
-        [],
-        ['Customer:', invoice.clientName],
-        ['Address:', [invoice.clientAddress, invoice.clientPlace, invoice.clientState, invoice.clientZipCode].filter(Boolean).join(', ')],
-        ['GSTIN:', invoice.clientGstin, '', 'Phone:', invoice.clientPhone],
-        [],
-        ['S.No', 'Description', 'HSN/SAC', 'Disc%', 'Tax%', 'MRP', 'UOM', 'Qty', 'Price', 'Amount'],
-        ...invoice.items.map((item, i) => [i + 1, item.description, item.hsnSac, item.discountPct, item.taxRate, item.mrp, item.uom, item.quantity, item.price, item.amount]),
-        [],
-        ['', '', '', '', '', '', '', '', 'Gross Amount:', invoice.grossAmount],
-        ['', '', '', '', '', '', '', '', 'Discount (' + invoice.discountPct + '%):', invoice.discountAmount],
-        ['', '', '', '', '', '', '', '', 'Taxable Value:', invoice.taxableValue],
-        ['', '', '', '', '', '', '', '', 'CGST (' + invoice.cgstRate + '%):', invoice.cgstAmount],
-        ['', '', '', '', '', '', '', '', 'SGST (' + invoice.sgstRate + '%):', invoice.sgstAmount],
-        ['', '', '', '', '', '', '', '', 'Total Tax:', invoice.totalTaxAmount],
-        ['', '', '', '', '', '', '', '', 'Round Off:', invoice.roundOff],
-        ['', '', '', '', '', '', '', '', 'TOTAL:', invoice.totalAmount],
-        [],
-        ['Amount in Words:', invoice.amountInWords],
-        [],
-        ['Bank Details:'],
-        ['Account Name: TMG Clothings', '', 'A/C No: 44358238258'],
-        ['IFSC: SBIN0061170', '', 'Bank: STATE BANK OF INDIA, Siruthozhil Branch, Kovilpatti'],
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      ws['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 6 }, { wch: 8 }, { wch: 14 }, { wch: 14 }];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Invoice');
-      XLSX.writeFile(wb, invoice.invoiceNo + '.xlsx');
+      await this.loadingService.run(async () => {
+        const XLSX = await import('xlsx');
+        const rows: any[][] = [
+          ['TMG Clothings', '', '', '', 'GSTIN: 33AAYFT2559B1ZY'],
+          ['Door No.334/2, Serayampalaym, Vellanaipatti Post, Coimbatore - 641048'],
+          ['Phone: 9842211787 | Email: order@tmggarments.in'],
+          [],
+          ['TAX INVOICE'],
+          [],
+          ['Invoice No:', invoice.invoiceNo, '', 'Invoice Date:', this.formatDate(invoice.invoiceDate)],
+          ['DC No:', invoice.dcNo, '', 'Order No:', invoice.orderNo],
+          ['Vehicle No:', invoice.vehicleNo, '', 'Total Pkgs:', invoice.totalPkgs],
+          ['Transport:', invoice.transport, '', 'Destination:', invoice.destination],
+          ['Agent:', invoice.agentName],
+          [],
+          ['Customer:', invoice.clientName],
+          ['Address:', [invoice.clientAddress, invoice.clientPlace, invoice.clientState, invoice.clientZipCode].filter(Boolean).join(', ')],
+          ['GSTIN:', invoice.clientGstin, '', 'Phone:', invoice.clientPhone],
+          [],
+          ['S.No', 'Description', 'HSN/SAC', 'Disc%', 'Tax%', 'MRP', 'UOM', 'Qty', 'Price', 'Amount'],
+          ...invoice.items.map((item, i) => [i + 1, item.description, item.hsnSac, item.discountPct, item.taxRate, item.mrp, item.uom, item.quantity, item.price, item.amount]),
+          [],
+          ['', '', '', '', '', '', '', '', 'Gross Amount:', invoice.grossAmount],
+          ['', '', '', '', '', '', '', '', 'Discount (' + invoice.discountPct + '%):', invoice.discountAmount],
+          ['', '', '', '', '', '', '', '', 'Taxable Value:', invoice.taxableValue],
+          ['', '', '', '', '', '', '', '', 'CGST (' + invoice.cgstRate + '%):', invoice.cgstAmount],
+          ['', '', '', '', '', '', '', '', 'SGST (' + invoice.sgstRate + '%):', invoice.sgstAmount],
+          ['', '', '', '', '', '', '', '', 'Total Tax:', invoice.totalTaxAmount],
+          ['', '', '', '', '', '', '', '', 'Round Off:', invoice.roundOff],
+          ['', '', '', '', '', '', '', '', 'TOTAL:', invoice.totalAmount],
+          [],
+          ['Amount in Words:', invoice.amountInWords],
+          [],
+          ['Bank Details:'],
+          ['Account Name: TMG Clothings', '', 'A/C No: 44358238258'],
+          ['IFSC: SBIN0061170', '', 'Bank: STATE BANK OF INDIA, Siruthozhil Branch, Kovilpatti'],
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 6 }, { wch: 8 }, { wch: 14 }, { wch: 14 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Invoice');
+        XLSX.writeFile(wb, invoice.invoiceNo + '.xlsx');
+      });
     } catch {
       await Swal.fire({ icon: 'error', title: 'Excel Export Failed', text: 'Unable to generate Excel. Please try printing the PDF instead.' });
     }
@@ -1170,219 +1190,198 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   async printEnhancedBoxLabels(packingList: PackingList): Promise<void> {
     if (!packingList.id) return;
-    const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id);
-    const dc = existingDCs.length > 0 ? existingDCs[0] : null;
-    const existingInvoices = await this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id);
-    const invoiceNo = existingInvoices.length > 0 ? existingInvoices[0].invoiceNo : '';
-    const cartons = packingList.cartons ?? [];
-    if (!cartons.length) {
-      await Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'No cartons to print', timer: 2000, showConfirmButton: false });
-      return;
-    }
-    const totalBoxes = cartons.length;
-    const labelsHtml = cartons.map((_, idx) => this.buildEnhancedBoxLabelHtml(packingList, idx, totalBoxes, dc, invoiceNo)).join('');
-    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Box Labels - ' + packingList.packingListNo + '</title>'
-      + '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px;background:#fff}'
-      + '.label-page{width:23cm;height:10.5cm;page-break-after:always;overflow:hidden;display:flex;flex-direction:column;border:1px solid #000}'
-      + '@media print{@page{size:23cm 10.5cm;margin:0}body{margin:0}.label-page{border:none;page-break-after:always}}'
-      + '</style></head><body>' + labelsHtml + '</body></html>';
+    // Open the popup synchronously, in direct response to the click, BEFORE any
+    // await — browsers tie window.open() permission to the user gesture that
+    // triggered it, and that gesture expires once we cross an async boundary
+    // (e.g. the Firestore reads below). Writing into an already-open window
+    // later is unaffected by that expiry.
     const win = window.open('', '_blank', 'width=900,height=500');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+    await this.loadingService.run(async () => {
+      const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id!);
+      const dc = existingDCs.length > 0 ? existingDCs[0] : null;
+      const existingInvoices = await this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id!);
+      const invoiceNo = existingInvoices.length > 0 ? existingInvoices[0].invoiceNo : '';
+      const cartons = packingList.cartons ?? [];
+      if (!cartons.length) {
+        win?.close();
+        await Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'No cartons to print', timer: 2000, showConfirmButton: false });
+        return;
+      }
+      const totalBoxes = cartons.length;
+      const labelsHtml = cartons.map((_, idx) => this.buildEnhancedBoxLabelHtml(packingList, idx, totalBoxes, dc, invoiceNo)).join('');
+      // Thermal box label — fixed 235mm x 105mm media, matching the physical
+      // label stock. @page here isn't just visual: it tells the browser's
+      // print dialog the exact target page size, which the thermal printer
+      // driver then maps its "Destination"/paper-size selection against.
+      const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Box Labels - ' + packingList.packingListNo + '</title>'
+        + '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px;background:#fff}'
+        + '.label-page{width:235mm;height:105mm;page-break-after:always;overflow:hidden;display:flex;flex-direction:column;border:1px solid #000}'
+        + '@media print{@page{size:235mm 105mm;margin:0}body{margin:0}.label-page{border:none;page-break-after:always}}'
+        + '</style></head><body>' + labelsHtml + '</body></html>';
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+      else await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
+    });
   }
 
   // ─── Print ─────────────────────────────────────────────────────────────────
 
+  // Downloads a PDF directly (via jsPDF, same as Reports' export) instead of
+  // opening a print-preview window — window.open()+document.write() into a
+  // popup that's pre-opened before the Firestore reads below turned out to
+  // still render blank in some browser/profile combinations, with no error
+  // surfaced. A direct file download has no such popup-timing dependency.
   async printReadyPickList(pickList: PickList) {
-    const lines = pickList.id ? await this.pickListService.getPickListLinesOnce(pickList.id) : pickList.items;
-    const html = this.buildReadyPickListPrintHtml(pickList, lines);
-    const win = window.open('', '_blank', 'width=1050,height=750');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
-  }
+    await this.loadingService.run(async () => {
+      const lines = pickList.id ? await this.pickListService.getPickListLinesOnce(pickList.id) : pickList.items;
+      const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean))] as string[];
+      const invItems = barcodes.length ? await this.inventoryService.getInventoryByBarcodes(barcodes) : [];
+      const mrpByBarcode = new Map<string, number>();
+      for (const inv of invItems) mrpByBarcode.set(inv.barcode, Number(inv.price) || 0);
 
-  private buildReadyPickListPrintHtml(pickList: PickList, lines: PickListLine[]): string {
-    const toPackLines = lines
-      .map((line) => {
-        const pickedQty = Math.max(0, Number(line.pickedQty ?? 0) || 0);
-        const packedQty = Math.max(0, Number(line.packedIntoPackingListsQty ?? 0) || 0);
-        const toPackQty = Math.max(0, pickedQty - packedQty);
-        return {
-          styleNo: line.styleNo,
-          color: line.color || '',
-          part: String(line.group ?? '').trim() || 'General',
-          size: String(line.size),
-          sleeveType: line.sleeveType ?? '',
-          pickedQty,
-          packedQty,
-          toPackQty,
-        };
-      })
-      .filter((line) => line.toPackQty > 0);
+      const toPackLines = lines
+        .map((line) => {
+          const pickedQty = Math.max(0, Number(line.pickedQty ?? 0) || 0);
+          const packedQty = Math.max(0, Number(line.packedIntoPackingListsQty ?? 0) || 0);
+          const toPackQty = Math.max(0, pickedQty - packedQty);
+          return {
+            styleNo: line.styleNo,
+            color: line.color || '',
+            part: String(line.group ?? '').trim() || 'General',
+            size: String(line.size),
+            sleeveType: line.sleeveType ?? '',
+            mrp: mrpByBarcode.get(line.barcode ?? '') ?? 0,
+            pickedQty,
+            packedQty,
+            toPackQty,
+          };
+        })
+        .filter((line) => line.toPackQty > 0);
 
-    const totals = toPackLines.reduce((sum, line) => ({
-      picked: sum.picked + line.pickedQty,
-      packed: sum.packed + line.packedQty,
-      toPack: sum.toPack + line.toPackQty,
-    }), { picked: 0, packed: 0, toPack: 0 });
-
-    // Pivot into one row per product (style/part/color/sleeve) with one
-    // column per size, instead of one row per item+size — matches the
-    // packer's physical picking sheet layout (product rows × size columns).
-    interface ProductRow {
-      styleNo: string;
-      part: string;
-      color: string;
-      sleeveType: string;
-      qtyBySize: Map<string, number>;
-      total: number;
-    }
-    const productMap = new Map<string, ProductRow>();
-    const sizeSet = new Set<string>();
-
-    for (const line of toPackLines) {
-      sizeSet.add(line.size);
-      const key = `${line.styleNo}||${line.part}||${line.color}||${line.sleeveType}`;
-      const existing = productMap.get(key);
-      if (existing) {
-        existing.qtyBySize.set(line.size, (existing.qtyBySize.get(line.size) ?? 0) + line.toPackQty);
-        existing.total += line.toPackQty;
-      } else {
-        productMap.set(key, {
-          styleNo: line.styleNo,
-          part: line.part,
-          color: line.color,
-          sleeveType: line.sleeveType,
-          qtyBySize: new Map([[line.size, line.toPackQty]]),
-          total: line.toPackQty,
-        });
+      if (!toPackLines.length) {
+        await Swal.fire({ icon: 'info', title: 'Nothing to Pack', text: 'There is no picked-but-unpacked quantity on this Pick List.' });
+        return;
       }
-    }
 
-    const sizes = [...sizeSet].sort((a, b) => this.rankSize(a) - this.rankSize(b));
-    const productRows = [...productMap.values()].sort((a, b) => {
-      const styleCompare = a.styleNo.localeCompare(b.styleNo, undefined, { numeric: true });
-      if (styleCompare !== 0) return styleCompare;
-      return a.color.localeCompare(b.color, undefined, { numeric: true });
+      const totals = toPackLines.reduce((sum, line) => ({
+        picked: sum.picked + line.pickedQty,
+        packed: sum.packed + line.packedQty,
+        toPack: sum.toPack + line.toPackQty,
+      }), { picked: 0, packed: 0, toPack: 0 });
+
+      // Pivot into one row per product (style/part/color/sleeve) with one
+      // column per size, instead of one row per item+size — matches the
+      // packer's physical picking sheet layout (product rows × size columns).
+      interface ProductRow {
+        styleNo: string;
+        part: string;
+        color: string;
+        sleeveType: string;
+        mrp: number;
+        qtyBySize: Map<string, number>;
+        total: number;
+      }
+      const productMap = new Map<string, ProductRow>();
+      const sizeSet = new Set<string>();
+
+      for (const line of toPackLines) {
+        sizeSet.add(line.size);
+        const key = `${line.styleNo}||${line.part}||${line.color}||${line.sleeveType}`;
+        const existing = productMap.get(key);
+        if (existing) {
+          existing.qtyBySize.set(line.size, (existing.qtyBySize.get(line.size) ?? 0) + line.toPackQty);
+          existing.total += line.toPackQty;
+        } else {
+          productMap.set(key, {
+            styleNo: line.styleNo,
+            part: line.part,
+            color: line.color,
+            sleeveType: line.sleeveType,
+            mrp: line.mrp,
+            qtyBySize: new Map([[line.size, line.toPackQty]]),
+            total: line.toPackQty,
+          });
+        }
+      }
+
+      const sizes = [...sizeSet].sort((a, b) => this.rankSize(a) - this.rankSize(b));
+      const productRows = [...productMap.values()].sort((a, b) => {
+        const styleCompare = a.styleNo.localeCompare(b.styleNo, undefined, { numeric: true });
+        if (styleCompare !== 0) return styleCompare;
+        return a.color.localeCompare(b.color, undefined, { numeric: true });
+      });
+      const sizeTotals = sizes.map((size) => productRows.reduce((sum, row) => sum + (row.qtyBySize.get(size) ?? 0), 0));
+      const grandTotal = productRows.reduce((sum, row) => sum + row.total, 0);
+      const productLabel = (row: ProductRow) => [row.styleNo, row.part, row.color, row.sleeveType].filter(Boolean).join(' - ');
+
+      const rows: any[][] = [
+        ['#', 'Product', ...sizes, 'MRP', 'Qty (Pcs)'],
+        ...productRows.map((row, i) => [
+          i + 1,
+          productLabel(row),
+          ...sizes.map((size) => row.qtyBySize.get(size) || '-'),
+          row.mrp > 0 ? row.mrp.toFixed(2) : '-',
+          row.total,
+        ]),
+        ['', 'Totals', ...sizeTotals, '-', grandTotal],
+      ];
+
+      const filterSummary = `${(pickList.salesNos ?? []).join(', ')} · ${pickList.clientName} · `
+        + `Picked ${totals.picked} · Already Packed ${totals.packed} · To Pack Now ${totals.toPack}`;
+
+      await exportRowsToPdf(rows, `Ready to Pack - ${pickList.pickListNo}`, filterSummary, {
+        signatureLabels: ['Prepared By', 'Checked By', 'Packed By'],
+      });
     });
-    const sizeTotals = sizes.map((size) => productRows.reduce((sum, row) => sum + (row.qtyBySize.get(size) ?? 0), 0));
-    const grandTotal = productRows.reduce((sum, row) => sum + row.total, 0);
-    const productLabel = (row: ProductRow) => [row.styleNo, row.part, row.color, row.sleeveType].filter(Boolean).join(' - ');
-
-    const buildHeaderCell = (label: string, align: 'left' | 'center' | 'right' = 'left') =>
-      `<th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#ffffff;font-size:10px;font-weight:700;text-transform:uppercase;text-align:${align};letter-spacing:0.04em">${label}</th>`;
-
-    const htmlRows = productRows.map((row, index) => `
-        <tr style="background:${index % 2 === 0 ? '#ffffff' : '#f8fafc'}">
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:#64748b">${index + 1}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;font-weight:700;color:#111827">${productLabel(row)}</td>
-          ${sizes.map((size) => `<td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:#334155">${row.qtyBySize.get(size) || '-'}</td>`).join('')}
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#0f766e">${row.total}</td>
-        </tr>`).join('');
-
-    const footerRow = `
-        <tr>
-          <td colspan="2" style="padding:9px 10px;border:1px solid #d7deea;text-align:right">Totals</td>
-          ${sizeTotals.map((t) => `<td style="padding:9px 10px;border:1px solid #d7deea;text-align:center">${t}</td>`).join('')}
-          <td style="padding:9px 10px;border:1px solid #d7deea;text-align:center">${grandTotal}</td>
-        </tr>`;
-
-    const printedAtLabel = new Date().toLocaleString('en-IN');
-
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Ready to Pack - ${pickList.pickListNo}</title>
-          <style>
-            body { font-family: Arial, sans-serif; font-size: 12px; margin: 18px; color: #0f172a; }
-            h1, p { margin: 0; }
-            .header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 12px; }
-            .meta { margin-top: 4px; color: #64748b; font-size: 11px; line-height: 1.5; }
-            .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 10px; }
-            .box { border: 1px solid #d7deea; background: #f8fafc; border-radius: 10px; padding: 10px 12px; }
-            .label { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: 0.04em; }
-            .value { margin-top: 5px; font-size: 20px; font-weight: 700; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-            tfoot td { background: #eff6ff; font-weight: 700; }
-            @media print { body { margin: 10px; } .summary { gap: 8px; } }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <h1 style="font-size:24px">Ready to Pack — ${pickList.pickListNo}</h1>
-              <p class="meta">${(pickList.salesNos ?? []).join(', ')} · ${pickList.clientName}</p>
-            </div>
-            <div style="text-align:right">
-              <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase">Printed At</div>
-              <div style="margin-top:4px;font-size:12px;color:#0f172a">${printedAtLabel}</div>
-            </div>
-          </div>
-
-          <div class="summary">
-            <div class="box"><div class="label">Picked Qty</div><div class="value" style="color:#15803d">${totals.picked}</div></div>
-            <div class="box"><div class="label">Already Packed</div><div class="value" style="color:#64748b">${totals.packed}</div></div>
-            <div class="box"><div class="label">To Pack Now</div><div class="value" style="color:#0f766e">${totals.toPack}</div></div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                ${buildHeaderCell('#', 'center')}
-                ${buildHeaderCell('Product')}
-                ${sizes.map((size) => buildHeaderCell(size, 'center')).join('')}
-                ${buildHeaderCell('Qty (Pcs)', 'center')}
-              </tr>
-            </thead>
-            <tbody>${htmlRows}</tbody>
-            <tfoot>${footerRow}</tfoot>
-          </table>
-        </body>
-      </html>`;
   }
 
   async printPackingList(packingList: PackingList) {
     if (!packingList.id) return;
-    const [fresh, lines] = await Promise.all([
-      this.packingListService.getPackingListByIdOnce(packingList.id),
-      this.packingListService.getPackingListLinesOnce(packingList.id),
-    ]);
-    const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean))] as string[];
-    const invItems = barcodes.length ? await this.inventoryService.getInventoryByBarcodes(barcodes) : [];
-    const mrpByBarcode = new Map<string, number>();
-    for (const inv of invItems) mrpByBarcode.set(inv.barcode, Number(inv.price) || 0);
-    const html = this.buildPrintHtml(fresh ?? packingList, lines, mrpByBarcode);
+    // Opened synchronously, before any await — see printEnhancedBoxLabels.
     const win = window.open('', '_blank', 'width=1100,height=780');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+    await this.loadingService.run(async () => {
+      const [fresh, lines] = await Promise.all([
+        this.packingListService.getPackingListByIdOnce(packingList.id!),
+        this.packingListService.getPackingListLinesOnce(packingList.id!),
+      ]);
+      const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean))] as string[];
+      const invItems = barcodes.length ? await this.inventoryService.getInventoryByBarcodes(barcodes) : [];
+      const mrpByBarcode = new Map<string, number>();
+      for (const inv of invItems) mrpByBarcode.set(inv.barcode, Number(inv.price) || 0);
+      const html = this.buildPrintHtml(fresh ?? packingList, lines, mrpByBarcode);
+      if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+      else await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
+    });
   }
 
   async exportPackingListToExcel(packingList: PackingList): Promise<void> {
     if (!packingList.id) return;
     try {
-      const [fresh, lines] = await Promise.all([
-        this.packingListService.getPackingListByIdOnce(packingList.id),
-        this.packingListService.getPackingListLinesOnce(packingList.id),
-      ]);
-      const loaded = fresh ?? packingList;
-      const XLSX = await import('xlsx');
-      const rows: any[][] = [
-        ['Packing List No:', loaded.packingListNo, '', 'Date:', this.formatDate(loaded.createdAt)],
-        ['Source Pick List(s):', (loaded.pickListNos ?? []).join(', ')],
-        ['Customer:', loaded.clientName, '', 'Orders:', (loaded.salesNos ?? []).join(', ')],
-        [],
-        ['S.No', 'Style No', 'Color', 'Part', 'Size', 'Sleeve', 'Barcode', 'Required Qty', 'Packed Qty'],
-        ...lines.map((line, i) => [
-          i + 1, line.styleNo, line.color, line.partName, line.size, line.sleeveType ?? '',
-          line.barcode ?? '', line.requiredQty, line.packedQty,
-        ]),
-        [],
-        ['', '', '', '', '', '', 'TOTAL:', loaded.totalRequiredQty, loaded.totalPackedQty],
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 12 }, { wch: 12 }];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Packing List');
-      XLSX.writeFile(wb, `${loaded.packingListNo}.xlsx`);
+      await this.loadingService.run(async () => {
+        const [fresh, lines] = await Promise.all([
+          this.packingListService.getPackingListByIdOnce(packingList.id!),
+          this.packingListService.getPackingListLinesOnce(packingList.id!),
+        ]);
+        const loaded = fresh ?? packingList;
+        const XLSX = await import('xlsx');
+        const rows: any[][] = [
+          ['Packing List No:', loaded.packingListNo, '', 'Date:', this.formatDate(loaded.createdAt)],
+          ['Source Pick List(s):', (loaded.pickListNos ?? []).join(', ')],
+          ['Customer:', loaded.clientName, '', 'Orders:', (loaded.salesNos ?? []).join(', ')],
+          [],
+          ['S.No', 'Style No', 'Color', 'Part', 'Size', 'Sleeve', 'Barcode', 'Required Qty', 'Packed Qty'],
+          ...lines.map((line, i) => [
+            i + 1, line.styleNo, line.color, line.partName, line.size, line.sleeveType ?? '',
+            line.barcode ?? '', line.requiredQty, line.packedQty,
+          ]),
+          [],
+          ['', '', '', '', '', '', 'TOTAL:', loaded.totalRequiredQty, loaded.totalPackedQty],
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 12 }, { wch: 12 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Packing List');
+        XLSX.writeFile(wb, `${loaded.packingListNo}.xlsx`);
+      });
     } catch {
       await Swal.fire({ icon: 'error', title: 'Excel Export Failed', text: 'Unable to generate Excel. Please try printing the PDF instead.' });
     }
@@ -1412,6 +1411,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
   async generateAndPrintDC(packingList: PackingList) {
     if (!packingList.id || this.isGeneratingDC()) return;
 
+    // Opened synchronously, before any await, so the browser still ties this
+    // popup to the click that triggered it — see printEnhancedBoxLabels. Closed
+    // below on any path that ends up not printing.
+    const win = window.open('', '_blank', 'width=960,height=820');
+
     const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id);
 
     // Set only when the user explicitly overrides an existing DC via
@@ -1436,61 +1440,66 @@ export class PackingListComponent implements OnInit, OnDestroy {
         denyButtonColor: '#d97706',
       });
       if (result.isConfirmed) {
-        const refreshedDCs = await this.backfillDCSleeveTypes(existingDCs, packingList.id);
-        await this.printDCsWithLabels(refreshedDCs.sort((a, b) => a.dcSeq - b.dcSeq), packingList);
+        await this.loadingService.run(async () => {
+          const refreshedDCs = await this.backfillDCSleeveTypes(existingDCs, packingList.id!);
+          await this.printDCsWithLabels(refreshedDCs.sort((a, b) => a.dcSeq - b.dcSeq), packingList, win);
+        });
         return;
       }
-      if (!result.isDenied) return;
+      if (!result.isDenied) { win?.close(); return; }
       allowDuplicate = true;
     }
 
     this.isGeneratingDC.set(true);
     try {
-      const [fresh, lines] = await Promise.all([
-        this.packingListService.getPackingListByIdOnce(packingList.id),
-        this.packingListService.getPackingListLinesOnce(packingList.id),
-      ]);
-      const loaded = fresh ?? packingList;
-      const agentName = this.agentName().trim();
-      const transport = this.transport().trim();
+      await this.loadingService.run(async () => {
+        const [fresh, lines] = await Promise.all([
+          this.packingListService.getPackingListByIdOnce(packingList.id!),
+          this.packingListService.getPackingListLinesOnce(packingList.id!),
+        ]);
+        const loaded = fresh ?? packingList;
+        const agentName = this.agentName().trim();
+        const transport = this.transport().trim();
 
-      if (agentName || transport) {
-        await this.packingListService.updateDispatchInfo(packingList.id, agentName, transport);
-      }
-
-      const partyProgress = loaded.partyProgress ?? [];
-      const generatedDCs: DeliveryChallan[] = [];
-
-      if (partyProgress.length === 0) {
-        const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
-        const dc = await this.createDCForParty(loaded, lines, client, '', '', loaded.clientName, agentName, transport, allowDuplicate);
-        generatedDCs.push(dc);
-      } else {
-        // A line can end up with no salesOrderId at all only in an edge case
-        // (a source Pick List line with no Sales Order attribution) — rather
-        // than let it match no party and vanish from every DC, it's billed
-        // under the Packing List's primary Sales Order, same as where
-        // PickListService.processPartyScan attributes an additional scan
-        // with no explicit order of its own.
-        const primarySalesOrderId = partyProgress[0]?.salesOrderId ?? '';
-        for (const party of partyProgress) {
-          const partyLines = lines.filter((l) =>
-            l.salesOrderIds.includes(party.salesOrderId) ||
-            (l.salesOrderIds.length === 0 && party.salesOrderId === primarySalesOrderId)
-          );
-          if (!partyLines.length) continue;
-          const clientName = party.clientName || loaded.clientName;
-          const clientId = party.clientId || loaded.clientId;
-          const client = await this.clientService.getClientForDC(clientId, clientName);
-          const dc = await this.createDCForParty(loaded, partyLines, client, party.salesOrderId, party.salesNo, clientName, agentName, transport, allowDuplicate);
-          generatedDCs.push(dc);
+        if (agentName || transport) {
+          await this.packingListService.updateDispatchInfo(packingList.id!, agentName, transport);
         }
-      }
 
-      await this.refreshDeliveryChallans();
-      await this.printDCsWithLabels(generatedDCs, loaded);
-      this.cancel();
+        const partyProgress = loaded.partyProgress ?? [];
+        const generatedDCs: DeliveryChallan[] = [];
+
+        if (partyProgress.length === 0) {
+          const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
+          const dc = await this.createDCForParty(loaded, lines, client, '', '', loaded.clientName, agentName, transport, allowDuplicate);
+          generatedDCs.push(dc);
+        } else {
+          // A line can end up with no salesOrderId at all only in an edge case
+          // (a source Pick List line with no Sales Order attribution) — rather
+          // than let it match no party and vanish from every DC, it's billed
+          // under the Packing List's primary Sales Order, same as where
+          // PickListService.processPartyScan attributes an additional scan
+          // with no explicit order of its own.
+          const primarySalesOrderId = partyProgress[0]?.salesOrderId ?? '';
+          for (const party of partyProgress) {
+            const partyLines = lines.filter((l) =>
+              l.salesOrderIds.includes(party.salesOrderId) ||
+              (l.salesOrderIds.length === 0 && party.salesOrderId === primarySalesOrderId)
+            );
+            if (!partyLines.length) continue;
+            const clientName = party.clientName || loaded.clientName;
+            const clientId = party.clientId || loaded.clientId;
+            const client = await this.clientService.getClientForDC(clientId, clientName);
+            const dc = await this.createDCForParty(loaded, partyLines, client, party.salesOrderId, party.salesNo, clientName, agentName, transport, allowDuplicate);
+            generatedDCs.push(dc);
+          }
+        }
+
+        await this.refreshDeliveryChallans();
+        await this.printDCsWithLabels(generatedDCs, loaded, win);
+        this.cancel();
+      });
     } catch (err: any) {
+      win?.close();
       const text = err?.message === 'already_has_dc'
         ? 'A DC has already been generated for this Packing List.'
         : err?.message ?? 'Unable to generate Delivery Challan.';
@@ -1578,6 +1587,110 @@ export class PackingListComponent implements OnInit, OnDestroy {
     } finally {
       this.packingInProgress.update((ids) => ids.filter((id) => id !== line.lineId));
     }
+  }
+
+  // ─── Line Edit (pre-DC correction) ─────────────────────────────────────────
+
+  // Editing is locked out the moment any DC exists for this Packing List —
+  // dcGeneratedKeys/invoiceId are the same fields the backend transaction in
+  // PackingListService.updatePackingListLine() checks, so this is just the UI
+  // mirror of that authoritative gate (not a substitute for it).
+  canEditPackingListLines(packingList: PackingList | null): boolean {
+    if (!packingList) return false;
+    return (packingList.dcGeneratedKeys ?? []).length === 0 && !packingList.invoiceId;
+  }
+
+  async editPackingListLine(packingList: PackingList, line: PackingListLine) {
+    if (!packingList.id) return;
+
+    // Re-check against a fresh read — the viewed packingList signal can be
+    // stale if a DC was generated (e.g. from another tab/user) since it was loaded.
+    const fresh = await this.packingListService.getPackingListByIdOnce(packingList.id);
+    if (!fresh || !this.canEditPackingListLines(fresh)) {
+      await Swal.fire({ icon: 'error', title: 'Editing Locked', text: 'A DC has already been generated for this Packing List — Style/Size/Qty can no longer be edited.' });
+      if (fresh) await this.openView(fresh);
+      return;
+    }
+
+    const { value: formValues } = await Swal.fire({
+      title: 'Edit Packing Line',
+      html: '<div style="text-align:left;font-size:13px">'
+        + '<p style="font-size:11px;color:#64748b;margin-bottom:10px">Quantity can only be reduced, not increased. Changing Style/Size re-identifies these physical units against Design Master/Inventory.</p>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Style No</label>'
+        + `<input id="edit-style" class="swal2-input" style="margin:0;width:100%" value="${line.styleNo}"></div>`
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Size</label>'
+        + `<input id="edit-size" class="swal2-input" style="margin:0;width:100%" value="${line.size}"></div>`
+        + `<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Packed Qty (max ${line.packedQty})</label>`
+        + `<input id="edit-qty" type="number" min="0" max="${line.packedQty}" class="swal2-input" style="margin:0;width:100%" value="${line.packedQty}"></div>`
+        + '</div>',
+      showCancelButton: true,
+      confirmButtonText: 'Save',
+      confirmButtonColor: '#4f46e5',
+      preConfirm: () => {
+        const styleNo = (document.getElementById('edit-style') as HTMLInputElement).value.trim();
+        const size = (document.getElementById('edit-size') as HTMLInputElement).value.trim();
+        const packedQty = Number((document.getElementById('edit-qty') as HTMLInputElement).value);
+        if (!styleNo || !size) { Swal.showValidationMessage('Style No and Size are required.'); return; }
+        if (!Number.isFinite(packedQty) || packedQty < 0) { Swal.showValidationMessage('Enter a valid quantity.'); return; }
+        if (packedQty > line.packedQty) { Swal.showValidationMessage(`Quantity can only be reduced (max ${line.packedQty}).`); return; }
+        return { styleNo, size, packedQty };
+      },
+    });
+    if (!formValues) return;
+
+    const identityChanged = formValues.styleNo !== line.styleNo || formValues.size !== line.size;
+    let barcode = line.barcode;
+    let inventoryId = line.inventoryId;
+    let designId = line.designId;
+
+    if (identityChanged) {
+      const inventoryList = await firstValueFrom(this.inventoryService.getInventory());
+      const match = inventoryList.find((inv) =>
+        inv.styleNo === formValues.styleNo
+        && inv.color === line.color
+        && inv.size === formValues.size
+        && (inv.sleeveType ?? '') === (line.sleeveType ?? '')
+      );
+      if (!match) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'No Matching Inventory Item',
+          text: `No inventory item found for Style "${formValues.styleNo}", Size "${formValues.size}", Color "${line.color}". Add it in Design Master first.`,
+        });
+        return;
+      }
+      barcode = match.barcode;
+      inventoryId = match.id;
+      designId = match.designId;
+    }
+
+    await this.loadingService.run(async () => {
+      try {
+        await this.packingListService.updatePackingListLine(packingList.id!, line.lineId, {
+          styleNo: formValues.styleNo,
+          size: formValues.size,
+          packedQty: formValues.packedQty,
+          barcode,
+          inventoryId,
+          designId,
+        });
+        await this.refreshPickListsAndPackingLists();
+        const refreshed = await this.packingListService.getPackingListByIdOnce(packingList.id!);
+        if (refreshed) await this.openView(refreshed);
+        await Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Packing line updated', timer: 2000, showConfirmButton: false });
+      } catch (err: any) {
+        const messages: Record<string, string> = {
+          dc_already_generated: 'A DC has already been generated for this Packing List — editing is locked.',
+          qty_can_only_decrease: 'Quantity can only be reduced, not increased.',
+          insufficient_stock: 'The corrected item does not have enough stock available.',
+          inventory_not_found: 'The corrected item could not be found in Inventory.',
+          inventory_not_resolved: 'Could not resolve the new Style/Size against Inventory.',
+        };
+        await Swal.fire({ icon: 'error', title: 'Update Failed', text: messages[err?.message] ?? err?.message ?? 'Unable to update the packing line.' });
+        const refreshed = await this.packingListService.getPackingListByIdOnce(packingList.id!);
+        if (refreshed) await this.openView(refreshed);
+      }
+    });
   }
 
   printCartonLabel(packingList: PackingList, carton: PackingCarton) {
@@ -1724,7 +1837,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
     transport: string,
     allowDuplicate = false,
   ): Promise<DeliveryChallan> {
-    const packedLines = lines.filter((l) => l.packedQty > 0 || l.requiredQty > 0);
+    // DC quantity must reflect what was actually packed, not what the Pick
+    // List/Packing List line was carrying as its to-pack (requiredQty) amount
+    // — a line with zero packedQty contributes nothing to the DC, full stop.
+    // (Previously this fell back to requiredQty for unpacked lines, which
+    // billed pending/unpacked quantity into the DC.)
+    const packedLines = lines.filter((l) => l.packedQty > 0);
 
     const barcodes = [...new Set(packedLines.map((l) => l.barcode).filter(Boolean))] as string[];
     const invItems = barcodes.length ? await this.inventoryService.getInventoryByBarcodes(barcodes) : [];
@@ -1735,7 +1853,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const sizeSet = new Set<string>();
 
     for (const line of packedLines) {
-      const qty = line.packedQty > 0 ? line.packedQty : line.requiredQty;
+      const qty = line.packedQty;
       if (qty <= 0) continue;
       sizeSet.add(line.size);
       const key = `${line.partName}||${line.styleNo}||${line.color}||${line.sleeveType ?? ''}`;
@@ -1783,7 +1901,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     }, { allowDuplicate });
   }
 
-  private async printDCsWithLabels(dcs: DeliveryChallan[], packingList: PackingList): Promise<void> {
+  private async printDCsWithLabels(dcs: DeliveryChallan[], packingList: PackingList, preOpenedWin: Window | null = null): Promise<void> {
     const total = dcs.length;
     const dcHtmlParts = dcs.map((dc, idx) => this.buildCustomerDCHtml(dc, idx + 1, total));
     const allDCHtml = dcHtmlParts.join('<div style="page-break-before:always"></div>');
@@ -1807,8 +1925,9 @@ ${allDCHtml}
 </div>
 </body></html>`;
 
-    const win = window.open('', '_blank', 'width=960,height=820');
+    const win = preOpenedWin ?? window.open('', '_blank', 'width=960,height=820');
     if (win) { win.document.write(combinedHtml); win.document.close(); setTimeout(() => win.print(), 600); }
+    else await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
   }
 
   private buildCustomerDCHtml(dc: DeliveryChallan, pageNum: number, totalPages: number): string {
@@ -2252,7 +2371,7 @@ ${allDCHtml}
     if (dc?.billingAddress) addrParts.push(dc.billingAddress);
     if (dc?.place || dc?.state) addrParts.push([dc.place, dc.state].filter(Boolean).join(', ') + (dc?.zipCode ? ' - ' + dc.zipCode : ''));
     if (dc?.clientPhone) addrParts.push('Ph: ' + dc.clientPhone);
-    const addrHtml = addrParts.map((p) => '<div style="font-size:8px;color:#333;margin-top:1px">' + p + '</div>').join('');
+    const addrHtml = addrParts.map((p) => '<div style="font-size:6.5px;line-height:1.3;color:#333;margin-top:1px">' + p + '</div>').join('');
     const qrData = 'INV:' + (invoiceNo || 'N/A') + '|BOX:' + (cartonIndex + 1) + 'of' + totalBoxes + '|CODE:' + (dc?.clientId || packingList.clientId).substring(0, 8).toUpperCase();
     return '<div class="label-page">'
       + '<div style="display:flex;align-items:center;padding:4px 8px;border-bottom:1.5px solid #000;background:#f8f8f8">'
@@ -2266,7 +2385,7 @@ ${allDCHtml}
       + '<div style="flex:1;padding:5px 8px;border-right:1px solid #ccc">'
       + '<div style="font-size:8px;font-weight:700;text-transform:uppercase;color:#4f46e5">Ship To</div>'
       + '<div style="font-size:11px;font-weight:900;color:#0f172a;margin-top:1px">' + customerName + '</div>'
-      + (addrHtml || '<div style="font-size:8px;color:#888">—</div>') + '</div>'
+      + (addrHtml || '<div style="font-size:6.5px;color:#888">—</div>') + '</div>'
       + '<div style="width:90px;padding:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fafafa">'
       + '<div style="border:1.5px solid #0f172a;padding:5px;font-size:6px;font-family:monospace;word-break:break-all;text-align:center;width:76px;line-height:1.4">' + qrData + '</div>'
       + '<div style="font-size:6px;color:#666;margin-top:3px;text-align:center">Scan for details</div></div></div>'

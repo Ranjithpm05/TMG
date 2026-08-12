@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import {
+  DocumentSnapshot,
   Firestore,
   collection,
   collectionData,
@@ -415,6 +416,177 @@ export class PackingListService {
       stockDeducted = await this.deductInventoryOnCompletion(packingListId);
     }
     return { ...txResult, stockDeducted };
+  }
+
+  // Manual correction of a Packing List line's Style/Size/Packed Qty, used
+  // when a pre-DC review finds a mis-scan (wrong barcode/size) or an
+  // over-count. Locked out entirely once a DC exists for this Packing List —
+  // dcGeneratedKeys/invoiceId are the SAME fields DeliveryChallanService's
+  // atomic transaction stamps on generation, so this can never race a
+  // concurrent "Generate DC" click. Qty may only be lowered (never raised),
+  // mirroring PickListService.updatePickList's rule — raising would require
+  // picking a carton and re-validating stock, which this correction flow
+  // isn't meant to replace.
+  //
+  // Caller must resolve the target Style/Size's barcode/inventoryId/designId
+  // up front (via Inventory) when changing identity — this method just
+  // re-validates and applies it. Reconciles:
+  //  - packingList.cartons: PackingCartonEntry snapshots styleNo/size/barcode
+  //    at scan time rather than referencing the line, so both the removed
+  //    qty (trimmed LIFO across cartons) and any identity change must be
+  //    replayed onto whatever entries this line left behind.
+  //  - inventory: only touched if stockDeducted is already true for this
+  //    Packing List (i.e. deductInventoryOnCompletion already ran) — restores
+  //    the old item's stock and, if identity changed, deducts the corrected
+  //    qty from the new item (rejecting if it doesn't have enough stock).
+  async updatePackingListLine(
+    packingListId: string,
+    lineId: string,
+    changes: { styleNo?: string; size?: string; packedQty: number; barcode?: string; inventoryId?: string; designId?: string },
+  ): Promise<PackingListLine> {
+    const result = await runTransaction(this.firestore, async (transaction) => {
+      const lineRef = this.lineDoc(packingListId, lineId);
+      const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
+      const [lineSnap, packingListSnap] = await Promise.all([
+        transaction.get(lineRef),
+        transaction.get(packingListRef),
+      ]);
+      if (!lineSnap.exists()) throw new Error('line_not_found');
+      if (!packingListSnap.exists()) throw new Error('packinglist_not_found');
+
+      const liveLine = this.normalizeLine({ lineId: lineSnap.id, ...lineSnap.data() });
+      const packingList = this.normalizePackingList({ id: packingListSnap.id, ...packingListSnap.data() });
+
+      if ((packingList.dcGeneratedKeys ?? []).length > 0 || packingList.invoiceId) {
+        throw new Error('dc_already_generated');
+      }
+
+      const nextStyleNo = (changes.styleNo ?? liveLine.styleNo).trim();
+      const nextSize = (changes.size ?? liveLine.size).trim();
+      const nextPackedQty = Math.max(0, Math.floor(Number(changes.packedQty)));
+      if (!Number.isFinite(nextPackedQty)) throw new Error('qty_invalid');
+      if (nextPackedQty > liveLine.packedQty) throw new Error('qty_can_only_decrease');
+
+      const identityChanged = nextStyleNo !== liveLine.styleNo || nextSize !== liveLine.size;
+      if (identityChanged && (!changes.barcode || !changes.inventoryId)) {
+        throw new Error('inventory_not_resolved');
+      }
+
+      const delta = liveLine.packedQty - nextPackedQty;
+      const nextBarcode = identityChanged ? changes.barcode! : liveLine.barcode;
+      const nextInventoryId = identityChanged ? changes.inventoryId : liveLine.inventoryId;
+      const nextDesignId = identityChanged ? (changes.designId || liveLine.designId) : liveLine.designId;
+
+      // Inventory reconciliation — reads must happen before any writes in a
+      // Firestore transaction, so resolve both snapshots now if needed.
+      let oldInvSnap: DocumentSnapshot | null = null;
+      let newInvSnap: DocumentSnapshot | null = null;
+      if (packingList.stockDeducted) {
+        if (identityChanged) {
+          if (liveLine.packedQty > 0 && liveLine.inventoryId) {
+            oldInvSnap = await transaction.get(doc(this.firestore, `inventory/${liveLine.inventoryId}`));
+          }
+          if (nextPackedQty > 0) {
+            newInvSnap = await transaction.get(doc(this.firestore, `inventory/${nextInventoryId}`));
+            if (!newInvSnap.exists()) throw new Error('inventory_not_found');
+            if ((Number(newInvSnap.data()?.['currentStock']) || 0) < nextPackedQty) throw new Error('insufficient_stock');
+          }
+        } else if (delta > 0 && liveLine.inventoryId) {
+          oldInvSnap = await transaction.get(doc(this.firestore, `inventory/${liveLine.inventoryId}`));
+        }
+      }
+
+      // Carton reconciliation.
+      let toTrim = delta;
+      const cartons = (packingList.cartons ?? []).map((c) => ({ ...c, entries: c.entries.map((e) => ({ ...e })) }));
+      for (let ci = cartons.length - 1; ci >= 0 && toTrim > 0; ci--) {
+        const entries = cartons[ci].entries;
+        for (let ei = entries.length - 1; ei >= 0 && toTrim > 0; ei--) {
+          const entry = entries[ei];
+          if (entry.lineId !== lineId) continue;
+          const take = Math.min(entry.qty, toTrim);
+          entry.qty -= take;
+          toTrim -= take;
+          if (entry.qty <= 0) entries.splice(ei, 1);
+        }
+      }
+      if (identityChanged) {
+        for (const carton of cartons) {
+          for (const entry of carton.entries) {
+            if (entry.lineId === lineId) {
+              entry.styleNo = nextStyleNo;
+              entry.size = nextSize;
+              entry.barcode = nextBarcode;
+            }
+          }
+        }
+      }
+      const nextCartons = cartons.map((c) => this.normalizeCarton({ ...c, totalQty: c.entries.reduce((s, e) => s + e.qty, 0) }));
+
+      const nextRemainingQty = Math.max(0, liveLine.requiredQty - nextPackedQty);
+      const nextLineStatus: PackingListLine['status'] = nextRemainingQty <= 0 ? 'completed' : nextPackedQty > 0 ? 'in_progress' : 'ready';
+      const updatedLine = this.normalizeLine({
+        ...liveLine,
+        styleNo: nextStyleNo,
+        size: nextSize,
+        barcode: nextBarcode,
+        inventoryId: nextInventoryId,
+        designId: nextDesignId,
+        packedQty: nextPackedQty,
+        remainingQty: nextRemainingQty,
+        status: nextLineStatus,
+        updatedAt: Date.now(),
+      });
+
+      const wasCompleted = liveLine.remainingQty <= 0;
+      const nowCompleted = nextRemainingQty <= 0;
+      const completedDelta = (nowCompleted ? 1 : 0) - (wasCompleted ? 1 : 0);
+      const nextTotalPackedQty = Math.max(0, (packingList.totalPackedQty || 0) - delta);
+      const nextCompletedLineCount = Math.max(0, (packingList.completedLineCount || 0) + completedDelta);
+      const nextPartSummaries = this.applyPartSummaryDelta(packingList.partSummaries ?? [], liveLine.partName, -delta);
+      const nextPartyProgress = this.applyPartyProgressDelta(packingList.partyProgress ?? [], liveLine, -delta, packingList.clientName);
+      const nextStatus = this.computePackingListStatus(
+        packingList.totalRequiredQty || 0,
+        nextTotalPackedQty,
+        packingList.lineCount || 0,
+        nextCompletedLineCount,
+      );
+
+      transaction.update(lineRef, this.stripUndefined({
+        styleNo: updatedLine.styleNo,
+        size: updatedLine.size,
+        barcode: updatedLine.barcode,
+        inventoryId: updatedLine.inventoryId,
+        designId: updatedLine.designId,
+        packedQty: updatedLine.packedQty,
+        remainingQty: updatedLine.remainingQty,
+        status: updatedLine.status,
+        updatedAt: serverTimestamp(),
+      }));
+
+      transaction.update(packingListRef, this.stripUndefined({
+        totalPackedQty: nextTotalPackedQty,
+        completedLineCount: nextCompletedLineCount,
+        cartonCount: nextCartons.length,
+        status: nextStatus,
+        partSummaries: nextPartSummaries,
+        partyProgress: nextPartyProgress,
+        cartons: nextCartons,
+        updatedAt: serverTimestamp(),
+      }));
+
+      if (identityChanged) {
+        if (oldInvSnap) transaction.update(oldInvSnap.ref, { currentStock: increment(liveLine.packedQty), updatedAt: serverTimestamp() });
+        if (newInvSnap) transaction.update(newInvSnap.ref, { currentStock: increment(-nextPackedQty), updatedAt: serverTimestamp() });
+      } else if (oldInvSnap) {
+        transaction.update(oldInvSnap.ref, { currentStock: increment(delta), updatedAt: serverTimestamp() });
+      }
+
+      return { line: updatedLine, inventoryTouched: !!(oldInvSnap || newInvSnap) };
+    });
+
+    if (result.inventoryTouched) this.inventoryService.invalidateCache();
+    return result.line;
   }
 
   private applyPartSummaryDelta(

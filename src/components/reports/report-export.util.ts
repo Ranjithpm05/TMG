@@ -6,6 +6,8 @@ export interface ExportRowOpts {
   isGrandTotalRow?: (row: any[]) => boolean;
   /** Only the Exceed Order report passes this (highlights rows where stock is exceeded). */
   highlightRow?: (row: any[]) => boolean;
+  /** exportRowsToPdf only: draws one underlined blank per label, evenly spaced, below the table (e.g. ['Prepared By', 'Checked By', 'Packed By']). */
+  signatureLabels?: string[];
 }
 
 function formatTimestamp(): string {
@@ -135,6 +137,24 @@ export async function exportRowsToPdf(
       textColor: isHighlighted ? [153, 27, 27] : [0, 0, 0],
     });
   });
+
+  if (opts?.signatureLabels?.length) {
+    const labels = opts.signatureLabels;
+    if (y > pageH - margin - 20) { doc.addPage(); y = margin; }
+    y += 18;
+    const segW = usableW / labels.length;
+    doc.setDrawColor(51, 65, 85);
+    doc.setLineWidth(0.3);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    labels.forEach((label, i) => {
+      const x1 = margin + i * segW + 5;
+      const x2 = margin + (i + 1) * segW - 5;
+      doc.line(x1, y, x2, y);
+      doc.text(label, (x1 + x2) / 2, y + 4, { align: 'center' });
+    });
+  }
 
   doc.save(`${title.replace(/\s+/g, '_')}_${formatTimestamp()}.pdf`);
 }

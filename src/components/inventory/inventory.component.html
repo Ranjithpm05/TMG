@@ -99,7 +99,10 @@
                             [class.bg-green-100]="(item.currentStock||0) > 0"
                             [class.text-green-800]="(item.currentStock||0) > 0"
                             [class.bg-red-100]="(item.currentStock||0) === 0"
-                            [class.text-red-700]="(item.currentStock||0) === 0">
+                            [class.text-red-700]="(item.currentStock||0) === 0"
+                            [class.bg-rose-600]="(item.currentStock||0) < 0"
+                            [class.text-white]="(item.currentStock||0) < 0"
+                            [title]="(item.currentStock||0) < 0 ? 'Negative stock — picked beyond available inventory' : ''">
                         {{item.currentStock}}
                     </span>
                     </td>
