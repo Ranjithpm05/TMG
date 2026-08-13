@@ -1693,6 +1693,46 @@ export class PackingListComponent implements OnInit, OnDestroy {
     });
   }
 
+  async deletePackingListLine(packingList: PackingList, line: PackingListLine) {
+    if (!packingList.id) return;
+
+    // Re-check against a fresh read — see editPackingListLine for why.
+    const fresh = await this.packingListService.getPackingListByIdOnce(packingList.id);
+    if (!fresh || !this.canEditPackingListLines(fresh)) {
+      await Swal.fire({ icon: 'error', title: 'Editing Locked', text: 'A DC has already been generated for this Packing List — rows can no longer be deleted.' });
+      if (fresh) await this.openView(fresh);
+      return;
+    }
+
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete this item?',
+      text: 'Are you sure you want to delete this item from the Packing List?',
+      showCancelButton: true,
+      confirmButtonText: 'Delete',
+      confirmButtonColor: '#dc2626',
+      cancelButtonText: 'Cancel',
+    });
+    if (!result.isConfirmed) return;
+
+    await this.loadingService.run(async () => {
+      try {
+        await this.packingListService.deletePackingListLine(packingList.id!, line.lineId);
+        await this.refreshPickListsAndPackingLists();
+        const refreshed = await this.packingListService.getPackingListByIdOnce(packingList.id!);
+        if (refreshed) await this.openView(refreshed);
+        await Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Item deleted from Packing List', timer: 2000, showConfirmButton: false });
+      } catch (err: any) {
+        const messages: Record<string, string> = {
+          dc_already_generated: 'A DC has already been generated for this Packing List — rows can no longer be deleted.',
+        };
+        await Swal.fire({ icon: 'error', title: 'Delete Failed', text: messages[err?.message] ?? err?.message ?? 'Unable to delete this packing line.' });
+        const refreshed = await this.packingListService.getPackingListByIdOnce(packingList.id!);
+        if (refreshed) await this.openView(refreshed);
+      }
+    });
+  }
+
   printCartonLabel(packingList: PackingList, carton: PackingCarton) {
     const html = this.buildCartonLabelHtml(packingList, carton);
     const win = window.open('', '_blank', 'width=600,height=500');

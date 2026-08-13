@@ -879,10 +879,16 @@
                       <td class="px-4 py-3"><span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="lineStatusBadge(line)">{{lineStatusLabel(line)}}</span></td>
                       @if (canEditPackingListLines(packingList)) {
                         <td class="px-4 py-3 text-center">
-                          <button (click)="editPackingListLine(packingList, line)"
-                            class="px-2.5 py-1 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 transition-colors">
-                            Edit
-                          </button>
+                          <div class="flex items-center justify-center gap-1.5">
+                            <button (click)="editPackingListLine(packingList, line)"
+                              class="px-2.5 py-1 border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 transition-colors">
+                              Edit
+                            </button>
+                            <button (click)="deletePackingListLine(packingList, line)"
+                              class="px-2.5 py-1 border border-red-300 rounded-lg text-xs text-red-600 hover:bg-red-50 transition-colors">
+                              Delete
+                            </button>
+                          </div>
                         </td>
                       }
                     </tr>

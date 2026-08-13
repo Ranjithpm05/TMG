@@ -589,6 +589,131 @@ export class PackingListService {
     return result.line;
   }
 
+  // Row-wise delete, pre-DC only — locked out by the same dcGeneratedKeys/
+  // invoiceId fields as updatePackingListLine (see there for why that's a
+  // safe atomic gate). Unlike an edit, deleting a row removes its
+  // requiredQty too, so — beyond the carton/inventory reconciliation shared
+  // with updatePackingListLine — this also releases the quantity this line
+  // had claimed from its source Pick List line(s) (via `sources`), so a
+  // future "Generate Packing List" pass can re-offer it instead of it being
+  // permanently stuck against a packing-list line that no longer exists.
+  async deletePackingListLine(packingListId: string, lineId: string): Promise<void> {
+    const result = await runTransaction(this.firestore, async (transaction) => {
+      const lineRef = this.lineDoc(packingListId, lineId);
+      const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
+      const [lineSnap, packingListSnap] = await Promise.all([
+        transaction.get(lineRef),
+        transaction.get(packingListRef),
+      ]);
+      if (!lineSnap.exists()) throw new Error('line_not_found');
+      if (!packingListSnap.exists()) throw new Error('packinglist_not_found');
+
+      const liveLine = this.normalizeLine({ lineId: lineSnap.id, ...lineSnap.data() });
+      const packingList = this.normalizePackingList({ id: packingListSnap.id, ...packingListSnap.data() });
+
+      if ((packingList.dcGeneratedKeys ?? []).length > 0 || packingList.invoiceId) {
+        throw new Error('dc_already_generated');
+      }
+
+      let invSnap: DocumentSnapshot | null = null;
+      if (packingList.stockDeducted && liveLine.packedQty > 0 && liveLine.inventoryId) {
+        invSnap = await transaction.get(doc(this.firestore, `inventory/${liveLine.inventoryId}`));
+      }
+
+      // Carton reconciliation — strip every entry this line left behind.
+      const cartons = (packingList.cartons ?? []).map((c) => ({
+        ...c,
+        entries: c.entries.filter((e) => e.lineId !== lineId),
+      }));
+      const nextCartons = cartons.map((c) => this.normalizeCarton({ ...c, totalQty: c.entries.reduce((s, e) => s + e.qty, 0) }));
+
+      const wasCompleted = liveLine.remainingQty <= 0;
+      const nextTotalRequiredQty = Math.max(0, (packingList.totalRequiredQty || 0) - liveLine.requiredQty);
+      const nextTotalPackedQty = Math.max(0, (packingList.totalPackedQty || 0) - liveLine.packedQty);
+      const nextLineCount = Math.max(0, (packingList.lineCount || 0) - 1);
+      const nextCompletedLineCount = Math.max(0, (packingList.completedLineCount || 0) - (wasCompleted ? 1 : 0));
+      const nextPartSummaries = this.removeLineFromPartSummaries(packingList.partSummaries ?? [], liveLine.partName, liveLine.requiredQty, liveLine.packedQty);
+      const nextPartyProgress = this.removeLineFromPartyProgress(packingList.partyProgress ?? [], liveLine, liveLine.requiredQty, liveLine.packedQty);
+      const nextStatus = this.computePackingListStatus(nextTotalRequiredQty, nextTotalPackedQty, nextLineCount, nextCompletedLineCount);
+
+      transaction.delete(lineRef);
+
+      transaction.update(packingListRef, this.stripUndefined({
+        totalRequiredQty: nextTotalRequiredQty,
+        totalPackedQty: nextTotalPackedQty,
+        lineCount: nextLineCount,
+        completedLineCount: nextCompletedLineCount,
+        cartonCount: nextCartons.length,
+        status: nextStatus,
+        partSummaries: nextPartSummaries,
+        partyProgress: nextPartyProgress,
+        cartons: nextCartons,
+        updatedAt: serverTimestamp(),
+      }));
+
+      if (invSnap?.exists()) {
+        transaction.update(invSnap.ref, { currentStock: increment(liveLine.packedQty), updatedAt: serverTimestamp() });
+      }
+
+      return { line: liveLine, inventoryTouched: !!invSnap };
+    });
+
+    if (result.inventoryTouched) this.inventoryService.invalidateCache();
+
+    const sources = result.line.sources ?? [];
+    if (sources.length) {
+      const batch = writeBatch(this.firestore);
+      let hasOps = false;
+      for (const source of sources) {
+        if (!source.pickListId || !source.pickListLineId || source.qty <= 0) continue;
+        batch.update(doc(this.firestore, `pickLists/${source.pickListId}/lines/${source.pickListLineId}`), {
+          packedIntoPackingListsQty: increment(-source.qty),
+          updatedAt: serverTimestamp(),
+        });
+        hasOps = true;
+      }
+      if (hasOps) {
+        await batch.commit();
+        const affectedPickListIds = [...new Set(sources.map((s) => s.pickListId).filter(Boolean))];
+        await Promise.all(affectedPickListIds.map((id) => this.pickListService.recalculatePickListStatus(id)));
+      }
+    }
+  }
+
+  private removeLineFromPartSummaries(
+    partSummaries: PackingPartSummary[],
+    partName: string,
+    requiredQty: number,
+    packedQty: number,
+  ): PackingPartSummary[] {
+    const key = partName || 'General';
+    return partSummaries.map((entry) => entry.partName !== key ? entry : {
+      ...entry,
+      requiredQty: Math.max(0, entry.requiredQty - requiredQty),
+      packedQty: Math.max(0, entry.packedQty - packedQty),
+    });
+  }
+
+  private removeLineFromPartyProgress(
+    partyProgress: PackingPartyProgress[],
+    line: PackingListLine,
+    requiredQty: number,
+    packedQty: number,
+  ): PackingPartyProgress[] {
+    if (!line.salesOrderIds.length) return partyProgress;
+    const next = [...partyProgress];
+    for (const salesOrderId of line.salesOrderIds) {
+      if (!salesOrderId) continue;
+      const idx = next.findIndex((entry) => entry.salesOrderId === salesOrderId);
+      if (idx === -1) continue;
+      const existing = next[idx];
+      const nextRequiredQty = Math.max(0, existing.requiredQty - requiredQty);
+      const nextPackedQty = Math.max(0, existing.packedQty - packedQty);
+      next[idx] = { ...existing, requiredQty: nextRequiredQty, packedQty: nextPackedQty, pendingQty: nextRequiredQty - nextPackedQty };
+    }
+    return next;
+  }
+
   private applyPartSummaryDelta(
     partSummaries: PackingPartSummary[],
     partName: string,
