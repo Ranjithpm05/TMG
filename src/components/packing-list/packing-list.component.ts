@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { firstValueFrom, Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
 import { PickList, PickListLine } from '../../models/pick-list.model';
@@ -23,9 +24,16 @@ import { InvoiceService } from '../../services/invoice.service';
 import { InventoryService } from '../../services/inventory.service';
 import { InventoryItem } from '../../models/inventory.model';
 import { LoadingService } from '../../services/loading.service';
+import { QzTrayService } from '../../services/qz-tray.service';
+import {
+  BoxLabelPrinterSettings,
+  buildBoxLabelTsplBatch,
+  loadBoxLabelSettings,
+  saveBoxLabelSettings,
+} from '../../services/box-label-tspl.util';
 import { exportRowsToPdf } from '../reports/report-export.util';
 
-type ViewMode = 'list' | 'view' | 'live-pack' | 'combine';
+type ViewMode = 'list' | 'view' | 'live-pack' | 'combine' | 'box-label-print';
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', '6XL', 'Free Size'];
 
@@ -44,6 +52,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
   private invoiceService = inject(InvoiceService);
   private inventoryService = inject(InventoryService);
   private loadingService = inject(LoadingService);
+  private qzTrayService = inject(QzTrayService);
+  private sanitizer = inject(DomSanitizer);
   private subscriptions: Subscription[] = [];
 
   // ─── Navigation ────────────────────────────────────────────────────────────
@@ -96,6 +106,19 @@ export class PackingListComponent implements OnInit, OnDestroy {
   // ─── Combine (multiple Pick Lists → one Packing List) ─────────────────────
   combineClientId = signal<string | null>(null);
   selectedPickListIdsForCombine = signal<Set<string>>(new Set());
+
+  // ─── Box Label print (QZ Tray + TSPL thermal printing) ─────────────────────
+  boxLabelPackingList = signal<PackingList | null>(null);
+  boxLabelDc = signal<DeliveryChallan | null>(null);
+  boxLabelInvoiceNo = signal('');
+  boxLabelSettings = signal<BoxLabelPrinterSettings>(loadBoxLabelSettings());
+  boxLabelPrinters = signal<string[]>([]);
+  boxLabelSelected = signal<Set<number>>(new Set());
+  boxLabelPreviewIndex = signal(0);
+  isDetectingBoxLabelPrinters = signal(false);
+  isPrintingBoxLabels = signal(false);
+  boxLabelQzStatus = signal<'unknown' | 'connected' | 'error'>('unknown');
+  boxLabelQzError = signal('');
 
   // ─── Computed ──────────────────────────────────────────────────────────────
 
@@ -1188,39 +1211,148 @@ export class PackingListComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Opens the Box Label print screen (QZ Tray + raw TSPL to a thermal
+  // printer) instead of the browser's print dialog used by every other
+  // print action in this app — thermal label printers need exact
+  // width/height/gap/density/speed control that only a direct print-agent
+  // connection (QZ Tray) can give, and the browser's own print dialog can't.
   async printEnhancedBoxLabels(packingList: PackingList): Promise<void> {
     if (!packingList.id) return;
-    // Open the popup synchronously, in direct response to the click, BEFORE any
-    // await — browsers tie window.open() permission to the user gesture that
-    // triggered it, and that gesture expires once we cross an async boundary
-    // (e.g. the Firestore reads below). Writing into an already-open window
-    // later is unaffected by that expiry.
-    const win = window.open('', '_blank', 'width=900,height=500');
     await this.loadingService.run(async () => {
-      const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id!);
-      const dc = existingDCs.length > 0 ? existingDCs[0] : null;
-      const existingInvoices = await this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id!);
-      const invoiceNo = existingInvoices.length > 0 ? existingInvoices[0].invoiceNo : '';
+      const [existingDCs, existingInvoices] = await Promise.all([
+        this.dcService.getDCsByPackingListIdOnce(packingList.id!),
+        this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id!),
+      ]);
       const cartons = packingList.cartons ?? [];
       if (!cartons.length) {
-        win?.close();
         await Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'No cartons to print', timer: 2000, showConfirmButton: false });
         return;
       }
-      const totalBoxes = cartons.length;
-      const labelsHtml = cartons.map((_, idx) => this.buildEnhancedBoxLabelHtml(packingList, idx, totalBoxes, dc, invoiceNo)).join('');
-      // Thermal box label — fixed 235mm x 105mm media, matching the physical
-      // label stock. @page here isn't just visual: it tells the browser's
-      // print dialog the exact target page size, which the thermal printer
-      // driver then maps its "Destination"/paper-size selection against.
-      const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Box Labels - ' + packingList.packingListNo + '</title>'
-        + '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px;background:#fff}'
-        + '.label-page{width:235mm;height:105mm;page-break-after:always;overflow:hidden;display:flex;flex-direction:column;border:1px solid #000}'
-        + '@media print{@page{size:235mm 105mm;margin:0}body{margin:0}.label-page{border:none;page-break-after:always}}'
-        + '</style></head><body>' + labelsHtml + '</body></html>';
-      if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
-      else await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
+      this.boxLabelPackingList.set(packingList);
+      this.boxLabelDc.set(existingDCs[0] ?? null);
+      this.boxLabelInvoiceNo.set(existingInvoices[0]?.invoiceNo ?? '');
+      this.boxLabelSelected.set(new Set(cartons.map((_, idx) => idx)));
+      this.boxLabelPreviewIndex.set(0);
+      this.boxLabelQzStatus.set('unknown');
+      this.boxLabelQzError.set('');
+      this.mode.set('box-label-print');
     });
+    // Detect printers right away so the dropdown isn't empty on open — errors
+    // here (QZ Tray not running) surface in the panel, not as a blocking Swal.
+    this.detectBoxLabelPrinters();
+  }
+
+  closeBoxLabelPrintModal(): void {
+    this.boxLabelPackingList.set(null);
+    this.mode.set('view');
+  }
+
+  // Returns a full standalone HTML document (not a fragment) so it can be
+  // dropped straight into an <iframe [srcdoc]> — an emulated-encapsulation
+  // Angular <style> block would never reach this markup, since [innerHTML]/
+  // srcdoc content is inserted outside Angular's template compiler and never
+  // receives its scoping attribute.
+  boxLabelPreviewHtml(): SafeHtml {
+    const packingList = this.boxLabelPackingList();
+    if (!packingList) return this.sanitizer.bypassSecurityTrustHtml('');
+    const cartons = packingList.cartons ?? [];
+    const idx = Math.min(this.boxLabelPreviewIndex(), Math.max(0, cartons.length - 1));
+    const labelHtml = this.buildEnhancedBoxLabelHtml(packingList, idx, cartons.length, this.boxLabelDc(), this.boxLabelInvoiceNo());
+    const settings = this.boxLabelSettings();
+    const doc = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+      + '*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px;background:#fff}'
+      + `.label-page{width:${settings.labelWidthMm}mm;height:${settings.labelHeightMm}mm;overflow:hidden;display:flex;flex-direction:column;border:1px solid #000}`
+      + '</style></head><body>' + labelHtml + '</body></html>';
+    return this.sanitizer.bypassSecurityTrustHtml(doc);
+  }
+
+  setBoxLabelPreviewIndex(idx: number): void {
+    this.boxLabelPreviewIndex.set(idx);
+  }
+
+  async detectBoxLabelPrinters(): Promise<void> {
+    this.isDetectingBoxLabelPrinters.set(true);
+    this.boxLabelQzError.set('');
+    try {
+      const printers = await this.qzTrayService.listPrinters();
+      this.boxLabelPrinters.set(printers);
+      this.boxLabelQzStatus.set('connected');
+      const current = this.boxLabelSettings();
+      if (!current.printerName && printers.length) {
+        this.updateBoxLabelSetting('printerName', printers[0]);
+      }
+    } catch (err: any) {
+      this.boxLabelQzStatus.set('error');
+      this.boxLabelQzError.set(err?.message ?? 'Could not connect to QZ Tray. Make sure it is installed and running.');
+    } finally {
+      this.isDetectingBoxLabelPrinters.set(false);
+    }
+  }
+
+  updateBoxLabelSetting<K extends keyof BoxLabelPrinterSettings>(key: K, value: BoxLabelPrinterSettings[K]): void {
+    const next = { ...this.boxLabelSettings(), [key]: value };
+    this.boxLabelSettings.set(next);
+    saveBoxLabelSettings(next);
+  }
+
+  isBoxLabelCartonSelected(index: number): boolean {
+    return this.boxLabelSelected().has(index);
+  }
+
+  toggleBoxLabelCarton(index: number): void {
+    const next = new Set(this.boxLabelSelected());
+    if (next.has(index)) next.delete(index); else next.add(index);
+    this.boxLabelSelected.set(next);
+  }
+
+  selectAllBoxLabelCartons(): void {
+    const total = this.boxLabelPackingList()?.cartons.length ?? 0;
+    this.boxLabelSelected.set(new Set(Array.from({ length: total }, (_, i) => i)));
+  }
+
+  clearBoxLabelCartonSelection(): void {
+    this.boxLabelSelected.set(new Set());
+  }
+
+  async printSelectedBoxLabels(): Promise<void> {
+    await this.runBoxLabelPrint([...this.boxLabelSelected()].sort((a, b) => a - b));
+  }
+
+  async printAllBoxLabels(): Promise<void> {
+    const total = this.boxLabelPackingList()?.cartons.length ?? 0;
+    await this.runBoxLabelPrint(Array.from({ length: total }, (_, i) => i));
+  }
+
+  private async runBoxLabelPrint(cartonIndexes: number[]): Promise<void> {
+    const packingList = this.boxLabelPackingList();
+    const settings = this.boxLabelSettings();
+    if (!packingList || !cartonIndexes.length) return;
+    if (!settings.printerName) {
+      await Swal.fire({ icon: 'warning', title: 'No Printer Selected', text: 'Detect and select a thermal printer first.' });
+      return;
+    }
+
+    this.isPrintingBoxLabels.set(true);
+    try {
+      const commands = buildBoxLabelTsplBatch(
+        packingList,
+        cartonIndexes,
+        packingList.cartons.length,
+        this.boxLabelDc(),
+        this.boxLabelInvoiceNo(),
+        settings,
+      );
+      await this.qzTrayService.printRaw(settings.printerName, commands);
+      this.boxLabelQzStatus.set('connected');
+      await Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `Sent ${cartonIndexes.length} label(s) to ${settings.printerName}`, timer: 2200, showConfirmButton: false });
+    } catch (err: any) {
+      this.boxLabelQzStatus.set('error');
+      const message = err?.message ?? 'Unable to reach QZ Tray or the selected printer.';
+      this.boxLabelQzError.set(message);
+      await Swal.fire({ icon: 'error', title: 'Print Failed', text: message });
+    } finally {
+      this.isPrintingBoxLabels.set(false);
+    }
   }
 
   // ─── Print ─────────────────────────────────────────────────────────────────
@@ -2411,7 +2543,7 @@ ${allDCHtml}
     if (dc?.billingAddress) addrParts.push(dc.billingAddress);
     if (dc?.place || dc?.state) addrParts.push([dc.place, dc.state].filter(Boolean).join(', ') + (dc?.zipCode ? ' - ' + dc.zipCode : ''));
     if (dc?.clientPhone) addrParts.push('Ph: ' + dc.clientPhone);
-    const addrHtml = addrParts.map((p) => '<div style="font-size:6.5px;line-height:1.3;color:#333;margin-top:1px">' + p + '</div>').join('');
+    const addrHtml = addrParts.map((p) => '<div style="font-size:9.5px;line-height:1.35;color:#333;margin-top:1.5px">' + p + '</div>').join('');
     const qrData = 'INV:' + (invoiceNo || 'N/A') + '|BOX:' + (cartonIndex + 1) + 'of' + totalBoxes + '|CODE:' + (dc?.clientId || packingList.clientId).substring(0, 8).toUpperCase();
     return '<div class="label-page">'
       + '<div style="display:flex;align-items:center;padding:4px 8px;border-bottom:1.5px solid #000;background:#f8f8f8">'
@@ -2425,7 +2557,7 @@ ${allDCHtml}
       + '<div style="flex:1;padding:5px 8px;border-right:1px solid #ccc">'
       + '<div style="font-size:8px;font-weight:700;text-transform:uppercase;color:#4f46e5">Ship To</div>'
       + '<div style="font-size:11px;font-weight:900;color:#0f172a;margin-top:1px">' + customerName + '</div>'
-      + (addrHtml || '<div style="font-size:6.5px;color:#888">—</div>') + '</div>'
+      + (addrHtml || '<div style="font-size:9.5px;color:#888">—</div>') + '</div>'
       + '<div style="width:90px;padding:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fafafa">'
       + '<div style="border:1.5px solid #0f172a;padding:5px;font-size:6px;font-family:monospace;word-break:break-all;text-align:center;width:76px;line-height:1.4">' + qrData + '</div>'
       + '<div style="font-size:6px;color:#666;margin-top:3px;text-align:center">Scan for details</div></div></div>'

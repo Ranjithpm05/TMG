@@ -22,6 +22,7 @@
     "firebase": "^11.10.0",
     "jspdf": "^4.2.0",
     "qrcode": "^1.5.4",
+    "qz-tray": "^2.2.6",
     "rxjs": "^7.8.2",
     "sweetalert2": "^11.26.17",
     "tailwindcss": "latest",
