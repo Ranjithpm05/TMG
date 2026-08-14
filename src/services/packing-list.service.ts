@@ -19,7 +19,7 @@ import {
   writeBatch,
   WriteBatch,
 } from '@angular/fire/firestore';
-import { from, map, Observable } from 'rxjs';
+import { from, map, Observable, shareReplay } from 'rxjs';
 import { PickListLine } from '../models/pick-list.model';
 import {
   PackingCarton,
@@ -47,11 +47,23 @@ export class PackingListService {
   // fetchAllDocs() — a prior fixed limit(100) here silently truncated the
   // list once packing lists passed that count. The active packing session for
   // a single packing list uses getPackingListById()/getPackingListLines()
-  // below, which stay live.
+  // below, which stay live. Cached; invalidated by every write in this
+  // service below, and (via the public invalidateCache()) by
+  // DeliveryChallanService.createDC, which stamps dcGeneratedKeys directly
+  // onto this same top-level doc from outside this service.
+  private packingListsCache$: Observable<PackingList[]> | null = null;
+
+  invalidateCache(): void {
+    this.packingListsCache$ = null;
+  }
+
   getPackingLists(): Observable<PackingList[]> {
-    return from(
-      fetchAllDocs(this.packingRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePackingList({ id: d.id, ...d.data() }))
-    );
+    if (!this.packingListsCache$) {
+      this.packingListsCache$ = from(
+        fetchAllDocs(this.packingRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePackingList({ id: d.id, ...d.data() }))
+      ).pipe(shareReplay(1));
+    }
+    return this.packingListsCache$;
   }
 
   getPackingListById(id: string): Observable<PackingList | null> {
@@ -192,6 +204,7 @@ export class PackingListService {
     ];
 
     await this.commitInChunks(operations);
+    this.invalidateCache();
 
     // Recompute each affected Pick List's own totals/status now that its
     // lines' packedIntoPackingListsQty changed — see computeEffectiveStatus:
@@ -316,6 +329,7 @@ export class PackingListService {
     if (txResult.packingListCompleted) {
       stockDeducted = await this.deductInventoryOnCompletion(packingListId);
     }
+    this.invalidateCache();
 
     return { ...txResult, stockDeducted } satisfies PackingScanResult;
   }
@@ -415,6 +429,7 @@ export class PackingListService {
     if (txResult.packingListCompleted) {
       stockDeducted = await this.deductInventoryOnCompletion(packingListId);
     }
+    this.invalidateCache();
     return { ...txResult, stockDeducted };
   }
 
@@ -586,6 +601,7 @@ export class PackingListService {
     });
 
     if (result.inventoryTouched) this.inventoryService.invalidateCache();
+    this.invalidateCache();
     return result.line;
   }
 
@@ -659,6 +675,7 @@ export class PackingListService {
     });
 
     if (result.inventoryTouched) this.inventoryService.invalidateCache();
+    this.invalidateCache();
 
     const sources = result.line.sources ?? [];
     if (sources.length) {
@@ -797,6 +814,7 @@ export class PackingListService {
         updatedAt: serverTimestamp(),
       }));
     });
+    this.invalidateCache();
   }
 
   async updateDispatchInfo(
@@ -810,11 +828,13 @@ export class PackingListService {
       transport: transport.trim() || null,
       updatedAt: serverTimestamp(),
     }));
+    this.invalidateCache();
   }
 
   async markQcVerified(packingListId: string): Promise<void> {
     const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
     await updateDoc(packingListRef, { qcVerifiedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    this.invalidateCache();
   }
 
   private async deductInventoryOnCompletion(packingListId: string): Promise<boolean> {
@@ -880,6 +900,7 @@ export class PackingListService {
     if (deducted) {
       // Stock quantities changed — drop the cached inventory list so the next read is fresh.
       this.inventoryService.invalidateCache();
+      this.invalidateCache();
     }
     return deducted;
   }
@@ -895,6 +916,7 @@ export class PackingListService {
         : c
     );
     await updateDoc(packingListRef, this.stripUndefined({ cartons, updatedAt: serverTimestamp() }));
+    this.invalidateCache();
   }
 
   private async resolveScannableLine(

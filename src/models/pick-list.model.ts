@@ -108,7 +108,26 @@ export interface PickList {
   orderSummaries?: PickListOrderSummary[];
   inventoryReserved?: boolean;
   legacyPickingPending?: boolean;
-  items: PickListLine[];
+  // Legacy field: a full duplicate of every line's data, once written on
+  // every recalculate/finalize. This is what pushed real pick-list documents
+  // past Firestore's 1 MiB limit (see project memory on the 1 MiB fix) — no
+  // longer written for new docs (replaced by totalRemainingQty/
+  // pickedByLineKey/partGroups below, which cover every real consumer at a
+  // fraction of the size). Only present on documents that predate that fix;
+  // normalizePickList() derives the same info from the `lines` subcollection
+  // fallback when this is absent, so it never needs to be read directly.
+  items?: PickListLine[];
+  // Sum of remainingQty across all lines — replaces summing over `items` for
+  // the Dashboard's "Reserved" inventory tile.
+  totalRemainingQty?: number;
+  // pickedQty summed per `${salesOrderId}||${styleNo}||${color}||${size}||${sleeveType}`
+  // key — replaces scanning `items` to find how much of a given order/style/
+  // size combo has already been picked (used when generating a new Pick List
+  // so already-picked balance isn't re-offered).
+  pickedByLineKey?: Record<string, number>;
+  // Distinct, trimmed `group` values across all lines — replaces scanning
+  // `items` to count how many distinct parts/groups a Pick List spans.
+  partGroups?: string[];
   remarks?: string;
   // Stamped by the explicit "Complete Pick List" action (Party-wise type),
   // which force-closes a list regardless of remaining pending quantity.

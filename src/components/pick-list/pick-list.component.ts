@@ -61,6 +61,7 @@ export class PickListComponent implements OnInit, OnDestroy {
   private claimHeartbeat: ReturnType<typeof setInterval> | null = null;
   private cameraStream: MediaStream | null = null;
   private cameraAnimationFrame: number | null = null;
+  private startCameraScannerTimeoutId: any = null;
   private cameraCanvas: HTMLCanvasElement | null = null;
   private barcodeDetector: any = null;
   private cameraLoopBusy = false;
@@ -457,8 +458,88 @@ export class PickListComponent implements OnInit, OnDestroy {
     void this.stopLivePicking({ keepMode: true });
   }
 
+  // Indexed by clientId/orderId via memoized computed() maps instead of a raw
+  // `.find()`/`.reduce()`/`.some()` per row — these were each called several
+  // times per visible order row from the template on every change-detection
+  // cycle (once directly, then again inside getPickStatusForOrder/
+  // getOrderRemainingQty/canGenerateOrder), the same O(orders × pickLists)
+  // hot-path pattern already fixed for alreadyPickedIndex above.
+  private clientNameById = computed(() => {
+    const map = new Map<string, string>();
+    for (const client of this.clients()) {
+      if (client.id) map.set(client.id, client.clientName);
+    }
+    return map;
+  });
+
+  private orderPickIndex = computed(() => {
+    const pickedByOrder = new Map<string, { picked: number; pending: number }>();
+    for (const pickList of this.effectivePickedLists()) {
+      const summaries = pickList.orderSummaries ?? [];
+      if (summaries.length) {
+        for (const summary of summaries) {
+          const entry = pickedByOrder.get(summary.salesOrderId) ?? { picked: 0, pending: 0 };
+          entry.picked += summary.pickedQty;
+          entry.pending += summary.pendingQty;
+          pickedByOrder.set(summary.salesOrderId, entry);
+        }
+      } else {
+        for (const item of pickList.items ?? []) {
+          if (!item.salesOrderId) continue;
+          const entry = pickedByOrder.get(item.salesOrderId) ?? { picked: 0, pending: 0 };
+          entry.picked += item.pickedQty || 0;
+          entry.pending += item.pendingQty || 0;
+          pickedByOrder.set(item.salesOrderId, entry);
+        }
+      }
+    }
+
+    // Preserves visiblePickLists() encounter order per orderId, so `pickList`/
+    // `openPickList` below match the original `.find()`'s first-match semantics.
+    const pickListsByOrder = new Map<string, PickList[]>();
+    for (const pickList of this.visiblePickLists()) {
+      for (const orderId of pickList.salesOrderIds) {
+        const list = pickListsByOrder.get(orderId);
+        if (list) list.push(pickList);
+        else pickListsByOrder.set(orderId, [pickList]);
+      }
+    }
+
+    const map = new Map<string, {
+      total: number;
+      picked: number;
+      pending: number;
+      status: 'not_started' | 'partial' | 'completed';
+      pickList: PickList | null;
+      openPickList: PickList | null;
+      hasAnyPickList: boolean;
+    }>();
+
+    for (const order of this.salesOrders()) {
+      const total = this.getOrderTotalQty(order);
+      const { picked = 0, pending = 0 } = pickedByOrder.get(order.id) ?? {};
+      const relatedPickLists = pickListsByOrder.get(order.id) ?? [];
+      const openPickList = relatedPickLists.find((pl) => pl.status !== 'Completed' || !!pl.legacyPickingPending) ?? null;
+
+      let status: 'not_started' | 'partial' | 'completed' = 'not_started';
+      if (total > 0 && picked >= total) status = 'completed';
+      else if (relatedPickLists.length > 0 || picked > 0 || pending > 0) status = 'partial';
+
+      map.set(order.id, {
+        total,
+        picked,
+        pending,
+        status,
+        pickList: relatedPickLists[0] ?? null,
+        openPickList,
+        hasAnyPickList: relatedPickLists.length > 0,
+      });
+    }
+    return map;
+  });
+
   getClientName(id: string): string {
-    return this.clients().find((client) => client.id === id)?.clientName ?? '-';
+    return this.clientNameById().get(id) ?? '-';
   }
 
   getOrderTotalQty(order: SalesOrder): number {
@@ -466,42 +547,23 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   getPickedQtyForOrder(orderId: string): number {
-    return this.effectivePickedLists().reduce((sum, pickList) => {
-      const summary = pickList.orderSummaries?.find((entry) => entry.salesOrderId === orderId);
-      if (summary) return sum + summary.pickedQty;
-      return sum + (pickList.items ?? []).filter((item) => item.salesOrderId === orderId).reduce((itemSum, item) => itemSum + (item.pickedQty || 0), 0);
-    }, 0);
+    return this.orderPickIndex().get(orderId)?.picked ?? 0;
   }
 
   getOrderPendingQty(orderId: string): number {
-    return this.effectivePickedLists().reduce((sum, pickList) => {
-      const summary = pickList.orderSummaries?.find((entry) => entry.salesOrderId === orderId);
-      if (summary) return sum + summary.pendingQty;
-      return sum + (pickList.items ?? []).filter((item) => item.salesOrderId === orderId).reduce((itemSum, item) => itemSum + (item.pendingQty || 0), 0);
-    }, 0);
+    return this.orderPickIndex().get(orderId)?.pending ?? 0;
   }
 
   getPickStatusForOrder(orderId: string): 'not_started' | 'partial' | 'completed' {
-    const order = this.salesOrders().find((entry) => entry.id === orderId);
-    if (!order) return 'not_started';
-    const total = this.getOrderTotalQty(order);
-    const picked = this.getPickedQtyForOrder(orderId);
-    const pending = this.getOrderPendingQty(orderId);
-    const hasPickList = this.visiblePickLists().some((pickList) => pickList.salesOrderIds.includes(orderId));
-    if (total > 0 && picked >= total) return 'completed';
-    if (hasPickList || picked > 0 || pending > 0) return 'partial';
-    return 'not_started';
+    return this.orderPickIndex().get(orderId)?.status ?? 'not_started';
   }
 
   getPickListForOrder(orderId: string): PickList | null {
-    return this.visiblePickLists().find((pickList) => pickList.salesOrderIds.includes(orderId)) ?? null;
+    return this.orderPickIndex().get(orderId)?.pickList ?? null;
   }
 
   getOpenPickListForOrder(orderId: string): PickList | null {
-    return this.visiblePickLists().find((pickList) =>
-      pickList.salesOrderIds.includes(orderId)
-      && (pickList.status !== 'Completed' || !!pickList.legacyPickingPending)
-    ) ?? null;
+    return this.orderPickIndex().get(orderId)?.openPickList ?? null;
   }
 
   getAvailableQtyForOrder(order: SalesOrder): number {
@@ -521,9 +583,9 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   getOrderRemainingQty(orderId: string): number {
-    const order = this.salesOrders().find((entry) => entry.id === orderId);
-    if (!order) return 0;
-    return Math.max(0, this.getOrderTotalQty(order) - this.getPickedQtyForOrder(orderId));
+    const entry = this.orderPickIndex().get(orderId);
+    if (!entry) return 0;
+    return Math.max(0, entry.total - entry.picked);
   }
 
   canGenerateOrder(orderId: string): boolean {
@@ -547,7 +609,7 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   getGenerateActionLabel(orderId: string): string {
-    return this.visiblePickLists().some((pickList) => pickList.salesOrderIds.includes(orderId)) ? 'Generate Balance' : 'Generate';
+    return this.orderPickIndex().get(orderId)?.hasAnyPickList ? 'Generate Balance' : 'Generate';
   }
 
   getPickActionLabel(pickList: PickList | null | undefined): string {
@@ -564,13 +626,15 @@ export class PickListComponent implements OnInit, OnDestroy {
   // Rebuilding a flatMap of every pick list's items on every single call (once
   // per size-entry — tens of thousands across all orders) was the same O(n)
   // hot-path problem as findInventoryMatch(). Indexed once per
-  // effectivePickedLists() change instead.
+  // effectivePickedLists() change instead. Reads the compact
+  // `pickedByLineKey` aggregate (keyed identically to this map) rather than
+  // scanning the legacy per-line `items` array — see PickList.items doc
+  // comment for why that array is no longer populated on new/updated docs.
   private alreadyPickedIndex = computed(() => {
     const map = new Map<string, number>();
     for (const pickList of this.effectivePickedLists()) {
-      for (const line of pickList.items ?? []) {
-        const key = `${line.salesOrderId}||${line.styleNo}||${line.color}||${String(line.size)}||${line.sleeveType ?? ''}`;
-        map.set(key, (map.get(key) ?? 0) + (line.pickedQty || 0));
+      for (const [key, pickedQty] of Object.entries(pickList.pickedByLineKey ?? {})) {
+        map.set(key, (map.get(key) ?? 0) + (pickedQty || 0));
       }
     }
     return map;
@@ -1494,7 +1558,12 @@ export class PickListComponent implements OnInit, OnDestroy {
     this.isCameraOpen.set(true);
     this.scannerMessage.set('Point camera at the assigned item');
 
-    setTimeout(async () => {
+    this.startCameraScannerTimeoutId = setTimeout(async () => {
+      this.startCameraScannerTimeoutId = null;
+      // stopCameraScanner() may have already run during this 50ms delay (fast
+      // navigation away) — bail out instead of opening a camera stream that
+      // would then never get stopped.
+      if (!this.isCameraOpen()) return;
       if (!this.cameraVideoElement || !navigator.mediaDevices?.getUserMedia) {
         this.isCameraOpen.set(false);
         await this.showToast('error', 'Camera Error', 'Camera is not supported on this device.');
@@ -1519,6 +1588,10 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   private stopCameraScanner() {
+    if (this.startCameraScannerTimeoutId) {
+      clearTimeout(this.startCameraScannerTimeoutId);
+      this.startCameraScannerTimeoutId = null;
+    }
     if (this.cameraAnimationFrame) {
       cancelAnimationFrame(this.cameraAnimationFrame);
       this.cameraAnimationFrame = null;

@@ -1901,20 +1901,44 @@ export class PackingListComponent implements OnInit, OnDestroy {
     return this.packingLists().find((pl) => pl.pickListId === pickListId) ?? null;
   }
 
+  // Indexed by pickListId via a memoized computed() map instead of a raw
+  // `.filter()` over the entire packingLists() array — this is called once
+  // per row of the "Ready to Pack" table (via @let) on every change-detection
+  // cycle, an O(readyPickLists × totalPackingLists) scan that only grows as
+  // packing history accumulates. Same fix pattern as pick-list.component.ts's
+  // inventoryIndex/alreadyPickedIndex.
+  private packingListsByPickListId = computed(() => {
+    const map = new Map<string, PackingList[]>();
+    for (const pl of this.packingLists()) {
+      const keys = new Set<string>();
+      if (pl.pickListId) keys.add(pl.pickListId);
+      for (const id of pl.pickListIds ?? []) {
+        if (id) keys.add(id);
+      }
+      for (const key of keys) {
+        const list = map.get(key);
+        if (list) list.push(pl);
+        else map.set(key, [pl]);
+      }
+    }
+    return map;
+  });
+
   getPackingListsForPickList(pickListId: string): PackingList[] {
     if (!pickListId) return [];
-    return this.packingLists().filter((pl) => pl.pickListId === pickListId || pl.pickListIds?.includes(pickListId));
+    return this.packingListsByPickListId().get(pickListId) ?? [];
   }
 
   getFirstIncompletePacking(packingLists: PackingList[]): PackingList | null {
     return packingLists.find((pl) => pl.status !== 'Completed') ?? null;
   }
 
+  // Reads the partGroups aggregate (distinct group names, maintained
+  // server-side by PickListService) rather than scanning the legacy per-line
+  // `items` array — see PickList.items doc comment for why that array is no
+  // longer populated on new/updated docs.
   getPartCountFromPickList(pickList: PickList): number {
-    const parts = new Set(
-      (pickList.items ?? []).map((l) => String(l.group ?? '').trim() || 'General').filter(Boolean)
-    );
-    return parts.size;
+    return pickList.partGroups?.length ?? 0;
   }
 
   getCartonEntryCount(carton: PackingCarton): number {

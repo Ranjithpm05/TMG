@@ -357,6 +357,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
 
   private stream: MediaStream | null = null;
   private animationFrameId: number | null = null;
+  private startBatchScanTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private lastScannedTime = 0;
   private lastTickTime = 0;
   private readonly SCAN_INTERVAL = 60;          // scan every 60 ms (was 150)
@@ -592,6 +593,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     }
 
   ngOnDestroy() {
+    if (this.startBatchScanTimeoutId) clearTimeout(this.startBatchScanTimeoutId);
     if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
     this.stream?.getTracks().forEach(track => track.stop());
     if (this.draftSaveTimer) clearTimeout(this.draftSaveTimer);
@@ -1187,16 +1189,50 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     );
   }
 
+  // Indexed by clientId/orderId via memoized computed() maps instead of a raw
+  // `.find()`/`.reduce()` per row — these are called once per visible order
+  // row from the template on every change-detection cycle, and some orders in
+  // this dataset carry hundreds of items (see pick-list.component.ts's note on
+  // an order with 688 items), so re-summing them per CD tick is expensive.
+  private clientNameById = computed(() => {
+    const map = new Map<string, string>();
+    for (const c of this.clients()) {
+      if (c.id) map.set(c.id, c.clientName);
+    }
+    return map;
+  });
+
+  private orderTotalsById = computed(() => {
+    const map = new Map<string, { qty: number; price: number }>();
+    for (const order of this.salesOrders()) {
+      if (order.id) map.set(order.id, this.computeOrderTotals(order));
+    }
+    return map;
+  });
+
+  private computeOrderTotals(order: SalesOrder): { qty: number; price: number } {
+    let qty = 0;
+    let price = 0;
+    for (const item of order.items) {
+      for (const size of item.itemSizes) {
+        const sizeQty = Number(size.quantity) || 0;
+        qty += sizeQty;
+        price += sizeQty * (Number(size.WSP) || 0);
+      }
+    }
+    return { qty, price };
+  }
+
   getClientName(clientId: string): string {
-    return this.clients().find(c => c.id === clientId)?.clientName ?? 'Unknown Client';
+    return this.clientNameById().get(clientId) ?? 'Unknown Client';
   }
 
   getOrderTotalQuantity(order: SalesOrder): number {
-    return order.items.reduce((total, item) => total + item.itemSizes.reduce((itemTotal, size) => itemTotal + (Number(size.quantity) || 0), 0), 0);
+    return this.orderTotalsById().get(order.id)?.qty ?? this.computeOrderTotals(order).qty;
   }
 
   getOrderTotalPrice(order: SalesOrder): number {
-    return order.items.reduce((total, item) => total + item.itemSizes.reduce((itemTotal, size) => itemTotal + ((Number(size.quantity) || 0) * (Number(size.WSP) || 0)), 0), 0);
+    return this.orderTotalsById().get(order.id)?.price ?? this.computeOrderTotals(order).price;
   }
 
   // --- New Item Addition Logic ---
@@ -1393,7 +1429,12 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.torchTrack = null;
     this.enhanceCanvas = document.createElement('canvas');
 
-    setTimeout(async () => {
+    this.startBatchScanTimeoutId = setTimeout(async () => {
+      this.startBatchScanTimeoutId = null;
+      // stopBatchScan()/ngOnDestroy() may have already run during this delay
+      // (fast navigation away) — bail out instead of opening a camera stream
+      // that would then never get stopped.
+      if (!this.isBatchScanning()) return;
       if (!this.videoElement || !navigator.mediaDevices?.getUserMedia) {
         Swal.fire({ icon: 'error', title: 'Error', text: 'Camera not supported by your browser or element not ready.' });
         this.isBatchScanning.set(false);
@@ -1604,6 +1645,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   }
 
   stopBatchScan() {
+    if (this.startBatchScanTimeoutId) { clearTimeout(this.startBatchScanTimeoutId); this.startBatchScanTimeoutId = null; }
     if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
     // Turn off torch before stopping
     if (this.torchEnabled && this.torchTrack) {

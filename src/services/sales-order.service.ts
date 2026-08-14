@@ -14,7 +14,7 @@ import {
 } from '@angular/fire/firestore';
 
 import type { SalesOrder } from '../models/sales-order.model';
-import { from, Observable } from 'rxjs';
+import { from, Observable, shareReplay } from 'rxjs';
 import { fetchAllDocs } from './firestore-pagination.util';
 
 @Injectable({ providedIn: 'root' })
@@ -22,6 +22,32 @@ export class SalesOrderService {
 
     private firestore = inject(Firestore);
     private salesOrderRef = collection(this.firestore, 'salesOrders');
+
+    // The full unbounded list is read repeatedly (Pick List screen, Sales Order's
+    // own "All" view, every write-triggered refresh) — cached one-time read,
+    // invalidated by this service's own create/update/delete below, same pattern
+    // as ClientService/DesignService/InventoryService.
+    private salesOrdersCache$: Observable<SalesOrder[]> | null = null;
+
+    // getSalesOrdersInRange() is keyed by exact (start, end) pair rather than
+    // a single cached value, since different callers legitimately want
+    // different ranges — but the common case (Sales Order/Dashboard/Reports
+    // all default to "current month", and users frequently navigate back to
+    // the same screen without changing the filter) previously re-paid a full
+    // paginated Firestore read on every single visit. Capped to avoid
+    // unbounded growth in a long-lived SPA session — cleared wholesale if it
+    // ever grows past a generous bound rather than tracking per-entry LRU.
+    private salesOrdersRangeCache = new Map<string, Observable<SalesOrder[]>>();
+    private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
+
+    // Public: PickListService.syncSalesOrderShipment() writes salesOrders/{id}.status
+    // directly (auto-marking an order Shipped once fully picked) without going through
+    // this service, and must invalidate this cache too or the Pick List screen would
+    // keep showing the pre-shipment status until an unrelated cache refresh.
+    invalidateCache(): void {
+        this.salesOrdersCache$ = null;
+        this.salesOrdersRangeCache.clear();
+    }
 
     private buildSalesOrder(
         order: Omit<SalesOrder, 'id' | 'status' | 'orderDate'>
@@ -47,17 +73,20 @@ export class SalesOrderService {
     // reads this method (same bug class as the Design Master export issue).
     // Sorted client-side instead, which has no such requirement.
     getSalesOrders(): Observable<SalesOrder[]> {
-        return from(
-            fetchAllDocs(this.salesOrderRef, [], (d) =>
-                // Spread doc data first, then override with the real Firestore doc id last —
-                // some legacy documents have a stale/blank "id" field stored in their body
-                // (see createSalesOrder), which must never win over the actual doc reference id.
-                ({ ...d.data(), id: d.id } as SalesOrder)
-            ).then(async orders => {
-                await this.healMissingCreatedAt(orders);
-                return orders.sort((a, b) => this.toMillis(b.createdAt) - this.toMillis(a.createdAt));
-            })
-        );
+        if (!this.salesOrdersCache$) {
+            this.salesOrdersCache$ = from(
+                fetchAllDocs(this.salesOrderRef, [], (d) =>
+                    // Spread doc data first, then override with the real Firestore doc id last —
+                    // some legacy documents have a stale/blank "id" field stored in their body
+                    // (see createSalesOrder), which must never win over the actual doc reference id.
+                    ({ ...d.data(), id: d.id } as SalesOrder)
+                ).then(async orders => {
+                    await this.healMissingCreatedAt(orders);
+                    return orders.sort((a, b) => this.toMillis(b.createdAt) - this.toMillis(a.createdAt));
+                })
+            ).pipe(shareReplay(1));
+        }
+        return this.salesOrdersCache$;
     }
 
     /**
@@ -132,18 +161,28 @@ export class SalesOrderService {
     // fetchAllDocs() — a prior fixed limit(5000) here would have silently
     // dropped orders from a report's totals once a date range held more rows
     // than that. Avoids leaving a listener open while a report is viewed.
+    // Cached per exact (start, end) pair — see salesOrdersRangeCache above.
     getSalesOrdersInRange(start: Date, end: Date): Observable<SalesOrder[]> {
-        return from(
-            fetchAllDocs(
-                this.salesOrderRef,
-                [
-                    where('createdAt', '>=', Timestamp.fromDate(start)),
-                    where('createdAt', '<=', Timestamp.fromDate(end)),
-                    orderBy('createdAt', 'desc'),
-                ],
-                (d) => ({ ...d.data(), id: d.id } as SalesOrder)
-            )
-        );
+        const key = `${start.getTime()}_${end.getTime()}`;
+        let cached = this.salesOrdersRangeCache.get(key);
+        if (!cached) {
+            if (this.salesOrdersRangeCache.size >= SalesOrderService.MAX_RANGE_CACHE_ENTRIES) {
+                this.salesOrdersRangeCache.clear();
+            }
+            cached = from(
+                fetchAllDocs(
+                    this.salesOrderRef,
+                    [
+                        where('createdAt', '>=', Timestamp.fromDate(start)),
+                        where('createdAt', '<=', Timestamp.fromDate(end)),
+                        orderBy('createdAt', 'desc'),
+                    ],
+                    (d) => ({ ...d.data(), id: d.id } as SalesOrder)
+                )
+            ).pipe(shareReplay(1));
+            this.salesOrdersRangeCache.set(key, cached);
+        }
+        return cached;
     }
 
     // 🔹 Create sales order
@@ -168,6 +207,7 @@ export class SalesOrderService {
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
             });
+            this.invalidateCache();
             return newOrder;
         })();
 
@@ -202,6 +242,7 @@ export class SalesOrderService {
                 ...sanitized,
                 updatedAt: serverTimestamp()
             });
+            this.invalidateCache();
         })();
 
         return from(promise);
@@ -211,5 +252,6 @@ export class SalesOrderService {
     async deleteSalesOrder(orderId: string): Promise<void> {
         const orderDoc = doc(this.firestore, `salesOrders/${orderId}`);
         await deleteDoc(orderDoc);
+        this.invalidateCache();
     }
 }

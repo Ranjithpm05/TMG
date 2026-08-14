@@ -114,8 +114,11 @@ export class DesignService {
     // records returned — getDesigns() pages through with startAfter() until a
     // page comes back short, so the full collection is always returned no
     // matter how large it grows (a prior fixed limit() here silently
-    // truncated the list once the collection passed that count).
-    private static readonly PAGE_SIZE = 1000;
+    // truncated the list once the collection passed that count). Each page is
+    // an awaited round trip before the next starts, so a larger page size
+    // directly cuts round-trip count for a large catalog (matches
+    // firestore-pagination.util.ts's fetchAllDocs()).
+    private static readonly PAGE_SIZE = 5000;
 
     // 🔹 GET ALL DESIGNS (cached one-time read)
     // No `orderBy('createdAt')` on the query itself: Firestore silently drops any

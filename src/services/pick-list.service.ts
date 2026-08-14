@@ -20,7 +20,7 @@ import {
   writeBatch,
   WriteBatch,
 } from '@angular/fire/firestore';
-import { from, firstValueFrom, Observable, map } from 'rxjs';
+import { from, firstValueFrom, Observable, map, shareReplay } from 'rxjs';
 import type { SalesOrder } from '../models/sales-order.model';
 import type {
   PickList,
@@ -34,6 +34,7 @@ import type {
 import type { InventoryItem } from '../models/inventory.model';
 import { InventoryService } from './inventory.service';
 import { DesignService } from './design.service';
+import { SalesOrderService } from './sales-order.service';
 import { fetchAllDocs } from './firestore-pagination.util';
 
 type StoredPickList = PickList & {
@@ -52,6 +53,7 @@ export class PickListService {
   private firestore = inject(Firestore);
   private inventoryService = inject(InventoryService);
   private designService = inject(DesignService);
+  private salesOrderService = inject(SalesOrderService);
   private plRef = collection(this.firestore, 'pickLists');
   private inventoryRef = collection(this.firestore, 'inventory');
 
@@ -59,11 +61,20 @@ export class PickListService {
   // fetchAllDocs() — a prior fixed limit(100) here silently truncated the
   // list once pick lists passed that count. The active picking session for a
   // single pick list uses getPickListById()/getPickListLines() below, which
-  // stay live.
+  // stay live. Cached, invalidated by every write in this service below.
+  private pickListsCache$: Observable<PickList[]> | null = null;
+
+  private invalidatePickListsCache(): void {
+    this.pickListsCache$ = null;
+  }
+
   getPickLists(): Observable<PickList[]> {
-    return from(
-      fetchAllDocs(this.plRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePickList({ id: d.id, ...d.data() }))
-    );
+    if (!this.pickListsCache$) {
+      this.pickListsCache$ = from(
+        fetchAllDocs(this.plRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePickList({ id: d.id, ...d.data() }))
+      ).pipe(shareReplay(1));
+    }
+    return this.pickListsCache$;
   }
 
   getPickListById(id: string): Observable<PickList | null> {
@@ -143,7 +154,9 @@ export class PickListService {
         pickableLineCount: summary.pickableLineCount,
         completedLineCount: summary.completedLineCount,
         orderSummaries: summary.orderSummaries,
-        items: summary.items,
+        totalRemainingQty: summary.totalRemainingQty,
+        pickedByLineKey: summary.pickedByLineKey,
+        partGroups: summary.partGroups,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })),
@@ -155,6 +168,7 @@ export class PickListService {
     ];
 
     await this.commitInChunks(operations);
+    this.invalidatePickListsCache();
     return pickListDoc.id;
   }
 
@@ -201,6 +215,7 @@ export class PickListService {
     ];
 
     await this.commitInChunks(operations);
+    this.invalidatePickListsCache();
     if (restoreByInventoryId.size > 0) this.inventoryService.invalidateCache();
   }
 
@@ -457,19 +472,16 @@ export class PickListService {
         pickableLineCount: summary.pickableLineCount,
         completedLineCount: 0,
         orderSummaries: summary.orderSummaries.map((entry) => ({ ...entry, pickedQty: 0 })),
-        items: summary.items.map((line) => ({
-          ...line,
-          pickedQty: 0,
-          remainingQty: line.requiredQty,
-          balanceQty: line.requiredQty + (line.pendingQty || 0),
-          status: line.requiredQty > 0 && line.inventoryId && line.barcode ? 'ready' : line.status,
-          claimedByUserId: undefined,
-          claimedByUsername: undefined,
-          claimExpiresAt: undefined,
-          completedAt: undefined,
-          completedByUserId: undefined,
-          completedByUsername: undefined,
-        })),
+        // summary was built from resetLines, which already have pickedQty:0/
+        // remainingQty:requiredQty per line — so these already reflect the
+        // reset state directly, no extra zeroing needed.
+        totalRemainingQty: summary.totalRemainingQty,
+        pickedByLineKey: summary.pickedByLineKey,
+        partGroups: summary.partGroups,
+        // Shrinks any pre-fix doc that still carries the legacy `items` array
+        // (see PickList.items doc comment) — this is the exact write path
+        // that used to grow it, so it's the natural place to drop it too.
+        items: deleteField(),
         inventoryReserved: true,
         legacyPickingPending: false,
         updatedAt: serverTimestamp(),
@@ -477,6 +489,7 @@ export class PickListService {
     ];
 
     await this.commitInChunks(operations);
+    this.invalidatePickListsCache();
     return this.getPickListByIdOnce(pickListId);
   }
 
@@ -794,6 +807,7 @@ export class PickListService {
     // The transaction may have deducted inventory.currentStock — drop the cached
     // inventory list so the next read (Dashboard/Reports/Inventory screen) is fresh.
     this.inventoryService.invalidateCache();
+    this.invalidatePickListsCache();
     return result;
   }
 
@@ -815,9 +829,17 @@ export class PickListService {
       pickableLineCount: summary.pickableLineCount,
       completedLineCount: summary.completedLineCount,
       orderSummaries: summary.orderSummaries,
-      items: summary.items,
+      totalRemainingQty: summary.totalRemainingQty,
+      pickedByLineKey: summary.pickedByLineKey,
+      partGroups: summary.partGroups,
+      // Shrinks any pre-fix doc that still carries the legacy full-line
+      // `items` array (see PickList.items doc comment — this was the write
+      // path that grew real pick lists past Firestore's 1 MiB limit, since
+      // this is called on every edit and every Packing List generation).
+      items: deleteField(),
       updatedAt: serverTimestamp(),
     }));
+    this.invalidatePickListsCache();
   }
 
   /**
@@ -860,12 +882,18 @@ export class PickListService {
       pickableLineCount: summary.pickableLineCount,
       completedLineCount: summary.completedLineCount,
       orderSummaries: summary.orderSummaries,
-      items: summary.items,
+      totalRemainingQty: summary.totalRemainingQty,
+      pickedByLineKey: summary.pickedByLineKey,
+      partGroups: summary.partGroups,
+      // See recalculatePickListStatus for why this actively removes the
+      // legacy `items` field rather than just no longer adding to it.
+      items: deleteField(),
       finalizedAt: now,
       finalizedByUserId: user.id,
       finalizedByUsername: user.username,
       updatedAt: serverTimestamp(),
     }));
+    this.invalidatePickListsCache();
 
     await Promise.all(
       summary.orderSummaries
@@ -1085,6 +1113,7 @@ export class PickListService {
     });
 
     this.inventoryService.invalidateCache();
+    this.invalidatePickListsCache();
     return result;
   }
 
@@ -1128,6 +1157,7 @@ export class PickListService {
       status: nextStatus,
       updatedAt: serverTimestamp(),
     });
+    this.salesOrderService.invalidateCache();
   }
 
   // Resolves the `inventory` doc to decrement stock against for a barcode
@@ -1256,7 +1286,25 @@ export class PickListService {
       orderSummaries: orderSummaries.length ? orderSummaries : this.buildOrderSummaries(items),
       inventoryReserved: raw?.inventoryReserved === true,
       legacyPickingPending,
+      // Kept only as the migration source for ensureLegacyPickListLines()/
+      // prepareLegacyPickListForPicking() on pre-fix docs that still carry a
+      // stored `items` array — always `[]` for any doc written after the fix.
       items,
+      // totalRemainingQty/pickedByLineKey/partGroups replace the legacy `items`
+      // duplication (see PickList.items doc comment) — for docs written after
+      // that fix, these come straight from the stored aggregate fields; for
+      // any older doc that still carries a full `items` array but hasn't been
+      // touched by a write since, they're derived here from that array so
+      // every consumer stays correct without needing a migration write first.
+      totalRemainingQty: raw?.totalRemainingQty != null
+        ? Number(raw.totalRemainingQty) || 0
+        : items.reduce((sum, line) => sum + (line.remainingQty || 0), 0),
+      pickedByLineKey: raw?.pickedByLineKey && typeof raw.pickedByLineKey === 'object'
+        ? raw.pickedByLineKey
+        : this.buildPickedByLineKey(items),
+      partGroups: Array.isArray(raw?.partGroups)
+        ? raw.partGroups.map((g: any) => String(g))
+        : this.buildPartGroups(items),
       remarks: raw?.remarks ?? '',
       finalizedAt: raw?.finalizedAt != null ? Number(raw.finalizedAt) || 0 : undefined,
       finalizedByUserId: raw?.finalizedByUserId,
@@ -1386,6 +1434,10 @@ export class PickListService {
       .reduce((sum, line) => sum + Math.min(line.packedIntoPackingListsQty || 0, line.pickedQty || 0), 0);
     const pickableLineCount = pickableLines.length;
     const completedLineCount = pickableLines.filter((line) => line.remainingQty <= 0).length;
+    // Sum of remainingQty across ALL lines (not just pickable ones) — matches
+    // exactly what dashboard.component.ts's reservedInventoryQty() used to sum
+    // over the (now-legacy) `items` array, so this is a drop-in replacement.
+    const totalRemainingQty = normalizedLines.reduce((sum, line) => sum + (line.remainingQty || 0), 0);
 
     return {
       totalRequiredQty,
@@ -1393,12 +1445,39 @@ export class PickListService {
       totalPendingQty,
       totalAdditionalPickedQty,
       totalPackedIntoPackingListsQty,
+      totalRemainingQty,
       pickableLineCount,
       completedLineCount,
       status: this.computeEffectiveStatus(type, totalRequiredQty, totalPickedQty, totalPackedIntoPackingListsQty, pickableLineCount, completedLineCount),
       orderSummaries,
-      items: normalizedLines.map((line) => this.normalizeLine(line)),
+      pickedByLineKey: this.buildPickedByLineKey(normalizedLines),
+      partGroups: this.buildPartGroups(normalizedLines),
     };
+  }
+
+  // Compact replacement for scanning the (legacy) `items` array to find how
+  // much of a given order/style/color/size/sleeve combo has already been
+  // picked — a flat map (key -> summed pickedQty) costs a tiny fraction of
+  // the bytes of an array of full line objects, since it carries no repeated
+  // field names, just one string key + one number per line.
+  private buildPickedByLineKey(lines: PickListLine[]): Record<string, number> {
+    const map: Record<string, number> = {};
+    for (const line of lines) {
+      const key = `${line.salesOrderId}||${line.styleNo}||${line.color}||${String(line.size)}||${line.sleeveType ?? ''}`;
+      map[key] = (map[key] ?? 0) + (line.pickedQty || 0);
+    }
+    return map;
+  }
+
+  // Compact replacement for scanning the (legacy) `items` array to count
+  // distinct parts/groups — just the distinct group names, not one entry per
+  // line.
+  private buildPartGroups(lines: PickListLine[]): string[] {
+    const groups = new Set<string>();
+    for (const line of lines) {
+      groups.add(String(line.group ?? '').trim() || 'General');
+    }
+    return [...groups];
   }
 
   private buildOrderSummaries(lines: PickListLine[]): PickListOrderSummary[] {

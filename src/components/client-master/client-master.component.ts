@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, signal, inject, OnInit, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, inject, OnInit, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Client } from '../../models/client.model';
@@ -74,14 +74,22 @@ export class ClientMasterComponent implements OnInit {
 
   paginatedClients = computed(() => {
     const startIndex = (this.currentPage() - 1) * this.itemsPerPage();
-    // Ensure currentPage is not out of bounds after filtering
-    if (startIndex >= this.filteredClients().length && this.currentPage() > 1) {
-      this.currentPage.set(this.totalPages() || 1);
-    }
-    const newStartIndex = (this.currentPage() - 1) * this.itemsPerPage();
-    return this.filteredClients().slice(newStartIndex, newStartIndex + this.itemsPerPage());
+    return this.filteredClients().slice(startIndex, startIndex + this.itemsPerPage());
   });
-  
+
+  constructor() {
+    // Clamps currentPage back into range after filtering shrinks the result
+    // set — moved out of paginatedClients() since writing to a signal from
+    // inside a computed() that also reads it is a memoization-defeating
+    // anti-pattern (and unsupported by Angular's computed() contract).
+    effect(() => {
+      const startIndex = (this.currentPage() - 1) * this.itemsPerPage();
+      if (startIndex >= this.filteredClients().length && this.currentPage() > 1) {
+        this.currentPage.set(this.totalPages() || 1);
+      }
+    });
+  }
+
   ngOnInit() {
     this.loadClients();
   }

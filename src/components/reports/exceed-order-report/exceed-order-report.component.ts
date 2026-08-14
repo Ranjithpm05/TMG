@@ -1,11 +1,15 @@
 import { Component, ChangeDetectionStrategy, inject, computed } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
+import { tap } from 'rxjs';
 import Swal from 'sweetalert2';
 
 import { ReportsDataService } from '../reports-data.service';
 import { LoadingService } from '../../../services/loading.service';
+import { InventoryService } from '../../../services/inventory.service';
 import { exportRowsToExcel, exportRowsToPdf, printReportRows } from '../report-export.util';
 import type { Design } from '../../../models/design.model';
+import type { InventoryItem } from '../../../models/inventory.model';
 
 const REPORT_TITLE = 'Exceed Order Report';
 
@@ -27,7 +31,20 @@ interface ExceedRow {
 })
 export class ExceedOrderReportComponent {
   private readonly data = inject(ReportsDataService);
+  private readonly inventoryService = inject(InventoryService);
   protected readonly loadingService = inject(LoadingService);
+
+  // Owned here rather than in the shared ReportsDataService: this is the only
+  // one of the 7 report tabs that needs inventory (11,000+ docs), so fetching
+  // it eagerly for every tab would block the shared loading overlay on every
+  // Reports visit regardless of which tab is open. Instantiated only when
+  // this `@defer`'d tab component is actually created.
+  private readonly inventory = toSignal(
+    this.inventoryService.getInventory().pipe(
+      tap({ subscribe: () => this.loadingService.start(), finalize: () => this.loadingService.stop() })
+    ),
+    { initialValue: [] as InventoryItem[] }
+  );
 
   protected readonly report = computed(() => this.buildExceedReport());
 
@@ -101,7 +118,7 @@ export class ExceedOrderReportComponent {
     }
 
     const availableByDesign = new Map<string, number>();
-    for (const inv of this.data.inventory()) {
+    for (const inv of this.inventory()) {
       if (!inv.designId) continue;
       availableByDesign.set(inv.designId, (availableByDesign.get(inv.designId) ?? 0) + (Number(inv.currentStock) || 0));
     }

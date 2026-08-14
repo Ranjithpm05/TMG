@@ -1021,6 +1021,7 @@ export class GoodsInwardComponent implements OnInit, OnDestroy {
   // Metrics
   private scanSessionStart = 0;
   private metricsInterval: any = null;
+  private startScanTimeoutId: any = null;
 
   private getBarcodeMap(): Map<string, { design: Design; size: SizePrice }> {
     const designs = this.designs();
@@ -1114,7 +1115,12 @@ self.onmessage = function(e) {
       this.scansPerMin.set(elapsed > 0 ? Math.round(this.scanCount() / elapsed) : 0);
     }, 3000);
 
-    setTimeout(async () => {
+    this.startScanTimeoutId = setTimeout(async () => {
+      this.startScanTimeoutId = null;
+      // stopScan() may have already run during this 50ms delay (fast
+      // navigation away) — bail out instead of opening a camera stream that
+      // would then never get stopped.
+      if (!this.isScanning()) return;
       if (!this.videoElement || !navigator.mediaDevices?.getUserMedia) {
         Swal.fire({ icon: 'error', title: 'Error', text: 'Camera not supported on this device.' });
         this.isScanning.set(false); return;
@@ -1164,6 +1170,7 @@ self.onmessage = function(e) {
   }
 
   stopScan() {
+    if (this.startScanTimeoutId) { clearTimeout(this.startScanTimeoutId); this.startScanTimeoutId = null; }
     if (this.animFrameId)     { cancelAnimationFrame(this.animFrameId); this.animFrameId = null; }
     if (this.metricsInterval) { clearInterval(this.metricsInterval); this.metricsInterval = null; }
     if (this.torchEnabled && this.torchTrack)

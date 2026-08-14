@@ -390,12 +390,12 @@ export class DashboardComponent {
     return openPick + openPack;
   }
 
+  // Reads the totalRemainingQty aggregate (sum of remainingQty across a pick
+  // list's lines, maintained server-side by PickListService) rather than
+  // scanning the legacy per-line `items` array — see PickList.items doc
+  // comment for why that array is no longer populated on new/updated docs.
   private reservedInventoryQty(): number {
-    return this.filteredPickLists().reduce(
-      (sum, pickList) =>
-        sum + (pickList.items ?? []).reduce((itemTotal, item) => itemTotal + (Number(item.remainingQty) || 0), 0),
-      0
-    );
+    return this.filteredPickLists().reduce((sum, pickList) => sum + (Number(pickList.totalRemainingQty) || 0), 0);
   }
 
   private pendingInboundQty(): number {

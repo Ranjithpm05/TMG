@@ -66,15 +66,18 @@ export class InventoryService {
     }
     const dedupedItems = [...byBarcode.values()];
 
-    // Run all inventory lookups in parallel instead of sequentially.
-    const snapshots = await Promise.all(
-      dedupedItems.map(({ item }) => getDocs(query(this.invRef, where('barcode', '==', item.barcode))))
+    // Batched lookup (chunks of 30 via a single `where(barcode, 'in', ...)` query each)
+    // instead of one query per distinct barcode — a GRN with hundreds of distinct SKUs
+    // previously cost one billed read-query per SKU here.
+    const existingByBarcode = new Map(
+      (await this.getInventoryByBarcodes(dedupedItems.map(({ item }) => item.barcode)))
+        .map((inv) => [inv.barcode, inv] as const)
     );
 
-    return snapshots.map((snap, idx) => {
-      const { item, totalQty } = dedupedItems[idx];
+    return dedupedItems.map(({ item, totalQty }) => {
       const signedQty = direction * totalQty;
-      if (snap.empty) {
+      const existing = existingByBarcode.get(item.barcode);
+      if (!existing) {
         if (direction === -1) {
           // Compensating a chunk whose target doc no longer exists — nothing to revert.
           console.warn(`Inventory compensation skipped: no inventory doc for barcode ${item.barcode}`);
@@ -90,7 +93,6 @@ export class InventoryService {
           createdAt: serverTimestamp(), updatedAt: serverTimestamp()
         });
       }
-      const existing = snap.docs[0];
       return (batch: WriteBatch) => batch.update(doc(this.firestore, `inventory/${existing.id}`), {
         currentStock: increment(signedQty),
         totalReceived: increment(signedQty),

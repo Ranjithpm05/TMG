@@ -12,23 +12,40 @@ import {
   updateDoc,
   where,
 } from '@angular/fire/firestore';
-import { from, Observable } from 'rxjs';
+import { from, Observable, shareReplay } from 'rxjs';
 import { Invoice, InvoiceItem, InvoiceTaxSummary } from '../models/invoice.model';
 import { fetchAllDocs } from './firestore-pagination.util';
+import { DeliveryChallanService } from './delivery-challan.service';
 
 @Injectable({ providedIn: 'root' })
 export class InvoiceService {
   private firestore = inject(Firestore);
+  private deliveryChallanService = inject(DeliveryChallanService);
   private invoicesRef = collection(this.firestore, 'invoices');
+
+  // Read repeatedly (e-Invoice and Packing List screens, every generation
+  // refresh) — cached one-time read, invalidated by createInvoice/updateInvoice
+  // below, same pattern as ClientService/DesignService/InventoryService.
+  private invoicesCache$: Observable<Invoice[]> | null = null;
+
+  // Public: EInvoiceService.saveEInvoice()/cancelEInvoice() write eInvoiceStatus/
+  // irn/etc. directly onto an invoices/{id} doc without going through this
+  // service, and must invalidate this cache too.
+  invalidateCache(): void {
+    this.invoicesCache$ = null;
+  }
 
   // One-time read, paged through in full via fetchAllDocs() — a prior fixed
   // limit(100) here silently truncated the list once invoices passed that
   // count. The e-Invoice and Packing List screens snapshot this into a local
   // list and reload manually after their own writes.
   getInvoices(): Observable<Invoice[]> {
-    return from(
-      fetchAllDocs(this.invoicesRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
-    );
+    if (!this.invoicesCache$) {
+      this.invoicesCache$ = from(
+        fetchAllDocs(this.invoicesRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
+      ).pipe(shareReplay(1));
+    }
+    return this.invoicesCache$;
   }
 
   async getInvoicesByPackingListIdOnce(packingListId: string): Promise<Invoice[]> {
@@ -98,6 +115,11 @@ export class InvoiceService {
       return invoiceData;
     });
 
+    this.invalidateCache();
+    // This transaction also stamped invoiceId/invoiceNo onto the source DC doc —
+    // invalidate its cached list too so a subsequent Packing List/e-Invoice
+    // screen visit doesn't show the DC as still not-yet-invoiced.
+    this.deliveryChallanService.invalidateCache();
     return { id: invoiceDocRef.id, ...data };
   }
 
@@ -110,6 +132,7 @@ export class InvoiceService {
   async updateInvoice(invoiceId: string, updates: Partial<Invoice>): Promise<void> {
     const invoiceRef = doc(this.firestore, 'invoices', invoiceId);
     await updateDoc(invoiceRef, this.stripUndefined({ ...updates, updatedAt: serverTimestamp() }));
+    this.invalidateCache();
   }
 
   private getFyCode(): string {

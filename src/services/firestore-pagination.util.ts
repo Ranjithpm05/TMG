@@ -12,7 +12,13 @@ export async function fetchAllDocs<T>(
   collectionRef: CollectionReference,
   constraints: QueryConstraint[],
   mapDoc: (doc: QueryDocumentSnapshot) => T,
-  pageSize = 1000
+  // Each page is an awaited round trip before the next starts (cursor
+  // pagination can't be parallelized — page N+1's cursor depends on page N's
+  // last doc). Firestore has no server-side cap on `limit()` beyond overall
+  // response size, so a larger page size directly cuts round-trip count for
+  // large collections (e.g. ~11k-doc inventory: ~12 pages at 1000 -> ~3 at
+  // 5000) with no change in total data transferred.
+  pageSize = 5000
 ): Promise<T[]> {
   const results: T[] = [];
   let cursor: QueryDocumentSnapshot | undefined;

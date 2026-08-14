@@ -12,22 +12,40 @@ import {
   updateDoc,
   where,
 } from '@angular/fire/firestore';
-import { from, Observable } from 'rxjs';
+import { from, Observable, shareReplay } from 'rxjs';
 import { DCItem, DeliveryChallan } from '../models/delivery-challan.model';
 import { fetchAllDocs } from './firestore-pagination.util';
+import { PackingListService } from './packing-list.service';
 
 @Injectable({ providedIn: 'root' })
 export class DeliveryChallanService {
   private firestore = inject(Firestore);
+  private packingListService = inject(PackingListService);
   private dcRef = collection(this.firestore, 'deliveryChallans');
+
+  // Read repeatedly (Packing List and e-Invoice screens, every DC-generation
+  // refresh) — cached one-time read, invalidated by createDC/updateDCItems below,
+  // same pattern as ClientService/DesignService/InventoryService.
+  private dcsCache$: Observable<DeliveryChallan[]> | null = null;
+
+  // Public: InvoiceService.createInvoice() stamps invoiceId/invoiceNo directly
+  // onto a deliveryChallans/{id} doc in the same transaction as creating the
+  // invoice, without going through this service — it must invalidate this
+  // cache too or the DC would keep showing as not-yet-invoiced.
+  invalidateCache(): void {
+    this.dcsCache$ = null;
+  }
 
   // One-time read, paged through in full via fetchAllDocs() — a prior fixed
   // limit(100) here silently truncated the list once delivery challans passed
   // that count. The Packing List screen snapshots this into a local list.
   getDeliveryChallans(): Observable<DeliveryChallan[]> {
-    return from(
-      fetchAllDocs(this.dcRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
-    );
+    if (!this.dcsCache$) {
+      this.dcsCache$ = from(
+        fetchAllDocs(this.dcRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
+      ).pipe(shareReplay(1));
+    }
+    return this.dcsCache$;
   }
 
   async getDCsByPackingListIdOnce(packingListId: string): Promise<DeliveryChallan[]> {
@@ -94,6 +112,11 @@ export class DeliveryChallanService {
       return dcData;
     });
 
+    this.invalidateCache();
+    // This transaction also stamped dcGeneratedKeys onto the source Packing
+    // List doc — invalidate its cached list too so a subsequent Packing List
+    // screen visit doesn't show stale dcGeneratedKeys/lock state.
+    this.packingListService.invalidateCache();
     return { id: dcDocRef.id, ...data };
   }
 
@@ -102,6 +125,7 @@ export class DeliveryChallanService {
   // pass back the same items array with only the gap fields filled in.
   async updateDCItems(dcId: string, items: DCItem[]): Promise<void> {
     await updateDoc(doc(this.dcRef, dcId), this.stripUndefined({ items, updatedAt: serverTimestamp() }));
+    this.invalidateCache();
   }
 
   private stripUndefined<T>(value: T): T {

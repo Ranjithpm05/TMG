@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, signal, inject, OnInit, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, inject, OnInit, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Design, SizePrice } from '../../models/design.model';
@@ -68,13 +68,21 @@ export class DesignMasterComponent implements OnInit {
 
     paginatedDesigns = computed(() => {
         const startIndex = (this.currentPage() - 1) * this.itemsPerPage();
-        // Ensure currentPage is not out of bounds after filtering
-        if (startIndex >= this.filteredDesigns().length && this.currentPage() > 1) {
-        this.currentPage.set(this.totalPages() || 1);
-        }
-        const newStartIndex = (this.currentPage() - 1) * this.itemsPerPage();
-        return this.filteredDesigns().slice(newStartIndex, newStartIndex + this.itemsPerPage());
+        return this.filteredDesigns().slice(startIndex, startIndex + this.itemsPerPage());
     });
+
+    constructor() {
+        // Clamps currentPage back into range after filtering shrinks the result
+        // set — moved out of paginatedDesigns() since writing to a signal from
+        // inside a computed() that also reads it is a memoization-defeating
+        // anti-pattern (and unsupported by Angular's computed() contract).
+        effect(() => {
+            const startIndex = (this.currentPage() - 1) * this.itemsPerPage();
+            if (startIndex >= this.filteredDesigns().length && this.currentPage() > 1) {
+                this.currentPage.set(this.totalPages() || 1);
+            }
+        });
+    }
 
     ngOnInit() {
         this.loadDesigns();

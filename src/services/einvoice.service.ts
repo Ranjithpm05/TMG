@@ -10,11 +10,13 @@ import {
   EInvoiceSupplyType,
 } from '../models/einvoice.model';
 import { CompanySettingsService } from './company-settings.service';
+import { InvoiceService } from './invoice.service';
 
 @Injectable({ providedIn: 'root' })
 export class EInvoiceService {
   private firestore = inject(Firestore);
   private companySettingsService = inject(CompanySettingsService);
+  private invoiceService = inject(InvoiceService);
 
   async generateIRN(sellerGstin: string, fy: string, docType: string, docNo: string): Promise<string> {
     const text = `${sellerGstin}|${fy}|${docType}|${docNo}`;
@@ -165,6 +167,7 @@ export class EInvoiceService {
       eInvoicePayload: this.deepStripUndefined(payload),
       updatedAt: serverTimestamp(),
     });
+    this.invoiceService.invalidateCache();
   }
 
   async cancelEInvoice(invoiceId: string, reason: string): Promise<void> {
@@ -175,6 +178,7 @@ export class EInvoiceService {
       cancelledAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    this.invoiceService.invalidateCache();
   }
 
   private deepStripUndefined(obj: any): any {

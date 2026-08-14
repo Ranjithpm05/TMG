@@ -5,12 +5,10 @@ import { switchMap, tap } from 'rxjs';
 import { SalesOrderService } from '../../services/sales-order.service';
 import { ClientService } from '../../services/client.service';
 import { DesignService } from '../../services/design.service';
-import { InventoryService } from '../../services/inventory.service';
 import { LoadingService } from '../../services/loading.service';
 import type { SalesOrder, OrderItem } from '../../models/sales-order.model';
 import type { Client } from '../../models/client.model';
 import type { Design } from '../../models/design.model';
-import type { InventoryItem } from '../../models/inventory.model';
 
 export interface MatrixRow {
   key: string;
@@ -42,7 +40,6 @@ export class ReportsDataService {
   private readonly salesOrderService = inject(SalesOrderService);
   private readonly clientService = inject(ClientService);
   private readonly designService = inject(DesignService);
-  private readonly inventoryService = inject(InventoryService);
   private readonly loadingService = inject(LoadingService);
 
   // ── Filter state ──────────────────────────────────────────────────────
@@ -93,12 +90,18 @@ export class ReportsDataService {
     ),
     { initialValue: [] as Design[] }
   );
-  readonly inventory = toSignal(
-    this.inventoryService.getInventory().pipe(
-      tap({ subscribe: () => this.loadingService.start(), finalize: () => this.loadingService.stop() })
-    ),
-    { initialValue: [] as InventoryItem[] }
-  );
+  // Deliberately NOT loaded here: inventory is an 11,000+-doc collection, and
+  // of the 7 report tabs only Exceed Order Report reads it. Eagerly
+  // `toSignal`-ing it here (like clients/designs/orders above) would fetch
+  // the entire collection the instant the Reports screen opens, on EVERY
+  // tab, blocking the shared LoadingService overlay for every visitor even
+  // when they never open Exceed Order Report. ExceedOrderReportComponent
+  // injects InventoryService directly and creates its own
+  // `toSignal(getInventory())` instead, scoped to when that tab's
+  // `@defer`'d component actually gets instantiated —
+  // InventoryService.getInventory() is itself `shareReplay(1)`-cached, so
+  // this still costs only one fetch per session no matter which report tab
+  // triggers it first.
 
   readonly clientById = computed(() => {
     const map = new Map<string, Client>();

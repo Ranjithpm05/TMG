@@ -12,7 +12,7 @@ import {
   runTransaction,
   serverTimestamp
 } from '@angular/fire/firestore';
-import { from, Observable } from 'rxjs';
+import { from, Observable, shareReplay } from 'rxjs';
 import type { GoodsInward, GoodsInwardItem } from '../models/goods-inward.model';
 import { fetchAllDocs } from './firestore-pagination.util';
 import { InventoryService } from './inventory.service';
@@ -27,6 +27,15 @@ export class GoodsInwardService {
   private grnRef = collection(this.firestore, 'goodsInward');
   private readonly APPROVE_CHUNK_ITEMS = 400;
   private readonly REVERT_RETRIES = 3;
+
+  // Read repeatedly (Dashboard on every visit, this screen's own ngOnInit +
+  // refresh-after-every-write) — cached one-time read, invalidated by every
+  // write in this service below, same pattern as ClientService/DesignService.
+  private grnsCache$: Observable<GoodsInward[]> | null = null;
+
+  private invalidateGrnsCache(): void {
+    this.grnsCache$ = null;
+  }
 
   /**
    * Recursively removes every key whose value is `undefined`.
@@ -52,9 +61,12 @@ export class GoodsInwardService {
   // passed that count; Dashboard/Reports need the complete set for correct
   // totals, not just the most recent page).
   getGoodsInwards(): Observable<GoodsInward[]> {
-    return from(
-      fetchAllDocs(this.grnRef, [orderBy('createdAt', 'desc')], (d) => ({ id: d.id, ...d.data() } as GoodsInward))
-    );
+    if (!this.grnsCache$) {
+      this.grnsCache$ = from(
+        fetchAllDocs(this.grnRef, [orderBy('createdAt', 'desc')], (d) => ({ id: d.id, ...d.data() } as GoodsInward))
+      ).pipe(shareReplay(1));
+    }
+    return this.grnsCache$;
   }
 
   // 🔹 Create GRN
@@ -65,6 +77,7 @@ export class GoodsInwardService {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
+    this.invalidateGrnsCache();
   }
 
   // 🔹 Update GRN
@@ -77,12 +90,14 @@ export class GoodsInwardService {
       ...clean,
       updatedAt: serverTimestamp()
     });
+    this.invalidateGrnsCache();
   }
 
   // 🔹 Delete GRN
   async deleteGoodsInward(id: string): Promise<void> {
     const grnDoc = doc(this.firestore, `goodsInward/${id}`);
     await deleteDoc(grnDoc);
+    this.invalidateGrnsCache();
   }
 
   // 🔹 Approve GRN — locks the doc against concurrent/duplicate approval (re-reads
@@ -132,6 +147,7 @@ export class GoodsInwardService {
         updatedAt: serverTimestamp()
       });
       this.inventoryService.invalidateCache();
+      this.invalidateGrnsCache();
       return 'approved';
     } catch (err) {
       await this.revertCommittedChunks(grnDocRef, grnNo, itemChunks, chunksCommitted);
@@ -176,6 +192,7 @@ export class GoodsInwardService {
 
     this.inventoryService.invalidateCache();
     await updateDoc(grnDocRef, { status: 'Pending', approvalLock: deleteField(), updatedAt: serverTimestamp() });
+    this.invalidateGrnsCache();
   }
 
   private chunkItems(items: GoodsInwardItem[]): GoodsInwardItem[][] {

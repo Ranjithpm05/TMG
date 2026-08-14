@@ -68,48 +68,50 @@ export class PickListReportComponent {
     });
   });
 
-  // getPickListLinesOnce() is fetched per matching pick list (not the header's
-  // possibly-stale `items` snapshot) so this report is correct even while a
-  // Party-wise list is still 'Partial' — see PickListService.processPartyScan.
-  private readonly linesByPickList = toSignal(
+  // getPickListLinesOnce() is fetched once per matching pick list (not the
+  // header's possibly-stale `items` snapshot) so this report is correct even
+  // while a Party-wise list is still 'Partial' — see
+  // PickListService.processPartyScan. Lines and downstream (packed/DC/
+  // invoice) data are fetched together in one pipeline — previously each ran
+  // as its own independent toSignal/switchMap chain, both calling
+  // getPickListLinesOnce() for the exact same pick lists, doubling that read
+  // for every party pick list in range.
+  private readonly reportData = toSignal(
     toObservable(this.partyPickListsInRange).pipe(
       switchMap((pickLists) => {
-        if (!pickLists.length) return of(new Map<string, PickListLine[]>());
+        if (!pickLists.length) {
+          return of({
+            linesByPickList: new Map<string, PickListLine[]>(),
+            downstreamByPickList: new Map<string, PickListDownstream>(),
+          });
+        }
         return from(
           Promise.all(
-            pickLists.map((pickList) =>
-              this.pickListService.getPickListLinesOnce(pickList.id!).then((lines) => [pickList.id!, lines] as const)
-            )
+            pickLists.map(async (pickList) => {
+              const lines = await this.pickListService.getPickListLinesOnce(pickList.id!);
+              const downstream = await this.loadDownstream(pickList, lines);
+              return { id: pickList.id!, lines, downstream };
+            })
           )
-        ).pipe(map((entries) => new Map(entries)));
+        ).pipe(
+          map((entries) => ({
+            linesByPickList: new Map(entries.map((entry) => [entry.id, entry.lines] as const)),
+            downstreamByPickList: new Map(entries.map((entry) => [entry.id, entry.downstream] as const)),
+          }))
+        );
       }),
       tap({ subscribe: () => this.loadingService.start(), finalize: () => this.loadingService.stop() })
     ),
-    { initialValue: new Map<string, PickListLine[]>() }
-  );
-
-  // Packed/DC/Invoice Qty per Pick List line — traced through every Packing
-  // List/DC/Invoice generated from this Pick List, so multi-batch packing
-  // and multi-Sales-Order combine flows are both accounted for.
-  private readonly downstreamByPickList = toSignal(
-    toObservable(this.partyPickListsInRange).pipe(
-      switchMap((pickLists) => {
-        if (!pickLists.length) return of(new Map<string, PickListDownstream>());
-        return from(
-          Promise.all(
-            pickLists.map((pickList) =>
-              this.loadDownstream(pickList).then((downstream) => [pickList.id!, downstream] as const)
-            )
-          )
-        ).pipe(map((entries) => new Map(entries)));
-      })
-    ),
-    { initialValue: new Map<string, PickListDownstream>() }
+    {
+      initialValue: {
+        linesByPickList: new Map<string, PickListLine[]>(),
+        downstreamByPickList: new Map<string, PickListDownstream>(),
+      },
+    }
   );
 
   protected readonly report = computed<PickListReportRow[]>(() => {
-    const linesByPickList = this.linesByPickList();
-    const downstreamByPickList = this.downstreamByPickList();
+    const { linesByPickList, downstreamByPickList } = this.reportData();
     const rows: PickListReportRow[] = [];
 
     for (const pickList of this.partyPickListsInRange()) {
@@ -148,15 +150,12 @@ export class PickListReportComponent {
   // over several packing batches — see PackingListService.buildPackableLines),
   // walk its DCs and their Invoices to compute, per Pick List line, how much
   // has actually reached each downstream stage.
-  private async loadDownstream(pickList: PickList): Promise<PickListDownstream> {
+  private async loadDownstream(pickList: PickList, lines: PickListLine[]): Promise<PickListDownstream> {
     const packedQtyByLineId = new Map<string, number>();
     const dcQtyByLineId = new Map<string, number>();
     const invoiceQtyByLineId = new Map<string, number>();
 
-    const [lines, packingLists] = await Promise.all([
-      this.pickListService.getPickListLinesOnce(pickList.id!),
-      this.packingListService.getPackingListsReferencingPickListOnce(pickList.id!),
-    ]);
+    const packingLists = await this.packingListService.getPackingListsReferencingPickListOnce(pickList.id!);
     if (!packingLists.length) return { packedQtyByLineId, dcQtyByLineId, invoiceQtyByLineId };
 
     const packingListsData = await Promise.all(
