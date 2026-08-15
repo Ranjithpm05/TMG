@@ -209,7 +209,7 @@ export class PickListReportComponent {
             const qty = Number(rawQty) || 0;
             if (qty <= 0) continue;
             const key = bucketKey(item.partName, item.styleNo, item.color, item.sleeveType ?? '', size);
-            const bucketLines = (linesByBucket.get(key) ?? []).filter((line) => !dc.salesOrderId || dc.salesOrderId === line.salesOrderId);
+            const bucketLines = (linesByBucket.get(key) ?? []).filter((line) => !dc.salesOrderIds.length || dc.salesOrderIds.includes(line.salesOrderId));
             if (!bucketLines.length) continue;
             const bucketPackedTotal = bucketLines.reduce((sum, line) => sum + (packedQtyByLineId.get(line.lineId) ?? 0), 0);
             for (const line of bucketLines) {

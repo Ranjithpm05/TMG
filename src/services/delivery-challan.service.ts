@@ -53,24 +53,26 @@ export class DeliveryChallanService {
     return snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() }));
   }
 
-  // Atomically enforces "at most one DC per (Packing List, Sales Order)" —
-  // a plain check-then-create (even with a fresh Firestore read right before)
-  // still has a race window between two near-simultaneous calls (double
-  // click, two tabs). A transaction closes it: the packing list doc's
-  // `dcGeneratedKeys` array is read and verified inside the same transaction
-  // that creates the DC and appends the key, so Firestore aborts/retries one
-  // of two concurrent attempts instead of letting both succeed. Throws
-  // 'already_has_dc' if this (packingListId, salesOrderId) combination was
-  // already issued a DC — callers should surface a clear message rather than
-  // silently creating a duplicate. Pass `allowDuplicate: true` only for an
-  // explicit, user-confirmed "Generate New DC" override (past a warning
-  // dialog) — the default stays guarded so an accidental double-click can't
-  // silently create a second DC.
+  // Atomically enforces "at most one DC per Packing List" — a plain
+  // check-then-create (even with a fresh Firestore read right before) still
+  // has a race window between two near-simultaneous calls (double click, two
+  // tabs). A transaction closes it: the packing list doc's `dcGeneratedKeys`
+  // array is read and verified inside the same transaction that creates the
+  // DC and appends a marker, so Firestore aborts/retries one of two
+  // concurrent attempts instead of letting both succeed. Throws
+  // 'already_has_dc' if this packing list already has any DC — this also
+  // correctly blocks a 3rd DC on packing lists that already accumulated
+  // multiple DCs under the old per-Sales-Order scheme, since it only checks
+  // array length, not the (legacy) key contents. Callers should surface a
+  // clear message rather than silently creating a duplicate. Pass
+  // `allowDuplicate: true` only for an explicit, user-confirmed "Generate
+  // New DC" override (past a warning dialog) — the default stays guarded so
+  // an accidental double-click can't silently create a second DC.
   async createDC(
     input: Omit<DeliveryChallan, 'id' | 'dcNo' | 'dcSeq' | 'packedOn' | 'createdAt' | 'updatedAt'>,
     options?: { allowDuplicate?: boolean },
   ): Promise<DeliveryChallan> {
-    const dcKey = input.salesOrderId || '__all__';
+    const dcKey = 'DC';
     const packingListRef = doc(this.firestore, `packingLists/${input.packingListId}`);
     const counterRef = doc(this.firestore, 'counters/dcCounter');
     const dcDocRef = doc(this.dcRef);
@@ -83,7 +85,7 @@ export class DeliveryChallanService {
       const existingKeys: string[] = Array.isArray(packingSnap.data()?.['dcGeneratedKeys'])
         ? packingSnap.data()!['dcGeneratedKeys']
         : [];
-      if (existingKeys.includes(dcKey) && !options?.allowDuplicate) throw new Error('already_has_dc');
+      if (existingKeys.length > 0 && !options?.allowDuplicate) throw new Error('already_has_dc');
 
       const counterSnap = await transaction.get(counterRef);
       const currentSeq = counterSnap.exists() ? (Number(counterSnap.data()?.['seq']) || 0) : 0;
@@ -160,8 +162,12 @@ export class DeliveryChallanService {
       dcSeq: Number(raw?.dcSeq) || 0,
       packingListId: String(raw?.packingListId ?? ''),
       packingListNo: String(raw?.packingListNo ?? ''),
-      salesOrderId: String(raw?.salesOrderId ?? ''),
-      salesNo: String(raw?.salesNo ?? ''),
+      salesOrderIds: Array.isArray(raw?.salesOrderIds)
+        ? raw.salesOrderIds.map((s: any) => String(s))
+        : (raw?.salesOrderId ? [String(raw.salesOrderId)] : []),
+      salesNos: Array.isArray(raw?.salesNos)
+        ? raw.salesNos.map((s: any) => String(s))
+        : (raw?.salesNo ? [String(raw.salesNo)] : []),
       clientId: String(raw?.clientId ?? ''),
       clientName: String(raw?.clientName ?? ''),
       billingAddress: String(raw?.billingAddress ?? ''),

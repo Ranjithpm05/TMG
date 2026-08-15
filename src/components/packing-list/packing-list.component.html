@@ -224,7 +224,7 @@
                     <div class="font-bold text-indigo-700">{{dc.dcNo}}</div>
                   </td>
                   <td class="px-4 py-3 text-gray-800 font-medium">{{dc.clientName}}</td>
-                  <td class="px-4 py-3 text-xs text-gray-600">{{dc.salesNo || '-'}}</td>
+                  <td class="px-4 py-3 text-xs text-gray-600">{{dc.salesNos.join(', ') || '-'}}</td>
                   <td class="px-4 py-3 text-xs text-gray-600">{{dc.packingListNo}}</td>
                   <td class="px-4 py-3 text-center font-bold text-green-700">{{dc.totalQty}}</td>
                   <td class="px-4 py-3 text-center font-semibold text-teal-700">{{dc.boxCount}}</td>

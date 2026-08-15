@@ -14,8 +14,8 @@ export interface DeliveryChallan {
   dcSeq: number;
   packingListId: string;
   packingListNo: string;
-  salesOrderId: string;
-  salesNo: string;
+  salesOrderIds: string[];
+  salesNos: string[];
   clientId: string;
   clientName: string;
   billingAddress: string;
@@ -32,9 +32,8 @@ export interface DeliveryChallan {
   items: DCItem[];
   sizes: string[];
   // Set atomically inside InvoiceService.createInvoice()'s transaction to
-  // prevent generating more than one Invoice per DC (a Packing List can now
-  // produce several DCs — one per Sales Order — so the one-invoice guard
-  // lives here, not on the Packing List).
+  // prevent generating more than one Invoice per DC. A Packing List
+  // produces exactly one DC, so this also caps invoices at one per Packing List.
   invoiceId?: string;
   invoiceNo?: string;
   createdAt: any;

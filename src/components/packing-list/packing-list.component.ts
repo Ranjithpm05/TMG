@@ -210,7 +210,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
       if (!term) return true;
       return dc.dcNo.toLowerCase().includes(term)
         || dc.clientName.toLowerCase().includes(term)
-        || dc.salesNo.toLowerCase().includes(term)
+        || dc.salesNos.some((s) => s.toLowerCase().includes(term))
         || dc.packingListNo.toLowerCase().includes(term);
     });
   });
@@ -1055,9 +1055,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
           dcNo: dc.dcNo,
           packingListId: loaded.id!,
           packingListNo: loaded.packingListNo,
-          salesOrderIds: dc.salesOrderId ? [dc.salesOrderId] : loaded.salesOrderIds,
-          salesNos: dc.salesNo ? [dc.salesNo] : loaded.salesNos,
-          orderNo: dc.salesNo || (loaded.salesNos ?? []).join(', '),
+          salesOrderIds: dc.salesOrderIds.length ? dc.salesOrderIds : loaded.salesOrderIds,
+          salesNos: dc.salesNos.length ? dc.salesNos : loaded.salesNos,
+          orderNo: (dc.salesNos.length ? dc.salesNos : loaded.salesNos ?? []).join(', '),
           clientId,
           clientName,
           clientAddress: client?.billingAddress ?? '',
@@ -1787,34 +1787,21 @@ export class PackingListComponent implements OnInit, OnDestroy {
           await this.packingListService.updateDispatchInfo(packingList.id!, agentName, transport);
         }
 
+        // A Packing List always belongs to exactly one customer (generation
+        // groups by clientId, and combining Pick Lists blocks mixing
+        // clients) — partyProgress only ever varies by salesOrderId/salesNo
+        // under that one client. So every packed line goes into a single DC
+        // covering the whole Packing List, with all its Sales Orders listed.
         const partyProgress = loaded.partyProgress ?? [];
-        const generatedDCs: DeliveryChallan[] = [];
-
-        if (partyProgress.length === 0) {
-          const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
-          const dc = await this.createDCForParty(loaded, lines, client, '', '', loaded.clientName, agentName, transport, allowDuplicate);
-          generatedDCs.push(dc);
-        } else {
-          // A line can end up with no salesOrderId at all only in an edge case
-          // (a source Pick List line with no Sales Order attribution) — rather
-          // than let it match no party and vanish from every DC, it's billed
-          // under the Packing List's primary Sales Order, same as where
-          // PickListService.processPartyScan attributes an additional scan
-          // with no explicit order of its own.
-          const primarySalesOrderId = partyProgress[0]?.salesOrderId ?? '';
-          for (const party of partyProgress) {
-            const partyLines = lines.filter((l) =>
-              l.salesOrderIds.includes(party.salesOrderId) ||
-              (l.salesOrderIds.length === 0 && party.salesOrderId === primarySalesOrderId)
-            );
-            if (!partyLines.length) continue;
-            const clientName = party.clientName || loaded.clientName;
-            const clientId = party.clientId || loaded.clientId;
-            const client = await this.clientService.getClientForDC(clientId, clientName);
-            const dc = await this.createDCForParty(loaded, partyLines, client, party.salesOrderId, party.salesNo, clientName, agentName, transport, allowDuplicate);
-            generatedDCs.push(dc);
-          }
-        }
+        const salesOrderIds = partyProgress.length
+          ? [...new Set(partyProgress.map((p) => p.salesOrderId).filter(Boolean))]
+          : (loaded.salesOrderIds ?? []);
+        const salesNos = partyProgress.length
+          ? [...new Set(partyProgress.map((p) => p.salesNo).filter(Boolean))]
+          : (loaded.salesNos ?? []);
+        const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
+        const dc = await this.createDCForPackingList(loaded, lines, client, salesOrderIds, salesNos, loaded.clientName, agentName, transport, allowDuplicate);
+        const generatedDCs: DeliveryChallan[] = [dc];
 
         await this.refreshDeliveryChallans();
         await this.printDCsWithLabels(generatedDCs, loaded, win);
@@ -2212,12 +2199,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
     }));
   }
 
-  private async createDCForParty(
+  private async createDCForPackingList(
     packingList: PackingList,
     lines: PackingListLine[],
     client: any,
-    salesOrderId: string,
-    salesNo: string,
+    salesOrderIds: string[],
+    salesNos: string[],
     clientName: string,
     agentName: string,
     transport: string,
@@ -2258,15 +2245,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
     const sizes = [...sizeSet].sort((a, b) => this.rankSize(a) - this.rankSize(b));
     const totalQty = [...rowMap.values()].reduce((s, r) => s + r.total, 0);
-    const boxCount = salesOrderId
-      ? (packingList.cartons ?? []).filter((c) => c.entries.some((e) => e.salesOrderIds.includes(salesOrderId))).length
-      : (packingList.cartons ?? []).length;
+    const boxCount = (packingList.cartons ?? []).length;
 
     return this.dcService.createDC({
       packingListId: packingList.id!,
       packingListNo: packingList.packingListNo,
-      salesOrderId,
-      salesNo,
+      salesOrderIds,
+      salesNos,
       clientId: packingList.clientId,
       clientName: clientName || packingList.clientName,
       billingAddress: client?.billingAddress ?? '',
@@ -2424,7 +2409,7 @@ ${allDCHtml}
     <table style="border-collapse:collapse;width:100%">
       <tr><td style="padding:3px 6px;font-size:10px;color:#555;white-space:nowrap">DC No.</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${dc.dcNo}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Packed On</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order No.</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.salesNo || dc.packingListNo}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order No.</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.salesNos.length ? dc.salesNos.join(', ') : dc.packingListNo}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order Date</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Total Qty</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${grandTotal}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">No.of Box</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${dc.boxCount}</td></tr>
