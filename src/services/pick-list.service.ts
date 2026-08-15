@@ -1117,6 +1117,111 @@ export class PickListService {
     return result;
   }
 
+  // Reverses exactly one previously-scanned unit of `lineId` — the inline
+  // "remove" action next to a scanned item on the live scan screen, for
+  // every Pick List type. Mirrors processScan()/processPartyScan()'s
+  // transaction in reverse: decrements pickedQty, restores the inventory
+  // unit it deducted, and rolls back the same pickList aggregates. A
+  // Party-wise Extra line is deleted entirely once its pickedQty reaches
+  // zero, since it only exists because it was scanned. Blocked once any of
+  // this line's qty has already flowed into a Packing List
+  // (packedIntoPackingListsQty) — that stock is no longer "just scanned",
+  // it's been physically packed and can't be silently undone here.
+  async removeScannedUnit(
+    pickListId: string,
+    lineId: string,
+    _user: PickListClaimUser
+  ): Promise<PickListLine | null> {
+    const result = await runTransaction(this.firestore, async (transaction) => {
+      const lineRef = this.lineDoc(pickListId, lineId);
+      const pickListRef = doc(this.firestore, `pickLists/${pickListId}`);
+      const [lineSnap, pickListSnap] = await Promise.all([
+        transaction.get(lineRef),
+        transaction.get(pickListRef),
+      ]);
+
+      if (!pickListSnap.exists()) throw new Error('picklist_not_found');
+      if (!lineSnap.exists()) throw new Error('line_not_found');
+
+      const pickList = this.normalizePickList({ id: pickListSnap.id, ...pickListSnap.data() });
+      const liveLine = this.normalizeLine({ lineId: lineSnap.id, ...lineSnap.data() });
+
+      if (liveLine.pickedQty <= 0) throw new Error('nothing_to_remove');
+      if (liveLine.pickedQty - 1 < (liveLine.packedIntoPackingListsQty || 0)) throw new Error('already_packed');
+
+      const wasCompleted = !liveLine.isAdditional && liveLine.remainingQty <= 0;
+      const nextPickedQty = liveLine.pickedQty - 1;
+      const inventoryReserved = !!pickList.inventoryReserved;
+      const removedLineEntirely = liveLine.isAdditional && nextPickedQty <= 0;
+
+      if (removedLineEntirely) {
+        transaction.delete(lineRef);
+      } else {
+        const nextRequiredQty = liveLine.isAdditional ? nextPickedQty : liveLine.requiredQty;
+        const nextRemainingQty = Math.max(0, nextRequiredQty - nextPickedQty);
+        const updatedLine = this.normalizeLine({
+          ...liveLine,
+          requiredQty: nextRequiredQty,
+          pickedQty: nextPickedQty,
+          remainingQty: nextRemainingQty,
+          balanceQty: nextRemainingQty + (liveLine.pendingQty || 0),
+          status: nextPickedQty > 0 ? 'in_progress' : 'ready',
+          completedAt: undefined,
+          completedByUserId: undefined,
+          completedByUsername: undefined,
+        });
+        transaction.set(lineRef, this.stripUndefined({
+          ...updatedLine,
+          createdAt: (lineSnap.data() as any)?.createdAt ?? serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }));
+      }
+
+      if (!inventoryReserved && liveLine.inventoryId) {
+        transaction.update(doc(this.firestore, `inventory/${liveLine.inventoryId}`), {
+          currentStock: increment(1),
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      const nextTotalPickedQty = liveLine.isAdditional
+        ? (pickList.totalPickedQty || 0)
+        : Math.max(0, (pickList.totalPickedQty || 0) - 1);
+      const nextTotalAdditionalPickedQty = Math.max(0, (pickList.totalAdditionalPickedQty || 0) - (liveLine.isAdditional ? 1 : 0));
+      const nextCompletedLineCount = Math.max(0, (pickList.completedLineCount || 0) - (wasCompleted ? 1 : 0));
+      const nextOrderSummaries = liveLine.isAdditional
+        ? (pickList.orderSummaries ?? [])
+        : (pickList.orderSummaries ?? []).map((summary) => {
+            if (summary.salesOrderId !== liveLine.salesOrderId) return summary;
+            return { ...summary, pickedQty: Math.max(0, (summary.pickedQty || 0) - 1) };
+          });
+
+      const nextStatus = this.computeEffectiveStatus(
+        pickList.type,
+        pickList.totalRequiredQty || 0,
+        nextTotalPickedQty,
+        pickList.totalPackedIntoPackingListsQty || 0,
+        pickList.pickableLineCount || 0,
+        nextCompletedLineCount
+      );
+
+      transaction.update(pickListRef, this.stripUndefined({
+        totalPickedQty: nextTotalPickedQty,
+        totalAdditionalPickedQty: nextTotalAdditionalPickedQty,
+        completedLineCount: nextCompletedLineCount,
+        orderSummaries: nextOrderSummaries,
+        status: nextStatus,
+        updatedAt: serverTimestamp(),
+      }));
+
+      return removedLineEntirely ? null : this.normalizeLine({ ...liveLine, pickedQty: nextPickedQty });
+    });
+
+    this.inventoryService.invalidateCache();
+    this.invalidatePickListsCache();
+    return result;
+  }
+
   async syncSalesOrderShipment(_pickListId: string, salesOrderId: string): Promise<void> {
     if (!salesOrderId) return;
 

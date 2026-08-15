@@ -250,6 +250,25 @@ export class DesignService {
         return null;
     }
 
+    // Barcode → MRP (SizePrice.price) for every barcode in the catalog, in one
+    // shot — Design Master is the single source of truth for MRP (see
+    // findDesignSizeByBarcode above); Inventory's own `price` field is only a
+    // snapshot copied in at GRN time and goes stale the moment Design
+    // Master's MRP is edited afterward without a new GRN, so callers that
+    // need "the current MRP" (Packing List print/DC, not GRN receiving)
+    // must resolve it from here instead of from an inventory doc.
+    async getMrpByBarcodeMap(): Promise<Map<string, number>> {
+        const designs = await firstValueFrom(this.getDesigns());
+        const map = new Map<string, number>();
+        for (const design of designs) {
+            for (const sizeEntry of design.sizes ?? []) {
+                const barcode = String(sizeEntry.BARCODE ?? '').trim();
+                if (barcode) map.set(barcode, Number(sizeEntry.price) || 0);
+            }
+        }
+        return map;
+    }
+
     async findDesignByStyleNo(styleNo: string): Promise<Design | null> {
         const q = query(
             collection(this.firestore, 'designs'),

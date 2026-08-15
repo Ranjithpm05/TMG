@@ -187,7 +187,7 @@
                       </button>
                       <button (click)="printPackingList(packingList)"
                         class="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50 transition-colors">
-                        Print
+                        Print Packing List
                       </button>
                     </div>
                   </td>
@@ -1034,7 +1034,7 @@
             @if (bl.cartons[boxLabelPreviewIndex()]; as previewCarton) {
               <p class="text-xs text-gray-400 mt-2">Previewing: <strong class="text-gray-600">{{previewCarton.cartonNo}}</strong> — Box {{boxLabelPreviewIndex() + 1}} of {{bl.cartons.length}}</p>
             }
-            <p class="text-[11px] text-amber-600 mt-1">Actual printing uses raw TSPL commands sent via QZ Tray — verify alignment on the real printer before a full run.</p>
+            <p class="text-[11px] text-amber-600 mt-1">Actual printing uses raw ZPL commands sent via QZ Tray — verify alignment on the real printer before a full run.</p>
           </div>
 
           <!-- Boxes (cartons) -->

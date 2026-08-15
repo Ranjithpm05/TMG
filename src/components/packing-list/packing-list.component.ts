@@ -23,15 +23,15 @@ import { Invoice } from '../../models/invoice.model';
 import { InvoiceService } from '../../services/invoice.service';
 import { InventoryService } from '../../services/inventory.service';
 import { InventoryItem } from '../../models/inventory.model';
+import { DesignService } from '../../services/design.service';
 import { LoadingService } from '../../services/loading.service';
 import { QzTrayService } from '../../services/qz-tray.service';
 import {
   BoxLabelPrinterSettings,
-  buildBoxLabelTsplBatch,
+  buildBoxLabelZplBatch,
   loadBoxLabelSettings,
   saveBoxLabelSettings,
-} from '../../services/box-label-tspl.util';
-import { exportRowsToPdf } from '../reports/report-export.util';
+} from '../../services/box-label-zpl.util';
 
 type ViewMode = 'list' | 'view' | 'live-pack' | 'combine' | 'box-label-print';
 
@@ -51,6 +51,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   private dcService = inject(DeliveryChallanService);
   private invoiceService = inject(InvoiceService);
   private inventoryService = inject(InventoryService);
+  private designService = inject(DesignService);
   private loadingService = inject(LoadingService);
   private qzTrayService = inject(QzTrayService);
   private sanitizer = inject(DomSanitizer);
@@ -107,10 +108,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
   combineClientId = signal<string | null>(null);
   selectedPickListIdsForCombine = signal<Set<string>>(new Set());
 
-  // ─── Box Label print (QZ Tray + TSPL thermal printing) ─────────────────────
+  // ─── Box Label print (QZ Tray + ZPL thermal printing) ──────────────────────
   boxLabelPackingList = signal<PackingList | null>(null);
   boxLabelDc = signal<DeliveryChallan | null>(null);
-  boxLabelInvoiceNo = signal('');
   boxLabelSettings = signal<BoxLabelPrinterSettings>(loadBoxLabelSettings());
   boxLabelPrinters = signal<string[]>([]);
   boxLabelSelected = signal<Set<number>>(new Set());
@@ -742,9 +742,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.livePackingList.set(loaded);
     this.liveLines.set(lines);
 
-    const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean))] as string[];
-    const invItems = barcodes.length ? await this.inventoryService.getInventoryByBarcodes(barcodes) : [];
-    this.liveMrpByBarcode.set(new Map(invItems.map((inv) => [inv.barcode, Number(inv.price) || 0])));
+    this.liveMrpByBarcode.set(await this.designService.getMrpByBarcodeMap());
 
     let agentName = loaded.agentName ?? '';
     if (!agentName && loaded.clientId) {
@@ -1211,7 +1209,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Opens the Box Label print screen (QZ Tray + raw TSPL to a thermal
+  // Opens the Box Label print screen (QZ Tray + raw ZPL to a thermal
   // printer) instead of the browser's print dialog used by every other
   // print action in this app — thermal label printers need exact
   // width/height/gap/density/speed control that only a direct print-agent
@@ -1219,10 +1217,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   async printEnhancedBoxLabels(packingList: PackingList): Promise<void> {
     if (!packingList.id) return;
     await this.loadingService.run(async () => {
-      const [existingDCs, existingInvoices] = await Promise.all([
-        this.dcService.getDCsByPackingListIdOnce(packingList.id!),
-        this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id!),
-      ]);
+      const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id!);
       const cartons = packingList.cartons ?? [];
       if (!cartons.length) {
         await Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'No cartons to print', timer: 2000, showConfirmButton: false });
@@ -1230,7 +1225,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
       }
       this.boxLabelPackingList.set(packingList);
       this.boxLabelDc.set(existingDCs[0] ?? null);
-      this.boxLabelInvoiceNo.set(existingInvoices[0]?.invoiceNo ?? '');
       this.boxLabelSelected.set(new Set(cartons.map((_, idx) => idx)));
       this.boxLabelPreviewIndex.set(0);
       this.boxLabelQzStatus.set('unknown');
@@ -1252,17 +1246,29 @@ export class PackingListComponent implements OnInit, OnDestroy {
   // Angular <style> block would never reach this markup, since [innerHTML]/
   // srcdoc content is inserted outside Angular's template compiler and never
   // receives its scoping attribute.
+  //
+  // The label media is loaded portrait (labelWidthMm < labelHeightMm, e.g.
+  // 105×235mm) but buildEnhancedBoxLabelHtml lays its content out as a
+  // landscape design — matching the actual ZPL print (see the rotation
+  // comment on buildBoxLabelZpl). So `.label-page` (the div that function
+  // returns) is sized to the landscape content canvas and rotated 90°
+  // clockwise inside a `.label-frame` sized to the true physical label, the
+  // same transform the printer applies natively.
   boxLabelPreviewHtml(): SafeHtml {
     const packingList = this.boxLabelPackingList();
     if (!packingList) return this.sanitizer.bypassSecurityTrustHtml('');
     const cartons = packingList.cartons ?? [];
     const idx = Math.min(this.boxLabelPreviewIndex(), Math.max(0, cartons.length - 1));
-    const labelHtml = this.buildEnhancedBoxLabelHtml(packingList, idx, cartons.length, this.boxLabelDc(), this.boxLabelInvoiceNo());
+    const labelHtml = this.buildEnhancedBoxLabelHtml(packingList, idx, cartons.length, this.boxLabelDc());
     const settings = this.boxLabelSettings();
+    const contentW = Math.max(settings.labelWidthMm, settings.labelHeightMm);
+    const contentH = Math.min(settings.labelWidthMm, settings.labelHeightMm);
     const doc = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
       + '*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px;background:#fff}'
-      + `.label-page{width:${settings.labelWidthMm}mm;height:${settings.labelHeightMm}mm;overflow:hidden;display:flex;flex-direction:column;border:1px solid #000}`
-      + '</style></head><body>' + labelHtml + '</body></html>';
+      + `.label-frame{position:relative;width:${settings.labelWidthMm}mm;height:${settings.labelHeightMm}mm;overflow:hidden;border:1px solid #000}`
+      + `.label-page{position:absolute;top:0;left:0;width:${contentW}mm;height:${contentH}mm;overflow:hidden;display:flex;flex-direction:column;`
+      + `transform-origin:top left;transform:translate(${contentH}mm,0) rotate(90deg)}`
+      + '</style></head><body>' + `<div class="label-frame">${labelHtml}</div>` + '</body></html>';
     return this.sanitizer.bypassSecurityTrustHtml(doc);
   }
 
@@ -1334,12 +1340,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
     this.isPrintingBoxLabels.set(true);
     try {
-      const commands = buildBoxLabelTsplBatch(
+      const commands = buildBoxLabelZplBatch(
         packingList,
         cartonIndexes,
         packingList.cartons.length,
         this.boxLabelDc(),
-        this.boxLabelInvoiceNo(),
         settings,
       );
       await this.qzTrayService.printRaw(settings.printerName, commands);
@@ -1365,10 +1370,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   async printReadyPickList(pickList: PickList) {
     await this.loadingService.run(async () => {
       const lines = pickList.id ? await this.pickListService.getPickListLinesOnce(pickList.id) : pickList.items;
-      const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean))] as string[];
-      const invItems = barcodes.length ? await this.inventoryService.getInventoryByBarcodes(barcodes) : [];
-      const mrpByBarcode = new Map<string, number>();
-      for (const inv of invItems) mrpByBarcode.set(inv.barcode, Number(inv.price) || 0);
+      const mrpByBarcode = await this.designService.getMrpByBarcodeMap();
 
       const toPackLines = lines
         .map((line) => {
@@ -1408,8 +1410,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
         part: string;
         color: string;
         sleeveType: string;
-        mrp: number;
         qtyBySize: Map<string, number>;
+        mrpBySize: Map<string, number>;
         total: number;
       }
       const productMap = new Map<string, ProductRow>();
@@ -1421,6 +1423,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         const existing = productMap.get(key);
         if (existing) {
           existing.qtyBySize.set(line.size, (existing.qtyBySize.get(line.size) ?? 0) + line.toPackQty);
+          if (line.mrp > 0) existing.mrpBySize.set(line.size, line.mrp);
           existing.total += line.toPackQty;
         } else {
           productMap.set(key, {
@@ -1428,8 +1431,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
             part: line.part,
             color: line.color,
             sleeveType: line.sleeveType,
-            mrp: line.mrp,
             qtyBySize: new Map([[line.size, line.toPackQty]]),
+            mrpBySize: line.mrp > 0 ? new Map([[line.size, line.mrp]]) : new Map(),
             total: line.toPackQty,
           });
         }
@@ -1443,44 +1446,231 @@ export class PackingListComponent implements OnInit, OnDestroy {
       });
       const sizeTotals = sizes.map((size) => productRows.reduce((sum, row) => sum + (row.qtyBySize.get(size) ?? 0), 0));
       const grandTotal = productRows.reduce((sum, row) => sum + row.total, 0);
-      const productLabel = (row: ProductRow) => [row.styleNo, row.part, row.color, row.sleeveType].filter(Boolean).join(' - ');
-
-      const rows: any[][] = [
-        ['#', 'Product', ...sizes, 'MRP', 'Qty (Pcs)'],
-        ...productRows.map((row, i) => [
-          i + 1,
-          productLabel(row),
-          ...sizes.map((size) => row.qtyBySize.get(size) || '-'),
-          row.mrp > 0 ? row.mrp.toFixed(2) : '-',
-          row.total,
-        ]),
-        ['', 'Totals', ...sizeTotals, '-', grandTotal],
-      ];
 
       const filterSummary = `${(pickList.salesNos ?? []).join(', ')} · ${pickList.clientName} · `
         + `Picked ${totals.picked} · Already Packed ${totals.packed} · To Pack Now ${totals.toPack}`;
 
-      await exportRowsToPdf(rows, `Ready to Pack - ${pickList.pickListNo}`, filterSummary, {
-        signatureLabels: ['Prepared By', 'Checked By', 'Packed By'],
-      });
+      await this.printReadyToPackPdf(pickList, productRows, sizes, sizeTotals, grandTotal, filterSummary);
     });
   }
 
+  // Custom jsPDF layout (not the shared exportRowsToPdf/report-export util) —
+  // that util draws every row at a fixed height and overlaps text once a
+  // "Product" label wraps past one line, and it auto-switches to landscape
+  // past 6 columns which this print must never do (always portrait for
+  // packers on the floor). Row height here is computed per-row from the
+  // actual wrapped line count, and each size column stacks Qty over MRP so
+  // MRP can differ by size without adding a separate column per size.
+  private async printReadyToPackPdf(
+    pickList: PickList,
+    productRows: {
+      styleNo: string;
+      part: string;
+      color: string;
+      sleeveType: string;
+      qtyBySize: Map<string, number>;
+      mrpBySize: Map<string, number>;
+      total: number;
+    }[],
+    sizes: string[],
+    sizeTotals: number[],
+    grandTotal: number,
+    filterSummaryText: string
+  ): Promise<void> {
+    const { default: JsPDF } = await import('jspdf');
+    const doc = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 10;
+    const usableW = pageW - margin * 2;
+
+    const colW = { no: 8, style: 34, color: 22, sleeve: 16, total: 14 };
+    const fixedW = colW.no + colW.style + colW.color + colW.sleeve + colW.total;
+    const sizeColW = Math.max(11, (usableW - fixedW) / sizes.length);
+
+    const lineH = 3.4;
+    const padY = 1.6;
+
+    let y = margin;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text(`Ready to Pack - ${pickList.pickListNo}`, margin, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(filterSummaryText, margin, y, { maxWidth: usableW });
+    y += 6;
+
+    const headerCols: { label: string; w: number }[] = [
+      { label: '#', w: colW.no },
+      { label: 'Product No.', w: colW.style },
+      { label: 'Color', w: colW.color },
+      { label: 'Sleeve', w: colW.sleeve },
+      ...sizes.map((s) => ({ label: s, w: sizeColW })),
+      { label: 'Qty', w: colW.total },
+    ];
+
+    const drawHeaderRow = () => {
+      const h = lineH + padY * 2;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setDrawColor(200, 200, 200);
+      let x = margin;
+      for (const col of headerCols) {
+        doc.setFillColor(30, 41, 59);
+        doc.rect(x, y, col.w, h, 'F');
+        doc.rect(x, y, col.w, h, 'S');
+        doc.setTextColor(255, 255, 255);
+        doc.text(col.label, x + col.w / 2, y + h / 2 + 1.1, { align: 'center', maxWidth: col.w - 2 });
+        x += col.w;
+      }
+      y += h;
+    };
+
+    const ensureSpace = (h: number) => {
+      if (y + h > pageH - margin - 6) {
+        doc.addPage();
+        y = margin;
+        drawHeaderRow();
+      }
+    };
+
+    drawHeaderRow();
+
+    productRows.forEach((row, i) => {
+      doc.setFontSize(7);
+      const partSuffix = row.part && row.part !== 'General' ? ` (${row.part})` : '';
+      const styleLines = doc.splitTextToSize(`${row.styleNo}${partSuffix}`, colW.style - 3);
+      const colorLines = doc.splitTextToSize(row.color || '-', colW.color - 3);
+      const sleeveLines = doc.splitTextToSize(row.sleeveType || '-', colW.sleeve - 3);
+      const textLineCount = Math.max(styleLines.length, colorLines.length, sleeveLines.length, 1);
+      const rowH = Math.max(textLineCount, 2) * lineH + padY * 2;
+
+      ensureSpace(rowH);
+
+      if (i % 2 === 0) { doc.setFillColor(248, 250, 252); doc.rect(margin, y, usableW, rowH, 'F'); }
+      doc.setDrawColor(215, 222, 234);
+
+      let x = margin;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.rect(x, y, colW.no, rowH, 'S');
+      doc.text(String(i + 1), x + colW.no / 2, y + rowH / 2 + 1, { align: 'center' });
+      x += colW.no;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.rect(x, y, colW.style, rowH, 'S');
+      styleLines.forEach((ln: string, li: number) => doc.text(ln, x + 1.5, y + padY + lineH * (li + 1) - 1, { maxWidth: colW.style - 3 }));
+      x += colW.style;
+
+      doc.setFont('helvetica', 'normal');
+      doc.rect(x, y, colW.color, rowH, 'S');
+      colorLines.forEach((ln: string, li: number) => doc.text(ln, x + 1.5, y + padY + lineH * (li + 1) - 1, { maxWidth: colW.color - 3 }));
+      x += colW.color;
+
+      doc.rect(x, y, colW.sleeve, rowH, 'S');
+      sleeveLines.forEach((ln: string, li: number) => doc.text(ln, x + colW.sleeve / 2, y + padY + lineH * (li + 1) - 1, { align: 'center', maxWidth: colW.sleeve - 3 }));
+      x += colW.sleeve;
+
+      for (const size of sizes) {
+        const qty = row.qtyBySize.get(size) ?? 0;
+        const mrp = row.mrpBySize.get(size) ?? 0;
+        doc.rect(x, y, sizeColW, rowH, 'S');
+        if (qty > 0) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.setTextColor(15, 23, 42);
+          doc.text(String(qty), x + sizeColW / 2, y + padY + lineH - 0.6, { align: 'center' });
+          if (mrp > 0) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(6);
+            doc.setTextColor(100, 116, 139);
+            const mrpText = mrp.toFixed(2).replace(/\.00$/, '');
+            doc.text(mrpText, x + sizeColW / 2, y + padY + lineH * 2 - 0.6, { align: 'center', maxWidth: sizeColW - 2 });
+          }
+        } else {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(203, 213, 225);
+          doc.text('-', x + sizeColW / 2, y + rowH / 2 + 1, { align: 'center' });
+        }
+        x += sizeColW;
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(21, 128, 61);
+      doc.rect(x, y, colW.total, rowH, 'S');
+      doc.text(String(row.total), x + colW.total / 2, y + rowH / 2 + 1, { align: 'center' });
+
+      y += rowH;
+    });
+
+    const totalRowH = 8;
+    ensureSpace(totalRowH);
+    doc.setFillColor(241, 245, 249);
+    doc.rect(margin, y, usableW, totalRowH, 'F');
+    doc.setDrawColor(200, 200, 200);
+    let tx = margin;
+    const labelW = colW.no + colW.style + colW.color + colW.sleeve;
+    doc.rect(tx, y, labelW, totalRowH, 'S');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Totals', tx + 3, y + totalRowH / 2 + 1);
+    tx += labelW;
+    for (let idx = 0; idx < sizes.length; idx++) {
+      doc.rect(tx, y, sizeColW, totalRowH, 'S');
+      doc.text(String(sizeTotals[idx]), tx + sizeColW / 2, y + totalRowH / 2 + 1, { align: 'center' });
+      tx += sizeColW;
+    }
+    doc.rect(tx, y, colW.total, totalRowH, 'S');
+    doc.setTextColor(21, 128, 61);
+    doc.text(String(grandTotal), tx + colW.total / 2, y + totalRowH / 2 + 1, { align: 'center' });
+    y += totalRowH;
+
+    y += 16;
+    if (y > pageH - margin - 10) { doc.addPage(); y = margin + 10; }
+    const sigLabels = ['Prepared By', 'Checked By', 'Packed By'];
+    const segW = usableW / sigLabels.length;
+    doc.setDrawColor(51, 65, 85);
+    doc.setLineWidth(0.3);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    sigLabels.forEach((label, i) => {
+      const x1 = margin + i * segW + 5;
+      const x2 = margin + (i + 1) * segW - 5;
+      doc.line(x1, y, x2, y);
+      doc.text(label, (x1 + x2) / 2, y + 4, { align: 'center' });
+    });
+
+    doc.save(`Ready_to_Pack_${pickList.pickListNo}.pdf`);
+  }
+
+  // Opens a print PREVIEW (not an instant window.print()) — the popup itself
+  // carries on-screen Print/Close actions (hidden from the physical printout
+  // via @media print) so the user reviews the exact layout before picking a
+  // printer through the browser's own print dialog. Layout mirrors
+  // printReadyToPackPdf's product/size pivot (same Qty-over-MRP per size
+  // cell, Totals row, signatures) — just rendered as HTML instead of a
+  // downloaded PDF, and scoped to this Packing List's own lines.
   async printPackingList(packingList: PackingList) {
     if (!packingList.id) return;
     // Opened synchronously, before any await — see printEnhancedBoxLabels.
-    const win = window.open('', '_blank', 'width=1100,height=780');
+    const win = window.open('', '_blank', 'width=1150,height=820');
     await this.loadingService.run(async () => {
-      const [fresh, lines] = await Promise.all([
+      const [fresh, lines, client, mrpByBarcode] = await Promise.all([
         this.packingListService.getPackingListByIdOnce(packingList.id!),
         this.packingListService.getPackingListLinesOnce(packingList.id!),
+        this.clientService.getClientByIdOnce(packingList.clientId),
+        this.designService.getMrpByBarcodeMap(),
       ]);
-      const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean))] as string[];
-      const invItems = barcodes.length ? await this.inventoryService.getInventoryByBarcodes(barcodes) : [];
-      const mrpByBarcode = new Map<string, number>();
-      for (const inv of invItems) mrpByBarcode.set(inv.barcode, Number(inv.price) || 0);
-      const html = this.buildPrintHtml(fresh ?? packingList, lines, mrpByBarcode);
-      if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+      const html = this.buildPackingListPrintHtml(fresh ?? packingList, lines, mrpByBarcode, client?.place ?? '');
+      if (win) { win.document.write(html); win.document.close(); }
       else await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
     });
   }
@@ -2040,10 +2230,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     // billed pending/unpacked quantity into the DC.)
     const packedLines = lines.filter((l) => l.packedQty > 0);
 
-    const barcodes = [...new Set(packedLines.map((l) => l.barcode).filter(Boolean))] as string[];
-    const invItems = barcodes.length ? await this.inventoryService.getInventoryByBarcodes(barcodes) : [];
-    const mrpByBarcode = new Map<string, number>();
-    for (const inv of invItems) mrpByBarcode.set(inv.barcode, Number(inv.price) || 0);
+    const mrpByBarcode = await this.designService.getMrpByBarcodeMap();
 
     const rowMap = new Map<string, { partName: string; styleNo: string; color: string; sleeveType?: string; sizeQty: Record<string, number>; total: number; mrp: number }>();
     const sizeSet = new Set<string>();
@@ -2307,151 +2494,174 @@ ${allDCHtml}
     }
   }
 
-  private buildPrintHtml(packingList: PackingList, lines: PackingListLine[], mrpByBarcode: Map<string, number>): string {
-    const rankSize = (size: string) => {
-      const idx = SIZE_ORDER.indexOf(size);
-      return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
-    };
+  // Pivots this Packing List's own lines into the same product/size-matrix
+  // layout as printReadyToPackPdf (one row per style/color/sleeve, one
+  // column per size, Qty stacked over MRP per cell, Totals row, signatures)
+  // — but as an HTML print PREVIEW page instead of a downloaded PDF, per the
+  // Packing List tab's print requirement. requiredQty is the pivoted Qty
+  // (what this specific Packing List is assigned to pack per size, frozen at
+  // generation time — the direct analogue of "To Pack Now" on the Ready to
+  // Pack view); Packed/Remaining appear alongside it in the header stats so
+  // in-progress packing status isn't lost.
+  private buildPackingListPrintHtml(
+    packingList: PackingList,
+    lines: PackingListLine[],
+    mrpByBarcode: Map<string, number>,
+    location: string
+  ): string {
+    interface ProductRow {
+      styleNo: string;
+      part: string;
+      color: string;
+      sleeveType: string;
+      qtyBySize: Map<string, number>;
+      mrpBySize: Map<string, number>;
+      total: number;
+    }
+    const productMap = new Map<string, ProductRow>();
+    const sizeSet = new Set<string>();
 
-    const printLines = [...lines]
-      .map((l) => ({ ...l, salesText: (l.salesNos ?? []).join(', ') }))
-      .sort((a, b) => {
-        const pc = a.partName.localeCompare(b.partName, undefined, { numeric: true });
-        if (pc !== 0) return pc;
-        const sc = a.styleNo.localeCompare(b.styleNo, undefined, { numeric: true });
-        if (sc !== 0) return sc;
-        const cc = a.color.localeCompare(b.color, undefined, { numeric: true });
-        if (cc !== 0) return cc;
-        return rankSize(a.size) - rankSize(b.size);
-      });
+    for (const line of lines) {
+      const qty = Math.max(0, Number(line.requiredQty) || 0);
+      if (qty <= 0) continue;
+      sizeSet.add(line.size);
+      const mrp = mrpByBarcode.get(line.barcode ?? '') ?? 0;
+      const key = `${line.styleNo}||${line.partName}||${line.color}||${line.sleeveType ?? ''}`;
+      const existing = productMap.get(key);
+      if (existing) {
+        existing.qtyBySize.set(line.size, (existing.qtyBySize.get(line.size) ?? 0) + qty);
+        if (mrp > 0) existing.mrpBySize.set(line.size, mrp);
+        existing.total += qty;
+      } else {
+        productMap.set(key, {
+          styleNo: line.styleNo,
+          part: line.partName,
+          color: line.color,
+          sleeveType: line.sleeveType ?? '',
+          qtyBySize: new Map([[line.size, qty]]),
+          mrpBySize: mrp > 0 ? new Map([[line.size, mrp]]) : new Map(),
+          total: qty,
+        });
+      }
+    }
 
-    const summary = {
-      lineCount: printLines.length,
-      totalRequiredQty: printLines.reduce((s, l) => s + l.requiredQty, 0),
-      totalPackedQty: printLines.reduce((s, l) => s + l.packedQty, 0),
-      totalRemainingQty: printLines.reduce((s, l) => s + l.remainingQty, 0),
-      cartonCount: packingList.cartons.length,
-    };
+    const sizes = [...sizeSet].sort((a, b) => this.rankSize(a) - this.rankSize(b));
+    const productRows = [...productMap.values()].sort((a, b) => {
+      const styleCompare = a.styleNo.localeCompare(b.styleNo, undefined, { numeric: true });
+      if (styleCompare !== 0) return styleCompare;
+      return a.color.localeCompare(b.color, undefined, { numeric: true });
+    });
+    const sizeTotals = sizes.map((size) => productRows.reduce((sum, row) => sum + (row.qtyBySize.get(size) ?? 0), 0));
+    const grandTotal = productRows.reduce((sum, row) => sum + row.total, 0);
 
-    const statusStyle = packingList.status === 'Completed'
-      ? { bg: '#d1fae5', fg: '#047857' }
-      : packingList.status === 'Partial'
-        ? { bg: '#fef3c7', fg: '#b45309' }
-        : { bg: '#e5e7eb', fg: '#4b5563' };
+    const totalRequiredQty = lines.reduce((s, l) => s + (Number(l.requiredQty) || 0), 0);
+    const totalPackedQty = lines.reduce((s, l) => s + (Number(l.packedQty) || 0), 0);
+    const totalRemainingQty = lines.reduce((s, l) => s + (Number(l.remainingQty) || 0), 0);
 
-    const lineRows = printLines.map((l, i) => {
-      const lineBadge = l.status === 'completed'
-        ? { bg: '#d1fae5', fg: '#047857' }
-        : l.status === 'in_progress'
-          ? { bg: '#dbeafe', fg: '#1d4ed8' }
-          : { bg: '#e0e7ff', fg: '#3730a3' };
-      const mrp = mrpByBarcode.get(l.barcode ?? '') ?? 0;
+    const summaryLine = [
+      (packingList.salesNos ?? []).join(', '),
+      location ? `${packingList.clientName} - ${location}` : packingList.clientName,
+      `Required ${totalRequiredQty}`,
+      `Packed ${totalPackedQty}`,
+      `Remaining ${totalRemainingQty}`,
+    ].filter(Boolean).join(' · ');
+
+    const esc = (value: string) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const fixedColsPct = { no: 5, style: 24, color: 11, sleeve: 9, total: 8 };
+    const fixedTotalPct = fixedColsPct.no + fixedColsPct.style + fixedColsPct.color + fixedColsPct.sleeve + fixedColsPct.total;
+    const sizeColPct = sizes.length ? (100 - fixedTotalPct) / sizes.length : 0;
+
+    const colGroup = `
+      <col style="width:${fixedColsPct.no}%">
+      <col style="width:${fixedColsPct.style}%">
+      <col style="width:${fixedColsPct.color}%">
+      <col style="width:${fixedColsPct.sleeve}%">
+      ${sizes.map(() => `<col style="width:${sizeColPct}%">`).join('')}
+      <col style="width:${fixedColsPct.total}%">`;
+
+    const headerRow = `
+      <tr>
+        <th>#</th>
+        <th style="text-align:left">Product No.</th>
+        <th style="text-align:left">Color</th>
+        <th>Sleeve</th>
+        ${sizes.map((s) => `<th>${esc(s)}</th>`).join('')}
+        <th>Qty</th>
+      </tr>`;
+
+    const dataRows = productRows.map((row, i) => {
+      const partSuffix = row.part && row.part !== 'General' ? ` (${esc(row.part)})` : '';
+      const sizeCells = sizes.map((size) => {
+        const qty = row.qtyBySize.get(size) ?? 0;
+        const mrp = row.mrpBySize.get(size) ?? 0;
+        if (qty <= 0) return `<td class="qty-cell"><span class="dash">-</span></td>`;
+        const mrpHtml = mrp > 0 ? `<span class="mrp">${mrp.toFixed(2).replace(/\.00$/, '')}</span>` : '';
+        return `<td class="qty-cell"><span class="qty">${qty}</span>${mrpHtml}</td>`;
+      }).join('');
       return `
         <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}">
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;color:#64748b">${i + 1}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea">${l.partName}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;font-weight:700">${l.styleNo}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea">${l.color}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${l.size}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${l.sleeveType ?? '-'}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;font-family:monospace;font-size:11px">${l.barcode ?? '-'}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:right">${mrp > 0 ? mrp.toFixed(2) : '-'}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;font-size:11px">${l.salesText}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700">${l.requiredQty}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#15803d">${l.packedQty}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:${l.remainingQty > 0 ? '#d97706' : '#94a3b8'}">${l.remainingQty}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${l.lastCartonNo ?? '-'}</td>
-          <td style="padding:8px 10px;border:1px solid #d7deea">
-            <span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;background:${lineBadge.bg};color:${lineBadge.fg}">${l.status}</span>
-          </td>
+          <td style="text-align:center;color:#64748b">${i + 1}</td>
+          <td style="font-weight:700">${esc(row.styleNo)}${partSuffix}</td>
+          <td>${esc(row.color) || '-'}</td>
+          <td style="text-align:center">${esc(row.sleeveType) || '-'}</td>
+          ${sizeCells}
+          <td class="row-total">${row.total}</td>
         </tr>`;
     }).join('');
 
-    const cartonRows = packingList.cartons.map((c, i) => `
-      <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}">
-        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${i + 1}</td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;font-weight:700">${c.cartonNo}</td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">${c.entries.length}</td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center;font-weight:700;color:#047857">${c.totalQty}</td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;text-align:center">
-          <span style="padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;background:${c.cartonStatus === 'sealed' ? '#d1fae5' : '#fef3c7'};color:${c.cartonStatus === 'sealed' ? '#047857' : '#b45309'}">${c.cartonStatus === 'sealed' ? 'Sealed' : 'Open'}</span>
-        </td>
-        <td style="padding:8px 10px;border:1px solid #d7deea;font-size:11px">${c.entries.map((e) => `${e.styleNo} / ${e.color} / ${e.size} × ${e.qty}`).join(', ')}</td>
-      </tr>`).join('');
+    const totalsRow = `
+      <tr class="totals-row">
+        <td colspan="4" style="text-align:right;padding-right:10px">Totals</td>
+        ${sizeTotals.map((t) => `<td style="text-align:center">${t}</td>`).join('')}
+        <td class="row-total">${grandTotal}</td>
+      </tr>`;
 
     return `
       <!DOCTYPE html><html>
-      <head><meta charset="utf-8"><title>${packingList.packingListNo}</title>
+      <head><meta charset="utf-8"><title>Packing List - ${esc(packingList.packingListNo)}</title>
       <style>
-        body{font-family:Arial,sans-serif;font-size:12px;margin:18px;color:#0f172a}
-        h1,p{margin:0}
-        .header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:12px}
-        .meta{margin-top:4px;color:#64748b;font-size:11px;line-height:1.5}
-        .badge{display:inline-block;margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:700}
-        .summary{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:14px 0 10px}
-        .box{border:1px solid #d7deea;background:#f8fafc;border-radius:10px;padding:10px 12px}
-        .label{font-size:10px;text-transform:uppercase;color:#64748b;font-weight:700;letter-spacing:.04em}
-        .value{margin-top:5px;font-size:20px;font-weight:700}
-        table{width:100%;border-collapse:collapse;margin-top:10px}
-        .section-title{margin-top:18px;font-size:14px;font-weight:700;color:#0f172a}
-        .signatures{display:flex;justify-content:space-between;gap:24px;margin-top:28px}
-        .signatures div{flex:1;border-top:1px solid #334155;padding-top:6px;text-align:center;color:#475569;font-size:11px}
+        @page { size: A4; margin: 12mm; }
+        * { box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; color:#0f172a; margin:0; padding:20px; }
+        h1 { font-size:16px; margin:0 0 4px; }
+        .summary-line { font-size:11px; color:#475569; margin-bottom:14px; }
+        .toolbar { display:flex; justify-content:flex-end; gap:8px; margin-bottom:14px; }
+        .toolbar button { padding:8px 18px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; border:1px solid transparent; }
+        .toolbar .btn-print { background:#4f46e5; color:#fff; }
+        .toolbar .btn-close { background:#fff; color:#334155; border-color:#cbd5e1; }
+        table { width:100%; border-collapse:collapse; font-size:10.5px; table-layout:fixed; }
+        thead { display: table-header-group; }
+        tr { page-break-inside: avoid; }
+        th { background:#0f172a; color:#fff; padding:7px 4px; font-size:9.5px; text-transform:uppercase; letter-spacing:.02em; border:1px solid #0f172a; }
+        td { border:1px solid #d7deea; padding:5px 4px; vertical-align:middle; word-break:break-word; }
+        .qty-cell { text-align:center; }
+        .qty-cell .qty { font-weight:700; font-size:12px; display:block; }
+        .qty-cell .mrp { font-size:8.5px; color:#64748b; display:block; margin-top:1px; }
+        .qty-cell .dash { color:#cbd5e1; }
+        .row-total { text-align:center; font-weight:700; color:#15803d; }
+        .totals-row td { background:#f1f5f9; font-weight:700; }
+        .signatures { display:flex; justify-content:space-between; gap:24px; margin-top:40px; }
+        .signatures div { flex:1; border-top:1px solid #334155; padding-top:6px; text-align:center; color:#475569; font-size:11px; }
+        @media print {
+          .toolbar { display:none !important; }
+          body { padding:0; }
+        }
       </style></head>
       <body>
-        <div class="header">
-          <div>
-            <h1 style="font-size:24px">${packingList.packingListNo}</h1>
-            <p class="meta">Pick List: ${packingList.pickListNo}</p>
-            <p class="meta">Orders: ${(packingList.salesNos ?? []).join(', ')}</p>
-            <p class="meta">Client: ${packingList.clientName}</p>
-            <span class="badge" style="background:${statusStyle.bg};color:${statusStyle.fg}">${packingList.status}</span>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase">Printed At</div>
-            <div style="margin-top:4px;font-size:12px">${new Date().toLocaleString('en-IN')}</div>
-          </div>
+        <div class="toolbar">
+          <button class="btn-close" onclick="window.close()">Close</button>
+          <button class="btn-print" onclick="window.print()">Print</button>
         </div>
-        <div class="summary">
-          <div class="box"><div class="label">Lines</div><div class="value">${summary.lineCount}</div></div>
-          <div class="box"><div class="label">To Pack</div><div class="value" style="color:#4338ca">${summary.totalRequiredQty}</div></div>
-          <div class="box"><div class="label">Packed</div><div class="value" style="color:#15803d">${summary.totalPackedQty}</div></div>
-          <div class="box"><div class="label">Remaining</div><div class="value" style="color:${summary.totalRemainingQty > 0 ? '#d97706' : '#94a3b8'}">${summary.totalRemainingQty}</div></div>
-          <div class="box"><div class="label">Cartons</div><div class="value">${summary.cartonCount}</div></div>
-        </div>
-        <div class="section-title">Part-wise Packing Lines</div>
+        <h1>Packing List - ${esc(packingList.packingListNo)}</h1>
+        <div class="summary-line">${esc(summaryLine)}</div>
         <table>
-          <thead><tr>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">#</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Part</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Style No</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Color</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Size</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Sleeve</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Barcode</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">MRP</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Orders</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">To Pack</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Packed</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Remaining</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Last Carton</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Status</th>
-          </tr></thead>
-          <tbody>${lineRows}</tbody>
-        </table>
-        <div class="section-title">Carton Summary</div>
-        <table>
-          <thead><tr>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">#</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Carton No</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Lines</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Packed Qty</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Status</th>
-            <th style="padding:9px 10px;border:1px solid #d7deea;background:#0f172a;color:#fff;font-size:10px">Contents</th>
-          </tr></thead>
-          <tbody>${cartonRows || '<tr><td colspan="6" style="padding:12px;border:1px solid #d7deea;text-align:center;color:#94a3b8">No cartons packed yet.</td></tr>'}</tbody>
+          <colgroup>${colGroup}</colgroup>
+          <thead>${headerRow}</thead>
+          <tbody>${dataRows}${totalsRow}</tbody>
         </table>
         <div class="signatures">
-          <div>Prepared By</div><div>Packed By</div><div>Checked By</div>
+          <div>Prepared By</div><div>Checked By</div><div>Packed By</div>
         </div>
       </body></html>`;
   }
@@ -2556,7 +2766,12 @@ ${allDCHtml}
       </body></html>`;
   }
 
-  private buildEnhancedBoxLabelHtml(packingList: PackingList, cartonIndex: number, totalBoxes: number, dc: DeliveryChallan | null, invoiceNo: string): string {
+  // Mirrors buildBoxLabelZpl's layout: no company/header block, no Invoice
+  // No. (the QR encodes the DC number instead), and every value (name, sales
+  // order no., DC no., box no., destination, transport, qty) uses the same
+  // "value" style — matching that function's single '3' font tier applied
+  // uniformly instead of a per-field size hierarchy.
+  private buildEnhancedBoxLabelHtml(packingList: PackingList, cartonIndex: number, totalBoxes: number, dc: DeliveryChallan | null): string {
     const carton = packingList.cartons[cartonIndex];
     if (!carton) return '';
     const partyProgress = packingList.partyProgress ?? [];
@@ -2567,33 +2782,32 @@ ${allDCHtml}
     if (dc?.billingAddress) addrParts.push(dc.billingAddress);
     if (dc?.place || dc?.state) addrParts.push([dc.place, dc.state].filter(Boolean).join(', ') + (dc?.zipCode ? ' - ' + dc.zipCode : ''));
     if (dc?.clientPhone) addrParts.push('Ph: ' + dc.clientPhone);
-    const addrHtml = addrParts.map((p) => '<div style="font-size:9.5px;line-height:1.35;color:#333;margin-top:1.5px">' + p + '</div>').join('');
-    const qrData = 'INV:' + (invoiceNo || 'N/A') + '|BOX:' + (cartonIndex + 1) + 'of' + totalBoxes + '|CODE:' + (dc?.clientId || packingList.clientId).substring(0, 8).toUpperCase();
+    const addrHtml = addrParts.map((p) => '<div style="font-size:14px;line-height:1.3;color:#333;margin-top:2px">' + p + '</div>').join('');
+    const qrData = 'DC:' + (dc?.dcNo || 'N/A') + '|BOX:' + (cartonIndex + 1) + 'of' + totalBoxes + '|CODE:' + (dc?.clientId || packingList.clientId).substring(0, 8).toUpperCase();
+    const value = 'font-size:16px;font-weight:900;color:#0f172a;line-height:1.15;margin-top:1px';
+    const nameValue = 'font-size:24px;font-weight:900;color:#0f172a;line-height:1.15;margin-top:2px';
+    const caption = 'font-size:7px;color:#666;font-weight:700;text-transform:uppercase';
+    // Ship To gets ~57% of the label's height (flex-basis), matching
+    // buildBoxLabelZpl's 0–60mm-of-105mm row budget — the other two rows
+    // split the remaining ~43% between them (22%/22%), down from a roughly
+    // even 3-way split, at the user's request to make Ship To dominant.
     return '<div class="label-page">'
-      + '<div style="display:flex;align-items:center;padding:4px 8px;border-bottom:1.5px solid #000;background:#f8f8f8">'
-      + '<div style="width:36px;height:36px;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;margin-right:6px;background:#fff;font-size:7px;font-weight:900;color:#1e3a8a;text-align:center">TMG<br>CLG</div>'
-      + '<div style="flex:1"><div style="font-size:13px;font-weight:900;color:#0f172a">TMG Clothings</div>'
-      + '<div style="font-size:7px;color:#555">Door No.334/2, Serayampalaym, Coimbatore - 641048 | GSTIN: 33AAYFT2559B1ZY</div></div>'
-      + '<div style="text-align:right;font-size:8px;color:#666;min-width:60px">'
-      + '<div style="font-weight:700">Box ' + (cartonIndex + 1) + ' of ' + totalBoxes + '</div>'
-      + '<div style="font-size:18px;font-weight:900;color:#0f172a;line-height:1.1">' + carton.cartonNo + '</div></div></div>'
-      + '<div style="display:flex;border-bottom:1px solid #ccc;flex:1;min-height:0">'
-      + '<div style="flex:1;padding:5px 8px;border-right:1px solid #ccc">'
-      + '<div style="font-size:8px;font-weight:700;text-transform:uppercase;color:#4f46e5">Ship To</div>'
-      + '<div style="font-size:11px;font-weight:900;color:#0f172a;margin-top:1px">' + customerName + '</div>'
-      + (addrHtml || '<div style="font-size:9.5px;color:#888">—</div>') + '</div>'
-      + '<div style="width:90px;padding:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fafafa">'
-      + '<div style="border:1.5px solid #0f172a;padding:5px;font-size:6px;font-family:monospace;word-break:break-all;text-align:center;width:76px;line-height:1.4">' + qrData + '</div>'
-      + '<div style="font-size:6px;color:#666;margin-top:3px;text-align:center">Scan for details</div></div></div>'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #ccc">'
-      + '<div style="padding:3px 6px;border-right:1px solid #ccc"><div style="font-size:7px;color:#666;font-weight:700;text-transform:uppercase">Pick List</div><div style="font-size:9px;font-weight:700">' + packingList.pickListNo + '</div></div>'
-      + '<div style="padding:3px 6px;border-right:1px solid #ccc"><div style="font-size:7px;color:#666;font-weight:700;text-transform:uppercase">Order No.</div><div style="font-size:9px;font-weight:700">' + (packingList.salesNos ?? []).join(', ') + '</div></div>'
-      + '<div style="padding:3px 6px"><div style="font-size:7px;color:#666;font-weight:700;text-transform:uppercase">Invoice No.</div><div style="font-size:9px;font-weight:700">' + (invoiceNo || '—') + '</div></div></div>'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr">'
-      + '<div style="padding:3px 6px;border-right:1px solid #ccc"><div style="font-size:7px;color:#666;font-weight:700;text-transform:uppercase">Destination</div><div style="font-size:9px;font-weight:700">' + (dc?.place || '—') + '</div></div>'
-      + '<div style="padding:3px 6px;border-right:1px solid #ccc"><div style="font-size:7px;color:#666;font-weight:700;text-transform:uppercase">Transport</div><div style="font-size:9px;font-weight:700">' + (dc?.transport || packingList.transport || '—') + '</div></div>'
-      + '<div style="padding:3px 6px;background:#f0fdf4"><div style="font-size:7px;color:#047857;font-weight:700;text-transform:uppercase">Total Qty</div>'
-      + '<div style="font-size:16px;font-weight:900;color:#047857;line-height:1">' + carton.totalQty + ' PCS</div></div></div></div>';
+      + '<div style="flex:0 0 57%;padding:8px;border-bottom:1px solid #ccc;overflow:hidden">'
+      + '<div style="' + caption + ';color:#4f46e5">Ship To</div>'
+      + '<div style="' + nameValue + '">' + customerName + '</div>'
+      + (addrHtml || '<div style="font-size:14px;color:#888">—</div>') + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #ccc;flex:0 0 21%">'
+      + '<div style="padding:5px 6px;border-right:1px solid #ccc"><div style="' + caption + '">Sales Order No.</div><div style="' + value + '">' + ((packingList.salesNos ?? []).join(', ') || '—') + '</div></div>'
+      + '<div style="padding:5px 6px;border-right:1px solid #ccc"><div style="' + caption + '">DC No.</div><div style="' + value + '">' + (dc?.dcNo || '—') + '</div></div>'
+      + '<div style="padding:5px 6px"><div style="' + caption + '">Box No.</div><div style="' + value + '">' + carton.cartonNo + '</div>'
+      + '<div style="font-size:7px;color:#666;margin-top:2px">Box ' + (cartonIndex + 1) + ' of ' + totalBoxes + '</div></div></div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;flex:1;min-height:0">'
+      + '<div style="padding:5px 6px;border-right:1px solid #ccc"><div style="' + caption + '">Destination</div><div style="' + value + '">' + (dc?.place || '—') + '</div></div>'
+      + '<div style="padding:5px 6px;border-right:1px solid #ccc"><div style="' + caption + '">Transport</div><div style="' + value + '">' + (dc?.transport || packingList.transport || '—') + '</div></div>'
+      + '<div style="padding:5px 6px;background:#f0fdf4"><div style="' + caption + ';color:#047857">Total Qty</div><div style="' + value + ';color:#047857">' + carton.totalQty + ' PCS</div></div></div>'
+      + '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-top:1px solid #ccc">'
+      + '<div style="border:1.5px solid #0f172a;padding:4px;font-size:6px;font-family:monospace;word-break:break-all;text-align:center;width:76px;line-height:1.4">' + qrData + '</div>'
+      + '<div style="font-size:7px;color:#666">Scan for details</div></div></div>';
   }
 
   private buildInvoiceHtml(invoice: Invoice, logoDataUri = ''): string {

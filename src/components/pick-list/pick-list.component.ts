@@ -89,10 +89,16 @@ export class PickListComponent implements OnInit, OnDestroy {
   isSaving = signal(false);
   isSubmittingScan = signal(false);
   isClaimingItem = signal(false);
+  isRemovingScan = signal(false);
   isCameraOpen = signal(false);
   scanFeedback = signal<'idle' | 'success' | 'error'>('idle');
   scannerMessage = signal('Scan the assigned item');
   manualScanValue = signal('');
+  // Party-wise only — set to the lineId of whatever was scanned last (there's
+  // no claim to derive it from, unlike currentLineId for non-party types).
+  // currentScanLine below resolves it back against liveLines() so the
+  // displayed qty always reflects the latest write, not a stale snapshot.
+  lastScannedLineId = signal<string | null>(null);
   showLinesPanel = signal(false);
 
   listTab = signal<'orders' | 'picklists'>('orders');
@@ -351,6 +357,38 @@ export class PickListComponent implements OnInit, OnDestroy {
       pickedQty: pickList?.totalPickedQty ?? 0,
       additionalPickedQty: pickList?.totalAdditionalPickedQty ?? 0,
     };
+  });
+
+  // Every line that has at least one scanned unit, most-recently-touched
+  // first — the "Scanned Items" list next to the scan box, shown for every
+  // Pick List type (as opposed to partyLiveLines(), which includes
+  // not-yet-scanned requested lines too, for the collapsible All Lines panel).
+  scannedLines = computed(() => {
+    const toMillis = (value: any) => value?.toMillis?.() ?? 0;
+    return [...this.liveLines()]
+      .filter((line) => line.pickedQty > 0)
+      .sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
+  });
+
+  // The single "active" line for the Current Scanned Details card — the
+  // claimed/assigned line for non-party types (claim-based, so it's already
+  // known before any scan happens), or whatever was scanned most recently
+  // for party-wise (no claim concept there). Resolved against liveLines()
+  // each time so it reflects concurrent scans/removals, not a stale snapshot.
+  currentScanLine = computed<PickListLine | null>(() => {
+    const pickList = this.livePickList();
+    if (!pickList) return null;
+    if (pickList.type === 'party') {
+      const id = this.lastScannedLineId();
+      if (!id) return null;
+      return this.liveLines().find((line) => line.lineId === id) ?? null;
+    }
+    return this.currentAssignedLine();
+  });
+
+  scannedTotalQty = computed(() => {
+    const pickList = this.livePickList();
+    return (pickList?.totalPickedQty ?? 0) + (pickList?.totalAdditionalPickedQty ?? 0);
   });
 
   partyWiseTotals = computed(() =>
@@ -1256,6 +1294,7 @@ export class PickListComponent implements OnInit, OnDestroy {
     this.livePickList.set(freshPickList);
     this.liveLines.set([]);
     this.currentLineId.set(null);
+    this.lastScannedLineId.set(null);
     this.manualScanValue.set('');
     this.scanFeedback.set('idle');
     this.scannerMessage.set('Scan the assigned item');
@@ -1278,6 +1317,18 @@ export class PickListComponent implements OnInit, OnDestroy {
         this.liveLines.set(lines);
         const currentLine = this.currentAssignedLine();
         if (currentLine) this.currentLineId.set(currentLine.lineId);
+
+        // Party-wise has no claim to derive a "current" line from — on first
+        // load (fresh start, Continue Picking, or returning to an in-progress
+        // list) seed it from whatever was most recently scanned so far, so
+        // Current Scanned Details isn't empty until the next new scan.
+        if (freshPickList.type === 'party' && this.lastScannedLineId() === null) {
+          const toMillis = (value: any) => value?.toMillis?.() ?? 0;
+          const mostRecent = [...lines]
+            .filter((line) => line.pickedQty > 0)
+            .sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt))[0];
+          if (mostRecent) this.lastScannedLineId.set(mostRecent.lineId);
+        }
       })
     );
 
@@ -1387,6 +1438,7 @@ export class PickListComponent implements OnInit, OnDestroy {
       const result = await this.pickListService.processPartyScan(pickList.id, barcode, user);
       this.manualScanValue.set('');
       this.lastCameraBarcodeAt = Date.now();
+      this.lastScannedLineId.set(result.line.lineId);
       const label = result.line.isAdditional
         ? `Extra item · ${result.line.styleNo} ${result.line.size} · ${result.line.pickedQty} scanned`
         : `${result.line.styleNo} ${result.line.size} · ${result.line.pickedQty}/${result.line.requiredQty}`;
@@ -1400,6 +1452,39 @@ export class PickListComponent implements OnInit, OnDestroy {
       await this.showToast('error', title, text);
     } finally {
       this.isSubmittingScan.set(false);
+      this.focusScanInput();
+    }
+  }
+
+  async removeScannedUnit(line: PickListLine) {
+    const pickList = this.livePickList();
+    const user = this.asClaimUser();
+    if (!pickList?.id || !user || this.isRemovingScan()) return;
+
+    const confirmResult = await Swal.fire({
+      icon: 'warning',
+      title: 'Remove Scanned Unit?',
+      html: `<p>This removes 1 scanned unit of <b>${line.styleNo} · ${line.size}</b>${line.isAdditional ? ' (Extra)' : ''} and restores stock.</p>`,
+      showCancelButton: true,
+      confirmButtonText: 'Remove',
+      confirmButtonColor: '#dc2626',
+    });
+    if (!confirmResult.isConfirmed) return;
+
+    this.isRemovingScan.set(true);
+    try {
+      // No need to patch local state on success — currentScanLine/scannedLines
+      // are derived from liveLines(), which the Firestore subscription
+      // refreshes as soon as this transaction commits.
+      await this.pickListService.removeScannedUnit(pickList.id, line.lineId, user);
+    } catch (error: any) {
+      const code = error?.message ?? '';
+      const { title, text } = code === 'already_packed'
+        ? { title: 'Already Packed', text: 'This unit has already been carried into a Packing List and can no longer be removed here.' }
+        : { title: 'Could Not Remove', text: 'Please try again.' };
+      await this.showToast('error', title, text);
+    } finally {
+      this.isRemovingScan.set(false);
       this.focusScanInput();
     }
   }
@@ -1545,6 +1630,7 @@ export class PickListComponent implements OnInit, OnDestroy {
     this.scannerMessage.set('Scan the assigned item');
     this.isSubmittingScan.set(false);
     this.completionHandled = false;
+    this.lastScannedLineId.set(null);
 
     if (!keepMode) this.mode.set('list');
   }

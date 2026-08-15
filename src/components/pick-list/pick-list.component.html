@@ -643,6 +643,104 @@
         </div>
         }
 
+        <!-- CURRENT SCANNED DETAILS: the single active/latest item being picked (all Pick List types) -->
+        @let activeLine = currentScanLine();
+        @if (activeLine) {
+          <div class="bg-white rounded-2xl shadow-md overflow-hidden border-2 border-indigo-300 ring-2 ring-indigo-100">
+            <div class="bg-gradient-to-r from-indigo-600 to-indigo-700 px-4 py-2.5 flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-indigo-100 uppercase tracking-wider">Current Scanned Details</span>
+              @if (activeLine.isAdditional) {
+                <span class="text-[10px] font-bold text-pink-700 bg-pink-100 rounded-full px-2 py-0.5 flex-shrink-0">Extra</span>
+              }
+            </div>
+            <div class="p-4">
+              <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                <span class="text-[10px] font-bold text-gray-400 uppercase">Line</span>
+                <span class="px-2 py-0.5 bg-gray-100 text-gray-700 text-sm font-bold rounded-lg">{{activeLine.color || '-'}}</span>
+              </div>
+              <div class="text-2xl font-bold text-gray-900 leading-tight truncate">{{activeLine.styleNo}}</div>
+              <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm mt-1.5 mb-4">
+                <span><span class="text-gray-400">Size</span> <span class="font-bold text-gray-800">{{activeLine.size}}</span></span>
+                @if (activeLine.sleeveType) {
+                  <span><span class="text-gray-400">Type</span> <span class="font-bold text-gray-800">{{activeLine.sleeveType}}</span></span>
+                }
+                @if (activeLine.salesNo) {
+                  <span><span class="text-gray-400">Sales Order</span> <span class="font-bold text-gray-800">{{activeLine.salesNo}}</span></span>
+                }
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div class="bg-indigo-50 rounded-xl p-3 text-center border-2 border-indigo-300">
+                  <div class="text-[10px] text-indigo-500 font-bold uppercase mb-0.5">Scanning Qty</div>
+                  <div class="text-2xl font-bold text-indigo-700">{{activeLine.pickedQty}}</div>
+                </div>
+                <div class="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+                  <div class="text-[10px] text-gray-400 font-bold uppercase mb-0.5">Required</div>
+                  <div class="text-2xl font-bold text-gray-800">{{activeLine.isAdditional ? '-' : activeLine.requiredQty}}</div>
+                </div>
+                <div class="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+                  <div class="text-[10px] text-gray-400 font-bold uppercase mb-0.5">Picked</div>
+                  <div class="text-2xl font-bold text-gray-800">{{activeLine.pickedQty}}</div>
+                </div>
+                <div class="rounded-xl p-3 text-center border-2"
+                     [class.bg-amber-50]="!activeLine.isAdditional && activeLine.remainingQty > 0" [class.border-amber-300]="!activeLine.isAdditional && activeLine.remainingQty > 0"
+                     [class.bg-green-50]="activeLine.isAdditional || activeLine.remainingQty === 0" [class.border-green-300]="activeLine.isAdditional || activeLine.remainingQty === 0">
+                  <div class="text-[10px] font-bold uppercase mb-0.5"
+                       [class.text-amber-500]="!activeLine.isAdditional && activeLine.remainingQty > 0" [class.text-green-500]="activeLine.isAdditional || activeLine.remainingQty === 0">Remaining</div>
+                  <div class="text-2xl font-bold"
+                       [class.text-amber-600]="!activeLine.isAdditional && activeLine.remainingQty > 0" [class.text-green-600]="activeLine.isAdditional || activeLine.remainingQty === 0">{{activeLine.isAdditional ? '-' : activeLine.remainingQty}}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        } @else if (pickList.type === 'party') {
+          <div class="bg-white rounded-2xl shadow-sm p-4 text-center text-sm text-gray-400 border-2 border-dashed border-gray-200">
+            Scan an item to see its Current Scanned Details here.
+          </div>
+        }
+
+        <!-- SCANNED ITEMS: full scanned history, remove option (all Pick List types) -->
+        @let scanList = scannedLines();
+        @if (scanList.length > 0) {
+            <div class="bg-white rounded-2xl shadow-sm overflow-hidden border-2 border-indigo-100">
+              <div class="bg-indigo-600 px-4 py-2.5 flex items-center justify-between gap-2">
+                <span class="text-xs font-bold text-indigo-100 uppercase tracking-wider">Scanned Items</span>
+                <span class="text-xs font-bold text-white bg-white/20 rounded-full px-2.5 py-0.5 flex-shrink-0">Total Scanned Qty: {{scannedTotalQty()}}</span>
+              </div>
+              <div class="divide-y divide-gray-50 max-h-72 overflow-y-auto">
+                @for (line of scanList; track line.lineId) {
+                  <div class="px-4 py-2.5 flex items-center justify-between gap-3 transition-colors" [class.bg-indigo-50]="line.lineId === currentScanLine()?.lineId">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="font-semibold text-gray-900 text-sm truncate">{{line.styleNo}}</span>
+                        @if (line.isAdditional) {
+                          <span class="text-[10px] font-bold text-pink-700 bg-pink-100 rounded-full px-1.5 py-0.5 flex-shrink-0">Extra</span>
+                        }
+                        @if (line.lineId === currentScanLine()?.lineId) {
+                          <span class="text-[10px] font-bold text-indigo-600 bg-indigo-100 rounded-full px-1.5 py-0.5 flex-shrink-0">Last Scanned</span>
+                        }
+                      </div>
+                      <div class="text-xs text-gray-500 truncate">
+                        {{line.color}} · {{line.size}}{{line.sleeveType ? ' · ' + line.sleeveType : ''}}
+                        @if (line.salesNo) { <span class="text-gray-400"> · {{line.salesNo}}</span> }
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                      <span class="text-lg font-bold text-indigo-700 leading-none">
+                        {{line.pickedQty}}@if (!line.isAdditional) {<span class="text-xs text-gray-400 font-semibold">/{{line.requiredQty}}</span>}
+                      </span>
+                      <button (click)="removeScannedUnit(line)"
+                              [disabled]="isRemovingScan()"
+                              title="Remove one scanned unit"
+                              class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9.5 4h5a1 1 0 011 1v2h-7V5a1 1 0 011-1zM4 7h16"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+        }
+
         <!-- SCAN AREA -->
         <div class="bg-white rounded-2xl shadow-sm p-4">
           <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Scan / Enter Barcode</div>
