@@ -1909,6 +1909,97 @@ export class PackingListComponent implements OnInit, OnDestroy {
     return (packingList.dcGeneratedKeys ?? []).length === 0 && !packingList.invoiceId;
   }
 
+  // Adds an item that wasn't part of the original Pick List (e.g. a
+  // forgotten extra) directly to this Packing List — resolved by barcode
+  // against Inventory, then added as already packed via
+  // PackingListService.addPackingListLine. Same DC-lock gate as edit/delete.
+  async addItemToPackingList(packingList: PackingList) {
+    if (!packingList.id) return;
+
+    const fresh = await this.packingListService.getPackingListByIdOnce(packingList.id);
+    if (!fresh || !this.canEditPackingListLines(fresh)) {
+      await Swal.fire({ icon: 'error', title: 'Adding Locked', text: 'A DC has already been generated for this Packing List — items can no longer be added.' });
+      if (fresh) await this.openView(fresh);
+      return;
+    }
+
+    const salesOrderIds = fresh.salesOrderIds ?? [];
+    const salesNos = fresh.salesNos ?? [];
+    const soOptionsHtml = salesOrderIds.length > 1
+      ? salesOrderIds.map((id, i) => `<option value="${i}">${salesNos[i] ?? id}</option>`).join('')
+      : '';
+
+    const { value: formValues } = await Swal.fire({
+      title: 'Add Item to Packing List',
+      html: '<div style="text-align:left;font-size:13px">'
+        + '<p style="font-size:11px;color:#64748b;margin-bottom:10px">Scan or enter the barcode of the item to add. It will be added as already packed and ready for dispatch.</p>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Barcode</label>'
+        + '<input id="add-barcode" class="swal2-input" style="margin:0;width:100%" placeholder="Scan or type barcode" autofocus></div>'
+        + '<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Qty</label>'
+        + '<input id="add-qty" type="number" min="1" class="swal2-input" style="margin:0;width:100%" value="1"></div>'
+        + (soOptionsHtml
+          ? '<div style="margin-top:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Sales Order</label>'
+            + `<select id="add-so" class="swal2-select" style="margin:0;width:100%">${soOptionsHtml}</select></div>`
+          : '')
+        + '</div>',
+      showCancelButton: true,
+      confirmButtonText: 'Add',
+      confirmButtonColor: '#4f46e5',
+      preConfirm: () => {
+        const barcode = (document.getElementById('add-barcode') as HTMLInputElement).value.trim();
+        const qty = Number((document.getElementById('add-qty') as HTMLInputElement).value);
+        const soSelect = document.getElementById('add-so') as HTMLSelectElement | null;
+        const soIndex = soSelect ? Number(soSelect.value) : (salesOrderIds.length === 1 ? 0 : -1);
+        if (!barcode) { Swal.showValidationMessage('Enter or scan a barcode.'); return; }
+        if (!Number.isFinite(qty) || qty <= 0) { Swal.showValidationMessage('Enter a valid quantity.'); return; }
+        return { barcode, qty: Math.floor(qty), soIndex };
+      },
+    });
+    if (!formValues) return;
+
+    const inventoryList = await firstValueFrom(this.inventoryService.getInventory());
+    const match = inventoryList.find((inv) => inv.barcode === formValues.barcode);
+    if (!match) {
+      await Swal.fire({ icon: 'error', title: 'Item Not Found', text: `No inventory item found for barcode "${formValues.barcode}".` });
+      return;
+    }
+
+    const salesOrderId = formValues.soIndex >= 0 ? salesOrderIds[formValues.soIndex] : undefined;
+    const salesNo = formValues.soIndex >= 0 ? salesNos[formValues.soIndex] : undefined;
+
+    await this.loadingService.run(async () => {
+      try {
+        await this.packingListService.addPackingListLine(packingList.id!, {
+          styleNo: match.styleNo,
+          color: match.color,
+          partName: match.group,
+          size: match.size,
+          sleeveType: match.sleeveType,
+          barcode: match.barcode,
+          inventoryId: match.id!,
+          designId: match.designId,
+          qty: formValues.qty,
+          salesOrderId,
+          salesNo,
+        });
+        await this.refreshPickListsAndPackingLists();
+        const refreshed = await this.packingListService.getPackingListByIdOnce(packingList.id!);
+        if (refreshed) await this.openView(refreshed);
+        await Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Item added to Packing List', timer: 2000, showConfirmButton: false });
+      } catch (err: any) {
+        const messages: Record<string, string> = {
+          dc_already_generated: 'A DC has already been generated for this Packing List — items can no longer be added.',
+          insufficient_stock: 'This item does not have enough stock available.',
+          inventory_not_found: 'The item could not be found in Inventory.',
+          item_not_resolved: 'Could not resolve this barcode to an inventory item.',
+        };
+        await Swal.fire({ icon: 'error', title: 'Add Failed', text: messages[err?.message] ?? err?.message ?? 'Unable to add the item.' });
+        const refreshed = await this.packingListService.getPackingListByIdOnce(packingList.id!);
+        if (refreshed) await this.openView(refreshed);
+      }
+    });
+  }
+
   async editPackingListLine(packingList: PackingList, line: PackingListLine) {
     if (!packingList.id) return;
 

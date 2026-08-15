@@ -605,6 +605,136 @@ export class PackingListService {
     return result.line;
   }
 
+  // Adds a brand-new line to a Packing List before DC generation — for an
+  // item that wasn't part of the original Pick List (e.g. a forgotten extra)
+  // but still needs to ship with it. Unlike createGeneratedPackingList's
+  // lines (seeded from a Pick List, packed via scanning), a manually added
+  // line has no source Pick List line, so packedQty is set equal to the
+  // entered qty right away — the caller is asserting the item is in hand and
+  // ready, not queuing it for a future scan. Locked out by the same
+  // dcGeneratedKeys/invoiceId gate as updatePackingListLine/
+  // deletePackingListLine. If stock was already deducted for this Packing
+  // List (deductInventoryOnCompletion already ran because every originally
+  // required line was packed), the new qty is deducted here directly since
+  // that completion hook only fires on a Draft/Partial → Completed
+  // transition and this add usually doesn't cause one.
+  async addPackingListLine(
+    packingListId: string,
+    input: {
+      styleNo: string;
+      color: string;
+      partName: string;
+      size: string;
+      sleeveType?: string;
+      barcode: string;
+      inventoryId: string;
+      designId: string;
+      qty: number;
+      salesOrderId?: string;
+      salesNo?: string;
+    },
+  ): Promise<PackingListLine> {
+    const styleNo = input.styleNo.trim();
+    const color = input.color.trim();
+    const partName = input.partName.trim() || 'General';
+    const size = input.size.trim();
+    const sleeveType = input.sleeveType?.trim() || undefined;
+    const barcode = input.barcode.trim();
+    const inventoryId = input.inventoryId.trim();
+    const designId = input.designId.trim();
+    const qty = Math.floor(Number(input.qty));
+    const salesOrderId = input.salesOrderId?.trim() || undefined;
+    const salesNo = input.salesNo?.trim() || undefined;
+
+    if (!styleNo || !color || !size || !barcode || !inventoryId) throw new Error('item_not_resolved');
+    if (!Number.isFinite(qty) || qty <= 0) throw new Error('qty_invalid');
+
+    const lineRef = doc(this.linesCollection(packingListId));
+    const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
+
+    const result = await runTransaction(this.firestore, async (transaction) => {
+      const packingListSnap = await transaction.get(packingListRef);
+      if (!packingListSnap.exists()) throw new Error('packinglist_not_found');
+      const packingList = this.normalizePackingList({ id: packingListSnap.id, ...packingListSnap.data() });
+
+      if ((packingList.dcGeneratedKeys ?? []).length > 0 || packingList.invoiceId) {
+        throw new Error('dc_already_generated');
+      }
+
+      let invSnap: DocumentSnapshot | null = null;
+      if (packingList.stockDeducted) {
+        invSnap = await transaction.get(doc(this.firestore, `inventory/${inventoryId}`));
+        if (!invSnap.exists()) throw new Error('inventory_not_found');
+        if ((Number(invSnap.data()?.['currentStock']) || 0) < qty) throw new Error('insufficient_stock');
+      }
+
+      const now = Date.now();
+      const newLine = this.normalizeLine({
+        lineId: lineRef.id,
+        pickListLineId: '',
+        salesOrderIds: salesOrderId ? [salesOrderId] : [],
+        salesNos: salesNo ? [salesNo] : [],
+        clientId: packingList.clientId,
+        clientName: packingList.clientName,
+        designId,
+        styleNo,
+        color,
+        partName,
+        size,
+        sleeveType,
+        barcode,
+        inventoryId,
+        pickedQty: 0,
+        requiredQty: qty,
+        packedQty: qty,
+        remainingQty: 0,
+        status: 'completed',
+        sortOrder: 1_000_000 + (packingList.lineCount || 0),
+        sources: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const nextTotalRequiredQty = (packingList.totalRequiredQty || 0) + qty;
+      const nextTotalPackedQty = (packingList.totalPackedQty || 0) + qty;
+      const nextLineCount = (packingList.lineCount || 0) + 1;
+      const nextCompletedLineCount = (packingList.completedLineCount || 0) + 1;
+      const nextPartSummaries = this.addLineToPartSummaries(packingList.partSummaries ?? [], partName, qty, qty);
+      const nextPartyProgress = this.addLineToPartyProgress(packingList.partyProgress ?? [], newLine, qty, qty, packingList.clientName);
+      const nextStatus = this.computePackingListStatus(nextTotalRequiredQty, nextTotalPackedQty, nextLineCount, nextCompletedLineCount);
+
+      transaction.set(lineRef, this.stripUndefined({
+        ...newLine,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+
+      transaction.update(packingListRef, this.stripUndefined({
+        totalRequiredQty: nextTotalRequiredQty,
+        totalPackedQty: nextTotalPackedQty,
+        lineCount: nextLineCount,
+        completedLineCount: nextCompletedLineCount,
+        status: nextStatus,
+        partSummaries: nextPartSummaries,
+        partyProgress: nextPartyProgress,
+        updatedAt: serverTimestamp(),
+      }));
+
+      if (invSnap) {
+        transaction.update(invSnap.ref, { currentStock: increment(-qty), updatedAt: serverTimestamp() });
+      }
+
+      return { line: newLine, nextStatus, alreadyStockDeducted: !!packingList.stockDeducted, inventoryTouched: !!invSnap };
+    });
+
+    if (!result.alreadyStockDeducted && result.nextStatus === 'Completed') {
+      await this.deductInventoryOnCompletion(packingListId);
+    }
+    if (result.inventoryTouched) this.inventoryService.invalidateCache();
+    this.invalidateCache();
+    return result.line;
+  }
+
   // Row-wise delete, pre-DC only — locked out by the same dcGeneratedKeys/
   // invoiceId fields as updatePackingListLine (see there for why that's a
   // safe atomic gate). Unlike an edit, deleting a row removes its
@@ -726,6 +856,57 @@ export class PackingListService {
       const existing = next[idx];
       const nextRequiredQty = Math.max(0, existing.requiredQty - requiredQty);
       const nextPackedQty = Math.max(0, existing.packedQty - packedQty);
+      next[idx] = { ...existing, requiredQty: nextRequiredQty, packedQty: nextPackedQty, pendingQty: nextRequiredQty - nextPackedQty };
+    }
+    return next;
+  }
+
+  private addLineToPartSummaries(
+    partSummaries: PackingPartSummary[],
+    partName: string,
+    requiredQty: number,
+    packedQty: number,
+  ): PackingPartSummary[] {
+    const key = partName || 'General';
+    const idx = partSummaries.findIndex((entry) => entry.partName === key);
+    if (idx === -1) {
+      return [...partSummaries, { partName: key, requiredQty, packedQty }]
+        .sort((a, b) => a.partName.localeCompare(b.partName, undefined, { numeric: true }));
+    }
+    const next = [...partSummaries];
+    next[idx] = { ...next[idx], requiredQty: next[idx].requiredQty + requiredQty, packedQty: next[idx].packedQty + packedQty };
+    return next;
+  }
+
+  private addLineToPartyProgress(
+    partyProgress: PackingPartyProgress[],
+    line: PackingListLine,
+    requiredQty: number,
+    packedQty: number,
+    defaultClientName: string,
+  ): PackingPartyProgress[] {
+    if (!line.salesOrderIds.length) return partyProgress;
+    const next = [...partyProgress];
+    for (let i = 0; i < line.salesOrderIds.length; i++) {
+      const salesOrderId = line.salesOrderIds[i] ?? '';
+      if (!salesOrderId) continue;
+      const salesNo = line.salesNos[i] ?? '';
+      const idx = next.findIndex((entry) => entry.salesOrderId === salesOrderId);
+      if (idx === -1) {
+        next.push({
+          salesOrderId,
+          salesNo,
+          clientId: line.clientId || undefined,
+          clientName: line.clientName || defaultClientName,
+          requiredQty,
+          packedQty,
+          pendingQty: requiredQty - packedQty,
+        });
+        continue;
+      }
+      const existing = next[idx];
+      const nextRequiredQty = existing.requiredQty + requiredQty;
+      const nextPackedQty = existing.packedQty + packedQty;
       next[idx] = { ...existing, requiredQty: nextRequiredQty, packedQty: nextPackedQty, pendingQty: nextRequiredQty - nextPackedQty };
     }
     return next;
