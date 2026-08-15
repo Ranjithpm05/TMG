@@ -100,6 +100,11 @@ export class PickListComponent implements OnInit, OnDestroy {
   // displayed qty always reflects the latest write, not a stale snapshot.
   lastScannedLineId = signal<string | null>(null);
   showLinesPanel = signal(false);
+  // Lines scanned during the current live-pick session — the Scanned Items
+  // card only shows these, not pre-existing pickedQty from earlier sessions.
+  // Reset to empty on Start Picking / Continue Picking, populated as scans
+  // succeed below.
+  sessionScannedLineIds = signal<Set<string>>(new Set());
 
   listTab = signal<'orders' | 'picklists'>('orders');
   searchTerm = signal('');
@@ -365,8 +370,9 @@ export class PickListComponent implements OnInit, OnDestroy {
   // not-yet-scanned requested lines too, for the collapsible All Lines panel).
   scannedLines = computed(() => {
     const toMillis = (value: any) => value?.toMillis?.() ?? 0;
+    const sessionIds = this.sessionScannedLineIds();
     return [...this.liveLines()]
-      .filter((line) => line.pickedQty > 0)
+      .filter((line) => line.pickedQty > 0 && sessionIds.has(line.lineId))
       .sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
   });
 
@@ -386,10 +392,10 @@ export class PickListComponent implements OnInit, OnDestroy {
     return this.currentAssignedLine();
   });
 
-  scannedTotalQty = computed(() => {
-    const pickList = this.livePickList();
-    return (pickList?.totalPickedQty ?? 0) + (pickList?.totalAdditionalPickedQty ?? 0);
-  });
+  // Sum of pickedQty across the currently-displayed (session-scoped) Scanned
+  // Items rows — kept in sync with scannedLines() rather than the Pick
+  // List's all-time cumulative totals, so the header matches what's shown.
+  scannedTotalQty = computed(() => this.scannedLines().reduce((sum, line) => sum + line.pickedQty, 0));
 
   partyWiseTotals = computed(() =>
     this.customerWiseViewLines().map((customer) => ({
@@ -1295,6 +1301,7 @@ export class PickListComponent implements OnInit, OnDestroy {
     this.liveLines.set([]);
     this.currentLineId.set(null);
     this.lastScannedLineId.set(null);
+    this.sessionScannedLineIds.set(new Set());
     this.manualScanValue.set('');
     this.scanFeedback.set('idle');
     this.scannerMessage.set('Scan the assigned item');
@@ -1439,6 +1446,7 @@ export class PickListComponent implements OnInit, OnDestroy {
       this.manualScanValue.set('');
       this.lastCameraBarcodeAt = Date.now();
       this.lastScannedLineId.set(result.line.lineId);
+      this.sessionScannedLineIds.update((ids) => new Set(ids).add(result.line.lineId));
       const label = result.line.isAdditional
         ? `Extra item · ${result.line.styleNo} ${result.line.size} · ${result.line.pickedQty} scanned`
         : `${result.line.styleNo} ${result.line.size} · ${result.line.pickedQty}/${result.line.requiredQty}`;
@@ -1551,6 +1559,7 @@ export class PickListComponent implements OnInit, OnDestroy {
       const result = await this.pickListService.processScan(pickList.id, barcode, user, currentLine.lineId);
       this.manualScanValue.set('');
       this.lastCameraBarcodeAt = Date.now();
+      this.sessionScannedLineIds.update((ids) => new Set(ids).add(result.line.lineId));
       this.flashScanFeedback('success', `${result.line.styleNo} ${result.line.size} · ${result.line.pickedQty}/${result.line.requiredQty}`);
 
       if (result.orderCompleted) {
