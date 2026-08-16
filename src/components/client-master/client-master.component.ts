@@ -5,9 +5,9 @@ import { Client } from '../../models/client.model';
 import { ClientService } from '../../services/client.service';
 import Swal from 'sweetalert2';
 
-const EXCEL_HEADERS = ['ClientName', 'ClientShortName', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'GSTNo', 'Mobile', 'ContactPerson', 'Status'];
+const EXCEL_HEADERS = ['ClientName', 'ClientShortName', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'ShipToAddress', 'ShipToZipCode', 'ShipToPlace', 'ShipToState', 'ShipToCountry', 'GSTNo', 'Mobile', 'ContactPerson', 'Status'];
 const REQUIRED_HEADERS = ['ClientName', 'ClientType'];
-const EXPORT_HEADERS = ['ID', 'ClientName', 'ClientShortName', 'ClientCode', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'GSTNo', 'Mobile', 'ContactPerson', 'Status', 'CreatedAt', 'UpdatedAt'];
+const EXPORT_HEADERS = ['ID', 'ClientName', 'ClientShortName', 'ClientCode', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'ShipToAddress', 'ShipToZipCode', 'ShipToPlace', 'ShipToState', 'ShipToCountry', 'GSTNo', 'Mobile', 'ContactPerson', 'Status', 'CreatedAt', 'UpdatedAt'];
 
 type ViewMode = 'list' | 'form';
 
@@ -20,6 +20,12 @@ const EMPTY_CLIENT: Omit<Client, 'id' | 'clientCode'> = {
   country: '',
   state: '',
   place: '',
+  shipToAddress: '',
+  shipToZipCode: '',
+  shipToCountry: '',
+  shipToState: '',
+  shipToPlace: '',
+  shipToSameAsBilling: true,
   gstNo: '',
   mobile: '',
   contactPerson: '',
@@ -113,6 +119,16 @@ export class ClientMasterComponent implements OnInit {
 
   async saveClient() {
     let clientData = this.editableClient();
+    if (clientData.shipToSameAsBilling) {
+      clientData = {
+        ...clientData,
+        shipToAddress: clientData.billingAddress,
+        shipToZipCode: clientData.zipCode,
+        shipToPlace: clientData.place,
+        shipToState: clientData.state,
+        shipToCountry: clientData.country,
+      };
+    }
     try
     {
         Swal.fire({
@@ -220,8 +236,8 @@ export class ClientMasterComponent implements OnInit {
       const XLSX = await import('xlsx');
       const rows = [
         EXCEL_HEADERS,
-        ['Acme Garments', 'Acme', 'Direct', '', '123 Market Street', '400001', 'Mumbai', 'Maharashtra', 'India', '27AAAAA0000A1Z5', '9876543210', 'John Doe', 'Active'],
-        ['Best Traders', 'Best', 'Agent', 'Agent Rahul', '45 MG Road', '560001', 'Bengaluru', 'Karnataka', 'India', '29BBBBB1111B1Z6', '9123456780', 'Jane Smith', 'Active'],
+        ['Acme Garments', 'Acme', 'Direct', '', '123 Market Street', '400001', 'Mumbai', 'Maharashtra', 'India', '123 Market Street', '400001', 'Mumbai', 'Maharashtra', 'India', '27AAAAA0000A1Z5', '9876543210', 'John Doe', 'Active'],
+        ['Best Traders', 'Best', 'Agent', 'Agent Rahul', '45 MG Road', '560001', 'Bengaluru', 'Karnataka', 'India', '78 Warehouse Lane', '560002', 'Bengaluru', 'Karnataka', 'India', '29BBBBB1111B1Z6', '9123456780', 'Jane Smith', 'Active'],
       ];
       const ws = XLSX.utils.aoa_to_sheet(rows);
       ws['!cols'] = EXCEL_HEADERS.map(() => ({ wch: 18 }));
@@ -257,6 +273,11 @@ export class ClientMasterComponent implements OnInit {
           client.place ?? '',
           client.state ?? '',
           client.country ?? '',
+          client.shipToAddress ?? '',
+          client.shipToZipCode ?? '',
+          client.shipToPlace ?? '',
+          client.shipToState ?? '',
+          client.shipToCountry ?? '',
           client.gstNo ?? '',
           client.mobile ?? '',
           client.contactPerson ?? '',
@@ -381,6 +402,7 @@ export class ClientMasterComponent implements OnInit {
     const iName = col('ClientName'), iShortName = col('ClientShortName');
     const iType = col('ClientType'), iAgent = col('AgentName'), iAddress = col('BillingAddress');
     const iZip = col('ZipCode'), iPlace = col('Place'), iState = col('State'), iCountry = col('Country');
+    const iShipAddress = col('ShipToAddress'), iShipZip = col('ShipToZipCode'), iShipPlace = col('ShipToPlace'), iShipState = col('ShipToState'), iShipCountry = col('ShipToCountry');
     const iGst = col('GSTNo'), iMobile = col('Mobile'), iContact = col('ContactPerson'), iStatus = col('Status');
 
     // Track names already seen (existing clients + rows already processed in this file) to reject duplicates.
@@ -431,16 +453,34 @@ export class ClientMasterComponent implements OnInit {
       seenNamesInFile.add(nameKey);
       if (gstKey) seenGstInFile.add(gstKey);
 
+      const billingAddress = iAddress >= 0 ? String(row[iAddress] ?? '').trim() : '';
+      const zipCode = iZip >= 0 ? String(row[iZip] ?? '').trim() : '';
+      const place = iPlace >= 0 ? String(row[iPlace] ?? '').trim() : '';
+      const state = iState >= 0 ? String(row[iState] ?? '').trim() : '';
+      const country = iCountry >= 0 ? String(row[iCountry] ?? '').trim() : '';
+      // Ship To columns are optional in the import file — fall back to Bill To when absent/blank.
+      const shipToAddress = (iShipAddress >= 0 ? String(row[iShipAddress] ?? '').trim() : '') || billingAddress;
+      const shipToZipCode = (iShipZip >= 0 ? String(row[iShipZip] ?? '').trim() : '') || zipCode;
+      const shipToPlace = (iShipPlace >= 0 ? String(row[iShipPlace] ?? '').trim() : '') || place;
+      const shipToState = (iShipState >= 0 ? String(row[iShipState] ?? '').trim() : '') || state;
+      const shipToCountry = (iShipCountry >= 0 ? String(row[iShipCountry] ?? '').trim() : '') || country;
+
       result.push({
         clientName,
         clientShortName: iShortName >= 0 ? String(row[iShortName] ?? '').trim() : '',
         clientType,
         agentName: iAgent >= 0 ? String(row[iAgent] ?? '').trim() : '',
-        billingAddress: iAddress >= 0 ? String(row[iAddress] ?? '').trim() : '',
-        zipCode: iZip >= 0 ? String(row[iZip] ?? '').trim() : '',
-        place: iPlace >= 0 ? String(row[iPlace] ?? '').trim() : '',
-        state: iState >= 0 ? String(row[iState] ?? '').trim() : '',
-        country: iCountry >= 0 ? String(row[iCountry] ?? '').trim() : '',
+        billingAddress,
+        zipCode,
+        place,
+        state,
+        country,
+        shipToAddress,
+        shipToZipCode,
+        shipToPlace,
+        shipToState,
+        shipToCountry,
+        shipToSameAsBilling: iShipAddress < 0,
         gstNo,
         mobile: iMobile >= 0 ? String(row[iMobile] ?? '').trim() : '',
         contactPerson: iContact >= 0 ? String(row[iContact] ?? '').trim() : '',

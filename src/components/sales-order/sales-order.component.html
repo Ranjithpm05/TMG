@@ -1003,8 +1003,8 @@
                 <p class="font-bold text-sm bg-gray-100 px-2 py-1 inline-block">Consignee</p>
                 <div class="mt-2 text-sm text-gray-700">
                   <p class="font-bold text-base">{{ client.clientName }}</p>
-                  <p>{{ client.billingAddress }}</p>
-                  <p>State: {{ client.state }}</p>
+                  <p>{{ client.shipToAddress || client.billingAddress }}</p>
+                  <p>State: {{ client.shipToState || client.state }}</p>
                   <p>Phone: {{ client.mobile }}</p>
                 </div>
               </div>

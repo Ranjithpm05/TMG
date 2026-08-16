@@ -866,9 +866,9 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     sf('bold', 7.5, DARK); txt('SHIP TO', sx + 3, Y + 5);
     hl(Y + 6.5, sx + 3, sx + colW - 4);
     sf('normal', 7, BLACK);
-    txt(client.clientName,        sx + 3, Y + 10);
-    txt(client.billingAddress,    sx + 3, Y + 14);
-    txt(`State: ${client.state}`, sx + 3, Y + 18);
+    txt(client.clientName,                                    sx + 3, Y + 10);
+    txt(client.shipToAddress || client.billingAddress,        sx + 3, Y + 14);
+    txt(`State: ${client.shipToState || client.state}`,       sx + 3, Y + 18);
 
     // Order Details
     const ox = ML + colW * 2 + 2, ow = CW - colW * 2 - 2;

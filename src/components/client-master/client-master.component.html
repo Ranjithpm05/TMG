@@ -154,9 +154,10 @@
             }
           </div>
           <div class="space-y-4 p-4 border rounded-lg">
-            <h3 class="text-lg font-semibold text-gray-700">Address & Contact</h3>
+            <h3 class="text-lg font-semibold text-gray-700">Bill To Address</h3>
+            <p class="text-xs text-gray-500 -mt-2">Used on all Invoices.</p>
             <div>
-              <label for="billingAddress" class="block text-sm font-medium text-gray-700">Billing & Shipping Address</label>
+              <label for="billingAddress" class="block text-sm font-medium text-gray-700">Bill To Address</label>
               <textarea id="billingAddress" name="billingAddress" [(ngModel)]="client.billingAddress" rows="3" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></textarea>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -165,6 +166,26 @@
               <div><label for="state" class="block text-sm font-medium text-gray-700">State</label><input type="text" name="state" [(ngModel)]="client.state" id="state" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div>
               <div><label for="country" class="block text-sm font-medium text-gray-700">Country</label><input type="text" name="country" [(ngModel)]="client.country" id="country" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div>
             </div>
+          </div>
+          <div class="space-y-4 p-4 border rounded-lg">
+            <h3 class="text-lg font-semibold text-gray-700">Ship To Address</h3>
+            <p class="text-xs text-gray-500 -mt-2">Used on all DCs, Box Labels, and other shipping documents.</p>
+            <div class="flex items-center">
+              <input type="checkbox" id="shipToSameAsBilling" name="shipToSameAsBilling" [(ngModel)]="client.shipToSameAsBilling" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+              <label for="shipToSameAsBilling" class="ml-2 block text-sm text-gray-700">Same as Bill To Address</label>
+            </div>
+            @if (!client.shipToSameAsBilling) {
+              <div>
+                <label for="shipToAddress" class="block text-sm font-medium text-gray-700">Ship To Address</label>
+                <textarea id="shipToAddress" name="shipToAddress" [(ngModel)]="client.shipToAddress" rows="3" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></textarea>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label for="shipToZipCode" class="block text-sm font-medium text-gray-700">Zip Code</label><input type="text" name="shipToZipCode" [(ngModel)]="client.shipToZipCode" id="shipToZipCode" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div>
+                <div><label for="shipToPlace" class="block text-sm font-medium text-gray-700">Place/City</label><input type="text" name="shipToPlace" [(ngModel)]="client.shipToPlace" id="shipToPlace" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div>
+                <div><label for="shipToState" class="block text-sm font-medium text-gray-700">State</label><input type="text" name="shipToState" [(ngModel)]="client.shipToState" id="shipToState" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div>
+                <div><label for="shipToCountry" class="block text-sm font-medium text-gray-700">Country</label><input type="text" name="shipToCountry" [(ngModel)]="client.shipToCountry" id="shipToCountry" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div>
+              </div>
+            }
           </div>
           <div class="space-y-4 p-4 border rounded-lg md:col-span-2">
             <h3 class="text-lg font-semibold text-gray-700">Commercial & Contact</h3>

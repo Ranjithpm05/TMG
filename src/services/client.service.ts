@@ -105,6 +105,13 @@ export class ClientService {
       place: String(raw?.place ?? raw?.city ?? ''),
       state: String(raw?.state ?? ''),
       country: raw?.country ? String(raw.country) : undefined,
+      // Legacy clients have no Ship To fields yet — fall back to Bill To so DC/Box Label printing never blanks out.
+      shipToAddress: String(raw?.shipToAddress ?? raw?.billingAddress ?? raw?.address ?? raw?.billing_address ?? ''),
+      shipToZipCode: String(raw?.shipToZipCode ?? raw?.zipCode ?? raw?.zip_code ?? raw?.pinCode ?? raw?.pincode ?? ''),
+      shipToPlace: String(raw?.shipToPlace ?? raw?.place ?? raw?.city ?? ''),
+      shipToState: String(raw?.shipToState ?? raw?.state ?? ''),
+      shipToCountry: raw?.shipToCountry ? String(raw.shipToCountry) : (raw?.country ? String(raw.country) : undefined),
+      shipToSameAsBilling: raw?.shipToSameAsBilling !== undefined ? !!raw.shipToSameAsBilling : !raw?.shipToAddress,
       gstNo: String(raw?.gstNo ?? raw?.gst_no ?? raw?.gstin ?? raw?.gstNumber ?? ''),
       mobile: String(raw?.mobile ?? raw?.phone ?? raw?.mobileNo ?? raw?.contact ?? ''),
       contactPerson: raw?.contactPerson ? String(raw.contactPerson) : undefined,

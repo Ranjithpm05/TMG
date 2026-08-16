@@ -8,11 +8,20 @@ export interface Client {
   clientType: 'Direct' | 'Agent';
   agentName?: string;
 
+  // Bill To Address — used for Invoices.
   billingAddress?: string;
   zipCode?: string;
   place?: string;
   state?: string;
   country?: string;
+
+  // Ship To Address — used for DCs, Box Labels, and other shipping documents.
+  shipToAddress?: string;
+  shipToZipCode?: string;
+  shipToPlace?: string;
+  shipToState?: string;
+  shipToCountry?: string;
+  shipToSameAsBilling?: boolean;
 
   gstNo?: string;
   mobile?: string;

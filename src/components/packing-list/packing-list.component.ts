@@ -32,8 +32,18 @@ import {
   loadBoxLabelSettings,
   saveBoxLabelSettings,
 } from '../../services/box-label-zpl.util';
+import {
+  MrpLabelData,
+  MrpLabelPrinterSettings,
+  buildMrpLabelDataForLines,
+  buildMrpLabelZplBatch,
+  buildRotationDiagnosticZpl,
+  loadMrpLabelSettings,
+  mrpLabelDataForLine,
+  saveMrpLabelSettings,
+} from '../../services/mrp-label-zpl.util';
 
-type ViewMode = 'list' | 'view' | 'live-pack' | 'combine' | 'box-label-print';
+type ViewMode = 'list' | 'view' | 'live-pack' | 'combine' | 'box-label-print' | 'mrp-label-print';
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', '6XL', 'Free Size'];
 
@@ -119,6 +129,62 @@ export class PackingListComponent implements OnInit, OnDestroy {
   isPrintingBoxLabels = signal(false);
   boxLabelQzStatus = signal<'unknown' | 'connected' | 'error'>('unknown');
   boxLabelQzError = signal('');
+
+  // ─── MRP Label print (QZ Tray + ZPL thermal printing, one label per piece) ─
+  // Sourced from the Packing List's own lines/requiredQty, NOT cartons — a
+  // garment's MRP tag doesn't depend on which box it lands in, so this must
+  // work as soon as a Packing List is generated, whether or not packing
+  // (carton creation) has started yet. See closeMrpLabelPrintModal/
+  // printMrpLabels below for why cartons play no part in this feature.
+  mrpLabelPackingList = signal<PackingList | null>(null);
+  mrpLabelLines = signal<PackingListLine[]>([]);
+  mrpLabelSettings = signal<MrpLabelPrinterSettings>(loadMrpLabelSettings());
+  mrpLabelPrinters = signal<string[]>([]);
+  mrpLabelSelected = signal<Set<number>>(new Set());
+  mrpLabelPreviewLineIndex = signal(0);
+  mrpLabelMrpByBarcode = signal<Map<string, number>>(new Map());
+  isDetectingMrpLabelPrinters = signal(false);
+  isPrintingMrpLabels = signal(false);
+  mrpLabelQzStatus = signal<'unknown' | 'connected' | 'error'>('unknown');
+  mrpLabelQzError = signal('');
+
+  mrpLabelPreviewLine = computed<PackingListLine | null>(() => {
+    const lines = this.mrpLabelLines();
+    if (!lines.length) return null;
+    const idx = Math.min(this.mrpLabelPreviewLineIndex(), lines.length - 1);
+    return lines[idx] ?? null;
+  });
+
+  // The 80×70mm sheet is a 2-up layout (see mrp-label-zpl.util.ts) — preview
+  // the selected line paired with the next line in the list (wrapping back
+  // to itself if it's the last one) so the preview shows a representative
+  // sample of what one physical sheet actually contains.
+  mrpLabelPreviewPair = computed<[MrpLabelData, MrpLabelData] | null>(() => {
+    const lines = this.mrpLabelLines();
+    const line = this.mrpLabelPreviewLine();
+    if (!line) return null;
+    const idx = Math.min(this.mrpLabelPreviewLineIndex(), lines.length - 1);
+    const rightLine = lines[idx + 1] ?? line;
+    const mrpByBarcode = this.mrpLabelMrpByBarcode();
+    return [mrpLabelDataForLine(line, mrpByBarcode), mrpLabelDataForLine(rightLine, mrpByBarcode)];
+  });
+
+  // Total physical labels (one per piece) the selected lines would print — shown next to Print Selected/All.
+  mrpLabelSelectedPieceCount = computed(() => {
+    const lines = this.mrpLabelLines();
+    let total = 0;
+    for (const idx of this.mrpLabelSelected()) total += lines[idx]?.requiredQty ?? 0;
+    return total;
+  });
+
+  mrpLabelTotalPieceCount = computed(() => {
+    return this.mrpLabelLines().reduce((sum, l) => sum + l.requiredQty, 0);
+  });
+
+  // Physical 80x70mm sheets a piece count would consume — 2 garment tags per sheet (see mrp-label-zpl.util.ts).
+  mrpLabelSheetCount(pieceCount: number): number {
+    return Math.ceil(pieceCount / 2);
+  }
 
   // ─── Computed ──────────────────────────────────────────────────────────────
 
@@ -1360,6 +1426,240 @@ export class PackingListComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Opens the MRP Label print screen — same QZ Tray/raw-ZPL approach as Box
+  // Label Print, but one label per physical garment piece (80×70mm) instead
+  // of one address label per carton. The carton table doubles as the
+  // selection UI for *which cartons'* pieces to print; printing itself
+  // expands each selected carton's entries into one label per unit of qty.
+  async printMrpLabels(packingList: PackingList): Promise<void> {
+    if (!packingList.id) return;
+    await this.loadingService.run(async () => {
+      const [lines, mrpByBarcode] = await Promise.all([
+        this.packingListService.getPackingListLinesOnce(packingList.id!),
+        this.designService.getMrpByBarcodeMap(),
+      ]);
+      if (!lines.length) {
+        await Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'No lines to print', timer: 2000, showConfirmButton: false });
+        return;
+      }
+      this.mrpLabelMrpByBarcode.set(mrpByBarcode);
+      this.mrpLabelPackingList.set(packingList);
+      this.mrpLabelLines.set(lines);
+      this.mrpLabelSelected.set(new Set(lines.map((_, idx) => idx)));
+      this.mrpLabelPreviewLineIndex.set(0);
+      this.mrpLabelQzStatus.set('unknown');
+      this.mrpLabelQzError.set('');
+      this.mode.set('mrp-label-print');
+    });
+    this.detectMrpLabelPrinters();
+  }
+
+  closeMrpLabelPrintModal(): void {
+    this.mrpLabelPackingList.set(null);
+    this.mrpLabelLines.set([]);
+    this.mode.set('view');
+  }
+
+  // Mirrors buildMrpLabelZpl's 2-up layout in mm-based absolute-positioned
+  // HTML inside an <iframe [srcdoc]> — no rotation is involved (unlike the
+  // Box Label preview), since this label's media orientation already
+  // matches the design's landscape layout.
+  mrpLabelPreviewHtml(): SafeHtml {
+    const settings = this.mrpLabelSettings();
+    const pair = this.mrpLabelPreviewPair();
+    const inner = pair
+      ? this.buildMrpLabelPreviewInnerHtml(pair[0], pair[1], settings)
+      : '<div style="padding:10px;color:#999;font-size:11px;font-family:Arial,sans-serif">No entries to preview</div>';
+    const doc = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+      + '*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;background:#fff}'
+      + `.label-frame{position:relative;width:${settings.labelWidthMm}mm;height:${settings.labelHeightMm}mm;overflow:hidden;border:1px solid #000}`
+      + '</style></head><body>' + `<div class="label-frame">${inner}</div>` + '</body></html>';
+    return this.sanitizer.bypassSecurityTrustHtml(doc);
+  }
+
+  // Mirrors mrpLabelTagFields in mrp-label-zpl.util.ts exactly — same field
+  // content/order (Design/Style/Size/Qty/Shade/MRP/tax as separate
+  // columns), same `^A0B`-confirmed rotation, and the same layout: QR as a
+  // full-width band across the TOP 25% of the tag's height (sized to
+  // nearly fill it, also rotated), fields anchored just below the QR band
+  // and growing downward through the remaining 75%.
+  private buildMrpLabelPreviewInnerHtml(left: MrpLabelData, right: MrpLabelData, settings: MrpLabelPrinterSettings): string {
+    const REF_HALF_W = 39;
+
+    const W = settings.labelWidthMm;
+    const H = settings.labelHeightMm;
+    const DIVIDER_GAP_MM = 2;
+    const halfW = (W - DIVIDER_GAP_MM) / 2;
+    const scaleW = halfW / REF_HALF_W;
+
+    const buildHalf = (offsetXMm: number, data: MrpLabelData): string => {
+      // QR + code text — full-width band, top 25% of the tag's height, sized to nearly fill it.
+      const qrBandHMm = H * 0.25;
+      const qrZoneMm = Math.min(qrBandHMm - 1, halfW - 2);
+      const qrX = (halfW - qrZoneMm) / 2;
+      const qrY = (qrBandHMm - qrZoneMm) / 2;
+      const qrHtml = `<div style="position:absolute;left:${offsetXMm + qrX}mm;top:${qrY}mm;width:${qrZoneMm}mm;height:${qrZoneMm}mm;border:0.3mm solid #0f172a;display:flex;align-items:center;justify-content:center;font-size:${2 * scaleW}mm;color:#888">QR</div>`;
+      const codeHtml = `<div style="position:absolute;left:${offsetXMm + qrX}mm;top:${qrY + qrZoneMm + 1}mm;width:${qrZoneMm}mm;font-size:${1.2 * scaleW}mm;color:#555;text-align:center;word-break:break-all">${data.code}</div>`;
+
+      // Design / Style / Size / Qty / Shade / MRP / tax — each its OWN
+      // rotated column (not combined — matches mrp-label-zpl.util.ts
+      // exactly), anchored just BELOW the QR band and growing DOWNWARD —
+      // matching the ACTUAL confirmed ZPL behavior (`^A0B` text grows
+      // downward from its origin; an earlier revision anchored at the
+      // tag's bottom edge assuming upward growth, which broke the real
+      // print entirely since there was no room left to grow into).
+      // rotate(90deg) (CW) with a top-left origin (no centering translate)
+      // extends text downward from the literal anchor point.
+      const topYMm = qrBandHMm + 4;
+      const col = (xMm: number, heightMm: number, value: string, bold = false): string => {
+        const scaledH = heightMm * scaleW;
+        const leftX = offsetXMm + xMm * scaleW;
+        return `<div style="position:absolute;left:${leftX}mm;top:${topYMm}mm;transform:rotate(90deg);transform-origin:top left;color:#0f172a;font-weight:${bold ? 900 : 600};font-size:${scaledH}mm;white-space:nowrap;line-height:1">${value}</div>`;
+      };
+
+      let x = 1.5;
+      const fieldsHtml: string[] = [];
+      const push = (heightMm: number, value: string, bold = false) => {
+        fieldsHtml.push(col(x, heightMm, value, bold));
+        x += (heightMm * scaleW + 0.5) / scaleW;
+      };
+      push(2.8, `Design : ${data.design || '-'}`);
+      push(2.4, `Style : ${data.style}`);
+      push(2.4, `Size : ${data.size || '-'}`);
+      push(2.4, 'Qty : 1 No');
+      push(2.4, `Shade : ${data.shade}`);
+      push(4.2, `MRP : Rs. ${data.mrp.toFixed(2)}`, true);
+      push(1.8, '(Incl. of all Taxes)');
+
+      return qrHtml + codeHtml + fieldsHtml.join('');
+    };
+
+    const rightOffsetXMm = halfW + DIVIDER_GAP_MM;
+    const dividerHtml = `<div style="position:absolute;left:${halfW + DIVIDER_GAP_MM / 2}mm;top:0;width:0.3mm;height:100%;background:#999"></div>`;
+
+    return `<div style="position:relative;width:100%;height:100%">${buildHalf(0, left)}${buildHalf(rightOffsetXMm, right)}${dividerHtml}</div>`;
+  }
+
+  setMrpLabelPreviewLine(idx: number): void {
+    this.mrpLabelPreviewLineIndex.set(idx);
+  }
+
+  async detectMrpLabelPrinters(): Promise<void> {
+    this.isDetectingMrpLabelPrinters.set(true);
+    this.mrpLabelQzError.set('');
+    try {
+      const printers = await this.qzTrayService.listPrinters();
+      this.mrpLabelPrinters.set(printers);
+      this.mrpLabelQzStatus.set('connected');
+      const current = this.mrpLabelSettings();
+      if (!current.printerName && printers.length) {
+        this.updateMrpLabelSetting('printerName', printers[0]);
+      }
+    } catch (err: any) {
+      this.mrpLabelQzStatus.set('error');
+      this.mrpLabelQzError.set(err?.message ?? 'Could not connect to QZ Tray. Make sure it is installed and running.');
+    } finally {
+      this.isDetectingMrpLabelPrinters.set(false);
+    }
+  }
+
+  updateMrpLabelSetting<K extends keyof MrpLabelPrinterSettings>(key: K, value: MrpLabelPrinterSettings[K]): void {
+    const next = { ...this.mrpLabelSettings(), [key]: value };
+    this.mrpLabelSettings.set(next);
+    saveMrpLabelSettings(next);
+  }
+
+  isMrpLabelLineSelected(index: number): boolean {
+    return this.mrpLabelSelected().has(index);
+  }
+
+  toggleMrpLabelLine(index: number): void {
+    const next = new Set(this.mrpLabelSelected());
+    if (next.has(index)) next.delete(index); else next.add(index);
+    this.mrpLabelSelected.set(next);
+  }
+
+  selectAllMrpLabelLines(): void {
+    const total = this.mrpLabelLines().length;
+    this.mrpLabelSelected.set(new Set(Array.from({ length: total }, (_, i) => i)));
+  }
+
+  clearMrpLabelLineSelection(): void {
+    this.mrpLabelSelected.set(new Set());
+  }
+
+  async printSelectedMrpLabels(): Promise<void> {
+    await this.runMrpLabelPrint([...this.mrpLabelSelected()].sort((a, b) => a - b));
+  }
+
+  async printAllMrpLabels(): Promise<void> {
+    const total = this.mrpLabelLines().length;
+    await this.runMrpLabelPrint(Array.from({ length: total }, (_, i) => i));
+  }
+
+  // Diagnostic-only print — see buildRotationDiagnosticZpl's own doc
+  // comment. Two consecutive rotation techniques (^A0R, then ^ADR) both
+  // failed on the real printer per physical test prints; this isolates the
+  // rotation question from the rest of the label so one more physical
+  // print can settle which technique (if any) actually works on this
+  // hardware, instead of guessing a third full-label redesign.
+  async printMrpRotationTest(): Promise<void> {
+    const settings = this.mrpLabelSettings();
+    if (!settings.printerName) {
+      await Swal.fire({ icon: 'warning', title: 'No Printer Selected', text: 'Detect and select a thermal printer first.' });
+      return;
+    }
+    this.isPrintingMrpLabels.set(true);
+    try {
+      await this.qzTrayService.printRaw(settings.printerName, [buildRotationDiagnosticZpl(settings)]);
+      this.mrpLabelQzStatus.set('connected');
+      await Swal.fire({
+        icon: 'info',
+        title: 'Rotation Test Sent',
+        html: 'Check the printed label: 6 columns, each with an unrotated caption (A0R / A0B / ADR / ADB / AER / A0R-big) above a "TEST" sample using that technique. Whichever "TEST" prints sideways (not upright like its caption) tells us which technique to use — let me know which one(s) rotated, and which direction.',
+      });
+    } catch (err: any) {
+      this.mrpLabelQzStatus.set('error');
+      const message = err?.message ?? 'Unable to reach QZ Tray or the selected printer.';
+      this.mrpLabelQzError.set(message);
+      await Swal.fire({ icon: 'error', title: 'Print Failed', text: message });
+    } finally {
+      this.isPrintingMrpLabels.set(false);
+    }
+  }
+
+  private async runMrpLabelPrint(lineIndexes: number[]): Promise<void> {
+    const lines = this.mrpLabelLines();
+    const settings = this.mrpLabelSettings();
+    if (!lines.length || !lineIndexes.length) return;
+    if (!settings.printerName) {
+      await Swal.fire({ icon: 'warning', title: 'No Printer Selected', text: 'Detect and select a thermal printer first.' });
+      return;
+    }
+
+    this.isPrintingMrpLabels.set(true);
+    try {
+      const mrpByBarcode = this.mrpLabelMrpByBarcode();
+      const selectedLines = lineIndexes.map((idx) => lines[idx]).filter((l): l is PackingListLine => !!l);
+      const dataList = buildMrpLabelDataForLines(selectedLines, mrpByBarcode);
+      if (!dataList.length) {
+        await Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'No pieces to print in the selected line(s)', timer: 2000, showConfirmButton: false });
+        return;
+      }
+      const commands = buildMrpLabelZplBatch(dataList, settings);
+      await this.qzTrayService.printRaw(settings.printerName, commands);
+      this.mrpLabelQzStatus.set('connected');
+      await Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `Sent ${dataList.length} label(s) to ${settings.printerName}`, timer: 2200, showConfirmButton: false });
+    } catch (err: any) {
+      this.mrpLabelQzStatus.set('error');
+      const message = err?.message ?? 'Unable to reach QZ Tray or the selected printer.';
+      this.mrpLabelQzError.set(message);
+      await Swal.fire({ icon: 'error', title: 'Print Failed', text: message });
+    } finally {
+      this.isPrintingMrpLabels.set(false);
+    }
+  }
+
   // ─── Print ─────────────────────────────────────────────────────────────────
 
   // Downloads a PDF directly (via jsPDF, same as Reports' export) instead of
@@ -2345,10 +2645,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
       salesNos,
       clientId: packingList.clientId,
       clientName: clientName || packingList.clientName,
-      billingAddress: client?.billingAddress ?? '',
-      place: client?.place ?? '',
-      state: client?.state ?? '',
-      zipCode: client?.zipCode ?? '',
+      // DC is a shipping document — always use the client's Ship To Address, not Bill To.
+      billingAddress: client?.shipToAddress ?? '',
+      place: client?.shipToPlace ?? '',
+      state: client?.shipToState ?? '',
+      zipCode: client?.shipToZipCode ?? '',
       clientPhone: client?.mobile ?? '',
       clientGstin: client?.gstNo ?? '',
       totalQty,
