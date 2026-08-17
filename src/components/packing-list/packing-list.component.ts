@@ -22,9 +22,9 @@ import { DeliveryChallanService } from '../../services/delivery-challan.service'
 import { Invoice } from '../../models/invoice.model';
 import { InvoiceService } from '../../services/invoice.service';
 import { InventoryService } from '../../services/inventory.service';
-import { InventoryItem } from '../../models/inventory.model';
 import { DesignService } from '../../services/design.service';
 import { LoadingService } from '../../services/loading.service';
+import { priceAfterMargin } from '../../services/pricing.util';
 import { QzTrayService } from '../../services/qz-tray.service';
 import {
   BoxLabelPrinterSettings,
@@ -1056,13 +1056,20 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
     const primaryDc = dcsToInvoice[0];
 
+    // Every DC on this Packing List belongs to the same client — margin and
+    // discount are read once here, from Client Master, and applied
+    // automatically (no manual entry / override).
+    const invoiceClient = await this.clientService.getClientForDC(packingList.clientId, packingList.clientName);
+    const marginPct = invoiceClient?.marginPct ?? 0;
+    const clientDiscountPct = invoiceClient?.discountPct ?? 0;
+
     const { value: formValues } = await Swal.fire({
       title: 'Invoice Settings',
       html: '<div style="text-align:left;font-size:13px">'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">HSN/SAC Code</label>'
         + '<input id="inv-hsn" class="swal2-input" style="margin:0;width:100%" value="62059090"></div>'
-        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Discount %</label>'
-        + '<input id="inv-disc" type="number" class="swal2-input" style="margin:0;width:100%" value="10"></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Discount % (from Client Master)</label>'
+        + '<input class="swal2-input" style="margin:0;width:100%;background:#f3f4f6" value="' + clientDiscountPct + '" disabled></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Tax Rate % (total GST)</label>'
         + '<input id="inv-tax" type="number" class="swal2-input" style="margin:0;width:100%" value="5"></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Vehicle No.</label>'
@@ -1077,7 +1084,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
       confirmButtonColor: '#4f46e5',
       preConfirm: () => ({
         hsnSac: (document.getElementById('inv-hsn') as HTMLInputElement).value.trim() || '62059090',
-        discountPct: Number((document.getElementById('inv-disc') as HTMLInputElement).value) || 0,
         taxRate: Number((document.getElementById('inv-tax') as HTMLInputElement).value) || 5,
         vehicleNo: (document.getElementById('inv-vehicle') as HTMLInputElement).value.trim(),
         docNo: (document.getElementById('inv-docno') as HTMLInputElement).value.trim(),
@@ -1089,21 +1095,22 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.isGeneratingInvoice.set(true);
     try {
       const loaded = (await this.packingListService.getPackingListByIdOnce(packingList.id)) ?? packingList;
-      const inventoryList = await firstValueFrom(this.inventoryService.getInventory());
-      const { discountPct, taxRate, hsnSac } = formValues;
+      const { taxRate, hsnSac } = formValues;
+      const discountPct = clientDiscountPct;
       const halfTax = taxRate / 2;
 
       const generatedInvoices: Invoice[] = [];
       for (const dc of dcsToInvoice) {
         const clientName = dc.clientName || loaded.clientName;
         const clientId = loaded.clientId;
-        const client = await this.clientService.getClientForDC(clientId, clientName);
 
         // Mirrors the DC exactly: one InvoiceItem per DCItem, same quantity.
+        // Price = MRP after Margin (Client Master), same basis as the DC —
+        // Discount is layered on top only here, at the invoice-total level below.
         const invoiceItems = dc.items.map((dcItem) => {
-          const wsp = this.findWspForDCItem(inventoryList, dcItem);
-          const amount = Math.round(dcItem.total * wsp * 100) / 100;
-          return { description: dcItem.partName, hsnSac, discountPct, taxRate, mrp: dcItem.mrp, uom: 'NOS', quantity: dcItem.total, price: wsp, amount };
+          const price = priceAfterMargin(dcItem.mrp, marginPct);
+          const amount = Math.round(dcItem.total * price * 100) / 100;
+          return { description: dcItem.partName, hsnSac, discountPct, taxRate, mrp: dcItem.mrp, uom: 'NOS', quantity: dcItem.total, price, amount };
         });
 
         const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
@@ -1126,12 +1133,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
           orderNo: (dc.salesNos.length ? dc.salesNos : loaded.salesNos ?? []).join(', '),
           clientId,
           clientName,
-          clientAddress: client?.billingAddress ?? '',
-          clientPlace: client?.place ?? '',
-          clientState: client?.state ?? '',
-          clientZipCode: client?.zipCode ?? '',
-          clientPhone: client?.mobile ?? '',
-          clientGstin: client?.gstNo ?? '',
+          // Invoice is a billing document — always the client's Bill To Address.
+          clientAddress: invoiceClient?.billingAddress ?? '',
+          clientPlace: invoiceClient?.place ?? '',
+          clientState: invoiceClient?.state ?? '',
+          clientZipCode: invoiceClient?.zipCode ?? '',
+          clientPhone: invoiceClient?.mobile ?? '',
+          clientGstin: invoiceClient?.gstNo ?? '',
           destination: formValues.destination,
           transport: dc.transport ?? loaded.transport ?? '',
           vehicleNo: formValues.vehicleNo,
@@ -1183,19 +1191,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
     } finally {
       this.isGeneratingInvoice.set(false);
     }
-  }
-
-  // DCItem is grouped by style/color/sleeve, not by barcode, so its selling
-  // price is resolved the same way pick-list.service.ts's inventory matching
-  // does: exact styleNo+color+sleeveType match preferred, falling back to any
-  // sleeve variant of that styleNo+color.
-  private findWspForDCItem(inventoryList: InventoryItem[], dcItem: DCItem): number {
-    const candidates = inventoryList.filter((inv) => inv.styleNo === dcItem.styleNo && inv.color === dcItem.color);
-    const exact = candidates.find((inv) => (inv.sleeveType ?? '') === (dcItem.sleeveType ?? ''));
-    if (exact) return Number(exact.WSP) || 0;
-    const fallback = candidates.find((inv) => !dcItem.sleeveType || !inv.sleeveType);
-    if (fallback) return Number(fallback.WSP) || 0;
-    return candidates[0] ? Number(candidates[0].WSP) || 0 : 0;
   }
 
   async reprintInvoice(invoice: Invoice): Promise<void> {
@@ -2635,7 +2630,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
     }
 
     const sizes = [...sizeSet].sort((a, b) => this.rankSize(a) - this.rankSize(b));
-    const totalQty = [...rowMap.values()].reduce((s, r) => s + r.total, 0);
+    // DC applies Margin only — never Discount, which is Invoice-only.
+    const marginPct = client?.marginPct ?? 0;
+    const items: DCItem[] = [...rowMap.values()].map((row) => {
+      const price = priceAfterMargin(row.mrp, marginPct);
+      return { ...row, price, amount: Math.round(row.total * price * 100) / 100 };
+    });
+    const totalQty = items.reduce((s, r) => s + r.total, 0);
+    const totalAmount = Math.round(items.reduce((s, r) => s + (r.amount ?? 0), 0) * 100) / 100;
     const boxCount = (packingList.cartons ?? []).length;
 
     return this.dcService.createDC({
@@ -2653,10 +2655,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
       clientPhone: client?.mobile ?? '',
       clientGstin: client?.gstNo ?? '',
       totalQty,
+      totalAmount,
       boxCount,
       agentName,
       transport,
-      items: [...rowMap.values()],
+      items,
       sizes,
     }, { allowDuplicate });
   }
@@ -2715,7 +2718,7 @@ ${allDCHtml}
       }
     }
 
-    // Two-row header: Description | Design | Sleeve | Shade | MRP | Size(colspan) | Total
+    // Two-row header: Description | Design | Sleeve | Shade | MRP | Amount | Size(colspan) | Total
     const sizeHeaderCells = dc.sizes.map((s) => th2(s)).join('');
     const rs2 = (label: string, extra = '') =>
       `<th rowspan="2" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center;vertical-align:middle;${extra}">${label}</th>`;
@@ -2726,6 +2729,7 @@ ${allDCHtml}
       ${rs2('Sleeve')}
       ${rs2('Shade')}
       ${rs2('MRP')}
+      ${rs2('Amount')}
       ${dc.sizes.length > 0 ? `<th colspan="${dc.sizes.length}" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center">Size</th>` : ''}
       ${rs2('Total')}
     </tr>
@@ -2747,15 +2751,18 @@ ${allDCHtml}
           ${td2(item.sleeveType || '-')}
           ${td2(item.color || '-')}
           ${td2(item.mrp > 0 ? item.mrp.toFixed(2) : '-')}
+          ${td2(item.amount ? item.amount.toFixed(2) : '-')}
           ${sizeCells}
           ${td2(item.total, 'font-weight:700')}
         </tr>`);
       });
     }
 
+    const totalAmount = dc.totalAmount || dc.items.reduce((s, i) => s + (i.amount ?? 0), 0);
     const totalCells = dc.sizes.map((s) => td2(sizeTotals[s] ?? '', 'font-weight:700;background:#f0f0f0')).join('');
     const totalRow = `<tr>
       <td colspan="5" style="padding:5px 7px;${B}font-weight:700;font-size:10px;text-align:right;background:#f0f0f0">Total</td>
+      <td style="padding:5px 7px;${B}font-weight:900;font-size:10px;text-align:center;background:#f0f0f0">${totalAmount > 0 ? totalAmount.toFixed(2) : '-'}</td>
       ${totalCells}
       <td style="padding:5px 7px;${B}font-weight:900;font-size:11px;text-align:center;background:#f0f0f0">${grandTotal}</td>
     </tr>`;
@@ -2814,7 +2821,7 @@ ${allDCHtml}
 <table style="width:100%;border-collapse:collapse">
   ${thead}
   <tbody>
-    ${bodyRows.join('') || `<tr><td colspan="${4 + dc.sizes.length + 1}" style="padding:10px;text-align:center;color:#888">No items packed.</td></tr>`}
+    ${bodyRows.join('') || `<tr><td colspan="${5 + dc.sizes.length + 1}" style="padding:10px;text-align:center;color:#888">No items packed.</td></tr>`}
     ${totalRow}
   </tbody>
 </table>

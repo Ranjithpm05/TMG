@@ -115,6 +115,8 @@ export class ClientService {
       gstNo: String(raw?.gstNo ?? raw?.gst_no ?? raw?.gstin ?? raw?.gstNumber ?? ''),
       mobile: String(raw?.mobile ?? raw?.phone ?? raw?.mobileNo ?? raw?.contact ?? ''),
       contactPerson: raw?.contactPerson ? String(raw.contactPerson) : undefined,
+      marginPct: Number(raw?.marginPct) || 0,
+      discountPct: Number(raw?.discountPct) || 0,
       status: raw?.status === 'Inactive' ? 'Inactive' : 'Active',
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,

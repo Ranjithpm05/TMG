@@ -27,6 +27,11 @@ export interface Client {
   mobile?: string;
   contactPerson?: string;
 
+  // Margin% reduces MRP to get the selling price (Sales Order, DC, Invoice).
+  // Discount% applies only in the Invoice, after Margin.
+  marginPct?: number;
+  discountPct?: number;
+
   status: 'Active' | 'Inactive';
 
   createdAt?: any;

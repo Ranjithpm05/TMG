@@ -5,9 +5,9 @@ import { Client } from '../../models/client.model';
 import { ClientService } from '../../services/client.service';
 import Swal from 'sweetalert2';
 
-const EXCEL_HEADERS = ['ClientName', 'ClientShortName', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'ShipToAddress', 'ShipToZipCode', 'ShipToPlace', 'ShipToState', 'ShipToCountry', 'GSTNo', 'Mobile', 'ContactPerson', 'Status'];
+const EXCEL_HEADERS = ['ClientName', 'ClientShortName', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'ShipToAddress', 'ShipToZipCode', 'ShipToPlace', 'ShipToState', 'ShipToCountry', 'GSTNo', 'Mobile', 'ContactPerson', 'MarginPct', 'DiscountPct', 'Status'];
 const REQUIRED_HEADERS = ['ClientName', 'ClientType'];
-const EXPORT_HEADERS = ['ID', 'ClientName', 'ClientShortName', 'ClientCode', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'ShipToAddress', 'ShipToZipCode', 'ShipToPlace', 'ShipToState', 'ShipToCountry', 'GSTNo', 'Mobile', 'ContactPerson', 'Status', 'CreatedAt', 'UpdatedAt'];
+const EXPORT_HEADERS = ['ID', 'ClientName', 'ClientShortName', 'ClientCode', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'ShipToAddress', 'ShipToZipCode', 'ShipToPlace', 'ShipToState', 'ShipToCountry', 'GSTNo', 'Mobile', 'ContactPerson', 'MarginPct', 'DiscountPct', 'Status', 'CreatedAt', 'UpdatedAt'];
 
 type ViewMode = 'list' | 'form';
 
@@ -29,6 +29,8 @@ const EMPTY_CLIENT: Omit<Client, 'id' | 'clientCode'> = {
   gstNo: '',
   mobile: '',
   contactPerson: '',
+  marginPct: 0,
+  discountPct: 0,
   status: 'Active',
 };
 
@@ -236,8 +238,8 @@ export class ClientMasterComponent implements OnInit {
       const XLSX = await import('xlsx');
       const rows = [
         EXCEL_HEADERS,
-        ['Acme Garments', 'Acme', 'Direct', '', '123 Market Street', '400001', 'Mumbai', 'Maharashtra', 'India', '123 Market Street', '400001', 'Mumbai', 'Maharashtra', 'India', '27AAAAA0000A1Z5', '9876543210', 'John Doe', 'Active'],
-        ['Best Traders', 'Best', 'Agent', 'Agent Rahul', '45 MG Road', '560001', 'Bengaluru', 'Karnataka', 'India', '78 Warehouse Lane', '560002', 'Bengaluru', 'Karnataka', 'India', '29BBBBB1111B1Z6', '9123456780', 'Jane Smith', 'Active'],
+        ['Acme Garments', 'Acme', 'Direct', '', '123 Market Street', '400001', 'Mumbai', 'Maharashtra', 'India', '123 Market Street', '400001', 'Mumbai', 'Maharashtra', 'India', '27AAAAA0000A1Z5', '9876543210', 'John Doe', '10', '5', 'Active'],
+        ['Best Traders', 'Best', 'Agent', 'Agent Rahul', '45 MG Road', '560001', 'Bengaluru', 'Karnataka', 'India', '78 Warehouse Lane', '560002', 'Bengaluru', 'Karnataka', 'India', '29BBBBB1111B1Z6', '9123456780', 'Jane Smith', '12', '0', 'Active'],
       ];
       const ws = XLSX.utils.aoa_to_sheet(rows);
       ws['!cols'] = EXCEL_HEADERS.map(() => ({ wch: 18 }));
@@ -281,6 +283,8 @@ export class ClientMasterComponent implements OnInit {
           client.gstNo ?? '',
           client.mobile ?? '',
           client.contactPerson ?? '',
+          client.marginPct ?? 0,
+          client.discountPct ?? 0,
           client.status ?? '',
           this.formatTimestamp(client.createdAt),
           this.formatTimestamp(client.updatedAt),
@@ -404,6 +408,7 @@ export class ClientMasterComponent implements OnInit {
     const iZip = col('ZipCode'), iPlace = col('Place'), iState = col('State'), iCountry = col('Country');
     const iShipAddress = col('ShipToAddress'), iShipZip = col('ShipToZipCode'), iShipPlace = col('ShipToPlace'), iShipState = col('ShipToState'), iShipCountry = col('ShipToCountry');
     const iGst = col('GSTNo'), iMobile = col('Mobile'), iContact = col('ContactPerson'), iStatus = col('Status');
+    const iMargin = col('MarginPct'), iDiscount = col('DiscountPct');
 
     // Track names already seen (existing clients + rows already processed in this file) to reject duplicates.
     const existingNames = new Set(this.clients().map(c => this.safeLower(c.clientName).trim()));
@@ -484,6 +489,8 @@ export class ClientMasterComponent implements OnInit {
         gstNo,
         mobile: iMobile >= 0 ? String(row[iMobile] ?? '').trim() : '',
         contactPerson: iContact >= 0 ? String(row[iContact] ?? '').trim() : '',
+        marginPct: iMargin >= 0 ? Number(row[iMargin]) || 0 : 0,
+        discountPct: iDiscount >= 0 ? Number(row[iDiscount]) || 0 : 0,
         status,
       } as Omit<Client, 'id' | 'clientCode'>);
     }

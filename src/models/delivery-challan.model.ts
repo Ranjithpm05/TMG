@@ -6,6 +6,10 @@ export interface DCItem {
   sizeQty: Record<string, number>;
   total: number;
   mrp: number;
+  // Margin-adjusted unit price (Client Master Margin%) and its line total —
+  // no Discount is ever applied here, only in the Invoice.
+  price?: number;
+  amount?: number;
 }
 
 export interface DeliveryChallan {
@@ -31,6 +35,7 @@ export interface DeliveryChallan {
   transport: string;
   items: DCItem[];
   sizes: string[];
+  totalAmount?: number;
   // Set atomically inside InvoiceService.createInvoice()'s transaction to
   // prevent generating more than one Invoice per DC. A Packing List
   // produces exactly one DC, so this also caps invoices at one per Packing List.

@@ -8,6 +8,7 @@ import { ClientService } from '../../services/client.service';
 import { DesignService } from '../../services/design.service';
 import { SalesOrderService } from '../../services/sales-order.service';
 import { LoadingService } from '../../services/loading.service';
+import { priceAfterMargin } from '../../services/pricing.util';
 import Swal from 'sweetalert2';
 import { Timestamp } from '@angular/fire/firestore';
 import type jsPDF from 'jspdf';
@@ -1236,7 +1237,17 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
   }
 
   // --- New Item Addition Logic ---
+
+  // Selling price is Margin-based (Client Master), not Design Master's raw
+  // WSP — resolved from the order's currently-selected client so every item
+  // added while that client is active gets the same margin-adjusted price.
+  private currentSellingPrice(mrp: number): number {
+    const client = this.clients().find(c => c.id === this.selectedClientId());
+    return priceAfterMargin(mrp, client?.marginPct);
+  }
+
   addOrUpdateOrderItem(design: Design, sizeVar: SizePrice, quantity: number) {
+    const sellingPrice = this.currentSellingPrice(sizeVar.price);
     this.orderItems.update(currentItems => {
       const itemsCopy = JSON.parse(JSON.stringify(currentItems));
       let existingItem;
@@ -1255,10 +1266,10 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
         if (existingSize) {
           existingSize.quantity = (Number(existingSize.quantity) || 0) + quantity;
           existingSize.price = sizeVar.price;
-          existingSize.WSP = sizeVar.WSP;
-        } 
+          existingSize.WSP = sellingPrice;
+        }
         else {
-          existingItem.itemSizes.push({ size: sizeVar.size, quantity: quantity, price: sizeVar.price, WSP: sizeVar.WSP });
+          existingItem.itemSizes.push({ size: sizeVar.size, quantity: quantity, price: sizeVar.price, WSP: sellingPrice });
           existingItem.itemSizes.sort((a: OrderItemSize, b: OrderItemSize) =>
             String(a.size).localeCompare(String(b.size), undefined, { numeric: true })
           );
@@ -1271,7 +1282,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
         const { createdAt, updatedAt, ...designForOrder } = design;
         const newOrderItem: OrderItem = {
           design: designForOrder as Design,
-          itemSizes: [{ size: sizeVar.size, quantity: quantity, price: sizeVar.price, WSP: sizeVar.WSP  }]
+          itemSizes: [{ size: sizeVar.size, quantity: quantity, price: sizeVar.price, WSP: sellingPrice  }]
         };
         if (isShirt) newOrderItem.sleeveType = sizeVar.sleeveType;
         itemsCopy.push(newOrderItem);

@@ -190,9 +190,12 @@ export class DeliveryChallanService {
             sizeQty: item?.sizeQty && typeof item.sizeQty === 'object' ? item.sizeQty : {},
             total: Number(item?.total) || 0,
             mrp: Number(item?.mrp) || 0,
+            price: Number(item?.price) || 0,
+            amount: Number(item?.amount) || 0,
           }))
         : [],
       sizes: Array.isArray(raw?.sizes) ? raw.sizes.map((s: any) => String(s)) : [],
+      totalAmount: Number(raw?.totalAmount) || 0,
       invoiceId: raw?.invoiceId ? String(raw.invoiceId) : undefined,
       invoiceNo: raw?.invoiceNo ? String(raw.invoiceNo) : undefined,
       createdAt: raw?.createdAt,
