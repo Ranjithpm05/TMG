@@ -104,7 +104,15 @@ export interface PackingList {
   cartons: PackingCarton[];
   items: PackingListLine[];
   agentName?: string;
+  // Transport Master fields — transport is the transporter name, kept for
+  // backward compatibility with documents created before Transport Master
+  // existed; transportId/transportAddress/transportGstNo are looked up from
+  // Transport Master and carried through to the DC/Invoice created from this
+  // Packing List.
   transport?: string;
+  transportId?: string;
+  transportAddress?: string;
+  transportGstNo?: string;
   qcVerifiedAt?: any;
   stockDeducted?: boolean;
   remarks?: string;

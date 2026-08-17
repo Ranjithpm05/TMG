@@ -32,7 +32,12 @@ export interface DeliveryChallan {
   totalQty: number;
   boxCount: number;
   agentName: string;
+  // Transport Master fields — see PackingList.transport/transportId for how
+  // these are sourced.
   transport: string;
+  transportId?: string;
+  transportAddress?: string;
+  transportGstNo?: string;
   items: DCItem[];
   sizes: string[];
   totalAmount?: number;

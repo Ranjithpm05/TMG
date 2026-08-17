@@ -568,6 +568,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       <tr><td style="padding:2px 4px;font-size:9px;color:#555">Order No.</td><td style="padding:2px 4px;font-size:9px;font-weight:600">: ${invoice.orderNo || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:9px;color:#555">Destination</td><td style="padding:2px 4px;font-size:9px">: ${invoice.destination || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:9px;color:#555">Transport</td><td style="padding:2px 4px;font-size:9px">: ${invoice.transport || '—'}</td></tr>
+      ${invoice.transportGstNo ? `<tr><td style="padding:2px 4px;font-size:9px;color:#555">Transport GSTIN</td><td style="padding:2px 4px;font-size:9px">: ${invoice.transportGstNo}</td></tr>` : ''}
       <tr><td style="padding:2px 4px;font-size:9px;color:#555">Doc No.</td><td style="padding:2px 4px;font-size:9px">: ${invoice.docNo || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:9px;color:#555">Vehicle No.</td><td style="padding:2px 4px;font-size:9px">: ${invoice.vehicleNo || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:9px;color:#555">Total Pkgs</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ${invoice.totalPkgs}</td></tr>

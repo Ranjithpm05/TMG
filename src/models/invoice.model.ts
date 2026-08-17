@@ -42,7 +42,12 @@ export interface Invoice {
   clientPhone: string;
   clientGstin: string;
   destination: string;
+  // Transport Master fields — see PackingList.transport/transportId for how
+  // these are sourced.
   transport: string;
+  transportId?: string;
+  transportAddress?: string;
+  transportGstNo?: string;
   vehicleNo: string;
   docNo: string;
   shipmentDate: any;

@@ -495,9 +495,14 @@
             </div>
             <div class="flex items-center gap-1.5">
               <label class="text-[10px] font-semibold text-gray-500 uppercase whitespace-nowrap">Transport</label>
-              <input type="text" placeholder="Transporter"
+              <select
                 class="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs w-36 focus:outline-none focus:ring-1 focus:ring-teal-500"
-                [ngModel]="transport()" (ngModelChange)="transport.set($event)">
+                [ngModel]="transportId()" (ngModelChange)="onTransportSelected($event)">
+                <option value="">-- Select --</option>
+                @for (t of transports(); track t.id) {
+                  <option [value]="t.id">{{t.transportName}}</option>
+                }
+              </select>
             </div>
             <button (click)="saveDispatchInfo(packingList)" [disabled]="isSavingDispatchInfo()"
               class="px-2.5 py-1.5 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-200 text-white text-xs rounded-lg transition-colors">
@@ -758,9 +763,14 @@
               </div>
               <div class="flex items-center gap-1.5">
                 <label class="text-[10px] font-semibold text-gray-500 uppercase whitespace-nowrap">Transport</label>
-                <input type="text" placeholder="Transporter"
+                <select
                   class="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs w-36 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                  [ngModel]="transport()" (ngModelChange)="transport.set($event)">
+                  [ngModel]="transportId()" (ngModelChange)="onTransportSelected($event)">
+                  <option value="">-- Select --</option>
+                  @for (t of transports(); track t.id) {
+                    <option [value]="t.id">{{t.transportName}}</option>
+                  }
+                </select>
               </div>
               <button (click)="saveDispatchInfo(packingList)" [disabled]="isSavingDispatchInfo()"
                 class="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs rounded-lg transition-colors">

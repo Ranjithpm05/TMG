@@ -2,6 +2,7 @@ import { Component, ChangeDetectionStrategy, signal, inject, computed, effect, u
 import { CommonModule } from '@angular/common';
 import { ClientMasterComponent } from './components/client-master/client-master.component';
 import { DesignMasterComponent } from './components/design-master/design-master.component';
+import { TransportMasterComponent } from './components/transport-master/transport-master.component';
 import { SalesOrderComponent } from './components/sales-order/sales-order.component';
 import { LoginComponent } from './components/login/login.component';
 import { UserManagementComponent } from './components/user-management/user-management.component';
@@ -16,7 +17,7 @@ import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { EInvoiceComponent } from './components/einvoice/einvoice.component';
 import { ReportsComponent } from './components/reports/reports.component';
 
-type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'einvoice' | 'reports';
+type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'transportMaster' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'einvoice' | 'reports';
 type ViewHistoryState = { view: View };
 
 interface NavItem {
@@ -34,7 +35,7 @@ interface NavGroup {
 }
 
 const VIEW_STORAGE_KEY = 'gom.activeView';
-const VIEW_SEQUENCE: View[] = ['dashboard', 'sales', 'clients', 'designs', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList', 'einvoice', 'reports'];
+const VIEW_SEQUENCE: View[] = ['dashboard', 'sales', 'clients', 'designs', 'transportMaster', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList', 'einvoice', 'reports'];
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -61,6 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
     iconPaths: ['M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01'],
     items: [
       { view: 'designs', label: 'Design Master', screen: 'designs', iconPaths: ['M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01'] },
+      { view: 'transportMaster', label: 'Transport Master', screen: 'transportMaster', iconPaths: ['M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'] },
     ],
   },
   {
@@ -104,6 +106,7 @@ const NAV_GROUPS: NavGroup[] = [
     CommonModule,
     ClientMasterComponent,
     DesignMasterComponent,
+    TransportMasterComponent,
     SalesOrderComponent,
     LoginComponent,
     UserManagementComponent,

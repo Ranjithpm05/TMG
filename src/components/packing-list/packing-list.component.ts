@@ -18,6 +18,8 @@ import { DCItem, DeliveryChallan } from '../../models/delivery-challan.model';
 import { PickListService } from '../../services/pick-list.service';
 import { PackingListService } from '../../services/packing-list.service';
 import { ClientService } from '../../services/client.service';
+import { Transport } from '../../models/transport.model';
+import { TransportService } from '../../services/transport.service';
 import { DeliveryChallanService } from '../../services/delivery-challan.service';
 import { Invoice } from '../../models/invoice.model';
 import { InvoiceService } from '../../services/invoice.service';
@@ -58,6 +60,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   private pickListService = inject(PickListService);
   private packingListService = inject(PackingListService);
   private clientService = inject(ClientService);
+  private transportService = inject(TransportService);
   private dcService = inject(DeliveryChallanService);
   private invoiceService = inject(InvoiceService);
   private inventoryService = inject(InventoryService);
@@ -105,7 +108,16 @@ export class PackingListComponent implements OnInit, OnDestroy {
   currentCustomerIndex = signal(0);
 
   agentName = signal('');
+  // Transport Master selection for Dispatch Info — transport holds the
+  // transporter's name (kept for backward compatibility with older
+  // free-text values), transportId/transportAddress/transportGstNo are
+  // looked up from Transport Master when a transport is selected and carry
+  // through to the DC and Invoice generated from this Packing List.
+  transports = signal<Transport[]>([]);
   transport = signal('');
+  transportId = signal('');
+  transportAddress = signal('');
+  transportGstNo = signal('');
   isSavingDispatchInfo = signal(false);
 
   packingInProgress = signal<string[]>([]);
@@ -435,6 +447,21 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.subscriptions.push(
       this.invoiceService.getInvoices().subscribe({ next: (v) => { this.invoices.set(v); done(); }, error: done })
     );
+    this.subscriptions.push(
+      this.transportService.getTransports().subscribe({ next: (v) => this.transports.set(v) })
+    );
+  }
+
+  // Applies the selected Transport Master record's Name/Address/GST No to
+  // the Dispatch Info signals — the only place Transport is chosen; DC and
+  // Invoice both inherit it from here (see saveDispatchInfo/generateAndPrintDC/
+  // generateInvoice) rather than re-selecting it themselves.
+  onTransportSelected(transportId: string): void {
+    const selected = this.transports().find((t) => t.id === transportId);
+    this.transportId.set(selected?.id ?? '');
+    this.transport.set(selected?.transportName ?? '');
+    this.transportAddress.set(selected?.transportAddress ?? '');
+    this.transportGstNo.set(selected?.gstNo ?? '');
   }
 
   ngOnDestroy() {
@@ -487,6 +514,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.scannerMessage.set('Scan carton box no to begin packing.');
     this.agentName.set('');
     this.transport.set('');
+    this.transportId.set('');
+    this.transportAddress.set('');
+    this.transportGstNo.set('');
     this.packingInProgress.set([]);
     this.activeBoxNo.set('');
     this.boxInput.set('');
@@ -795,6 +825,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
     }
     this.agentName.set(agentName);
     this.transport.set(loaded.transport ?? '');
+    this.transportId.set(loaded.transportId ?? '');
+    this.transportAddress.set(loaded.transportAddress ?? '');
+    this.transportGstNo.set(loaded.transportGstNo ?? '');
     this.mode.set('view');
   }
 
@@ -817,6 +850,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
     }
     this.agentName.set(agentName);
     this.transport.set(loaded.transport ?? '');
+    this.transportId.set(loaded.transportId ?? '');
+    this.transportAddress.set(loaded.transportAddress ?? '');
+    this.transportGstNo.set(loaded.transportGstNo ?? '');
     this.mode.set('live-pack');
     this.packFeedback.set('idle');
     this.barcodeInput.set('');
@@ -1142,6 +1178,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
           clientGstin: invoiceClient?.gstNo ?? '',
           destination: formValues.destination,
           transport: dc.transport ?? loaded.transport ?? '',
+          transportId: dc.transportId ?? loaded.transportId ?? undefined,
+          transportAddress: dc.transportAddress ?? loaded.transportAddress ?? undefined,
+          transportGstNo: dc.transportGstNo ?? loaded.transportGstNo ?? undefined,
           vehicleNo: formValues.vehicleNo,
           docNo: formValues.docNo,
           shipmentDate: dc.createdAt ?? null,
@@ -2008,13 +2047,16 @@ export class PackingListComponent implements OnInit, OnDestroy {
     if (!packingList.id) return;
     const agentName = this.agentName().trim();
     const transport = this.transport().trim();
+    const transportId = this.transportId().trim();
+    const transportAddress = this.transportAddress().trim();
+    const transportGstNo = this.transportGstNo().trim();
     this.isSavingDispatchInfo.set(true);
     try {
-      await this.packingListService.updateDispatchInfo(packingList.id, agentName, transport);
+      await this.packingListService.updateDispatchInfo(packingList.id, agentName, transport, transportId, transportAddress, transportGstNo);
       const currentList = this.viewPackingList();
       const currentLive = this.livePackingList();
-      if (currentList?.id === packingList.id) this.viewPackingList.update((p) => p ? { ...p, agentName, transport } : p);
-      if (currentLive?.id === packingList.id) this.livePackingList.update((p) => p ? { ...p, agentName, transport } : p);
+      if (currentList?.id === packingList.id) this.viewPackingList.update((p) => p ? { ...p, agentName, transport, transportId, transportAddress, transportGstNo } : p);
+      if (currentLive?.id === packingList.id) this.livePackingList.update((p) => p ? { ...p, agentName, transport, transportId, transportAddress, transportGstNo } : p);
       await Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Dispatch info saved', timer: 1400, showConfirmButton: false });
     } catch {
       await Swal.fire({ icon: 'error', title: 'Save Failed', text: 'Unable to save dispatch information.' });
@@ -2077,9 +2119,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
         const loaded = fresh ?? packingList;
         const agentName = this.agentName().trim();
         const transport = this.transport().trim();
+        const transportId = this.transportId().trim();
+        const transportAddress = this.transportAddress().trim();
+        const transportGstNo = this.transportGstNo().trim();
 
         if (agentName || transport) {
-          await this.packingListService.updateDispatchInfo(packingList.id!, agentName, transport);
+          await this.packingListService.updateDispatchInfo(packingList.id!, agentName, transport, transportId, transportAddress, transportGstNo);
         }
 
         // A Packing List always belongs to exactly one customer (generation
@@ -2095,7 +2140,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
           ? [...new Set(partyProgress.map((p) => p.salesNo).filter(Boolean))]
           : (loaded.salesNos ?? []);
         const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
-        const dc = await this.createDCForPackingList(loaded, lines, client, salesOrderIds, salesNos, loaded.clientName, agentName, transport, allowDuplicate);
+        const dc = await this.createDCForPackingList(loaded, lines, client, salesOrderIds, salesNos, loaded.clientName, agentName, transport, transportId, transportAddress, transportGstNo, allowDuplicate);
         const generatedDCs: DeliveryChallan[] = [dc];
 
         await this.refreshDeliveryChallans();
@@ -2594,6 +2639,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
     clientName: string,
     agentName: string,
     transport: string,
+    transportId: string,
+    transportAddress: string,
+    transportGstNo: string,
     allowDuplicate = false,
   ): Promise<DeliveryChallan> {
     // DC quantity must reflect what was actually packed, not what the Pick
@@ -2659,6 +2707,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
       boxCount,
       agentName,
       transport,
+      transportId: transportId || undefined,
+      transportAddress: transportAddress || undefined,
+      transportGstNo: transportGstNo || undefined,
       items,
       sizes,
     }, { allowDuplicate });
@@ -2814,6 +2865,7 @@ ${allDCHtml}
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">No.of Box</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${dc.boxCount}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Agent Name</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.agentName || '-'}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Transport</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.transport || '-'}</td></tr>
+      ${dc.transportGstNo ? `<tr><td style="padding:3px 6px;font-size:10px;color:#555">Transport GSTIN</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.transportGstNo}</td></tr>` : ''}
     </table>
   </div>
 </div>
@@ -3238,6 +3290,7 @@ ${allDCHtml}
       + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Order No.</td><td style="padding:3px 4px;font-size:11px;font-weight:600">: ' + invoice.orderNo + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Destination</td><td style="padding:3px 4px;font-size:11px">: ' + (invoice.destination || '—') + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Transport</td><td style="padding:3px 4px;font-size:11px">: ' + (invoice.transport || '—') + '</td></tr>'
+      + (invoice.transportGstNo ? '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Transport GSTIN</td><td style="padding:3px 4px;font-size:11px">: ' + invoice.transportGstNo + '</td></tr>' : '')
       + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Doc No.</td><td style="padding:3px 4px;font-size:11px">: ' + (invoice.docNo || '—') + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Vehicle No.</td><td style="padding:3px 4px;font-size:11px">: ' + (invoice.vehicleNo || '—') + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Total Pkgs</td><td style="padding:3px 4px;font-size:11px;font-weight:700">: ' + invoice.totalPkgs + '</td></tr>'

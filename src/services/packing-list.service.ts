@@ -1002,11 +1002,17 @@ export class PackingListService {
     packingListId: string,
     agentName: string,
     transport: string,
+    transportId?: string,
+    transportAddress?: string,
+    transportGstNo?: string,
   ): Promise<void> {
     const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
     await updateDoc(packingListRef, this.stripUndefined({
       agentName: agentName.trim() || null,
       transport: transport.trim() || null,
+      transportId: transportId || null,
+      transportAddress: transportAddress || null,
+      transportGstNo: transportGstNo || null,
       updatedAt: serverTimestamp(),
     }));
     this.invalidateCache();
@@ -1355,6 +1361,9 @@ export class PackingListService {
       items,
       agentName: raw?.agentName ? String(raw.agentName) : undefined,
       transport: raw?.transport ? String(raw.transport) : undefined,
+      transportId: raw?.transportId ? String(raw.transportId) : undefined,
+      transportAddress: raw?.transportAddress ? String(raw.transportAddress) : undefined,
+      transportGstNo: raw?.transportGstNo ? String(raw.transportGstNo) : undefined,
       qcVerifiedAt: raw?.qcVerifiedAt,
       stockDeducted: raw?.stockDeducted === true,
       remarks: raw?.remarks,

@@ -181,6 +181,9 @@ export class DeliveryChallanService {
       boxCount: Number(raw?.boxCount) || 0,
       agentName: String(raw?.agentName ?? ''),
       transport: String(raw?.transport ?? ''),
+      transportId: raw?.transportId ? String(raw.transportId) : undefined,
+      transportAddress: raw?.transportAddress ? String(raw.transportAddress) : undefined,
+      transportGstNo: raw?.transportGstNo ? String(raw.transportGstNo) : undefined,
       items: Array.isArray(raw?.items)
         ? raw.items.map((item: any): DCItem => ({
             partName: String(item?.partName ?? ''),
