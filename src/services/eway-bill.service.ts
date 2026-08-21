@@ -24,7 +24,7 @@ export class EwayBillService {
   // credentials stay server-side, same reasoning as EInvoiceService). Guards
   // against calling this before the e-Invoice exists and against generating
   // a second E-Way Bill for the same invoice.
-  async generateEWayBill(invoice: Invoice, input: EwayBillTransportDetails, gstin: string, shipTo?: EwayBillShipTo): Promise<EwayBillGenerateResult> {
+  async generateEWayBill(invoice: Invoice, input: EwayBillTransportDetails, gstin: string, shipTo?: EwayBillShipTo, shipFrom?: EwayBillShipTo): Promise<EwayBillGenerateResult> {
     if (invoice.eInvoiceStatus !== 'generated' || !invoice.irn) {
       throw new Error('This invoice does not have a generated E-Invoice (IRN) yet.');
     }
@@ -44,6 +44,7 @@ export class EwayBillService {
         vehicleType?: string;
         transDocNo?: string;
         transDocDt?: string;
+        shipFrom?: EwayBillShipTo;
         shipTo?: EwayBillShipTo;
       },
       EwayBillGenerateResult
@@ -61,6 +62,7 @@ export class EwayBillService {
         vehicleType: input.vehicleType,
         transDocNo: input.transDocNo,
         transDocDt: input.transDocDt,
+        shipFrom,
         shipTo,
       });
       const result = response.data;
@@ -113,6 +115,7 @@ export class EwayBillService {
       ewbGeneratedAt: serverTimestamp(),
       ewbDate: result.ewbDate,
       ewbValidTill: result.ewbValidTill,
+      ewbGstin: result.gstin,
       ewbTransportDetails: this.stripUndefined(input),
       ewbErrorMessage: null,
       ewbErrorCode: null,

@@ -6,6 +6,7 @@ import {
   WEBTEL_EWB_USERNAME,
   WEBTEL_EWB_PASSWORD,
   WEBTEL_EWAYBILL_BASE_URL,
+  EWAYBILL_DEBUG_LOG,
   EWAYBILL_SECRETS,
 } from './config';
 import { postWebtel, isSuccessFlag, WebtelApiError } from './webtelClient';
@@ -21,7 +22,20 @@ interface GenerateEwayBillRequest {
   vehicleType?: 'R' | 'O';
   transDocNo?: string;
   transDocDt?: string; // yyyymmdd, per Webtel E-Way Bill sandbox spec
+  shipFrom?: { addr1?: string; addr2?: string; loc?: string; pin?: number; stcd?: string };
   shipTo?: { addr1?: string; addr2?: string; loc?: string; pin?: number; stcd?: string };
+}
+
+// Fields never to be written to logs, even in debug mode.
+const SECRET_BODY_KEYS = ['CDKey', 'EWbUserName', 'EWbPassword', 'EFUserName', 'EFPassword'];
+
+function redactSecrets(body: Record<string, unknown>): Record<string, unknown> {
+  const redacted = { ...body, Push_Data_List: (body.Push_Data_List as Record<string, unknown>[]).map((entry) => {
+    const clean = { ...entry };
+    for (const key of SECRET_BODY_KEYS) clean[key] = '[REDACTED]';
+    return clean;
+  }) };
+  return redacted;
 }
 
 // Proxies Webtel's E-Way Bill sandbox "Generate Ewaybill By IRN" API — the
@@ -47,9 +61,9 @@ export const generateEwayBillByIrn = onCall(
           TransdocDt: data.transDocDt || '',
           Vehno: data.vehicleNo || '',
           Vehtype: data.vehicleType || 'R',
-          ShipFrom_Addr1: '',
+          ShipFrom_Addr1:'',
           ShipFrom_Addr2: '',
-          ShipFrom_Loc: '',
+          ShipFrom_Loc:'',
           ShipFrom_Pin: 0,
           ShipFrom_Stcd: '',
           ShipTo_Addr1: data.shipTo?.addr1 || '',
@@ -58,7 +72,7 @@ export const generateEwayBillByIrn = onCall(
           ShipTo_Pin: data.shipTo?.pin || 0,
           ShipTo_Stcd: data.shipTo?.stcd || '',
           GSTIN: data.gstin,
-          CDKey: WEBTEL_CDKEY.value(),
+          CDKey: (parseInt(WEBTEL_CDKEY.value())).toString(),
           EWbUserName: WEBTEL_EWB_USERNAME.value(),
           EWbPassword: WEBTEL_EWB_PASSWORD.value(),
           EFUserName: WEBTEL_EF_USERNAME.value(),
@@ -67,18 +81,29 @@ export const generateEwayBillByIrn = onCall(
       ],
     };
 
+    if (EWAYBILL_DEBUG_LOG.value() === 'true') {
+      console.log('generateEwayBillByIrn request URL:', `${WEBTEL_EWAYBILL_BASE_URL.value()}/GenEWaybyIRN`);
+      console.log('generateEwayBillByIrn request body (secrets redacted):', JSON.stringify(redactSecrets(body), null, 2));
+    }
+
     try {
-      const result = await postWebtel(`${WEBTEL_EWAYBILL_BASE_URL.value()}/GenEWaybyIRN`, body);
-      if (!isSuccessFlag(result.IsSuccess)) {
-        throw new HttpsError('failed-precondition', result.ErrorMessage || 'E-Way Bill generation failed.', {
-          errorCode: result.ErrorCode,
-        });
-      }
-      return {
-        ewbNo: String(result.EwbNo ?? ''),
-        ewbDate: result.EwbDt as string,
-        ewbValidTill: result.EwbValidTill as string,
-      };
+        const result = await postWebtel(`${WEBTEL_EWAYBILL_BASE_URL.value()}/GenEWaybyIRN`, body);
+        if (EWAYBILL_DEBUG_LOG.value() === 'true') 
+        {
+            console.log('generateEwayBillByIrn response:', JSON.stringify(result, null, 2));
+        }
+        if (!isSuccessFlag(result.IsSuccess)) 
+        {
+            throw new HttpsError('failed-precondition', result.ErrorMessage || 'E-Way Bill generation failed.', {
+                errorCode: result.ErrorCode,
+            });
+        }
+        return {
+            ewbNo: String(result.EwbNo ?? ''),
+            ewbDate: result.EwbDt as string,
+            ewbValidTill: result.EwbValidTill as string,
+            gstin: (result.GSTIN as string) || data.gstin,
+        };
     } catch (err) {
       if (err instanceof HttpsError) throw err;
       const message = err instanceof WebtelApiError ? err.message : 'Failed to reach the E-Way Bill sandbox.';

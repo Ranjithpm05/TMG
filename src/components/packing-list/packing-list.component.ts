@@ -29,6 +29,7 @@ import { LoadingService } from '../../services/loading.service';
 import { priceAfterMargin } from '../../services/pricing.util';
 import { QzTrayService } from '../../services/qz-tray.service';
 import { getStageBadgeClass, getStageStatusLabel } from '../../services/document-stage.util';
+import { fetchLogoDataUri } from '../../services/company-logo.util';
 import {
   BoxLabelPrinterSettings,
   buildBoxLabelZplBatch,
@@ -1237,27 +1238,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
     // Opened synchronously, before any await — see printEnhancedBoxLabels.
     const win = window.open('', '_blank', 'width=1100,height=820');
     await this.loadingService.run(async () => {
-      const logoDataUri = await this.fetchLogoDataUri();
+      const logoDataUri = await fetchLogoDataUri();
       const html = this.buildInvoiceHtml(invoice, logoDataUri);
       if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
       else await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
     });
-  }
-
-  private async fetchLogoDataUri(): Promise<string> {
-    try {
-      const res = await fetch('/assets/logo.jpeg');
-      if (!res.ok) return '';
-      const blob = await res.blob();
-      return new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = () => resolve('');
-        reader.readAsDataURL(blob);
-      });
-    } catch {
-      return '';
-    }
   }
 
   async downloadInvoiceExcel(invoice: Invoice): Promise<void> {

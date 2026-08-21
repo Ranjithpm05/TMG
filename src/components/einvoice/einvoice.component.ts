@@ -19,6 +19,7 @@ import { CompanySettingsService } from '../../services/company-settings.service'
 import { ClientService } from '../../services/client.service';
 import { LoadingService } from '../../services/loading.service';
 import { exportInvoicesToTally } from './tally-export.util';
+import { fetchLogoDataUri } from '../../services/company-logo.util';
 
 type FilterTab = 'all' | 'pending' | 'generated' | 'failed' | 'cancelled';
 
@@ -212,6 +213,11 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
         icon: 'success',
         confirmButtonColor: '#10b981',
       });
+      // "IRN Generated Successfully → Show E-Invoice Print/Preview" — open it
+      // right after the success dialog closes, using the just-updated
+      // invoice object directly (don't rely on selectedInvoice() having
+      // re-rendered from the signal update yet).
+      await this.printEInvoicePdf(updated);
     } catch (err: any) {
       const message = err?.message || 'Could not generate e-Invoice. Please try again.';
       try {
@@ -322,6 +328,30 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       win.document.close();
       setTimeout(() => win.print(), 700);
     }
+  }
+
+  // The NIC/IRP standard "e-Invoice" acknowledgement print (IRN/QR/Transaction
+  // Details/Party Details/E-Way Bill sections) — a distinct document from the
+  // commercial Tax Invoice above. Only meaningful once an IRN actually
+  // exists: never shown for a pending/failed generation, so this print can
+  // never claim success when generateEInvoiceIrn didn't succeed.
+  async printEInvoicePdf(invoiceOverride?: Invoice): Promise<void> {
+    const invoice = invoiceOverride ?? this.selectedInvoice();
+    if (!invoice?.irn || invoice.eInvoiceStatus !== 'generated') {
+      Swal.fire('Not Available', 'Generate the e-Invoice successfully first to print this document.', 'warning');
+      return;
+    }
+    // Opened synchronously, before the logo fetch below, so browsers don't
+    // treat the popup as an unrequested one and block it.
+    const win = window.open('', '_blank', 'width=1000,height=900');
+    if (!win) {
+      Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try again.' });
+      return;
+    }
+    const logoDataUri = await fetchLogoDataUri();
+    const html = this.buildEInvoiceDocumentHtml(invoice, this.companySettings(), logoDataUri);
+    win.document.write(html);
+    win.document.close();
   }
 
   async exportInvoiceTally(invoice: Invoice): Promise<void> {
@@ -448,6 +478,17 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     return '₹ ' + (v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  // Webtel's GenIRN2 (GetQRImg:'1') returns SignedQRCode as raw base64 PNG
+  // bytes, not a data: URI — functions/src/einvoice.ts passes it through
+  // verbatim as signedQrCode. An <img src="{raw base64}"> can never render
+  // (browsers require the data: scheme prefix), which is why the QR showed
+  // as a broken image everywhere this field is used. Defensive on an
+  // already-prefixed value in case that ever changes upstream.
+  qrImageSrc(raw: string | undefined | null): string {
+    if (!raw) return '';
+    return raw.startsWith('data:') ? raw : `data:image/png;base64,${raw}`;
+  }
+
   // ─── HTML Invoice Builder ──────────────────────────────────────────────────
 
   private buildInvoiceHtml(invoice: Invoice, company: CompanySettings | null): string {
@@ -503,7 +544,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     const topRightHtml = isEInvoice && invoice.signedQrCode
       ? `<div style="text-align:right;min-width:90px">
            <div style="font-size:8px;color:#666;margin-bottom:2px">Triplicate-For Assessee</div>
-           <img src="${invoice.signedQrCode}" style="width:80px;height:80px;border:1px solid #ddd;border-radius:3px" alt="QR">
+           <img src="${this.qrImageSrc(invoice.signedQrCode)}" style="width:80px;height:80px;border:1px solid #ddd;border-radius:3px" alt="QR">
          </div>`
       : `<div style="text-align:right;font-size:8px;color:#666;min-width:100px">Triplicate-For Assessee</div>`;
 
@@ -651,6 +692,199 @@ ${bankSection}
 </div>
 
 </div></body></html>`;
+  }
+
+  // ─── E-Invoice (NIC/IRP) Document Builder ──────────────────────────────────
+  // Renders the standard NIC e-Invoice acknowledgement print — IRN/QR,
+  // Transaction Details, Party Details, Goods/Services + GST summary, and
+  // E-Way Bill Details — sourced entirely from invoice.eInvoicePayload (the
+  // exact payload that was validated and sent to generateEInvoiceIrn) plus
+  // the top-level irn/ackNo/ackDt/signedQrCode/ewb* fields returned by that
+  // call. Never recomputes tax values — this document must always agree
+  // with what was actually submitted and acknowledged.
+
+  private stateNameFromCode(code: string | undefined): string {
+    if (!code) return '-';
+    return INDIA_STATE_CODES.find((s) => s.code === code)?.name.toUpperCase() || code;
+  }
+
+  private buildEInvoiceDocumentHtml(invoice: Invoice, company: CompanySettings | null, logoDataUri: string): string {
+    const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const payload = (invoice.eInvoicePayload || {}) as {
+      TranDtls?: { SupTyp?: string; IgstOnIntra?: string };
+      DocDtls?: { Typ?: string; No?: string; Dt?: string };
+      SellerDtls?: { Gstin?: string; LglNm?: string; TrdNm?: string; Addr1?: string; Addr2?: string; Loc?: string; Pin?: number; Ph?: string; Em?: string };
+      BuyerDtls?: { Gstin?: string; LglNm?: string; Addr1?: string; Addr2?: string; Loc?: string; Pin?: number; Stcd?: string; Pos?: string; Ph?: string };
+      ItemList?: Array<{
+        SlNo: string; PrdDesc?: string; HsnCd: string; Qty?: number; Unit?: string; UnitPrice: number;
+        Discount?: number; AssAmt: number; GstRt: number; CesRt?: number; StateCesRt?: number; StateCesNonAdvlAmt?: number;
+        OthChrg?: number; TotItemVal: number;
+      }>;
+      ValDtls?: { AssVal: number; CgstVal: number; SgstVal: number; IgstVal: number; CesVal?: number; StCesVal?: number; Discount?: number; OthChrg?: number; RndOffAmt?: number; TotInvVal: number };
+    };
+
+    const B = 'border:1px solid #999;';
+    const th = (txt: string, extra = '') =>
+      `<th style="padding:5px 6px;${B}background:#e8e8e8;font-size:9px;font-weight:700;text-align:center;${extra}">${txt}</th>`;
+    const td = (txt: string | number, extra = '') =>
+      `<td style="padding:4px 6px;${B}font-size:9px;text-align:center;${extra}">${txt}</td>`;
+    const row = (label: string, value: string) =>
+      `<tr><td style="padding:2px 6px;font-size:9px;color:#555;white-space:nowrap;width:40%">${label}</td><td style="padding:2px 6px;font-size:9px;font-weight:600">: ${value}</td></tr>`;
+
+    const now = new Date();
+    const printDate = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()} `
+      + `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+    const logoHtml = logoDataUri
+      ? `<img src="${logoDataUri}" style="width:64px;height:64px;object-fit:contain;border-radius:6px;flex-shrink:0;margin-right:10px" alt="Logo">`
+      : `<div style="width:64px;height:64px;border:1.5px solid #1e3a8a;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:#1e3a8a;text-align:center;flex-shrink:0;margin-right:10px;line-height:1.3">TMG<br>CLOTHINGS</div>`;
+
+    const qrHtml = invoice.signedQrCode
+      ? `<img src="${this.qrImageSrc(invoice.signedQrCode)}" style="width:90px;height:90px;border:1px solid #ddd;border-radius:3px" alt="E-Invoice QR">`
+      : `<div style="width:90px;height:90px;border:1px dashed #ccc;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999;text-align:center">QR not<br>available</div>`;
+
+    const seller = payload.SellerDtls;
+    const buyer = payload.BuyerDtls;
+    const posName = this.stateNameFromCode(buyer?.Pos);
+    const igstDespiteSameState = payload.TranDtls?.IgstOnIntra === 'Y' ? 'Yes' : 'No';
+
+    const items = payload.ItemList || [];
+    const itemRows = items.map((it, i) => {
+      const taxRate = `${it.GstRt ?? 0}+${it.CesRt ?? 0}|${it.StateCesRt ?? 0}+${it.StateCesNonAdvlAmt ?? 0}`;
+      return `<tr style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'}">` +
+        td(it.SlNo) + td(esc(it.PrdDesc), 'text-align:left;font-weight:600') + td(it.HsnCd) +
+        td(it.Qty ?? '-') + td(it.Unit ?? '-') + td((it.UnitPrice ?? 0).toFixed(2), 'text-align:right') +
+        td((it.Discount ?? 0).toFixed(2), 'text-align:right') + td(it.AssAmt.toFixed(2), 'text-align:right;font-weight:600') +
+        td(taxRate) + td((it.OthChrg ?? 0).toFixed(2), 'text-align:right') +
+        td(it.TotItemVal.toFixed(2), 'text-align:right;font-weight:700') + '</tr>';
+    }).join('');
+
+    const val = payload.ValDtls;
+    const valSummaryHtml = val
+      ? `<table style="margin-top:6px"><thead><tr>
+           ${th('Taxable Amt')}${th('CGST Amt')}${th('SGST Amt')}${th('IGST Amt')}${th('CESS Amt')}${th('State CESS Amt')}${th('Discount')}${th('Other Charges')}${th('Round Off')}${th('Total Inv. Amt')}
+         </tr></thead><tbody><tr style="background:#f0f0f0;font-weight:700">
+           ${td(val.AssVal.toFixed(2))}${td(val.CgstVal.toFixed(2))}${td(val.SgstVal.toFixed(2))}${td(val.IgstVal.toFixed(2))}
+           ${td((val.CesVal ?? 0).toFixed(2))}${td((val.StCesVal ?? 0).toFixed(2))}${td((val.Discount ?? 0).toFixed(2))}
+           ${td((val.OthChrg ?? 0).toFixed(2))}${td((val.RndOffAmt ?? 0).toFixed(2))}${td(val.TotInvVal.toFixed(2))}
+         </tr></tbody></table>`
+      : '';
+
+    const hasEwb = !!invoice.ewbNo;
+    const ewbSection = hasEwb
+      ? `<div style="margin-top:10px;border:1px solid #999;padding:8px">
+           <div style="font-size:11px;font-weight:700;margin-bottom:6px">5. E-Waybill Details</div>
+           <table>
+             ${row('Eway Bill No', esc(invoice.ewbNo))}
+             ${row('Eway Bill Date', esc(invoice.ewbDate || '-'))}
+             ${row('Valid Till Date', esc(invoice.ewbValidTill || '-'))}
+             ${row('Generated By', esc(seller?.Gstin || company?.gstin || '-'))}
+             ${row('Print Date', printDate)}
+           </table>
+         </div>`
+      : '';
+
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>E-Invoice - ${esc(invoice.invoiceNo)}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:10px;color:#000;padding:14px}
+  table{width:100%;border-collapse:collapse}
+  thead{display:table-header-group}
+  tr{page-break-inside:avoid}
+  section{page-break-inside:avoid}
+  .toolbar{position:sticky;top:0;background:#fff;padding:8px 0;margin-bottom:10px;display:flex;gap:8px;justify-content:flex-end;border-bottom:1px solid #eee}
+  .toolbar button{padding:7px 16px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer}
+  .btn-print{background:#10b981;color:#fff}
+  .btn-close{background:#e2e8f0;color:#334155}
+  @media print{
+    @page{size:A4;margin:12mm}
+    .toolbar{display:none !important}
+    body{padding:0}
+  }
+</style>
+</head><body>
+
+<div class="toolbar">
+  <button class="btn-close" onclick="window.close()">Close</button>
+  <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+</div>
+
+<div style="display:flex;align-items:flex-start;border:2px solid #000;padding:8px;margin-bottom:8px">
+  ${logoHtml}
+  <div style="flex:1">
+    <div style="font-size:14px;font-weight:900">${esc(seller?.Gstin || company?.gstin || '-')}</div>
+    <div style="font-size:16px;font-weight:700">${esc(seller?.LglNm || company?.legalName || '-')}</div>
+  </div>
+  <div>${qrHtml}</div>
+</div>
+
+<section style="border:1px solid #999;padding:8px;margin-bottom:8px">
+  <div style="font-size:11px;font-weight:700;margin-bottom:6px">1. e-Invoice Details</div>
+  <table>
+    ${row('IRN', `<span style="font-family:monospace;font-size:8px;word-break:break-all">${esc(invoice.irn)}</span>`)}
+    ${row('Ack. No', esc(invoice.ackNo || '-'))}
+    ${row('Ack. Date', esc(invoice.ackDt || '-'))}
+  </table>
+</section>
+
+<section style="border:1px solid #999;padding:8px;margin-bottom:8px">
+  <div style="font-size:11px;font-weight:700;margin-bottom:6px">2. Transaction Details</div>
+  <div style="display:flex;gap:20px">
+    <table>
+      ${row('Supply Type Code', esc(payload.TranDtls?.SupTyp || '-'))}
+      ${row('Document No', esc(payload.DocDtls?.No || invoice.invoiceNo))}
+      ${row('Document Type', esc(payload.DocDtls?.Typ || 'INV'))}
+      ${row('Document Date', esc(payload.DocDtls?.Dt || '-'))}
+    </table>
+    <table>
+      ${row('Place of Supply', posName)}
+      ${row('IGST applicable despite same State', igstDespiteSameState)}
+    </table>
+  </div>
+</section>
+
+<section style="border:1px solid #999;padding:8px;margin-bottom:8px">
+  <div style="font-size:11px;font-weight:700;margin-bottom:6px">3. Party Details</div>
+  <div style="display:flex;gap:14px">
+    <div style="flex:1;border:1px solid #ddd;padding:6px">
+      <div style="font-size:10px;font-weight:700;margin-bottom:4px">Supplier</div>
+      <div style="font-size:9px">GSTIN : ${esc(seller?.Gstin || '-')}</div>
+      <div style="font-size:9px;font-weight:700;margin-top:2px">${esc(seller?.TrdNm || seller?.LglNm || '-')}</div>
+      <div style="font-size:9px;margin-top:2px">${esc(seller?.Addr1 || '-')}${seller?.Addr2 ? ', ' + esc(seller.Addr2) : ''}</div>
+      <div style="font-size:9px">${esc(seller?.Loc || '-')} - ${esc(seller?.Pin || '-')}</div>
+      ${seller?.Ph ? `<div style="font-size:9px">Phone: ${esc(seller.Ph)}</div>` : ''}
+      ${seller?.Em ? `<div style="font-size:9px">${esc(seller.Em)}</div>` : ''}
+    </div>
+    <div style="flex:1;border:1px solid #ddd;padding:6px">
+      <div style="font-size:10px;font-weight:700;margin-bottom:4px">Recipient</div>
+      <div style="font-size:9px">GSTIN : ${esc(buyer?.Gstin || '-')}</div>
+      <div style="font-size:9px;font-weight:700;margin-top:2px">${esc(buyer?.LglNm || '-')}</div>
+      <div style="font-size:9px;margin-top:2px">${esc(buyer?.Addr1 || '-')}${buyer?.Addr2 ? ', ' + esc(buyer.Addr2) : ''}</div>
+      <div style="font-size:9px">${esc(buyer?.Loc || '-')} - ${esc(buyer?.Pin || '-')}</div>
+      <div style="font-size:9px">${this.stateNameFromCode(buyer?.Stcd)}</div>
+      <div style="font-size:9px">Place of Supply : ${posName}</div>
+      ${buyer?.Ph ? `<div style="font-size:9px">Phone: ${esc(buyer.Ph)}</div>` : ''}
+    </div>
+  </div>
+</section>
+
+<section style="margin-bottom:8px">
+  <div style="font-size:11px;font-weight:700;margin-bottom:6px">4. Details of Goods / Services</div>
+  <table><thead><tr>
+    ${th('Sl.No')}${th('Item Description', 'text-align:left')}${th('HSN')}${th('Qty')}${th('Unit')}${th('Unit Price')}${th('Discount')}${th('Taxable Amt')}${th('Tax Rate (GST+Cess|St.Cess+CessNonAdvl)')}${th('Other Chrg')}${th('Total')}
+  </tr></thead><tbody>
+    ${itemRows}
+  </tbody></table>
+  ${valSummaryHtml}
+</section>
+
+${ewbSection}
+
+<div style="margin-top:16px;font-size:8px;color:#888;text-align:center;border-top:1px solid #eee;padding-top:6px">
+  Print Date : ${printDate}
+</div>
+
+</body></html>`;
   }
 
   private amountToWords(amount: number): string {

@@ -29,4 +29,5 @@ export interface EwayBillGenerateResult {
   ewbNo: string;
   ewbDate: string;
   ewbValidTill: string;
+  gstin: string;
 }

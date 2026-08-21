@@ -205,6 +205,16 @@
         Print PDF
       </button>
 
+      @if (inv.irn && inv.eInvoiceStatus === 'generated') {
+      <button (click)="printEInvoicePdf()"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-700 text-white text-sm font-semibold hover:bg-teal-600 transition-colors shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m6-4v4m-6-4v4m0-4h-2m-2-9h6v6h-6zM4 4h6v6H4V4zm10 2h.01M4 14h6v6H4v-6z"/>
+        </svg>
+        Print E-Invoice
+      </button>
+      }
+
       <button (click)="exportInvoiceTally(inv)"
         class="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -496,7 +506,7 @@
       @if (inv.signedQrCode) {
       <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 text-center">
         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Signed QR Code</h3>
-        <img [src]="inv.signedQrCode" alt="E-Invoice QR Code"
+        <img [src]="qrImageSrc(inv.signedQrCode)" alt="E-Invoice QR Code"
           class="w-48 h-48 mx-auto rounded-xl border border-slate-200 shadow-sm object-contain p-2">
         <p class="text-xs text-slate-400 mt-3">Scan to verify invoice authenticity</p>
       </div>

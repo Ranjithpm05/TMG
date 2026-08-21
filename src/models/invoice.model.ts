@@ -96,6 +96,7 @@ export interface Invoice {
   ewbGeneratedAt?: any;
   ewbDate?: string;
   ewbValidTill?: string;
+  ewbGstin?: string;
   ewbTransportDetails?: EwayBillTransportDetails;
   ewbErrorMessage?: string;
   ewbErrorCode?: string;

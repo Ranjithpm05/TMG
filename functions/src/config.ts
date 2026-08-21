@@ -36,6 +36,10 @@ export const EINVOICE_DEBUG_LOG = defineString('EINVOICE_DEBUG_LOG', {
   default: 'false',
 });
 
+export const EWAYBILL_DEBUG_LOG = defineString('EWAYBILL_DEBUG_LOG', {
+  default: 'false',
+});
+
 export const EINVOICE_SECRETS = [
   WEBTEL_CDKEY,
   WEBTEL_EF_USERNAME,
