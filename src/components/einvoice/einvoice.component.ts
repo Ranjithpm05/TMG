@@ -177,33 +177,40 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
 
     this.isGenerating.set(true);
     try {
-      await this.loadingService.run(async () => {
+      // The success dialog needs a user click to resolve — it must run
+      // *after* loadingService.run() so the "Processing…" overlay (z-[9999]
+      // in app.component.html, above SweetAlert2's own z-index) has already
+      // closed. Awaiting Swal.fire() while still inside run() stacked the
+      // overlay on top of the dialog and swallowed the OK click, so the
+      // overlay never closed — a deadlock, not just a slow request.
+      const { result, payload } = await this.loadingService.run(async () => {
         const { result, payload } = await this.einvoiceService.submitToIRP(invoice, settings);
         await this.einvoiceService.saveEInvoice(invoice.id!, result, payload);
+        return { result, payload };
+      });
 
-        const updated: Invoice = {
-          ...invoice,
-          eInvoiceStatus: 'generated',
-          irn: result.irn,
-          ackNo: result.ackNo,
-          ackDt: result.ackDt,
-          signedQrCode: result.signedQrCode,
-          signedInvoice: result.signedInvoice,
-          eInvoicePayload: payload,
-          eInvoiceErrorMessage: undefined,
-          eInvoiceErrorCode: undefined,
-        };
-        this.selectedInvoice.set(updated);
-        this.invoices.update((list) =>
-          list.map((i) => (i.id === invoice.id ? updated : i))
-        );
+      const updated: Invoice = {
+        ...invoice,
+        eInvoiceStatus: 'generated',
+        irn: result.irn,
+        ackNo: result.ackNo,
+        ackDt: result.ackDt,
+        signedQrCode: result.signedQrCode,
+        signedInvoice: result.signedInvoice,
+        eInvoicePayload: payload,
+        eInvoiceErrorMessage: undefined,
+        eInvoiceErrorCode: undefined,
+      };
+      this.selectedInvoice.set(updated);
+      this.invoices.update((list) =>
+        list.map((i) => (i.id === invoice.id ? updated : i))
+      );
 
-        await Swal.fire({
-          title: 'E-Invoice Generated!',
-          html: `<b>IRN:</b><br><code style="word-break:break-all;font-size:10px;display:block;background:#f1f5f9;padding:8px;border-radius:6px;margin-top:4px">${result.irn}</code>`,
-          icon: 'success',
-          confirmButtonColor: '#10b981',
-        });
+      await Swal.fire({
+        title: 'E-Invoice Generated!',
+        html: `<b>IRN:</b><br><code style="word-break:break-all;font-size:10px;display:block;background:#f1f5f9;padding:8px;border-radius:6px;margin-top:4px">${result.irn}</code>`,
+        icon: 'success',
+        confirmButtonColor: '#10b981',
       });
     } catch (err: any) {
       const message = err?.message || 'Could not generate e-Invoice. Please try again.';

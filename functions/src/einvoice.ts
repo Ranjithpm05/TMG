@@ -50,7 +50,7 @@ export const generateEInvoiceIrn = onCall(
       // Company Settings) — never hardcoded. If testing against Webtel's
       // public sandbox, which only accepts its own pre-registered test
       // GSTINs, set that value in Company Settings (master data), not here.
-      GSTIN: "29AAACW3775F000", //data.gstin,
+      GSTIN: data.gstin,
       GetQRImg: '1',
       GetSignedInvoice: '1',
       ...data.payload,
@@ -62,7 +62,6 @@ export const generateEInvoiceIrn = onCall(
     }
 
     try {
-        console.log('generateEInvoiceIrn', JSON.stringify(body))
       const result = await postWebtel(`${WEBTEL_EINVOICE_BASE_URL.value()}/GenIRN2`, body);
       if (EINVOICE_DEBUG_LOG.value() === 'true') {
         console.log('generateEInvoiceIrn response:', JSON.stringify(result, null, 2));

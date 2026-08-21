@@ -72,27 +72,27 @@ export class EInvoiceService {
     const supplyType: EInvoiceSupplyType = hasValidBuyerGstin ? 'B2B' : 'B2C';
 
     const sellerDtls: EInvoicePartyDtls = {
-      Gstin: "29AAACW3775F000",  //company.gstin,
+      Gstin: company.gstin,
       LglNm: company.legalName,
       ...(company.tradeName ? { TrdNm: company.tradeName } : {}),
       Addr1: company.address1,
       ...(company.address2 ? { Addr2: company.address2 } : {}),
       Loc: company.place,
-      Pin: 562160,//parseInt(company.pinCode) || 0,
-      Stcd: '29',//sellerStateCode,
+      Pin: parseInt(company.pinCode) || 0,
+      Stcd: sellerStateCode,
       ...(company.phone ? { Ph: company.phone } : {}),
       ...(company.email ? { Em: company.email } : {}),
     };
 
     const buyerDtls: EInvoiceBuyerDtls = {
-      Gstin: "29AWGPV7107B1Z1",//hasValidBuyerGstin ? invoice.clientGstin.toUpperCase() : 'URP',
+      Gstin: hasValidBuyerGstin ? invoice.clientGstin.toUpperCase() : 'URP',
       LglNm: invoice.clientName,
       Addr1: invoice.clientAddress || 'N/A',
       Loc: invoice.clientPlace || invoice.destination || 'N/A',
-      Pin: 562160,//parseInt(invoice.clientZipCode) || 0,
+      Pin: parseInt(invoice.clientZipCode) || 0,
       // Buyer's own Bill To/GSTIN-registration state. This is deliberately
       // NOT what decides IGST vs CGST+SGST below — see posStateCode.
-      Stcd: "29",//buyerStateCode,
+      Stcd: buyerStateCode,
       // Placeholder — set for real once posStateCode (below) is known, since
       // that needs the client's Ship To state, fetched next.
       Pos: buyerStateCode,
@@ -133,9 +133,9 @@ export class EInvoiceService {
       // of double-counting the pre-discount gross amount as the taxable value.
       const discount = Math.round((totAmt * (item.discountPct || 0) / 100) * 100) / 100;
       const assAmt = Math.round((totAmt - discount) * 100) / 100;
-      const igstAmt = !isInterState ? Math.round(assAmt * (gstRate / 100) * 100) / 100 : 0;
-      const cgstAmt = isInterState ? Math.round(assAmt * (gstRate / 2 / 100) * 100) / 100 : 0;
-      const sgstAmt = isInterState ? Math.round(assAmt * (gstRate / 2 / 100) * 100) / 100 : 0;
+      const igstAmt = isInterState ? Math.round(assAmt * (gstRate / 100) * 100) / 100 : 0;
+      const cgstAmt = !isInterState ? Math.round(assAmt * (gstRate / 2 / 100) * 100) / 100 : 0;
+      const sgstAmt = !isInterState ? Math.round(assAmt * (gstRate / 2 / 100) * 100) / 100 : 0;
       const totItemVal = Math.round((assAmt + igstAmt + cgstAmt + sgstAmt) * 100) / 100;
 
       return {
