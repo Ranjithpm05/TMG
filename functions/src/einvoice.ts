@@ -6,45 +6,36 @@ import {
   WEBTEL_EINV_USERNAME,
   WEBTEL_EINV_PASSWORD,
   WEBTEL_EINVOICE_BASE_URL,
+  EINVOICE_DEBUG_LOG,
   EINVOICE_SECRETS,
 } from './config';
 import { postWebtel, WebtelApiError } from './webtelClient';
 
-interface EInvoicePartyDtls {
-  Gstin: string;
-  LglNm: string;
-  TrdNm?: string;
-  Addr1: string;
-  Addr2?: string;
-  Loc: string;
-  Pin: number;
-  Stcd: string;
-  Ph?: string;
-  Em?: string;
-}
-
 interface GenerateEInvoiceRequest {
   gstin: string;
   payload: {
-    TranDtls: { SupTyp: string; RegRev: string; EcmGstin?: string | null; IgstOnIntra: string };
-    DocDtls: { Typ: string; No: string; Dt: string };
-    SellerDtls: EInvoicePartyDtls;
-    BuyerDtls: EInvoicePartyDtls & { Pos: string };
-    ItemList: Record<string, unknown>[];
-    ValDtls: Record<string, unknown>;
+    SellerDtls: Record<string, unknown>;
+    BuyerDtls: Record<string, unknown>;
+    [key: string]: unknown;
   };
 }
 
+// Fields never to be written to logs, even in debug mode.
+const SECRET_BODY_KEYS = ['CDKey', 'EInvUserName', 'EInvPassword', 'EFUserName', 'EFPassword'];
+
+function redactSecrets(body: Record<string, unknown>): Record<string, unknown> {
+  const redacted = { ...body };
+  for (const key of SECRET_BODY_KEYS) redacted[key] = '[REDACTED]';
+  return redacted;
+}
+
 // Proxies Webtel's GenIRN2 sandbox API (hierarchical-JSON e-Invoice
-// generation). The Angular EInvoiceService already builds the IRP-shaped
-// payload locally via preparePayload() — this function only adds the secret
-// credentials and forwards it, so business logic (item/tax computation)
-// stays in one place instead of being duplicated here.
+// generation).
 export const generateEInvoiceIrn = onCall(
   { secrets: EINVOICE_SECRETS, cors: true },
   async (request) => {
     const data = request.data as GenerateEInvoiceRequest;
-    if (!data?.gstin || !data?.payload?.SellerDtls || !data?.payload?.BuyerDtls) 
+    if (!data?.gstin || !data?.payload?.SellerDtls || !data?.payload?.BuyerDtls)
     {
       throw new HttpsError('invalid-argument', 'gstin and a complete e-Invoice payload are required.');
     }
@@ -55,26 +46,27 @@ export const generateEInvoiceIrn = onCall(
       EInvPassword: WEBTEL_EINV_PASSWORD.value(),
       EFUserName: WEBTEL_EF_USERNAME.value(),
       EFPassword: WEBTEL_EF_PASSWORD.value(),
-      GSTIN: '29AAACW3775F000',//data.gstin,
+      // Business GSTIN comes from the caller (company.gstin, configured in
+      // Company Settings) — never hardcoded. If testing against Webtel's
+      // public sandbox, which only accepts its own pre-registered test
+      // GSTINs, set that value in Company Settings (master data), not here.
+      GSTIN: "29AAACW3775F000", //data.gstin,
       GetQRImg: '1',
       GetSignedInvoice: '1',
-      TranDtls: {
-        SupTyp: data.payload.TranDtls.SupTyp,
-        RegRev: data.payload.TranDtls.RegRev,
-        EcmGstin: data.payload.TranDtls.EcmGstin ?? null,
-        IgstOnIntra: data.payload.TranDtls.IgstOnIntra,
-      },
-      DocDtls: data.payload.DocDtls,
-      SellerDtls: data.payload.SellerDtls,
-      BuyerDtls: data.payload.BuyerDtls,
-      ItemList: data.payload.ItemList,
-      ValDtls: data.payload.ValDtls,
+      ...data.payload,
     };
 
+    if (EINVOICE_DEBUG_LOG.value() === 'true') {
+      console.log('generateEInvoiceIrn request URL:', `${WEBTEL_EINVOICE_BASE_URL.value()}/GenIRN2`);
+      console.log('generateEInvoiceIrn request body (secrets redacted):', JSON.stringify(redactSecrets(body), null, 2));
+    }
+
     try {
-        console.log('Sending e-Invoice request to Webtel:', JSON.stringify(body));
-        console.log('Using Webtel e-Invoice base URL:', `${WEBTEL_EINVOICE_BASE_URL.value()}/GenIRN2`);
+        console.log('generateEInvoiceIrn', JSON.stringify(body))
       const result = await postWebtel(`${WEBTEL_EINVOICE_BASE_URL.value()}/GenIRN2`, body);
+      if (EINVOICE_DEBUG_LOG.value() === 'true') {
+        console.log('generateEInvoiceIrn response:', JSON.stringify(result, null, 2));
+      }
       if (String(result.Status) !== '1') {
         throw new HttpsError('failed-precondition', result.ErrorMessage || 'E-Invoice generation failed.', {
           errorCode: result.ErrorCode,

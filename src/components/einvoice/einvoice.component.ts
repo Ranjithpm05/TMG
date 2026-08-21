@@ -266,7 +266,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     }
   }
 
-  viewPayload(): void {
+  async viewPayload(): Promise<void> {
     const invoice = this.selectedInvoice();
     const settings = this.companySettings();
 
@@ -282,11 +282,11 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     }
 
     try {
-      const payload = this.einvoiceService.preparePayload(invoice!, settings);
+      const payload = await this.loadingService.run(() => this.einvoiceService.preparePayload(invoice!, settings));
       this.payloadJson.set(JSON.stringify(payload, null, 2));
       this.showPayloadModal.set(true);
-    } catch {
-      Swal.fire('Error', 'Could not prepare e-Invoice payload.', 'error');
+    } catch (err: any) {
+      Swal.fire('Error', err?.message || 'Could not prepare e-Invoice payload.', 'error');
     }
   }
 

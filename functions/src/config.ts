@@ -27,6 +27,15 @@ export const WEBTEL_EWAYBILL_BASE_URL = defineString('WEBTEL_EWAYBILL_BASE_URL',
   default: 'http://ewaysandbox.webtel.in/Sandbox/EWayBill/v1.3',
 });
 
+// Opt-in request/response logging for troubleshooting against the sandbox.
+// Off by default in every environment (including local emulation) — enable
+// explicitly with `firebase functions:config` / .env.<project> when needed.
+// Never gates credential redaction: secrets are stripped from the logged
+// payload regardless of this flag.
+export const EINVOICE_DEBUG_LOG = defineString('EINVOICE_DEBUG_LOG', {
+  default: 'false',
+});
+
 export const EINVOICE_SECRETS = [
   WEBTEL_CDKEY,
   WEBTEL_EF_USERNAME,

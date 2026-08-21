@@ -33,16 +33,54 @@ export interface EInvoiceBuyerDtls extends EInvoicePartyDtls {
   Pos: string;
 }
 
+// Ship-to party — only present when goods are shipped to a location other
+// than the buyer's own address (e.g. a client's separate Ship To Address).
+export interface EInvoiceShipDtls {
+  Gstin?: string;
+  LglNm: string;
+  TrdNm?: string;
+  Addr1: string;
+  Addr2?: string;
+  Loc: string;
+  Pin: number;
+  Stcd: string;
+}
+
+// Dispatch-from party — only present when goods are dispatched from a
+// location other than the seller's registered address.
+export interface EInvoiceDispDtls {
+  Nm: string;
+  Addr1: string;
+  Addr2?: string;
+  Loc: string;
+  Pin: number;
+  Stcd: string;
+}
+
+export interface EInvoiceBchDtls {
+  Nm: string;
+  Expdt?: string;
+  WrDt?: string;
+}
+
+export interface EInvoiceAttribDtls {
+  Nm: string;
+  Val: string;
+}
+
 export interface EInvoiceItem {
   SlNo: string;
   PrdDesc?: string;
   IsServc: 'Y' | 'N';
   HsnCd: string;
+  Barcde?: string;
   Qty?: number;
+  FreeQty?: number;
   Unit?: string;
   UnitPrice: number;
   TotAmt: number;
   Discount?: number;
+  PreTaxVal?: number;
   AssAmt: number;
   GstRt: number;
   IgstAmt: number;
@@ -50,8 +88,17 @@ export interface EInvoiceItem {
   SgstAmt: number;
   CesRt?: number;
   CesAmt?: number;
+  CesNonAdvlAmt?: number;
+  StateCesRt?: number;
+  StateCesAmt?: number;
+  StateCesNonAdvlAmt?: number;
   OthChrg?: number;
   TotItemVal: number;
+  OrdLineRef?: string;
+  OrgCntry?: string;
+  PrdSlNo?: string;
+  BchDtls?: EInvoiceBchDtls;
+  AttribDtls?: EInvoiceAttribDtls[];
 }
 
 export interface EInvoiceValDtls {
@@ -60,10 +107,93 @@ export interface EInvoiceValDtls {
   SgstVal: number;
   IgstVal: number;
   CesVal?: number;
+  StCesVal?: number;
   Discount?: number;
   OthChrg?: number;
   RndOffAmt?: number;
   TotInvVal: number;
+  TotInvValFc?: number;
+}
+
+// Optional — only meaningful when the invoice records a payment made against
+// it at generation time. Omit entirely (do not send zeros/placeholders) when
+// no payment data exists for the invoice.
+export interface EInvoicePayDtls {
+  Nm?: string;
+  Accdet?: string;
+  Mode?: string;
+  Fininsbr?: string;
+  Payterm?: string;
+  Payinstr?: string;
+  Crtrn?: string;
+  Dirdr?: string;
+  Crday?: number;
+  Paidamt?: number;
+  Paymtdue?: number;
+}
+
+export interface EInvoiceDocPerdDtls {
+  InvStDt: string;
+  InvEndDt: string;
+}
+
+export interface EInvoicePrecDocDtls {
+  InvNo: string;
+  InvDt: string;
+  OthRefNo?: string;
+}
+
+export interface EInvoiceContrDtls {
+  RecAdvRefr?: string;
+  RecAdvDt?: string;
+  Tendrefr?: string;
+  Contrrefr?: string;
+  Extrefr?: string;
+  Projrefr?: string;
+  Porefr?: string;
+  PoRefDt?: string;
+}
+
+// Optional — only when this invoice references a prior document (e.g. a
+// credit/debit note against a previous invoice) or a contract/PO.
+export interface EInvoiceRefDtls {
+  InvRm?: string;
+  DocPerdDtls?: EInvoiceDocPerdDtls;
+  PrecDocDtls?: EInvoicePrecDocDtls[];
+  ContrDtls?: EInvoiceContrDtls[];
+}
+
+export interface EInvoiceAddlDocDtls {
+  Url?: string;
+  Docs?: string;
+  Info?: string;
+}
+
+// Optional — export invoices only (SupTyp EXPWP/EXPWOP/SEZWP/SEZWOP/DEXP).
+// Must never be sent for a domestic B2B/B2C invoice.
+export interface EInvoiceExpDtls {
+  ShipBNo?: string;
+  ShipBDt?: string;
+  Port?: string;
+  RefClm?: 'Y' | 'N';
+  ForCur?: string;
+  CntCode?: string;
+  ExpDuty?: number | null;
+}
+
+// Optional — only when the E-Way Bill is generated together with the IRN.
+// This application generates the E-Way Bill as a separate subsequent step
+// (generateEwayBillByIrn, by IRN) instead, so this is not populated by
+// preparePayload() today; kept here for completeness/future use.
+export interface EInvoiceEwbDtls {
+  Transid?: string;
+  Transname?: string;
+  Distance?: number;
+  Transdocno?: string;
+  TransdocDt?: string;
+  Vehno?: string;
+  Vehtype?: 'R' | 'O';
+  TransMode?: '1' | '2' | '3' | '4';
 }
 
 export interface EInvoicePayload {
@@ -72,8 +202,15 @@ export interface EInvoicePayload {
   DocDtls: EInvoiceDocDtls;
   SellerDtls: EInvoicePartyDtls;
   BuyerDtls: EInvoiceBuyerDtls;
+  DispDtls?: EInvoiceDispDtls;
+  ShipDtls?: EInvoiceShipDtls;
   ItemList: EInvoiceItem[];
   ValDtls: EInvoiceValDtls;
+  PayDtls?: EInvoicePayDtls;
+  RefDtls?: EInvoiceRefDtls;
+  AddlDocDtls?: EInvoiceAddlDocDtls[];
+  ExpDtls?: EInvoiceExpDtls;
+  EwbDtls?: EInvoiceEwbDtls;
 }
 
 export interface CompanySettings {
