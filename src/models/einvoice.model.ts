@@ -1,4 +1,4 @@
-export type EInvoiceStatus = 'pending' | 'generated' | 'cancelled';
+export type EInvoiceStatus = 'pending' | 'generated' | 'failed' | 'cancelled';
 export type EInvoiceDocType = 'INV' | 'CRN' | 'DBN';
 export type EInvoiceSupplyType = 'B2B' | 'B2C' | 'SEZWP' | 'SEZWOP' | 'EXPWP' | 'EXPWOP' | 'DEXP';
 

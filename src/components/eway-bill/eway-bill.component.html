@@ -1,0 +1,458 @@
+<!-- ══════════════════════════════════════════════════════════════
+     E-WAY BILL MODULE
+     ══════════════════════════════════════════════════════════════ -->
+
+<!-- ── LIST VIEW ──────────────────────────────────────────────────── -->
+@if (mode() === 'list') {
+
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-black text-slate-800">E-Way Bill</h1>
+      <p class="text-sm text-slate-500 mt-0.5">Generate and track E-Way Bills using an invoice's E-Invoice IRN</p>
+    </div>
+  </div>
+
+  @if (!isLoading() && eligibleInvoices().length === 0) {
+  <div class="mb-6 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+    <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <div class="flex-1">
+      <p class="text-sm font-semibold text-amber-800">No eligible invoices yet</p>
+      <p class="text-xs text-amber-700 mt-0.5">An invoice must have a generated E-Invoice (IRN) before an E-Way Bill can be created for it. Generate the E-Invoice first.</p>
+    </div>
+  </div>
+  }
+
+  <!-- Stats cards -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-amber-50 rounded-2xl p-4 shadow-sm border border-amber-100 cursor-pointer hover:border-amber-300 transition-colors" (click)="setFilterTab('pending')">
+      <p class="text-xs font-semibold text-amber-500 uppercase tracking-wide">Pending</p>
+      <p class="text-3xl font-black text-amber-600 mt-1">{{ stats().pending }}</p>
+    </div>
+    <div class="bg-emerald-50 rounded-2xl p-4 shadow-sm border border-emerald-100 cursor-pointer hover:border-emerald-300 transition-colors" (click)="setFilterTab('generated')">
+      <p class="text-xs font-semibold text-emerald-500 uppercase tracking-wide">Generated</p>
+      <p class="text-3xl font-black text-emerald-600 mt-1">{{ stats().generated }}</p>
+    </div>
+    <div class="bg-red-50 rounded-2xl p-4 shadow-sm border border-red-100 cursor-pointer hover:border-red-300 transition-colors" (click)="setFilterTab('failed')">
+      <p class="text-xs font-semibold text-red-500 uppercase tracking-wide">Failed</p>
+      <p class="text-3xl font-black text-red-600 mt-1">{{ stats().failed }}</p>
+    </div>
+    <div class="bg-rose-50 rounded-2xl p-4 shadow-sm border border-rose-100 cursor-pointer hover:border-rose-300 transition-colors" (click)="setFilterTab('cancelled')">
+      <p class="text-xs font-semibold text-rose-500 uppercase tracking-wide">Cancelled</p>
+      <p class="text-3xl font-black text-rose-600 mt-1">{{ stats().cancelled }}</p>
+    </div>
+  </div>
+
+  <!-- Filter tabs + Search -->
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 pb-3 border-b border-slate-100">
+      <div class="flex gap-1 p-1 bg-slate-100 rounded-xl">
+        @for (tab of [['all','All'],['pending','Pending'],['generated','Generated'],['failed','Failed'],['cancelled','Cancelled']]; track tab[0]) {
+        <button (click)="setFilterTab($any(tab[0]))"
+          [class]="filterTab() === tab[0] ? 'bg-white text-slate-800 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700'"
+          class="px-3 py-1.5 rounded-lg text-sm transition-all">
+          {{ tab[1] }}
+        </button>
+        }
+      </div>
+      <div class="relative">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input type="text" placeholder="Search invoice, client, IRN…"
+          [value]="searchTerm()"
+          (input)="searchTerm.set($any($event.target).value)"
+          class="pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 w-64">
+      </div>
+    </div>
+
+    @if (isLoading()) {
+      <div class="flex items-center justify-center py-16 text-slate-400">
+        <svg class="animate-spin w-7 h-7 mr-3 text-indigo-500" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        Loading invoices…
+      </div>
+    } @else if (filteredInvoices().length === 0) {
+      <div class="text-center py-16 text-slate-400">
+        <svg class="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+        </svg>
+        <p class="font-semibold">No matching invoices</p>
+      </div>
+    } @else {
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50">
+              <th class="px-4 py-3 text-left">Invoice No</th>
+              <th class="px-4 py-3 text-left">Client</th>
+              <th class="px-4 py-3 text-left">IRN</th>
+              <th class="px-4 py-3 text-right">Amount</th>
+              <th class="px-4 py-3 text-center">E-Way Bill</th>
+              <th class="px-4 py-3 text-center">EWB No.</th>
+              <th class="px-4 py-3 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-50">
+            @for (inv of filteredInvoices(); track inv.id) {
+            <tr class="hover:bg-slate-50/70 transition-colors">
+              <td class="px-4 py-3.5 font-semibold text-slate-800">{{ inv.invoiceNo }}</td>
+              <td class="px-4 py-3.5 text-slate-600 max-w-[180px] truncate">{{ inv.clientName }}</td>
+              <td class="px-4 py-3.5">
+                <span class="inline-block font-mono text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 max-w-[110px] truncate" [title]="inv.irn">
+                  {{ (inv.irn || '').substring(0, 10) }}…
+                </span>
+              </td>
+              <td class="px-4 py-3.5 text-right font-semibold text-slate-700">{{ formatCurrency(inv.totalAmount) }}</td>
+              <td class="px-4 py-3.5 text-center">
+                <span class="inline-block px-2.5 py-1 rounded-full text-xs font-semibold {{ getStatusClass(inv.ewbStatus || 'pending') }}">
+                  {{ getStatusLabel(inv.ewbStatus || 'pending') }}
+                </span>
+              </td>
+              <td class="px-4 py-3.5 text-center font-mono text-xs text-slate-600">{{ inv.ewbNo || '—' }}</td>
+              <td class="px-4 py-3.5 text-center">
+                <button (click)="viewInvoice(inv)"
+                  class="px-3 py-1.5 bg-slate-800 text-white text-xs font-semibold rounded-lg hover:bg-indigo-600 transition-colors">
+                  View
+                </button>
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+}
+
+<!-- ── DETAIL VIEW ──────────────────────────────────────────────────── -->
+@if (mode() === 'view' && selectedInvoice(); as inv) {
+
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <div class="flex items-center gap-3">
+      <button (click)="backToList()" class="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm">
+        <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+        </svg>
+      </button>
+      <div>
+        <h1 class="text-xl font-black text-slate-800">{{ inv.invoiceNo }}</h1>
+        <p class="text-xs text-slate-500">{{ inv.clientName }} · {{ formatDate(inv.invoiceDate) }}</p>
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      @if (!inv.ewbStatus || inv.ewbStatus === 'pending' || inv.ewbStatus === 'failed') {
+      <button (click)="openGenerateModal()" [disabled]="isGenerating()"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 transition-colors shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+        </svg>
+        {{ inv.ewbStatus === 'failed' ? 'Retry Generation' : 'Generate E-Way Bill' }}
+      </button>
+      }
+      @if (inv.ewbStatus === 'generated') {
+      <button (click)="openCancelModal()"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+        Cancel E-Way Bill
+      </button>
+      }
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+    <div class="xl:col-span-2 space-y-4">
+
+      @if (inv.ewbStatus === 'generated') {
+      <div class="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+        <div class="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+          </svg>
+        </div>
+        <div>
+          <p class="font-semibold text-emerald-800 text-sm">E-Way Bill Successfully Generated</p>
+          <p class="text-xs text-emerald-600 mt-0.5">Valid till {{ inv.ewbValidTill || '—' }}.</p>
+        </div>
+      </div>
+      }
+      @if (inv.ewbStatus === 'cancelled') {
+      <div class="flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-2xl p-4">
+        <div class="w-10 h-10 rounded-full bg-rose-500 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </div>
+        <div>
+          <p class="font-semibold text-rose-800 text-sm">E-Way Bill Cancelled</p>
+          <p class="text-xs text-rose-600 mt-0.5">Reason: {{ inv.ewbCancelReason }}</p>
+        </div>
+      </div>
+      }
+      @if (inv.ewbStatus === 'failed') {
+      <div class="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl p-4">
+        <div class="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+        </div>
+        <div>
+          <p class="font-semibold text-red-800 text-sm">E-Way Bill Generation Failed</p>
+          <p class="text-xs text-red-600 mt-0.5">{{ inv.ewbErrorMessage || 'The sandbox rejected the request.' }}</p>
+        </div>
+      </div>
+      }
+
+      <!-- Invoice + IRN reference -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Invoice &amp; E-Invoice Reference</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div>
+            <p class="text-xs text-slate-400">Invoice No</p>
+            <p class="font-bold text-slate-800 text-sm mt-0.5">{{ inv.invoiceNo }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">DC No</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ inv.dcNo || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">Total Amount</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ formatCurrency(inv.totalAmount) }}</p>
+          </div>
+        </div>
+        <div class="border-t border-slate-100 mt-4 pt-4">
+          <p class="text-xs text-slate-400 mb-1">IRN (Invoice Reference Number)</p>
+          <p class="font-mono text-[11px] text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2.5 break-all leading-relaxed select-all">{{ inv.irn }}</p>
+        </div>
+        <div class="border-t border-slate-100 mt-4 pt-4">
+          <p class="text-xs text-slate-400 mb-1">Ship To</p>
+          <p class="font-bold text-slate-800">{{ inv.clientName }}</p>
+          <p class="text-sm text-slate-500 mt-0.5">{{ inv.clientAddress }}</p>
+          <p class="text-sm text-slate-500">{{ inv.clientPlace }}, {{ inv.clientState }} – {{ inv.clientZipCode }}</p>
+        </div>
+      </div>
+
+      @if (inv.ewbTransportDetails; as td) {
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Transport Details Submitted</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div>
+            <p class="text-xs text-slate-400">Mode</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ transportModeLabel(td.transMode) }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">Distance</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ td.distance }} km</p>
+          </div>
+          @if (td.vehicleNo) {
+          <div>
+            <p class="text-xs text-slate-400">Vehicle No</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ td.vehicleNo }}</p>
+          </div>
+          }
+          @if (td.transporterName) {
+          <div>
+            <p class="text-xs text-slate-400">Transporter</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ td.transporterName }}</p>
+          </div>
+          }
+          @if (td.transDocNo) {
+          <div>
+            <p class="text-xs text-slate-400">Transport Doc No</p>
+            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ td.transDocNo }}</p>
+          </div>
+          }
+        </div>
+      </div>
+      }
+    </div>
+
+    <!-- Right: E-Way Bill status panel -->
+    <div class="space-y-4">
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">E-Way Bill Status</h3>
+        <div class="flex items-center gap-3 mb-4">
+          <span class="inline-block px-3 py-1.5 rounded-full text-sm font-bold {{ getStatusClass(inv.ewbStatus || 'pending') }}">
+            {{ getStatusLabel(inv.ewbStatus || 'pending') }}
+          </span>
+        </div>
+
+        @if (inv.ewbNo) {
+        <div class="space-y-3">
+          <div>
+            <p class="text-xs text-slate-400 mb-1">E-Way Bill No.</p>
+            <p class="font-mono text-sm font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2.5 select-all">{{ inv.ewbNo }}</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <p class="text-xs text-slate-400">Generated On</p>
+              <p class="font-semibold text-slate-700 text-xs mt-0.5">{{ inv.ewbDate || '-' }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400">Valid Till</p>
+              <p class="font-semibold text-slate-700 text-xs mt-0.5">{{ inv.ewbValidTill || '-' }}</p>
+            </div>
+          </div>
+        </div>
+        } @else {
+        <p class="text-sm text-slate-400 italic">No E-Way Bill generated yet.</p>
+        }
+      </div>
+
+      <div class="bg-slate-50 rounded-2xl border border-slate-100 p-5">
+        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Requirements</h3>
+        <ul class="space-y-2 text-xs text-slate-500 list-disc pl-4">
+          <li>E-Invoice must already be generated for this invoice (it is — IRN present).</li>
+          <li>Vehicle number is required for Road transport; transport document no. &amp; date are required for Rail/Air/Ship.</li>
+          <li>Distance is the approximate transport distance in km.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODALS
+     ══════════════════════════════════════════════════════════════ -->
+
+<!-- ── Generate Modal ──────────────────────────────────────────────── -->
+@if (showGenerateModal()) {
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" (click)="closeGenerateModal()"></div>
+  <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div class="px-6 py-5 border-b border-slate-100">
+      <h2 class="text-lg font-black text-slate-800">Generate E-Way Bill</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Enter transport details required by the E-Way Bill sandbox</p>
+    </div>
+    <div class="p-6 space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Transport Mode <span class="text-rose-500">*</span></label>
+          <select [value]="generateForm().transMode"
+            (change)="updateGenerateField('transMode', $any($any($event.target).value))"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white">
+            @for (m of transportModes; track m.code) {
+              <option [value]="m.code">{{ m.label }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Distance (km) <span class="text-rose-500">*</span></label>
+          <input type="number" min="0" [value]="generateForm().distance"
+            (input)="updateGenerateField('distance', +$any($event.target).value)"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Transporter ID / GSTIN</label>
+          <input type="text" [value]="generateForm().transporterId || ''"
+            (input)="updateGenerateField('transporterId', $any($event.target).value)"
+            placeholder="e.g. 05AAACN1283H1ZQ"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Transporter Name</label>
+          <input type="text" [value]="generateForm().transporterName || ''"
+            (input)="updateGenerateField('transporterName', $any($event.target).value)"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+      </div>
+
+      @if (generateForm().transMode === '1') {
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Vehicle No. <span class="text-rose-500">*</span></label>
+          <input type="text" [value]="generateForm().vehicleNo || ''"
+            (input)="updateGenerateField('vehicleNo', $any($event.target).value.toUpperCase())"
+            placeholder="e.g. TN37AB1234"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Vehicle Type</label>
+          <select [value]="generateForm().vehicleType"
+            (change)="updateGenerateField('vehicleType', $any($any($event.target).value))"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white">
+            @for (v of vehicleTypes; track v.code) {
+              <option [value]="v.code">{{ v.label }}</option>
+            }
+          </select>
+        </div>
+      </div>
+      } @else {
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Transport Doc No. <span class="text-rose-500">*</span></label>
+          <input type="text" [value]="generateForm().transDocNo || ''"
+            (input)="updateGenerateField('transDocNo', $any($event.target).value)"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Transport Doc Date <span class="text-rose-500">*</span></label>
+          <input type="date"
+            (change)="updateGenerateField('transDocDt', $any($event.target).value.replaceAll('-',''))"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+      </div>
+      }
+    </div>
+    <div class="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
+      <button (click)="closeGenerateModal()" class="px-5 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
+      <button (click)="submitGenerate()" [disabled]="isGenerating()"
+        class="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+        {{ isGenerating() ? 'Generating…' : 'Generate E-Way Bill' }}
+      </button>
+    </div>
+  </div>
+</div>
+}
+
+<!-- ── Cancel Modal ─────────────────────────────────────────────── -->
+@if (showCancelModal()) {
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" (click)="closeCancelModal()"></div>
+  <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-md">
+    <div class="px-6 py-5 border-b border-slate-100">
+      <h2 class="text-lg font-black text-rose-700">Cancel E-Way Bill</h2>
+      <p class="text-xs text-slate-400 mt-0.5">This action will mark the E-Way Bill as cancelled.</p>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-500 mb-2">Cancellation Reason <span class="text-rose-500">*</span></label>
+        <div class="space-y-2">
+          @for (reason of cancelReasons; track reason.code) {
+          <label class="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors"
+            [class]="cancelReasonCode() === reason.code ? 'border-rose-400 bg-rose-50' : 'border-slate-200 hover:border-slate-300'">
+            <input type="radio" name="ewbCancelReason" [value]="reason.code"
+              [checked]="cancelReasonCode() === reason.code"
+              (change)="cancelReasonCode.set(reason.code)"
+              class="text-rose-500">
+            <span class="text-sm font-medium text-slate-700">{{ reason.label }}</span>
+          </label>
+          }
+        </div>
+        <div class="mt-3">
+          <textarea [value]="cancelRemark()"
+            (input)="cancelRemark.set($any($event.target).value)"
+            placeholder="Remark (optional)…"
+            rows="3"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-400 resize-none"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
+      <button (click)="closeCancelModal()" class="px-5 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Back</button>
+      <button (click)="confirmCancel()" [disabled]="isCancelling() || !cancelReasonCode()"
+        class="px-5 py-2 rounded-xl bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 disabled:opacity-60 transition-colors">
+        {{ isCancelling() ? 'Cancelling…' : 'Confirm Cancellation' }}
+      </button>
+    </div>
+  </div>
+</div>
+}

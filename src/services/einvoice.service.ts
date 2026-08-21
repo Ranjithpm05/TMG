@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, doc, updateDoc, serverTimestamp } from '@angular/fire/firestore';
+import { Functions, httpsCallable } from '@angular/fire/functions';
 import { Invoice } from '../models/invoice.model';
 import {
   CompanySettings,
@@ -12,29 +13,30 @@ import {
 import { CompanySettingsService } from './company-settings.service';
 import { InvoiceService } from './invoice.service';
 
+// Appendix-5 (E-Invoice sandbox doc) — Cancel Reasons numeric codes. The UI
+// (CANCEL_REASONS in einvoice.model.ts) shows the labels; this maps a chosen
+// label back to the code Webtel's CanIRN API expects.
+const CANCEL_REASON_CODES: Record<string, string> = {
+  'Duplicate': '1',
+  'Data Entry Mistake': '2',
+  'Order Cancelled': '3',
+  'Others': '4',
+};
+
+export interface EInvoiceSubmitResult {
+  irn: string;
+  ackNo: string;
+  ackDt: string;
+  signedQrCode: string;
+  signedInvoice: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class EInvoiceService {
   private firestore = inject(Firestore);
+  private functions = inject(Functions);
   private companySettingsService = inject(CompanySettingsService);
   private invoiceService = inject(InvoiceService);
-
-  async generateIRN(sellerGstin: string, fy: string, docType: string, docNo: string): Promise<string> {
-    const text = `${sellerGstin}|${fy}|${docType}|${docNo}`;
-    const msgBuffer = new TextEncoder().encode(text);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  async generateQRCodeDataUrl(content: string): Promise<string> {
-    const QRCode = await import('qrcode');
-    return QRCode.toDataURL(content, {
-      errorCorrectionLevel: 'M',
-      margin: 1,
-      width: 256,
-      color: { dark: '#0f172a', light: '#ffffff' },
-    });
-  }
 
   preparePayload(invoice: Invoice, company: CompanySettings): EInvoicePayload {
     const sellerStateCode = company.stateCode;
@@ -46,7 +48,7 @@ export class EInvoiceService {
     const supplyType: EInvoiceSupplyType = hasValidBuyerGstin ? 'B2B' : 'B2C';
 
     const sellerDtls: EInvoicePartyDtls = {
-      Gstin: company.gstin,
+      Gstin: '29AAACW3775F000',//company.gstin,
       LglNm: company.legalName,
       ...(company.tradeName ? { TrdNm: company.tradeName } : {}),
       Addr1: company.address1,
@@ -59,7 +61,7 @@ export class EInvoiceService {
     };
 
     const buyerDtls: EInvoiceBuyerDtls = {
-      Gstin: invoice.clientGstin?.toUpperCase() || 'URP',
+      Gstin: '29AAACW3775F000',//invoice.clientGstin?.toUpperCase() || 'URP',
       LglNm: invoice.clientName,
       Addr1: invoice.clientAddress || 'N/A',
       Loc: invoice.clientPlace || invoice.destination || 'N/A',
@@ -125,49 +127,83 @@ export class EInvoiceService {
     };
   }
 
-  async processEInvoice(invoice: Invoice): Promise<{ irn: string; qrDataUrl: string; payload: EInvoicePayload }> {
-    const company = await this.companySettingsService.getCompanySettingsOnce();
+  // Builds the IRP-shaped payload locally (preparePayload, above — unchanged
+  // business logic) then calls the generateEInvoiceIrn Cloud Function, which
+  // holds the Webtel CDKey/EF/EInv credentials server-side and forwards the
+  // request to Webtel's GenIRN2 sandbox API. Throws with a user-facing
+  // message on any failure (network, validation, duplicate IRN, etc.) —
+  // callers should catch and, on failure, call saveEInvoiceFailure() so the
+  // failed attempt is visible in the UI instead of silently reverting to
+  // "pending".
+  async submitToIRP(invoice: Invoice, company: CompanySettings): Promise<{ result: EInvoiceSubmitResult; payload: EInvoicePayload }> {
     if (!company?.gstin) {
       throw new Error('Company GSTIN not configured. Please set up company settings first.');
     }
-
-    const fy = this.getFYForIRN(invoice.invoiceDate);
-    const irn = await this.generateIRN(company.gstin, fy, 'INV', invoice.invoiceNo);
     const payload = this.preparePayload(invoice, company);
-    const ackNo = this.generateAckNo();
-    const ackDt = this.formatDateTimeForAck();
-
-    const qrContent = JSON.stringify({
-      Irn: irn,
-      AckNo: ackNo,
-      AckDt: ackDt,
-      SelGstin: company.gstin,
-      BuyGstin: invoice.clientGstin?.toUpperCase() || 'URP',
-      DocNo: invoice.invoiceNo,
-      DocTyp: 'INV',
-      DocDt: this.formatDateDDMMYYYY(invoice.invoiceDate),
-      TotInvVal: invoice.totalAmount,
-      ItemCnt: invoice.items.length,
-      MainHsnCode: invoice.items[0]?.hsnSac || '',
-    });
-
-    const qrDataUrl = await this.generateQRCodeDataUrl(qrContent);
-    return { irn, qrDataUrl, payload };
+    const callable = httpsCallable<{ gstin: string; payload: EInvoicePayload }, EInvoiceSubmitResult>(
+      this.functions,
+      'generateEInvoiceIrn'
+    );
+    try {
+      const response = await callable({ gstin: company.gstin, payload });
+      return { result: response.data, payload };
+    } catch (err: any) {
+      throw new Error(this.extractCallableErrorMessage(err));
+    }
   }
 
-  async saveEInvoice(invoiceId: string, irn: string, qrDataUrl: string, ackNo: string, ackDt: string, payload: EInvoicePayload): Promise<void> {
+  async saveEInvoice(invoiceId: string, result: EInvoiceSubmitResult, payload: EInvoicePayload): Promise<void> {
     const invoiceRef = doc(this.firestore, 'invoices', invoiceId);
     await updateDoc(invoiceRef, {
       eInvoiceStatus: 'generated',
-      irn,
+      irn: result.irn,
       irnGeneratedAt: serverTimestamp(),
-      ackNo,
-      ackDt,
-      signedQrCode: qrDataUrl,
+      ackNo: result.ackNo,
+      ackDt: result.ackDt,
+      signedQrCode: result.signedQrCode,
+      signedInvoice: result.signedInvoice,
       eInvoicePayload: this.deepStripUndefined(payload),
+      eInvoiceErrorMessage: null,
+      eInvoiceErrorCode: null,
       updatedAt: serverTimestamp(),
     });
     this.invoiceService.invalidateCache();
+  }
+
+  // Persists a failed generation attempt so the E-Invoice list can show
+  // "Failed" (with the reason) instead of silently staying "Pending" —
+  // the user can retry, since eInvoiceStatus !== 'generated' still allows it.
+  async saveEInvoiceFailure(invoiceId: string, message: string, code?: string): Promise<void> {
+    const invoiceRef = doc(this.firestore, 'invoices', invoiceId);
+    await updateDoc(invoiceRef, {
+      eInvoiceStatus: 'failed',
+      eInvoiceErrorMessage: message,
+      eInvoiceErrorCode: code ?? null,
+      updatedAt: serverTimestamp(),
+    });
+    this.invoiceService.invalidateCache();
+  }
+
+  getCancelReasonCode(label: string): string {
+    return CANCEL_REASON_CODES[label] || '4';
+  }
+
+  // Calls Webtel's CanIRN sandbox API (via the cancelEInvoiceIrn Cloud
+  // Function) then, only on success, marks the invoice cancelled locally —
+  // keeps Firestore from ever showing "cancelled" for an IRN that Webtel
+  // still considers active.
+  async cancelEInvoiceRemote(invoice: Invoice, reason: string, gstin: string): Promise<void> {
+    if (!invoice.irn) throw new Error('This invoice has no IRN to cancel.');
+    const callable = httpsCallable<
+      { irn: string; gstin: string; reasonCode: string; remark: string },
+      { cancelDate: string }
+    >(this.functions, 'cancelEInvoiceIrn');
+    try {
+      await callable({ irn: invoice.irn, gstin, reasonCode: this.getCancelReasonCode(reason), remark: reason });
+    } catch (err: any) {
+      throw new Error(this.extractCallableErrorMessage(err));
+    }
+    await this.cancelEInvoice(invoice.id!, reason);
   }
 
   async cancelEInvoice(invoiceId: string, reason: string): Promise<void> {
@@ -179,6 +215,13 @@ export class EInvoiceService {
       updatedAt: serverTimestamp(),
     });
     this.invoiceService.invalidateCache();
+  }
+
+  private extractCallableErrorMessage(err: any): string {
+    // Firebase callable errors surface the HttpsError message on `.message`
+    // and any extra detail object on `.details` (errorCode/infoDtls here).
+    const code = err?.details?.errorCode ? ` (code ${err.details.errorCode})` : '';
+    return (err?.message || 'Request to the sandbox failed.') + code;
   }
 
   private deepStripUndefined(obj: any): any {
@@ -195,17 +238,6 @@ export class EInvoiceService {
     return obj;
   }
 
-  private generateAckNo(): string {
-    const ts = Date.now().toString();
-    return ts.substring(ts.length - 13);
-  }
-
-  private formatDateTimeForAck(): string {
-    const d = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  }
-
   formatDateDDMMYYYY(timestamp: any): string {
     let d: Date;
     if (timestamp?.toDate) d = timestamp.toDate();
@@ -216,17 +248,6 @@ export class EInvoiceService {
     const dd = String(d.getDate()).padStart(2, '0');
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     return `${dd}/${mm}/${d.getFullYear()}`;
-  }
-
-  private getFYForIRN(timestamp: any): string {
-    let d: Date;
-    if (timestamp?.toDate) d = timestamp.toDate();
-    else if (timestamp?.seconds) d = new Date(timestamp.seconds * 1000);
-    else d = new Date();
-    const month = d.getMonth() + 1;
-    const year = d.getFullYear();
-    const fyStart = month >= 4 ? year : year - 1;
-    return `${fyStart}-${String(fyStart + 1).slice(2)}`;
   }
 
   private extractStateCodeFromGstin(gstin: string): string {

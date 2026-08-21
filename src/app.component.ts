@@ -15,9 +15,10 @@ import { PickListComponent } from './components/pick-list/pick-list.component';
 import { PackingListComponent } from './components/packing-list/packing-list.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { EInvoiceComponent } from './components/einvoice/einvoice.component';
+import { EwayBillComponent } from './components/eway-bill/eway-bill.component';
 import { ReportsComponent } from './components/reports/reports.component';
 
-type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'transportMaster' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'einvoice' | 'reports';
+type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'transportMaster' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'einvoice' | 'ewayBill' | 'reports';
 type ViewHistoryState = { view: View };
 
 interface NavItem {
@@ -35,7 +36,7 @@ interface NavGroup {
 }
 
 const VIEW_STORAGE_KEY = 'gom.activeView';
-const VIEW_SEQUENCE: View[] = ['dashboard', 'sales', 'clients', 'designs', 'transportMaster', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList', 'einvoice', 'reports'];
+const VIEW_SEQUENCE: View[] = ['dashboard', 'sales', 'clients', 'designs', 'transportMaster', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList', 'einvoice', 'ewayBill', 'reports'];
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -82,6 +83,7 @@ const NAV_GROUPS: NavGroup[] = [
     iconPaths: ['M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'],
     items: [
       { view: 'einvoice', label: 'E-Invoice', screen: 'einvoice', iconPaths: ['M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'] },
+      { view: 'ewayBill', label: 'E-Way Bill', screen: 'ewayBill', iconPaths: ['M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'] },
     ],
   },
   {
@@ -116,6 +118,7 @@ const NAV_GROUPS: NavGroup[] = [
     PackingListComponent,
     DashboardComponent,
     EInvoiceComponent,
+    EwayBillComponent,
     ReportsComponent,
   ],
 })

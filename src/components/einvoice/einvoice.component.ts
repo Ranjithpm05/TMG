@@ -20,7 +20,7 @@ import { ClientService } from '../../services/client.service';
 import { LoadingService } from '../../services/loading.service';
 import { exportInvoicesToTally } from './tally-export.util';
 
-type FilterTab = 'all' | 'pending' | 'generated' | 'cancelled';
+type FilterTab = 'all' | 'pending' | 'generated' | 'failed' | 'cancelled';
 
 @Component({
   selector: 'app-einvoice',
@@ -107,6 +107,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       total: all.length,
       pending: all.filter((i) => !i.eInvoiceStatus || i.eInvoiceStatus === 'pending').length,
       generated: all.filter((i) => i.eInvoiceStatus === 'generated').length,
+      failed: all.filter((i) => i.eInvoiceStatus === 'failed').length,
       cancelled: all.filter((i) => i.eInvoiceStatus === 'cancelled').length,
     };
   });
@@ -177,19 +178,20 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     this.isGenerating.set(true);
     try {
       await this.loadingService.run(async () => {
-        const { irn, qrDataUrl, payload } = await this.einvoiceService.processEInvoice(invoice);
-        const ackNo = this.buildAckNo();
-        const ackDt = this.buildAckDt();
-        await this.einvoiceService.saveEInvoice(invoice.id!, irn, qrDataUrl, ackNo, ackDt, payload);
+        const { result, payload } = await this.einvoiceService.submitToIRP(invoice, settings);
+        await this.einvoiceService.saveEInvoice(invoice.id!, result, payload);
 
         const updated: Invoice = {
           ...invoice,
           eInvoiceStatus: 'generated',
-          irn,
-          ackNo,
-          ackDt,
-          signedQrCode: qrDataUrl,
+          irn: result.irn,
+          ackNo: result.ackNo,
+          ackDt: result.ackDt,
+          signedQrCode: result.signedQrCode,
+          signedInvoice: result.signedInvoice,
           eInvoicePayload: payload,
+          eInvoiceErrorMessage: undefined,
+          eInvoiceErrorCode: undefined,
         };
         this.selectedInvoice.set(updated);
         this.invoices.update((list) =>
@@ -198,13 +200,23 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
 
         await Swal.fire({
           title: 'E-Invoice Generated!',
-          html: `<b>IRN:</b><br><code style="word-break:break-all;font-size:10px;display:block;background:#f1f5f9;padding:8px;border-radius:6px;margin-top:4px">${irn}</code>`,
+          html: `<b>IRN:</b><br><code style="word-break:break-all;font-size:10px;display:block;background:#f1f5f9;padding:8px;border-radius:6px;margin-top:4px">${result.irn}</code>`,
           icon: 'success',
           confirmButtonColor: '#10b981',
         });
       });
     } catch (err: any) {
-      Swal.fire('Generation Failed', err?.message || 'Could not generate e-Invoice. Please try again.', 'error');
+      const message = err?.message || 'Could not generate e-Invoice. Please try again.';
+      try {
+        await this.einvoiceService.saveEInvoiceFailure(invoice.id!, message);
+        const updated: Invoice = { ...invoice, eInvoiceStatus: 'failed', eInvoiceErrorMessage: message };
+        this.selectedInvoice.set(updated);
+        this.invoices.update((list) => list.map((i) => (i.id === invoice.id ? updated : i)));
+      } catch {
+        // Firestore write for the failure record itself failed — surface the
+        // original error below regardless.
+      }
+      Swal.fire('Generation Failed', message, 'error');
     } finally {
       this.isGenerating.set(false);
     }
@@ -229,10 +241,16 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const settings = this.companySettings();
+    if (!settings?.gstin) {
+      Swal.fire('Settings Missing', 'Company GSTIN is required to cancel via the sandbox.', 'warning');
+      return;
+    }
+
     this.isCancelling.set(true);
     try {
       await this.loadingService.run(async () => {
-        await this.einvoiceService.cancelEInvoice(invoice.id!, reason);
+        await this.einvoiceService.cancelEInvoiceRemote(invoice, reason, settings.gstin);
         const updated: Invoice = { ...invoice, eInvoiceStatus: 'cancelled', cancelReason: reason };
         this.selectedInvoice.set(updated);
         this.invoices.update((list) =>
@@ -400,12 +418,13 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       generated: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
       cancelled: 'bg-rose-100 text-rose-700 border border-rose-200',
       pending: 'bg-amber-100 text-amber-700 border border-amber-200',
+      failed: 'bg-red-100 text-red-700 border border-red-200',
     };
     return map[status] ?? map['pending'];
   }
 
   getStatusLabel(status: string): string {
-    return { generated: 'Generated', cancelled: 'Cancelled', pending: 'Pending' }[status] ?? 'Pending';
+    return { generated: 'Generated', cancelled: 'Cancelled', pending: 'Pending', failed: 'Failed' }[status] ?? 'Pending';
   }
 
   formatDate(ts: any): string {
@@ -420,17 +439,6 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
 
   formatCurrency(v: number): string {
     return '₹ ' + (v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
-  private buildAckNo(): string {
-    const ts = Date.now().toString();
-    return ts.substring(ts.length - 13);
-  }
-
-  private buildAckDt(): string {
-    const d = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   }
 
   // ─── HTML Invoice Builder ──────────────────────────────────────────────────

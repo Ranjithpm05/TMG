@@ -36,7 +36,7 @@
   }
 
   <!-- Stats cards -->
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
     <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
       <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total Invoices</p>
       <p class="text-3xl font-black text-slate-800 mt-1">{{ stats().total }}</p>
@@ -49,6 +49,10 @@
       <p class="text-xs font-semibold text-emerald-500 uppercase tracking-wide">Generated</p>
       <p class="text-3xl font-black text-emerald-600 mt-1">{{ stats().generated }}</p>
     </div>
+    <div class="bg-red-50 rounded-2xl p-4 shadow-sm border border-red-100 cursor-pointer hover:border-red-300 transition-colors" (click)="setFilterTab('failed')">
+      <p class="text-xs font-semibold text-red-500 uppercase tracking-wide">Failed</p>
+      <p class="text-3xl font-black text-red-600 mt-1">{{ stats().failed }}</p>
+    </div>
     <div class="bg-rose-50 rounded-2xl p-4 shadow-sm border border-rose-100 cursor-pointer hover:border-rose-300 transition-colors" (click)="setFilterTab('cancelled')">
       <p class="text-xs font-semibold text-rose-500 uppercase tracking-wide">Cancelled</p>
       <p class="text-3xl font-black text-rose-600 mt-1">{{ stats().cancelled }}</p>
@@ -60,7 +64,7 @@
     <div class="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 pb-3 border-b border-slate-100">
       <!-- Tabs -->
       <div class="flex gap-1 p-1 bg-slate-100 rounded-xl">
-        @for (tab of [['all','All'],['pending','Pending'],['generated','Generated'],['cancelled','Cancelled']]; track tab[0]) {
+        @for (tab of [['all','All'],['pending','Pending'],['generated','Generated'],['failed','Failed'],['cancelled','Cancelled']]; track tab[0]) {
         <button (click)="setFilterTab($any(tab[0]))"
           [class]="filterTab() === tab[0] ? 'bg-white text-slate-800 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700'"
           class="px-3 py-1.5 rounded-lg text-sm transition-all">
@@ -217,7 +221,7 @@
         View JSON
       </button>
 
-      @if (!inv.eInvoiceStatus || inv.eInvoiceStatus === 'pending') {
+      @if (!inv.eInvoiceStatus || inv.eInvoiceStatus === 'pending' || inv.eInvoiceStatus === 'failed') {
       <button (click)="generateEInvoice()" [disabled]="isGenerating()"
         class="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm">
         @if (isGenerating()) {
@@ -230,7 +234,7 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
           </svg>
-          Generate E-Invoice
+          {{ inv.eInvoiceStatus === 'failed' ? 'Retry Generation' : 'Generate E-Invoice' }}
         }
       </button>
       }
@@ -262,7 +266,7 @@
         </div>
         <div>
           <p class="font-semibold text-emerald-800 text-sm">E-Invoice Successfully Generated</p>
-          <p class="text-xs text-emerald-600 mt-0.5">IRN has been computed and QR code embedded. Ready for submission to IRP.</p>
+          <p class="text-xs text-emerald-600 mt-0.5">Registered with the IRP sandbox — IRN and signed QR code received.</p>
         </div>
       </div>
       }
@@ -276,6 +280,20 @@
         <div>
           <p class="font-semibold text-rose-800 text-sm">E-Invoice Cancelled</p>
           <p class="text-xs text-rose-600 mt-0.5">Reason: {{ inv.cancelReason }}</p>
+        </div>
+      </div>
+      }
+      @if (inv.eInvoiceStatus === 'failed') {
+      <div class="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl p-4">
+        <div class="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+        </div>
+        <div>
+          <p class="font-semibold text-red-800 text-sm">E-Invoice Generation Failed</p>
+          <p class="text-xs text-red-600 mt-0.5">{{ inv.eInvoiceErrorMessage || 'The sandbox rejected the request.' }}</p>
+          <p class="text-xs text-red-500 mt-0.5">Click <strong>Retry Generation</strong> above once corrected.</p>
         </div>
       </div>
       }
@@ -486,22 +504,22 @@
 
       <!-- Workflow guide -->
       <div class="bg-slate-50 rounded-2xl border border-slate-100 p-5">
-        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">E-Invoice Workflow</h3>
+        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">E-Invoice → E-Way Bill Workflow</h3>
         <ol class="space-y-3">
           <li class="flex gap-2.5 text-sm">
             <span class="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
-              [class]="!inv.eInvoiceStatus || inv.eInvoiceStatus === 'pending' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'">1</span>
+              [class]="!inv.eInvoiceStatus || inv.eInvoiceStatus === 'pending' || inv.eInvoiceStatus === 'failed' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'">1</span>
             <div>
               <p class="font-semibold text-slate-700">Generate E-Invoice</p>
-              <p class="text-xs text-slate-400">Compute IRN &amp; QR code from invoice data.</p>
+              <p class="text-xs text-slate-400">Registers the invoice with the IRP sandbox and returns a real IRN &amp; signed QR code.</p>
             </div>
           </li>
           <li class="flex gap-2.5 text-sm">
             <span class="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
               [class]="inv.eInvoiceStatus === 'generated' ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'">2</span>
             <div>
-              <p class="font-semibold text-slate-700">Submit to IRP</p>
-              <p class="text-xs text-slate-400">Download JSON and submit via GSP/IRP portal for official registration.</p>
+              <p class="font-semibold text-slate-700">Generate E-Way Bill</p>
+              <p class="text-xs text-slate-400">Once an IRN exists, go to the E-Way Bill screen to generate it using this invoice's IRN.</p>
             </div>
           </li>
           <li class="flex gap-2.5 text-sm">

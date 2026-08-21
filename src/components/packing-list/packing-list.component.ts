@@ -28,6 +28,7 @@ import { DesignService } from '../../services/design.service';
 import { LoadingService } from '../../services/loading.service';
 import { priceAfterMargin } from '../../services/pricing.util';
 import { QzTrayService } from '../../services/qz-tray.service';
+import { getStageBadgeClass, getStageStatusLabel } from '../../services/document-stage.util';
 import {
   BoxLabelPrinterSettings,
   buildBoxLabelZplBatch,
@@ -2495,6 +2496,28 @@ export class PackingListComponent implements OnInit, OnDestroy {
       const date = raw?.toDate ? raw.toDate() : new Date(raw);
       return date.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch { return '-'; }
+  }
+
+  // Compact E-Invoice / E-Way Bill status badges on the Invoices tab — reads
+  // the same status fields the E-Invoice/E-Way Bill screens use, via the
+  // shared document-stage util, so this list stays in sync with them without
+  // duplicating the status logic.
+  eInvoiceBadgeClass(invoice: Invoice): string {
+    return getStageBadgeClass(invoice.eInvoiceStatus || 'pending');
+  }
+
+  eInvoiceBadgeLabel(invoice: Invoice): string {
+    return getStageStatusLabel(invoice.eInvoiceStatus || 'pending');
+  }
+
+  ewbBadgeClass(invoice: Invoice): string {
+    if (invoice.eInvoiceStatus !== 'generated') return getStageBadgeClass('not-started');
+    return getStageBadgeClass(invoice.ewbStatus || 'pending');
+  }
+
+  ewbBadgeLabel(invoice: Invoice): string {
+    if (invoice.eInvoiceStatus !== 'generated') return getStageStatusLabel('not-started');
+    return getStageStatusLabel(invoice.ewbStatus || 'pending');
   }
 
   countPackedLines(lines: PackingListLine[]): number {
