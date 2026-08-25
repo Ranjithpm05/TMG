@@ -55,7 +55,7 @@ export const generateEInvoiceIrn = onCall(
       GetSignedInvoice: '1',
       ...data.payload,
     };
-
+    console.log("**********body", body)
     if (EINVOICE_DEBUG_LOG.value() === 'true') {
       console.log('generateEInvoiceIrn request URL:', `${WEBTEL_EINVOICE_BASE_URL.value()}/GenIRN2`);
       console.log('generateEInvoiceIrn request body (secrets redacted):', JSON.stringify(redactSecrets(body), null, 2));

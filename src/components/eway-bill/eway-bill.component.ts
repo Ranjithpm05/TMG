@@ -18,9 +18,11 @@ import {
   EWAY_BILL_VEHICLE_TYPES,
 } from '../../models/eway-bill.model';
 import { CompanySettings, INDIA_STATE_CODES } from '../../models/einvoice.model';
+import { Transport } from '../../models/transport.model';
 import { InvoiceService } from '../../services/invoice.service';
 import { EwayBillService } from '../../services/eway-bill.service';
 import { CompanySettingsService } from '../../services/company-settings.service';
+import { TransportService } from '../../services/transport.service';
 import { LoadingService } from '../../services/loading.service';
 import { fetchLogoDataUri } from '../../services/company-logo.util';
 import { buildEwbQrContent, generateQrDataUrl, generateBarcodeDataUrl } from '../../services/eway-bill-pdf.util';
@@ -38,6 +40,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   private invoiceService = inject(InvoiceService);
   private ewayBillService = inject(EwayBillService);
   private companySettingsService = inject(CompanySettingsService);
+  private transportService = inject(TransportService);
   protected loadingService = inject(LoadingService);
   private subs: Subscription[] = [];
 
@@ -48,6 +51,12 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   allInvoices = signal<Invoice[]>([]);
   selectedInvoice = signal<Invoice | null>(null);
   companySettings = signal<CompanySettings | null>(null);
+  transports = signal<Transport[]>([]);
+  // Which Transport Master record (if any) is currently backing the
+  // transporterId/transporterName fields below — '' means the user is
+  // entering/overriding those fields manually rather than picking a record.
+  selectedTransportId = signal<string>('');
+  activeTransports = computed(() => this.transports().filter((t) => t.status === 'Active'));
 
   isLoading = signal(true);
   isGenerating = signal(false);
@@ -120,6 +129,11 @@ export class EwayBillComponent implements OnInit, OnDestroy {
         this.companySettings.set(s);
       })
     );
+    this.subs.push(
+      this.transportService.getTransports().subscribe((list) => {
+        this.transports.set(list);
+      })
+    );
   }
 
   ngOnDestroy(): void {
@@ -142,11 +156,16 @@ export class EwayBillComponent implements OnInit, OnDestroy {
 
   openGenerateModal(): void {
     const invoice = this.selectedInvoice();
+    // Pre-fill the transporter from Transport Master — first by the exact
+    // record the invoice/DC already used (transportId), falling back to a
+    // name match, so the user isn't forced to retype it every time.
+    const matched = this.findTransportForInvoice(invoice);
+    this.selectedTransportId.set(matched?.id || '');
     this.generateForm.set({
       distance: 0,
       transMode: '1',
-      transporterId: '',
-      transporterName: '',
+      transporterId: matched?.gstNo || '',
+      transporterName: matched?.transportName || '',
       vehicleNo: '',
       vehicleType: 'R',
       // Transport document reference is the invoice's own DC No./today's
@@ -165,6 +184,32 @@ export class EwayBillComponent implements OnInit, OnDestroy {
 
   updateGenerateField<K extends keyof EwayBillTransportDetails>(field: K, value: EwayBillTransportDetails[K]): void {
     this.generateForm.update((f) => ({ ...f, [field]: value }));
+  }
+
+  // Selecting a Transport Master record fills transporterId/transporterName
+  // from it (gstNo doubles as the GSTIN/TRANSIN Webtel's TransId expects);
+  // selecting "— Enter manually —" (empty value) leaves whatever is already
+  // typed untouched rather than clearing it.
+  onTransportSelected(transportId: string): void {
+    this.selectedTransportId.set(transportId);
+    if (!transportId) return;
+    const transport = this.transports().find((t) => t.id === transportId);
+    if (!transport) return;
+    this.generateForm.update((f) => ({
+      ...f,
+      transporterId: transport.gstNo || '',
+      transporterName: transport.transportName,
+    }));
+  }
+
+  private findTransportForInvoice(invoice: Invoice | null): Transport | undefined {
+    if (!invoice) return undefined;
+    const list = this.transports();
+    if (invoice.transportId) {
+      const byId = list.find((t) => t.id === invoice.transportId);
+      if (byId) return byId;
+    }
+    return invoice.transport ? list.find((t) => t.transportName === invoice.transport) : undefined;
   }
 
   private todayYyyymmdd(): string {

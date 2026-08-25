@@ -364,6 +364,18 @@
         </div>
       </div>
 
+      <div>
+        <label class="block text-xs font-semibold text-slate-500 mb-1.5">Transporter (from Transport Master)</label>
+        <select [value]="selectedTransportId()"
+          (change)="onTransportSelected($any($event.target).value)"
+          class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white">
+          <option value="">— Enter manually below —</option>
+          @for (t of activeTransports(); track t.id) {
+            <option [value]="t.id">{{ t.transportName }}</option>
+          }
+        </select>
+      </div>
+
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="block text-xs font-semibold text-slate-500 mb-1.5">Transporter ID / GSTIN</label>
@@ -379,6 +391,7 @@
             class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
         </div>
       </div>
+      <p class="text-[11px] text-slate-400 -mt-2">Selecting a transporter fills the fields above from Transport Master; you can still edit them for a one-off transporter.</p>
 
       @if (generateForm().transMode === '1') {
       <div class="grid grid-cols-2 gap-4">
