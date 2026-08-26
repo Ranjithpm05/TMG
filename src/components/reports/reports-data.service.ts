@@ -1,6 +1,6 @@
 import { Injectable, signal, inject, computed } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { switchMap, tap, catchError, of } from 'rxjs';
+import { switchMap, tap, catchError, finalize, of } from 'rxjs';
 
 import { SalesOrderService } from '../../services/sales-order.service';
 import { ClientService } from '../../services/client.service';
@@ -74,15 +74,16 @@ export class ReportsDataService {
     toObservable(this.ordersTrigger).pipe(
       switchMap(({ start, end, clientId }) => {
         this.ordersError.set(null);
+        this.isLoadingOrders.set(true);
         return this.salesOrderService.getSalesOrdersInRange(start, end, clientId || undefined).pipe(
           catchError((err) => {
             console.error('Reports: failed to load sales orders', err);
             this.ordersError.set('Unable to load report data. Please try again.');
             return of([] as SalesOrder[]);
-          })
+          }),
+          finalize(() => this.isLoadingOrders.set(false))
         );
-      }),
-      tap({ subscribe: () => this.isLoadingOrders.set(true), finalize: () => this.isLoadingOrders.set(false) })
+      })
     ),
     { initialValue: [] as SalesOrder[] }
   );

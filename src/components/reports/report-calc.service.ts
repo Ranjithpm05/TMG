@@ -1,6 +1,6 @@
 import { Injectable, inject, computed, signal } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { from, of, switchMap, tap, catchError } from 'rxjs';
+import { from, of, switchMap, catchError, finalize } from 'rxjs';
 
 import { ReportsDataService } from './reports-data.service';
 import { PickListService } from '../../services/pick-list.service';
@@ -274,15 +274,16 @@ export class ReportCalcService {
         if (!orderIds.length) return of(EMPTY_DISPATCH_RESULT);
         const cached = this.dispatchCache.get(signature);
         if (cached) return of(cached);
+        this.isLoadingDispatch.set(true);
         return from(this.loadDispatchAttribution(orderIds, signature)).pipe(
           catchError((err) => {
             console.error('Reports: failed to load dispatch data', err);
             this.dispatchError.set('Unable to load report data. Please try again.');
             return of(EMPTY_DISPATCH_RESULT);
-          })
+          }),
+          finalize(() => this.isLoadingDispatch.set(false))
         );
-      }),
-      tap({ subscribe: () => this.isLoadingDispatch.set(true), finalize: () => this.isLoadingDispatch.set(false) })
+      })
     ),
     { initialValue: EMPTY_DISPATCH_RESULT }
   );
