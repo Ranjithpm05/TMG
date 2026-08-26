@@ -289,10 +289,14 @@ export class ReportCalcService {
   );
 
   private async loadDispatchAttribution(orderIds: string[], signature: string): Promise<DispatchAttributionResult> {
+    const t0 = performance.now();
     const pickLists = await this.pickListService.getPickListsByOrderIdsOnce(orderIds);
+    console.debug(`[Reports] pick lists: ${pickLists.length} for ${orderIds.length} orders in ${Math.round(performance.now() - t0)}ms`);
+    const t1 = performance.now();
     const attribution = pickLists.length
       ? await this.buildDispatchAttribution(pickLists)
       : { lineRecords: [] as DispatchLineRecord[], unassignedRecords: [] as DispatchLineRecord[] };
+    console.debug(`[Reports] dispatch attribution: ${attribution.lineRecords.length} lines in ${Math.round(performance.now() - t1)}ms`);
     const result: DispatchAttributionResult = { pickLists, ...attribution };
 
     this.dispatchCache.set(signature, result);
@@ -467,6 +471,7 @@ export class ReportCalcService {
 
   // ── Fan-out: Pick List -> Packing List -> DC -> Invoice ────────────────
   private async buildDispatchAttribution(pickLists: PickList[]): Promise<DispatchFanOutResult> {
+    const tStage1 = performance.now();
     const perPickList = await mapWithConcurrency(pickLists, 20, async (pickList) => {
       const [lines, packingLists] = await Promise.all([
         this.pickListService.getPickListLinesOnce(pickList.id!),
@@ -474,6 +479,7 @@ export class ReportCalcService {
       ]);
       return { pickList, lines, packingLists };
     });
+    console.debug(`[Reports] fan-out stage 1 (lines+packing refs): ${pickLists.length} pick lists in ${Math.round(performance.now() - tStage1)}ms`);
 
     const linesByPickListId = new Map<string, PickListLine[]>();
     const lineRecords = new Map<string, DispatchLineRecord>();
@@ -503,6 +509,7 @@ export class ReportCalcService {
     if (!packingListById.size) return { lineRecords: [...lineRecords.values()], unassignedRecords: [] };
 
     const unassignedRecords: DispatchLineRecord[] = [];
+    const tStage2 = performance.now();
 
     await mapWithConcurrency([...packingListById.values()], 20, async (packingList) => {
       const [packingLines, dcs] = await Promise.all([
@@ -644,6 +651,7 @@ export class ReportCalcService {
         }
       }
     });
+    console.debug(`[Reports] fan-out stage 2 (packing lines+DCs+invoices): ${packingListById.size} packing lists in ${Math.round(performance.now() - tStage2)}ms`);
 
     return { lineRecords: [...lineRecords.values()], unassignedRecords };
   }

@@ -75,7 +75,9 @@ export class ReportsDataService {
       switchMap(({ start, end, clientId }) => {
         this.ordersError.set(null);
         this.isLoadingOrders.set(true);
+        const t0 = performance.now();
         return this.salesOrderService.getSalesOrdersInRange(start, end, clientId || undefined).pipe(
+          tap((orders) => console.debug(`[Reports] sales orders: ${orders.length} rows in ${Math.round(performance.now() - t0)}ms`)),
           catchError((err) => {
             console.error('Reports: failed to load sales orders', err);
             this.ordersError.set('Unable to load report data. Please try again.');
@@ -90,7 +92,9 @@ export class ReportsDataService {
 
   readonly clients = toSignal(
     this.clientService.getClients().pipe(
-      tap({ subscribe: () => this.isLoadingMasterData.set(true), finalize: () => this.isLoadingMasterData.set(false) }),
+      tap({ subscribe: () => { this.isLoadingMasterData.set(true); this.clientsT0 = performance.now(); } }),
+      tap((clients) => console.debug(`[Reports] clients: ${clients.length} rows in ${Math.round(performance.now() - this.clientsT0)}ms`)),
+      tap({ finalize: () => this.isLoadingMasterData.set(false) }),
       catchError((err) => {
         console.error('Reports: failed to load clients', err);
         return of([] as Client[]);
@@ -98,8 +102,12 @@ export class ReportsDataService {
     ),
     { initialValue: [] as Client[] }
   );
+  private clientsT0 = 0;
+  private designsT0 = 0;
   readonly designs = toSignal(
     this.designService.getDesigns().pipe(
+      tap({ subscribe: () => { this.designsT0 = performance.now(); } }),
+      tap((designs) => console.debug(`[Reports] designs: ${designs.length} rows in ${Math.round(performance.now() - this.designsT0)}ms`)),
       catchError((err) => {
         console.error('Reports: failed to load designs', err);
         return of([] as Design[]);
