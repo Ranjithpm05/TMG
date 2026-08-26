@@ -1,0 +1,17 @@
+@if (error()) {
+  <div class="border border-red-200 bg-red-50 rounded-lg p-6 text-center mb-4">
+    <p class="text-sm text-red-700 mb-3">{{ error() }}</p>
+    <button type="button" (click)="retry.emit()" class="inline-flex items-center px-3 py-2 border border-red-300 shadow-sm text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-100">
+      Retry
+    </button>
+  </div>
+} @else if (loading()) {
+  <div class="mb-4" aria-live="polite" aria-label="Loading {{ label() }} Report">
+    <p class="text-xs text-gray-500 mb-2">Loading {{ label() }} Report…</p>
+    <div class="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100">
+      @for (row of [1, 2, 3, 4, 5]; track row) {
+        <div class="h-9 bg-gray-100 animate-pulse" [style.animationDelay.ms]="row * 80"></div>
+      }
+    </div>
+  </div>
+}

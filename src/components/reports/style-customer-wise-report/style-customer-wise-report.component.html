@@ -1,66 +1,117 @@
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-  <h3 class="text-lg font-semibold text-gray-800">Style No. & Customer Wise Sales Order Details</h3>
+  <h3 class="text-lg font-semibold text-gray-800">Style No. & Customer Wise Report</h3>
   <div class="flex gap-2">
-    <button (click)="exportExcel()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+    <button (click)="exportExcel()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
       Export Excel
     </button>
-    <button (click)="exportPdf()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+    <button (click)="exportPdf()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
       Export PDF
     </button>
-    <button (click)="printReport()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+    <button (click)="printReport()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
       Print
     </button>
   </div>
 </div>
 <p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
 
+<app-report-status [loading]="isLoading()" [error]="error()" label="Style No. & Customer Wise" (retry)="retry()" />
+
+@if (!isLoading() && !error()) {
 @let styleCustomerWise = report();
-<div class="overflow-x-auto border border-gray-200 rounded-lg">
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+  <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Order Qty</p>
+    <p class="mt-1 text-2xl font-semibold text-gray-900">{{ styleCustomerWise.grandTotal.totalQty | number }}</p>
+  </div>
+  <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+    <p class="text-xs font-medium text-blue-600 uppercase tracking-wide">Total Dispatched Qty</p>
+    <p class="mt-1 text-2xl font-semibold text-blue-900">{{ styleCustomerWise.grandTotal.dispatchedQty | number }}</p>
+  </div>
+  <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+    <p class="text-xs font-medium text-amber-600 uppercase tracking-wide">Total Extra Dispatched</p>
+    <p class="mt-1 text-2xl font-semibold text-amber-900">{{ styleCustomerWise.grandTotal.extraQty | number }}</p>
+  </div>
+  <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+    <p class="text-xs font-medium text-rose-600 uppercase tracking-wide">Total Pending Qty</p>
+    <p class="mt-1 text-2xl font-semibold text-rose-900">{{ styleCustomerWise.grandTotal.pendingQty | number }}</p>
+  </div>
+</div>
+
+<div>
   @if (styleCustomerWise.customers.length > 0) {
+    <div class="overflow-x-auto border border-gray-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-gray-800 text-white">
         <tr>
           <th class="px-3 py-3 text-center font-medium">#</th>
           <th class="px-4 py-3 text-left font-medium">Customer Name</th>
+          <th class="px-4 py-3 text-left font-medium">Agent Name</th>
+          <th class="px-4 py-3 text-left font-medium">Style No</th>
           <th class="px-4 py-3 text-left font-medium">Fabric Description</th>
-          <th class="px-4 py-3 text-left font-medium">Design No</th>
           <th class="px-4 py-3 text-left font-medium">Color</th>
           <th class="px-4 py-3 text-left font-medium">Sleeve Type</th>
           @for (size of styleCustomerWise.sizes; track size) {
             <th class="px-3 py-3 text-center font-medium whitespace-nowrap">{{ size }}</th>
           }
-          <th class="px-3 py-3 text-center font-medium">Total Qty</th>
+          <th class="px-3 py-3 text-center font-medium">Order Qty</th>
+          <th class="px-3 py-3 text-center font-medium">Dispatched Qty</th>
+          <th class="px-3 py-3 text-center font-medium">Extra Qty</th>
+          <th class="px-3 py-3 text-center font-medium">Pending Qty</th>
           <th class="px-4 py-3 text-right font-medium">WSP</th>
           <th class="px-4 py-3 text-right font-medium">Value</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-200">
-        @for (customer of styleCustomerWise.customers; track customer.clientName) {
+        @for (customer of pagedCustomers(); track customer.clientName) {
           @for (style of customer.styles; track style.styleNo) {
-            @for (row of style.rows; track row.color; let i = $index) {
+            @for (row of style.rows; track row.key; let i = $index) {
               <tr class="hover:bg-gray-50">
-                <td class="px-3 py-2 text-center text-gray-500">{{ i + 1 }}</td>
+                <td class="px-3 py-2 text-center text-gray-500">
+                  <button type="button" (click)="toggle(row.key)" class="mr-1 text-gray-400 hover:text-gray-700">{{ isExpanded(row.key) ? '▾' : '▸' }}</button>
+                </td>
                 <td class="px-4 py-2 text-gray-900 whitespace-nowrap">{{ customer.clientName }}</td>
-                <td class="px-4 py-2 text-gray-700">{{ style.fabricDescription }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ customer.agentName }}</td>
                 <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ style.styleNo }}</td>
+                <td class="px-4 py-2 text-gray-700">{{ style.fabricDescription }}</td>
                 <td class="px-4 py-2 text-gray-700">{{ row.color }}</td>
                 <td class="px-4 py-2 text-gray-700">{{ row.sleeveType }}</td>
                 @for (size of styleCustomerWise.sizes; track size) {
                   <td class="px-3 py-2 text-center text-gray-700">{{ row.qtyBySize[size] ?? 0 }}</td>
                 }
                 <td class="px-3 py-2 text-center font-semibold text-gray-900">{{ row.totalQty }}</td>
+                <td class="px-3 py-2 text-center text-blue-700 font-medium">{{ row.dispatchedQty }}</td>
+                <td class="px-3 py-2 text-center" [class.text-amber-700]="row.extraQty > 0" [class.font-semibold]="row.extraQty > 0">{{ row.extraQty }}</td>
+                <td class="px-3 py-2 text-center" [class.text-rose-700]="row.pendingQty > 0" [class.font-semibold]="row.pendingQty > 0">{{ row.pendingQty }}</td>
                 <td class="px-4 py-2 text-right text-gray-700">{{ row.wsp | number:'1.2-2' }}</td>
                 <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ row.value | number:'1.2-2' }}</td>
               </tr>
+              @if (isExpanded(row.key)) {
+                <tr class="bg-blue-50/40 text-xs">
+                  <td class="px-3 py-1.5"></td>
+                  <td class="px-4 py-1.5 text-blue-700 font-medium" [attr.colspan]="5">Dispatched Qty by size</td>
+                  @for (size of styleCustomerWise.sizes; track size) {
+                    <td class="px-3 py-1.5 text-center text-blue-700">{{ row.dispatchedBySize[size] ?? 0 }}</td>
+                  }
+                  <td class="px-3 py-1.5"></td>
+                  <td class="px-3 py-1.5 text-center text-blue-700 font-medium">{{ row.dispatchedQty }}</td>
+                  <td class="px-3 py-1.5"></td>
+                  <td class="px-3 py-1.5"></td>
+                  <td class="px-4 py-1.5"></td>
+                  <td class="px-4 py-1.5"></td>
+                </tr>
+              }
             }
           }
           <tr class="bg-indigo-100 font-bold">
             <td class="px-3 py-2"></td>
-            <td colspan="5" class="px-4 py-2 text-indigo-900">Customer Total: {{ customer.clientName }}</td>
+            <td colspan="6" class="px-4 py-2 text-indigo-900">Customer Total: {{ customer.clientName }}</td>
             @for (size of styleCustomerWise.sizes; track size) {
               <td class="px-3 py-2"></td>
             }
             <td class="px-3 py-2 text-center text-indigo-900">{{ customer.totalQty }}</td>
+            <td class="px-3 py-2 text-center text-indigo-900">{{ customer.dispatchedQty }}</td>
+            <td class="px-3 py-2 text-center text-indigo-900">{{ customer.extraQty }}</td>
+            <td class="px-3 py-2 text-center text-indigo-900">{{ customer.pendingQty }}</td>
             <td class="px-4 py-2"></td>
             <td class="px-4 py-2 text-right text-indigo-900">{{ customer.value | number:'1.2-2' }}</td>
           </tr>
@@ -68,19 +119,31 @@
       </tbody>
       <tfoot class="bg-gray-100 font-bold">
         <tr>
-          <td colspan="6" class="px-4 py-3 text-gray-900">Grand Total</td>
+          <td colspan="7" class="px-4 py-3 text-gray-900">Grand Total</td>
           @for (size of styleCustomerWise.sizes; track size) {
             <td class="px-3 py-3"></td>
           }
           <td class="px-3 py-3 text-center text-gray-900">{{ styleCustomerWise.grandTotal.totalQty }}</td>
+          <td class="px-3 py-3 text-center text-blue-900">{{ styleCustomerWise.grandTotal.dispatchedQty }}</td>
+          <td class="px-3 py-3 text-center text-amber-900">{{ styleCustomerWise.grandTotal.extraQty }}</td>
+          <td class="px-3 py-3 text-center text-rose-900">{{ styleCustomerWise.grandTotal.pendingQty }}</td>
           <td class="px-4 py-3"></td>
           <td class="px-4 py-3 text-right text-gray-900">{{ styleCustomerWise.grandTotal.value | number:'1.2-2' }}</td>
         </tr>
       </tfoot>
     </table>
+    </div>
+    <app-report-pagination
+      [total]="styleCustomerWise.customers.length"
+      [page]="currentPage()"
+      [pageSize]="pageSize()"
+      (pageChange)="setPage($event)"
+      (pageSizeChange)="setPageSize($event)"
+    />
   } @else {
     <div class="text-center py-10">
       <p class="text-sm text-gray-500">No orders match the current filters.</p>
     </div>
   }
 </div>
+}

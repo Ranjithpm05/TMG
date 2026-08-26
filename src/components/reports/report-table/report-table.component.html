@@ -1,0 +1,92 @@
+<ng-template #rowTpl let-row="row" let-depth="depth" let-path="path" let-index="index">
+  <tr class="hover:bg-gray-50">
+    <td class="px-3 py-2 text-center text-gray-500">
+      @if (depth === 0) { {{ index + 1 }} }
+    </td>
+    <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap" [style.paddingLeft.px]="16 + depth * 20">
+      @if (hasChildren(row)) {
+        <button type="button" (click)="toggle(path)" class="mr-1 w-4 inline-block text-gray-400 hover:text-gray-700">{{ isExpanded(path) ? '▾' : '▸' }}</button>
+      } @else if (depth > 0) {
+        <span class="mr-1 w-4 inline-block"></span>
+      }
+      {{ row.label }}
+    </td>
+    @if (secondaryHeader()) {
+      <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ depth === 0 && secondaryFn() ? secondaryFn()!(row) : '' }}</td>
+    }
+    @if (countHeader()) {
+      <td class="px-3 py-2 text-center text-gray-700">{{ depth === 0 && countFn() ? countFn()!(row) : '' }}</td>
+    }
+    <td class="px-3 py-2 text-center text-gray-700">{{ row.orderQty | number }}</td>
+    <td class="px-3 py-2 text-center text-blue-700 font-medium">{{ row.dispatchedQty | number }}</td>
+    <td class="px-3 py-2 text-center" [class.text-amber-700]="row.extraQty > 0" [class.font-semibold]="row.extraQty > 0">{{ row.extraQty | number }}</td>
+    <td class="px-3 py-2 text-center" [class.text-rose-700]="row.pendingQty > 0" [class.font-semibold]="row.pendingQty > 0">{{ row.pendingQty | number }}</td>
+    @if (valueHeader()) {
+      <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ depth === 0 && valueFn() ? (valueFn()!(row) | number:'1.2-2') : '' }}</td>
+    }
+  </tr>
+  @if (hasChildren(row) && isExpanded(path)) {
+    @for (child of row.children; track child.key; let ci = $index) {
+      <ng-container *ngTemplateOutlet="rowTpl; context: { row: child, depth: depth + 1, path: path + '>' + child.key, index: ci }"></ng-container>
+    }
+  }
+</ng-template>
+
+<div>
+  @if (rows().length > 0) {
+    <div class="overflow-x-auto border border-gray-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-800 text-white">
+        <tr>
+          <th class="px-3 py-3 text-center font-medium">#</th>
+          <th class="px-4 py-3 text-left font-medium">{{ labelHeader() }}</th>
+          @if (secondaryHeader()) {
+            <th class="px-4 py-3 text-left font-medium">{{ secondaryHeader() }}</th>
+          }
+          @if (countHeader()) {
+            <th class="px-3 py-3 text-center font-medium">{{ countHeader() }}</th>
+          }
+          <th class="px-3 py-3 text-center font-medium">Order Qty</th>
+          <th class="px-3 py-3 text-center font-medium">Dispatched Qty</th>
+          <th class="px-3 py-3 text-center font-medium">Extra Qty</th>
+          <th class="px-3 py-3 text-center font-medium">Pending Qty</th>
+          @if (valueHeader()) {
+            <th class="px-4 py-3 text-right font-medium">{{ valueHeader() }}</th>
+          }
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        @for (row of pagedRows(); track row.key; let i = $index) {
+          <ng-container *ngTemplateOutlet="rowTpl; context: { row: row, depth: 0, path: row.key, index: startIndex() + i }"></ng-container>
+        }
+      </tbody>
+      <tfoot class="bg-gray-100 font-bold">
+        <tr>
+          <td class="px-3 py-3"></td>
+          <td class="px-4 py-3 text-gray-900">Grand Total</td>
+          @if (secondaryHeader()) { <td class="px-4 py-3"></td> }
+          @if (countHeader()) { <td class="px-3 py-3"></td> }
+          <td class="px-3 py-3 text-center text-gray-900">{{ grandTotal().orderQty | number }}</td>
+          <td class="px-3 py-3 text-center text-blue-900">{{ grandTotal().dispatchedQty | number }}</td>
+          <td class="px-3 py-3 text-center text-amber-900">{{ grandTotal().extraQty | number }}</td>
+          <td class="px-3 py-3 text-center text-rose-900">{{ grandTotal().pendingQty | number }}</td>
+          @if (valueHeader()) {
+            <td class="px-4 py-3 text-right text-gray-900">{{ valueGrandTotal() ?? 0 | number:'1.2-2' }}</td>
+          }
+        </tr>
+      </tfoot>
+    </table>
+    </div>
+    <app-report-pagination
+      [total]="rows().length"
+      [page]="currentPage()"
+      [pageSize]="pageSize()"
+      (pageChange)="setPage($event)"
+      (pageSizeChange)="setPageSize($event)"
+    />
+  } @else {
+    <div class="text-center py-10">
+      <p class="text-sm text-gray-500">{{ emptyMessage() }}</p>
+    </div>
+  }
+</div>

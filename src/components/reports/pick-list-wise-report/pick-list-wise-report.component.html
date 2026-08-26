@@ -1,5 +1,5 @@
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-  <h3 class="text-lg font-semibold text-gray-800">Exceed Order Report</h3>
+  <h3 class="text-lg font-semibold text-gray-800">Pick List Wise Report</h3>
   <div class="flex gap-2">
     <button (click)="exportExcel()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
       Export Excel
@@ -13,13 +13,13 @@
   </div>
 </div>
 <p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
-<p class="text-xs text-gray-500 mb-4">Showing SKUs dispatched beyond their ordered quantity (Dispatched Qty &gt; Order Qty).</p>
 
-<app-report-status [loading]="isLoading()" [error]="error()" label="Exceed Order" (retry)="retry()" />
+<app-report-status [loading]="isLoading()" [error]="error()" label="Pick List Wise" (retry)="retry()" />
 
 @if (!isLoading() && !error()) {
 <app-report-summary-cards
   [orderQty]="grandTotal().orderQty"
+  [pickedQty]="grandTotal().pickedQty"
   [dispatchedQty]="grandTotal().dispatchedQty"
   [extraQty]="grandTotal().extraQty"
   [pendingQty]="grandTotal().pendingQty"
@@ -32,47 +32,58 @@
       <thead class="bg-gray-800 text-white">
         <tr>
           <th class="px-3 py-3 text-center font-medium">#</th>
-          <th class="px-4 py-3 text-left font-medium">Style No</th>
+          <th class="px-4 py-3 text-left font-medium">Pick List No</th>
+          <th class="px-4 py-3 text-left font-medium">Date</th>
+          <th class="px-4 py-3 text-left font-medium">Customer</th>
+          <th class="px-4 py-3 text-left font-medium">Agent</th>
+          <th class="px-4 py-3 text-left font-medium">Style</th>
           <th class="px-4 py-3 text-left font-medium">Product</th>
           <th class="px-4 py-3 text-left font-medium">Color</th>
           <th class="px-3 py-3 text-center font-medium">Size</th>
           <th class="px-4 py-3 text-left font-medium">Sleeve</th>
-          <th class="px-4 py-3 text-left font-medium">Customer</th>
-          <th class="px-4 py-3 text-left font-medium">Agent</th>
           <th class="px-3 py-3 text-center font-medium">Order Qty</th>
+          <th class="px-3 py-3 text-center font-medium">Picked Qty</th>
           <th class="px-3 py-3 text-center font-medium">Dispatched Qty</th>
           <th class="px-3 py-3 text-center font-medium">Extra Qty</th>
-          <th class="px-4 py-3 text-left font-medium">DC No.</th>
-          <th class="px-4 py-3 text-left font-medium">Dispatch Date</th>
+          <th class="px-3 py-3 text-center font-medium">Pending Qty</th>
+          <th class="px-3 py-3 text-center font-medium">Status</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-200">
-        @for (row of pagedRows(); track row.joinKey; let i = $index) {
-          <tr class="bg-amber-50 hover:bg-amber-100">
+        @for (row of pagedRows(); track row.pickListId + '||' + row.styleNo + '||' + row.color + '||' + row.size + '||' + row.sleeveType; let i = $index) {
+          <tr class="hover:bg-gray-50">
             <td class="px-3 py-2 text-center text-gray-500">{{ (currentPage() - 1) * pageSize() + i + 1 }}</td>
-            <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ row.styleNo }}</td>
+            <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ row.pickListNo }}</td>
+            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ formatDate(row.createdAt) }}</td>
+            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.clientName }}</td>
+            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.agentName }}</td>
+            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.styleNo }}</td>
             <td class="px-4 py-2 text-gray-700">{{ row.group }}</td>
             <td class="px-4 py-2 text-gray-700">{{ row.color || '-' }}</td>
             <td class="px-3 py-2 text-center text-gray-700">{{ row.size }}</td>
             <td class="px-4 py-2 text-gray-700">{{ row.sleeveType || '-' }}</td>
-            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.clientName || 'Unknown Client' }}</td>
-            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.agentName }}</td>
-            <td class="px-3 py-2 text-center text-gray-700">{{ row.orderQty }}</td>
+            <td class="px-3 py-2 text-center text-gray-700">{{ row.itemType === 'Additional' ? '-' : row.orderQty }}</td>
+            <td class="px-3 py-2 text-center text-gray-700">{{ row.pickedQty }}</td>
             <td class="px-3 py-2 text-center text-blue-700 font-medium">{{ row.dispatchedQty }}</td>
-            <td class="px-3 py-2 text-center text-amber-800 font-bold">{{ row.extraQty }}</td>
-            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.lastDcNo || '-' }}</td>
-            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ formatDate(row.lastDcDate) }}</td>
+            <td class="px-3 py-2 text-center" [class.text-amber-700]="row.extraQty > 0" [class.font-semibold]="row.extraQty > 0">{{ row.extraQty }}</td>
+            <td class="px-3 py-2 text-center" [class.text-rose-700]="row.pendingQty > 0" [class.font-semibold]="row.pendingQty > 0">{{ row.itemType === 'Additional' ? '-' : row.pendingQty }}</td>
+            <td class="px-3 py-2 text-center">
+              <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" [class]="statusBadgeClass(row.displayStatus)">
+                {{ row.displayStatus }}
+              </span>
+            </td>
           </tr>
         }
       </tbody>
       <tfoot class="bg-gray-100 font-bold">
         <tr>
-          <td colspan="8" class="px-4 py-3 text-gray-900">Grand Total</td>
+          <td colspan="10" class="px-4 py-3 text-gray-900">Grand Total</td>
           <td class="px-3 py-3 text-center text-gray-900">{{ grandTotal().orderQty }}</td>
+          <td class="px-3 py-3 text-center text-gray-900">{{ grandTotal().pickedQty }}</td>
           <td class="px-3 py-3 text-center text-blue-900">{{ grandTotal().dispatchedQty }}</td>
           <td class="px-3 py-3 text-center text-amber-900">{{ grandTotal().extraQty }}</td>
-          <td class="px-4 py-3"></td>
-          <td class="px-4 py-3"></td>
+          <td class="px-3 py-3 text-center text-rose-900">{{ grandTotal().pendingQty }}</td>
+          <td class="px-3 py-3"></td>
         </tr>
       </tfoot>
     </table>
@@ -86,7 +97,7 @@
     />
   } @else {
     <div class="text-center py-10">
-      <p class="text-sm text-gray-500">No SKUs are dispatched beyond their ordered quantity for the current filters.</p>
+      <p class="text-sm text-gray-500">No pick lists match the current filters.</p>
     </div>
   }
 </div>

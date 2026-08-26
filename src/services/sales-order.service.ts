@@ -162,21 +162,27 @@ export class SalesOrderService {
     // dropped orders from a report's totals once a date range held more rows
     // than that. Avoids leaving a listener open while a report is viewed.
     // Cached per exact (start, end) pair — see salesOrdersRangeCache above.
-    getSalesOrdersInRange(start: Date, end: Date): Observable<SalesOrder[]> {
-        const key = `${start.getTime()}_${end.getTime()}`;
+    // clientId narrows the query at the Firestore level (requires the
+    // composite index on clientId+createdAt in firestore.indexes.json) when a
+    // single customer is selected in Reports, instead of pulling the whole
+    // date range and filtering client-side.
+    getSalesOrdersInRange(start: Date, end: Date, clientId?: string): Observable<SalesOrder[]> {
+        const key = `${start.getTime()}_${end.getTime()}_${clientId ?? ''}`;
         let cached = this.salesOrdersRangeCache.get(key);
         if (!cached) {
             if (this.salesOrdersRangeCache.size >= SalesOrderService.MAX_RANGE_CACHE_ENTRIES) {
                 this.salesOrdersRangeCache.clear();
             }
+            const constraints = [
+                where('createdAt', '>=', Timestamp.fromDate(start)),
+                where('createdAt', '<=', Timestamp.fromDate(end)),
+                ...(clientId ? [where('clientId', '==', clientId)] : []),
+                orderBy('createdAt', 'desc'),
+            ];
             cached = from(
                 fetchAllDocs(
                     this.salesOrderRef,
-                    [
-                        where('createdAt', '>=', Timestamp.fromDate(start)),
-                        where('createdAt', '<=', Timestamp.fromDate(end)),
-                        orderBy('createdAt', 'desc'),
-                    ],
+                    constraints,
                     (d) => ({ ...d.data(), id: d.id } as SalesOrder)
                 )
             ).pipe(shareReplay(1));

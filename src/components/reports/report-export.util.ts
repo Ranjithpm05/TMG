@@ -10,18 +10,41 @@ export interface ExportRowOpts {
   signatureLabels?: string[];
 }
 
+/** Report Name/Date Range/Filters (via filterSummaryText) + these extras, shown above the table in every export/print. */
+export interface ExportMeta {
+  generatedAt?: Date;
+  /** e.g. { 'Order Qty': 100, 'Dispatched Qty': 80, 'Extra Qty': 0, 'Pending Qty': 20 } */
+  summary?: Record<string, number | string>;
+}
+
 function formatTimestamp(): string {
   const d = new Date();
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+function formatGeneratedAt(date: Date): string {
+  return `Generated: ${date.toLocaleString('en-IN')}`;
+}
+
+function formatSummaryLine(summary?: Record<string, number | string>): string {
+  if (!summary) return '';
+  return Object.entries(summary).map(([label, value]) => `${label}: ${value}`).join('  ·  ');
+}
+
 const defaultIsGrandTotalRow = (row: any[]) => [1, 2, 3].some((i) => String(row[i]).toLowerCase().includes('total'));
 
 /** Builds and downloads an .xlsx file from a header+body row matrix via a dynamic `xlsx` import. */
-export async function exportRowsToExcel(rows: any[][], title: string): Promise<void> {
+export async function exportRowsToExcel(rows: any[][], title: string, filterSummaryText?: string, meta?: ExportMeta): Promise<void> {
   try {
     const XLSX = await import('xlsx');
-    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const metaRows: any[][] = [[title]];
+    if (filterSummaryText) metaRows.push([filterSummaryText]);
+    metaRows.push([formatGeneratedAt(meta?.generatedAt ?? new Date())]);
+    const summaryLine = formatSummaryLine(meta?.summary);
+    if (summaryLine) metaRows.push([summaryLine]);
+    metaRows.push([]);
+
+    const ws = XLSX.utils.aoa_to_sheet([...metaRows, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
     XLSX.writeFile(wb, `${title.replace(/\s+/g, '_')}_${formatTimestamp()}.xlsx`);
@@ -31,7 +54,7 @@ export async function exportRowsToExcel(rows: any[][], title: string): Promise<v
 }
 
 /** Opens a new window with an HTML table built from the row matrix and triggers the browser print dialog. */
-export function printReportRows(rows: any[][], title: string, filterSummaryText: string, opts?: ExportRowOpts): void {
+export function printReportRows(rows: any[][], title: string, filterSummaryText: string, opts?: ExportRowOpts, meta?: ExportMeta): void {
   const [header, ...body] = rows;
   const isGrandTotalRow = opts?.isGrandTotalRow ?? defaultIsGrandTotalRow;
   const highlightRow = opts?.highlightRow;
@@ -50,15 +73,19 @@ export function printReportRows(rows: any[][], title: string, filterSummaryText:
     })
     .join('');
 
+  const summaryLine = formatSummaryLine(meta?.summary);
   const html = `<!DOCTYPE html><html><head><title>${title}</title>
   <style>
     body{font-family:Arial,sans-serif;font-size:12px;margin:20px;color:#1e293b}
-    h2{margin:0 0 4px 0} p{margin:0 0 14px 0;color:#64748b;font-size:11px}
+    h2{margin:0 0 4px 0} p{margin:0 0 4px 0;color:#64748b;font-size:11px}
+    p.summary{color:#1e293b;font-weight:600;margin-bottom:14px}
     table{border-collapse:collapse;width:100%}
     @media print{body{margin:10px}}
   </style></head><body>
   <h2>${title}</h2>
   <p>${filterSummaryText}</p>
+  <p>${formatGeneratedAt(meta?.generatedAt ?? new Date())}</p>
+  ${summaryLine ? `<p class="summary">${summaryLine}</p>` : ''}
   <table><thead>${theadHtml}</thead><tbody>${bodyHtml}</tbody></table>
   </body></html>`;
 
@@ -75,7 +102,8 @@ export async function exportRowsToPdf(
   rows: any[][],
   title: string,
   filterSummaryText: string,
-  opts?: ExportRowOpts
+  opts?: ExportRowOpts,
+  meta?: ExportMeta
 ): Promise<void> {
   const [header, ...body] = rows;
   const isGrandTotalRow = opts?.isGrandTotalRow ?? defaultIsGrandTotalRow;
@@ -98,7 +126,17 @@ export async function exportRowsToPdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.text(filterSummaryText, margin, y);
-  y += 6;
+  y += 4;
+  doc.text(formatGeneratedAt(meta?.generatedAt ?? new Date()), margin, y);
+  y += 4;
+  const summaryLine = formatSummaryLine(meta?.summary);
+  if (summaryLine) {
+    doc.setFont('helvetica', 'bold');
+    doc.text(summaryLine, margin, y);
+    doc.setFont('helvetica', 'normal');
+    y += 4;
+  }
+  y += 2;
 
   const drawRow = (
     values: any[],

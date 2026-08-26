@@ -1,28 +1,13 @@
 import { Injectable, signal, inject, computed } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { switchMap, tap } from 'rxjs';
+import { switchMap, tap, catchError, of } from 'rxjs';
 
 import { SalesOrderService } from '../../services/sales-order.service';
 import { ClientService } from '../../services/client.service';
 import { DesignService } from '../../services/design.service';
-import { LoadingService } from '../../services/loading.service';
 import type { SalesOrder, OrderItem } from '../../models/sales-order.model';
 import type { Client } from '../../models/client.model';
 import type { Design } from '../../models/design.model';
-
-export interface MatrixRow {
-  key: string;
-  label: string;
-  qtyByGroup: Record<string, number>;
-  totalQty: number;
-  totalValue: number;
-}
-
-export interface MatrixReport {
-  groups: string[];
-  rows: MatrixRow[];
-  grandTotal: { qtyByGroup: Record<string, number>; totalQty: number; totalValue: number };
-}
 
 export const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Shipped'] as const;
 
@@ -40,7 +25,17 @@ export class ReportsDataService {
   private readonly salesOrderService = inject(SalesOrderService);
   private readonly clientService = inject(ClientService);
   private readonly designService = inject(DesignService);
-  private readonly loadingService = inject(LoadingService);
+
+  /** Local, per-section loading/error state — deliberately NOT wired to the app-wide LoadingService, which would block the whole page behind a full-screen modal for what should be a scoped report-table loading state. */
+  readonly isLoadingOrders = signal(false);
+  readonly isLoadingMasterData = signal(false);
+  readonly ordersError = signal<string | null>(null);
+  private readonly ordersRetryTrigger = signal(0);
+
+  retryOrders(): void {
+    this.ordersError.set(null);
+    this.ordersRetryTrigger.update((n) => n + 1);
+  }
 
   // ── Filter state ──────────────────────────────────────────────────────
   readonly startDate = signal(this.currentMonthStart());
@@ -66,42 +61,51 @@ export class ReportsDataService {
   // .then()/.catch() around the whole signal) so it starts exactly when a
   // request begins and stops on success, error, or cancellation (e.g.
   // switchMap dropping a stale in-flight request when the date range changes
-  // again before it resolves).
+  // again before it resolves). Query-scoped by clientId at the Firestore
+  // level when a single customer is selected, instead of pulling the whole
+  // date range and filtering client-side.
+  private readonly ordersTrigger = computed(() => ({
+    ...this.dateRange(),
+    clientId: this.selectedCustomerId(),
+    retry: this.ordersRetryTrigger(),
+  }));
+
   private readonly ordersInRange = toSignal(
-    toObservable(this.dateRange).pipe(
-      switchMap(({ start, end }) =>
-        this.salesOrderService.getSalesOrdersInRange(start, end).pipe(
-          tap({ subscribe: () => this.loadingService.start(), finalize: () => this.loadingService.stop() })
-        )
-      )
+    toObservable(this.ordersTrigger).pipe(
+      switchMap(({ start, end, clientId }) => {
+        this.ordersError.set(null);
+        return this.salesOrderService.getSalesOrdersInRange(start, end, clientId || undefined).pipe(
+          catchError((err) => {
+            console.error('Reports: failed to load sales orders', err);
+            this.ordersError.set('Unable to load report data. Please try again.');
+            return of([] as SalesOrder[]);
+          })
+        );
+      }),
+      tap({ subscribe: () => this.isLoadingOrders.set(true), finalize: () => this.isLoadingOrders.set(false) })
     ),
     { initialValue: [] as SalesOrder[] }
   );
 
   readonly clients = toSignal(
     this.clientService.getClients().pipe(
-      tap({ subscribe: () => this.loadingService.start(), finalize: () => this.loadingService.stop() })
+      tap({ subscribe: () => this.isLoadingMasterData.set(true), finalize: () => this.isLoadingMasterData.set(false) }),
+      catchError((err) => {
+        console.error('Reports: failed to load clients', err);
+        return of([] as Client[]);
+      })
     ),
     { initialValue: [] as Client[] }
   );
   readonly designs = toSignal(
     this.designService.getDesigns().pipe(
-      tap({ subscribe: () => this.loadingService.start(), finalize: () => this.loadingService.stop() })
+      catchError((err) => {
+        console.error('Reports: failed to load designs', err);
+        return of([] as Design[]);
+      })
     ),
     { initialValue: [] as Design[] }
   );
-  // Deliberately NOT loaded here: inventory is an 11,000+-doc collection, and
-  // of the 7 report tabs only Exceed Order Report reads it. Eagerly
-  // `toSignal`-ing it here (like clients/designs/orders above) would fetch
-  // the entire collection the instant the Reports screen opens, on EVERY
-  // tab, blocking the shared LoadingService overlay for every visitor even
-  // when they never open Exceed Order Report. ExceedOrderReportComponent
-  // injects InventoryService directly and creates its own
-  // `toSignal(getInventory())` instead, scoped to when that tab's
-  // `@defer`'d component actually gets instantiated —
-  // InventoryService.getInventory() is itself `shareReplay(1)`-cached, so
-  // this still costs only one fetch per session no matter which report tab
-  // triggers it first.
 
   readonly clientById = computed(() => {
     const map = new Map<string, Client>();
@@ -191,61 +195,21 @@ export class ReportsDataService {
     return parts.join('  ·  ');
   }
 
-  // ── Aggregation helpers shared by Customer Wise + Agent Wise ──────────
-  // Every order that reaches this point must contribute to some row and to
-  // the grand total — falling back to an "Unassigned" bucket instead of
-  // skipping the order outright (as this used to do via `if (!key) continue`)
-  // is what previously caused Agent Wise (and, in principle, Customer Wise)
-  // totals to under-count whenever an order's client couldn't be resolved
-  // (e.g. a deleted client), silently excluding that order's quantities from
-  // every row AND the grand total instead of just mis-labeling it.
-  buildMatrix(keyFn: (order: SalesOrder) => string, labelFn: (key: string) => string): MatrixReport {
-    const rows = new Map<string, MatrixRow>();
-    const groupSet = new Set<string>();
-
-    for (const order of this.filteredOrders()) {
-      const resolvedKey = keyFn(order);
-      const key = resolvedKey || '__unassigned__';
-
-      for (const item of order.items ?? []) {
-        if (!this.matchesItemFilters(item)) continue;
-        const group = this.toText(item.design?.group) || 'Other';
-        groupSet.add(group);
-
-        let row = rows.get(key);
-        if (!row) {
-          const label = resolvedKey ? labelFn(resolvedKey) : 'Unassigned';
-          row = { key, label, qtyByGroup: {}, totalQty: 0, totalValue: 0 };
-          rows.set(key, row);
-        }
-
-        for (const size of item.itemSizes ?? []) {
-          const qty = Number(size.quantity) || 0;
-          const value = qty * (Number(size.WSP) || 0);
-          row.qtyByGroup[group] = (row.qtyByGroup[group] ?? 0) + qty;
-          row.totalQty += qty;
-          row.totalValue += value;
-        }
-      }
-    }
-
-    const groups = [...groupSet].sort();
-    const rowList = [...rows.values()].sort((a, b) => a.label.localeCompare(b.label));
-    const grandTotal = {
-      qtyByGroup: Object.fromEntries(groups.map((g) => [g, rowList.reduce((s, r) => s + (r.qtyByGroup[g] ?? 0), 0)])),
-      totalQty: rowList.reduce((s, r) => s + r.totalQty, 0),
-      totalValue: rowList.reduce((s, r) => s + r.totalValue, 0),
-    };
-
-    return { groups, rows: rowList, grandTotal };
+  /** Shared by all report aggregations that iterate order items (product/style pivots + ReportCalcService.orderLines). */
+  matchesItemFilters(item: OrderItem): boolean {
+    return this.matchesGroupAndDesign(item.design?.group, item.design?.styleNo);
   }
 
-  /** Shared by all report aggregations that iterate order items (product/exceed/style pivots + buildMatrix). */
-  matchesItemFilters(item: OrderItem): boolean {
-    const group = this.selectedGroup();
+  /**
+   * Same Product/Group + Design-Style-No filter as matchesItemFilters, but
+   * usable outside an OrderItem context (e.g. ReportCalcService applying it
+   * to a PickListLine/DispatchLineRecord's own group/styleNo).
+   */
+  matchesGroupAndDesign(group: unknown, styleNo: unknown): boolean {
+    const selectedGroup = this.selectedGroup();
     const search = this.toText(this.designSearch()).toLowerCase();
-    if (group && this.toText(item.design?.group) !== group) return false;
-    if (search && !this.toText(item.design?.styleNo).toLowerCase().includes(search)) return false;
+    if (selectedGroup && this.toText(group) !== selectedGroup) return false;
+    if (search && !this.toText(styleNo).toLowerCase().includes(search)) return false;
     return true;
   }
 

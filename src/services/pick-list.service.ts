@@ -108,6 +108,29 @@ export class PickListService {
     return snap.docs.map((docSnap) => this.normalizePickList({ id: docSnap.id, ...docSnap.data() }));
   }
 
+  // Query-level scoped alternative to reading the whole pickLists collection
+  // (getPickLists() above) when the caller already knows which Sales Orders
+  // it cares about — e.g. Reports scoping Pick Lists to the in-range orders
+  // instead of pulling every Pick List ever created. Chunks orderIds into
+  // groups of 30 (Firestore's array-contains-any limit) and dedupes by id,
+  // same chunking pattern as InvoiceService.getInvoicesByDCIdsOnce.
+  async getPickListsByOrderIdsOnce(orderIds: string[]): Promise<PickList[]> {
+    const uniqueIds = [...new Set(orderIds.filter(Boolean))];
+    if (!uniqueIds.length) return [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += 30) chunks.push(uniqueIds.slice(i, i + 30));
+    const results = await Promise.all(
+      chunks.map((chunk) => getDocs(query(this.plRef, where('salesOrderIds', 'array-contains-any', chunk))))
+    );
+    const byId = new Map<string, PickList>();
+    for (const snap of results) {
+      for (const docSnap of snap.docs) {
+        byId.set(docSnap.id, this.normalizePickList({ id: docSnap.id, ...docSnap.data() }));
+      }
+    }
+    return [...byId.values()];
+  }
+
   async createGeneratedPickList(input: {
     pickListNo: string;
     type: PickList['type'];

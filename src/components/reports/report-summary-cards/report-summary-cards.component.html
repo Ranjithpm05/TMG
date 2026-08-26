@@ -1,0 +1,24 @@
+<div class="grid gap-3 mb-4" [class.grid-cols-2]="pickedQty() === null" [class.sm:grid-cols-4]="pickedQty() === null" [class.grid-cols-3]="pickedQty() !== null" [class.sm:grid-cols-5]="pickedQty() !== null">
+  <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Order Qty</p>
+    <p class="mt-1 text-2xl font-semibold text-gray-900">{{ orderQty() | number }}</p>
+  </div>
+  @if (pickedQty() !== null) {
+    <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+      <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Picked Qty</p>
+      <p class="mt-1 text-2xl font-semibold text-gray-900">{{ pickedQty() | number }}</p>
+    </div>
+  }
+  <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+    <p class="text-xs font-medium text-blue-600 uppercase tracking-wide">Total Dispatched Qty</p>
+    <p class="mt-1 text-2xl font-semibold text-blue-900">{{ dispatchedQty() | number }}</p>
+  </div>
+  <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+    <p class="text-xs font-medium text-amber-600 uppercase tracking-wide">Total Extra Dispatched</p>
+    <p class="mt-1 text-2xl font-semibold text-amber-900">{{ extraQty() | number }}</p>
+  </div>
+  <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+    <p class="text-xs font-medium text-rose-600 uppercase tracking-wide">Total Pending Qty</p>
+    <p class="mt-1 text-2xl font-semibold text-rose-900">{{ pendingQty() | number }}</p>
+  </div>
+</div>

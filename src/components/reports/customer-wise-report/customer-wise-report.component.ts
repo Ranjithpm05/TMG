@@ -2,39 +2,49 @@ import { Component, ChangeDetectionStrategy, inject, computed } from '@angular/c
 import { CommonModule } from '@angular/common';
 import Swal from 'sweetalert2';
 
-import { ReportsDataService, type MatrixReport } from '../reports-data.service';
+import { ReportsDataService } from '../reports-data.service';
+import { ReportCalcService, type AggregatedRow } from '../report-calc.service';
 import { LoadingService } from '../../../services/loading.service';
-import { exportRowsToExcel, exportRowsToPdf, printReportRows } from '../report-export.util';
+import { exportRowsToExcel, exportRowsToPdf, printReportRows, type ExportMeta } from '../report-export.util';
+import { ReportTableComponent } from '../report-table/report-table.component';
+import { ReportSummaryCardsComponent } from '../report-summary-cards/report-summary-cards.component';
+import { ReportStatusComponent } from '../report-status/report-status.component';
 
-const REPORT_TITLE = 'Customer Wise Sales Report';
+const REPORT_TITLE = 'Customer Wise Report';
 
 @Component({
   selector: 'app-customer-wise-report',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ReportTableComponent, ReportSummaryCardsComponent, ReportStatusComponent],
   templateUrl: './customer-wise-report.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CustomerWiseReportComponent {
-  private readonly data = inject(ReportsDataService);
+  protected readonly data = inject(ReportsDataService);
+  private readonly calc = inject(ReportCalcService);
   protected readonly loadingService = inject(LoadingService);
 
-  protected readonly report = computed<MatrixReport>(() => {
-    const clientById = this.data.clientById();
-    return this.data.buildMatrix(
-      (order) => order.clientId,
-      (key) => this.data.toText(clientById.get(key)?.clientName) || 'Unknown Client'
-    );
-  });
+  protected readonly isLoading = computed(() => this.data.isLoadingOrders() || this.calc.isLoadingDispatch());
+  protected readonly error = computed(() => this.data.ordersError() || this.calc.dispatchError());
+
+  protected retry(): void {
+    this.data.retryOrders();
+    this.calc.retryDispatch();
+  }
+
+  protected readonly report = computed(() =>
+    this.calc.aggregate(
+      (f) => f.clientId,
+      (_key, sample) => sample.clientName || 'Unknown Client',
+      { keyFn: (f) => f.styleNo, labelFn: (key) => key }
+    )
+  );
+
+  /** Rows are keyed by clientId, so the agent name (resolved via Client) is already carried on the row's sample fulfillment. */
+  protected readonly agentNameFor = (row: AggregatedRow): string => row.sample.agentName || 'Unassigned';
 
   protected filterSummary(): string {
     return this.data.filterSummary();
-  }
-
-  /** Matrix rows are keyed by clientId, so the client (and its agent) can be looked up directly. */
-  protected agentNameFor(clientId: string): string {
-    const client = this.data.clientById().get(clientId);
-    return client ? this.data.resolveAgentName(client) : 'Unassigned';
   }
 
   async exportExcel(): Promise<void> {
@@ -43,12 +53,9 @@ export class CustomerWiseReportComponent {
       Swal.fire({ icon: 'info', title: 'No Data', text: 'There is no data to export for the current filters.' });
       return;
     }
-
     await this.loadingService.run(async () => {
-      // rAF (not setTimeout) lets the spinner paint one frame before the
-      // synchronous work below runs.
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      await exportRowsToExcel(rows, REPORT_TITLE);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await exportRowsToExcel(rows, REPORT_TITLE, this.data.filterSummary(), this.exportMeta());
     });
   }
 
@@ -58,10 +65,9 @@ export class CustomerWiseReportComponent {
       Swal.fire({ icon: 'info', title: 'No Data', text: 'There is no data to export for the current filters.' });
       return;
     }
-
     await this.loadingService.run(async () => {
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      await exportRowsToPdf(rows, REPORT_TITLE, this.data.filterSummary());
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await exportRowsToPdf(rows, REPORT_TITLE, this.data.filterSummary(), undefined, this.exportMeta());
     });
   }
 
@@ -71,36 +77,36 @@ export class CustomerWiseReportComponent {
       Swal.fire({ icon: 'info', title: 'No Data', text: 'There is no data to print for the current filters.' });
       return;
     }
-
     await this.loadingService.run(async () => {
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      printReportRows(rows, REPORT_TITLE, this.data.filterSummary());
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      printReportRows(rows, REPORT_TITLE, this.data.filterSummary(), undefined, this.exportMeta());
     });
   }
 
-  private buildExportRows(): any[][] {
-    const matrix = this.report();
-    const header = ['#', 'Customer Name', 'Agent Name', ...matrix.groups, 'Total Qty', 'Total Order Value'];
-    const body = matrix.rows.map((r, i) => [
-      i + 1,
-      r.label,
-      this.agentNameFor(r.key),
-      ...matrix.groups.map((g) => r.qtyByGroup[g] ?? 0),
-      r.totalQty,
-      this.round2(r.totalValue),
-    ]);
-    body.push([
-      '',
-      'Grand Total',
-      '',
-      ...matrix.groups.map((g) => matrix.grandTotal.qtyByGroup[g] ?? 0),
-      matrix.grandTotal.totalQty,
-      this.round2(matrix.grandTotal.totalValue),
-    ]);
-    return [header, ...body];
+  private exportMeta(): ExportMeta {
+    const { grandTotal } = this.report();
+    return {
+      generatedAt: new Date(),
+      summary: {
+        'Order Qty': grandTotal.orderQty,
+        'Dispatched Qty': grandTotal.dispatchedQty,
+        'Extra Qty': grandTotal.extraQty,
+        'Pending Qty': grandTotal.pendingQty,
+      },
+    };
   }
 
-  private round2(value: number): number {
-    return Math.round(value * 100) / 100;
+  private buildExportRows(): any[][] {
+    const { rows, grandTotal } = this.report();
+    const header = ['#', 'Customer Name', 'Agent Name', 'Order Qty', 'Dispatched Qty', 'Extra Qty', 'Pending Qty'];
+    const body: any[][] = [];
+    rows.forEach((row, i) => {
+      body.push([i + 1, row.label, this.agentNameFor(row), row.orderQty, row.dispatchedQty, row.extraQty, row.pendingQty]);
+      for (const child of row.children ?? []) {
+        body.push(['', `  ${child.label}`, '', child.orderQty, child.dispatchedQty, child.extraQty, child.pendingQty]);
+      }
+    });
+    body.push(['', 'Grand Total', '', grandTotal.orderQty, grandTotal.dispatchedQty, grandTotal.extraQty, grandTotal.pendingQty]);
+    return [header, ...body];
   }
 }

@@ -3,29 +3,59 @@ import { CommonModule } from '@angular/common';
 import Swal from 'sweetalert2';
 
 import { ReportsDataService } from '../reports-data.service';
+import { ReportCalcService, type AggregatedRow } from '../report-calc.service';
 import { LoadingService } from '../../../services/loading.service';
-import { exportRowsToExcel, exportRowsToPdf, printReportRows } from '../report-export.util';
+import { exportRowsToExcel, exportRowsToPdf, printReportRows, type ExportMeta } from '../report-export.util';
+import { ReportTableComponent } from '../report-table/report-table.component';
+import { ReportSummaryCardsComponent } from '../report-summary-cards/report-summary-cards.component';
+import { ReportStatusComponent } from '../report-status/report-status.component';
 
-const REPORT_TITLE = 'Product Wise Summary Report';
-
-interface ProductRow {
-  group: string;
-  totalQty: number;
-  totalValue: number;
-}
+const REPORT_TITLE = 'Product Wise Report';
 
 @Component({
   selector: 'app-product-wise-report',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ReportTableComponent, ReportSummaryCardsComponent, ReportStatusComponent],
   templateUrl: './product-wise-report.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProductWiseReportComponent {
-  private readonly data = inject(ReportsDataService);
+  protected readonly data = inject(ReportsDataService);
+  private readonly calc = inject(ReportCalcService);
   protected readonly loadingService = inject(LoadingService);
 
-  protected readonly report = computed(() => this.buildProductSummary());
+  protected readonly isLoading = computed(() => this.data.isLoadingOrders() || this.calc.isLoadingDispatch());
+  protected readonly error = computed(() => this.data.ordersError() || this.calc.dispatchError());
+
+  protected retry(): void {
+    this.data.retryOrders();
+    this.calc.retryDispatch();
+  }
+
+  protected readonly report = computed(() => this.calc.aggregate((f) => f.group, (key) => key));
+
+  // Order Value isn't part of SkuFulfillment (calc layer intentionally
+  // carries no price) — computed separately from filteredOrders(), same as
+  // this report always did.
+  protected readonly valueByGroup = computed(() => {
+    const map = new Map<string, number>();
+    for (const order of this.data.filteredOrders()) {
+      for (const item of order.items ?? []) {
+        if (!this.data.matchesItemFilters(item)) continue;
+        const group = this.data.toText(item.design?.group) || 'Other';
+        let value = map.get(group) ?? 0;
+        for (const size of item.itemSizes ?? []) {
+          value += (Number(size.quantity) || 0) * (Number(size.WSP) || 0);
+        }
+        map.set(group, value);
+      }
+    }
+    return map;
+  });
+
+  protected readonly totalValue = computed(() => [...this.valueByGroup().values()].reduce((sum, v) => sum + v, 0));
+
+  protected readonly valueFor = (row: AggregatedRow): number => this.valueByGroup().get(row.key) ?? 0;
 
   protected filterSummary(): string {
     return this.data.filterSummary();
@@ -37,10 +67,9 @@ export class ProductWiseReportComponent {
       Swal.fire({ icon: 'info', title: 'No Data', text: 'There is no data to export for the current filters.' });
       return;
     }
-
     await this.loadingService.run(async () => {
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      await exportRowsToExcel(rows, REPORT_TITLE);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await exportRowsToExcel(rows, REPORT_TITLE, this.data.filterSummary(), this.exportMeta());
     });
   }
 
@@ -50,10 +79,9 @@ export class ProductWiseReportComponent {
       Swal.fire({ icon: 'info', title: 'No Data', text: 'There is no data to export for the current filters.' });
       return;
     }
-
     await this.loadingService.run(async () => {
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      await exportRowsToPdf(rows, REPORT_TITLE, this.data.filterSummary());
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await exportRowsToPdf(rows, REPORT_TITLE, this.data.filterSummary(), undefined, this.exportMeta());
     });
   }
 
@@ -63,53 +91,36 @@ export class ProductWiseReportComponent {
       Swal.fire({ icon: 'info', title: 'No Data', text: 'There is no data to print for the current filters.' });
       return;
     }
-
     await this.loadingService.run(async () => {
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      printReportRows(rows, REPORT_TITLE, this.data.filterSummary());
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      printReportRows(rows, REPORT_TITLE, this.data.filterSummary(), undefined, this.exportMeta());
     });
   }
 
-  private buildExportRows(): any[][] {
-    const { rows, grandTotal } = this.report();
-    const header = ['#', 'Product / Group', 'Order Qty', 'Order Value'];
-    const body = rows.map((r, i) => [i + 1, r.group, r.totalQty, this.round2(r.totalValue)]);
-    body.push(['', 'Grand Total', grandTotal.totalQty, this.round2(grandTotal.totalValue)]);
-    return [header, ...body];
-  }
-
-  private buildProductSummary(): { rows: ProductRow[]; grandTotal: { totalQty: number; totalValue: number } } {
-    const rows = new Map<string, ProductRow>();
-
-    for (const order of this.data.filteredOrders()) {
-      for (const item of order.items ?? []) {
-        if (!this.data.matchesItemFilters(item)) continue;
-        const group = this.data.toText(item.design?.group) || 'Other';
-
-        let row = rows.get(group);
-        if (!row) {
-          row = { group, totalQty: 0, totalValue: 0 };
-          rows.set(group, row);
-        }
-
-        for (const size of item.itemSizes ?? []) {
-          const qty = Number(size.quantity) || 0;
-          row.totalQty += qty;
-          row.totalValue += qty * (Number(size.WSP) || 0);
-        }
-      }
-    }
-
-    const rowList = [...rows.values()].sort((a, b) => a.group.localeCompare(b.group));
-    const grandTotal = {
-      totalQty: rowList.reduce((s, r) => s + r.totalQty, 0),
-      totalValue: rowList.reduce((s, r) => s + r.totalValue, 0),
+  private exportMeta(): ExportMeta {
+    const { grandTotal } = this.report();
+    return {
+      generatedAt: new Date(),
+      summary: {
+        'Order Qty': grandTotal.orderQty,
+        'Dispatched Qty': grandTotal.dispatchedQty,
+        'Extra Qty': grandTotal.extraQty,
+        'Pending Qty': grandTotal.pendingQty,
+      },
     };
-
-    return { rows: rowList, grandTotal };
   }
 
   private round2(value: number): number {
     return Math.round(value * 100) / 100;
+  }
+
+  private buildExportRows(): any[][] {
+    const { rows, grandTotal } = this.report();
+    const header = ['#', 'Product / Group', 'Order Qty', 'Dispatched Qty', 'Extra Qty', 'Pending Qty', 'Order Value'];
+    const body = rows.map((row, i) => [
+      i + 1, row.label, row.orderQty, row.dispatchedQty, row.extraQty, row.pendingQty, this.round2(this.valueFor(row)),
+    ]);
+    body.push(['', 'Grand Total', grandTotal.orderQty, grandTotal.dispatchedQty, grandTotal.extraQty, grandTotal.pendingQty, this.round2(this.totalValue())]);
+    return [header, ...body];
   }
 }

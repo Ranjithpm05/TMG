@@ -1,62 +1,36 @@
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-  <h3 class="text-lg font-semibold text-gray-800">Agent Wise Sales Report</h3>
+  <h3 class="text-lg font-semibold text-gray-800">Agent Wise Report</h3>
   <div class="flex gap-2">
-    <button (click)="exportExcel()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+    <button (click)="exportExcel()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
       Export Excel
     </button>
-    <button (click)="exportPdf()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+    <button (click)="exportPdf()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
       Export PDF
     </button>
-    <button (click)="printReport()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+    <button (click)="printReport()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
       Print
     </button>
   </div>
 </div>
 <p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
 
-@let matrix = report();
-<div class="overflow-x-auto border border-gray-200 rounded-lg">
-  @if (matrix.rows.length > 0) {
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-800 text-white">
-        <tr>
-          <th class="px-3 py-3 text-center font-medium">#</th>
-          <th class="px-4 py-3 text-left font-medium">Agent Name</th>
-          @for (group of matrix.groups; track group) {
-            <th class="px-3 py-3 text-center font-medium whitespace-nowrap">{{ group }}</th>
-          }
-          <th class="px-3 py-3 text-center font-medium">Total Qty</th>
-          <th class="px-4 py-3 text-right font-medium">Total Order Value</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-gray-200">
-        @for (row of matrix.rows; track row.key; let i = $index) {
-          <tr class="hover:bg-gray-50">
-            <td class="px-3 py-2 text-center text-gray-500">{{ i + 1 }}</td>
-            <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ row.label }}</td>
-            @for (group of matrix.groups; track group) {
-              <td class="px-3 py-2 text-center text-gray-700">{{ row.qtyByGroup[group] ?? 0 }}</td>
-            }
-            <td class="px-3 py-2 text-center font-semibold text-gray-900">{{ row.totalQty }}</td>
-            <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ row.totalValue | number:'1.2-2' }}</td>
-          </tr>
-        }
-      </tbody>
-      <tfoot class="bg-gray-100 font-bold">
-        <tr>
-          <td class="px-3 py-3"></td>
-          <td class="px-4 py-3 text-gray-900">Grand Total</td>
-          @for (group of matrix.groups; track group) {
-            <td class="px-3 py-3 text-center text-gray-900">{{ matrix.grandTotal.qtyByGroup[group] ?? 0 }}</td>
-          }
-          <td class="px-3 py-3 text-center text-gray-900">{{ matrix.grandTotal.totalQty }}</td>
-          <td class="px-4 py-3 text-right text-gray-900">{{ matrix.grandTotal.totalValue | number:'1.2-2' }}</td>
-        </tr>
-      </tfoot>
-    </table>
-  } @else {
-    <div class="text-center py-10">
-      <p class="text-sm text-gray-500">No orders match the current filters.</p>
-    </div>
-  }
-</div>
+<app-report-status [loading]="isLoading()" [error]="error()" label="Agent Wise" (retry)="retry()" />
+
+@if (!isLoading() && !error()) {
+  @let result = report();
+  <app-report-summary-cards
+    [orderQty]="result.grandTotal.orderQty"
+    [dispatchedQty]="result.grandTotal.dispatchedQty"
+    [extraQty]="result.grandTotal.extraQty"
+    [pendingQty]="result.grandTotal.pendingQty"
+  />
+
+  <app-report-table
+    [rows]="result.rows"
+    [grandTotal]="result.grandTotal"
+    labelHeader="Agent Name"
+    countHeader="Customer Count"
+    [countFn]="customerCountFor"
+    emptyMessage="No orders match the current filters."
+  />
+}

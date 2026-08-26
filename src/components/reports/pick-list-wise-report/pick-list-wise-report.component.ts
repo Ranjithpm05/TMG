@@ -3,29 +3,23 @@ import { CommonModule } from '@angular/common';
 import Swal from 'sweetalert2';
 
 import { ReportsDataService } from '../reports-data.service';
-import { ReportCalcService, type SkuFulfillment } from '../report-calc.service';
+import { ReportCalcService } from '../report-calc.service';
 import { LoadingService } from '../../../services/loading.service';
 import { exportRowsToExcel, exportRowsToPdf, printReportRows, type ExportMeta } from '../report-export.util';
 import { ReportSummaryCardsComponent } from '../report-summary-cards/report-summary-cards.component';
 import { ReportStatusComponent } from '../report-status/report-status.component';
 import { ReportPaginationComponent } from '../report-pagination/report-pagination.component';
 
-const REPORT_TITLE = 'Exceed Order Report';
+const REPORT_TITLE = 'Pick List Wise Report';
 
-/**
- * Redefined per spec: this tab used to compare Order Qty against current
- * Inventory stock. It now shows only SKUs where Dispatched Qty > Order Qty
- * (an over-dispatch), sourced from the same shared skuFulfillments() every
- * other report uses — no separate Inventory read here anymore.
- */
 @Component({
-  selector: 'app-exceed-order-report',
+  selector: 'app-pick-list-wise-report',
   standalone: true,
   imports: [CommonModule, ReportSummaryCardsComponent, ReportStatusComponent, ReportPaginationComponent],
-  templateUrl: './exceed-order-report.component.html',
+  templateUrl: './pick-list-wise-report.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ExceedOrderReportComponent {
+export class PickListWiseReportComponent {
   protected readonly data = inject(ReportsDataService);
   private readonly calc = inject(ReportCalcService);
   protected readonly loadingService = inject(LoadingService);
@@ -41,11 +35,7 @@ export class ExceedOrderReportComponent {
   protected readonly pageSize = signal(25);
   protected readonly currentPage = signal(1);
 
-  protected readonly rows = computed<SkuFulfillment[]>(() =>
-    this.calc.skuFulfillments()
-      .filter((f) => f.extraQty > 0)
-      .sort((a, b) => a.styleNo.localeCompare(b.styleNo) || a.clientName.localeCompare(b.clientName))
-  );
+  protected readonly rows = this.calc.pickListWiseRows;
 
   private readonly resetPageOnRowsChange = effect(() => {
     this.rows();
@@ -74,6 +64,7 @@ export class ExceedOrderReportComponent {
     const rows = this.rows();
     return {
       orderQty: rows.reduce((s, r) => s + r.orderQty, 0),
+      pickedQty: rows.reduce((s, r) => s + r.pickedQty, 0),
       dispatchedQty: rows.reduce((s, r) => s + r.dispatchedQty, 0),
       extraQty: rows.reduce((s, r) => s + r.extraQty, 0),
       pendingQty: rows.reduce((s, r) => s + r.pendingQty, 0),
@@ -86,6 +77,17 @@ export class ExceedOrderReportComponent {
 
   protected formatDate(date: Date | null): string {
     return date ? this.data.formatLongDate(date) : '-';
+  }
+
+  protected statusBadgeClass(status: string): string {
+    switch (status) {
+      case 'Completed': return 'bg-emerald-100 text-emerald-800';
+      case 'Dispatched': return 'bg-blue-100 text-blue-800';
+      case 'Partially Dispatched': return 'bg-indigo-100 text-indigo-800';
+      case 'Picked': return 'bg-teal-100 text-teal-800';
+      case 'Partially Picked': return 'bg-amber-100 text-amber-800';
+      default: return 'bg-gray-100 text-gray-700';
+    }
   }
 
   async exportExcel(): Promise<void> {
@@ -110,7 +112,7 @@ export class ExceedOrderReportComponent {
 
     await this.loadingService.run(async () => {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      await exportRowsToPdf(rows, REPORT_TITLE, this.data.filterSummary(), { highlightRow: () => true }, this.exportMeta());
+      await exportRowsToPdf(rows, REPORT_TITLE, this.data.filterSummary(), undefined, this.exportMeta());
     });
   }
 
@@ -123,7 +125,7 @@ export class ExceedOrderReportComponent {
 
     await this.loadingService.run(async () => {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      printReportRows(rows, REPORT_TITLE, this.data.filterSummary(), { highlightRow: () => true }, this.exportMeta());
+      printReportRows(rows, REPORT_TITLE, this.data.filterSummary(), undefined, this.exportMeta());
     });
   }
 
@@ -133,6 +135,7 @@ export class ExceedOrderReportComponent {
       generatedAt: new Date(),
       summary: {
         'Order Qty': grandTotal.orderQty,
+        'Picked Qty': grandTotal.pickedQty,
         'Dispatched Qty': grandTotal.dispatchedQty,
         'Extra Qty': grandTotal.extraQty,
         'Pending Qty': grandTotal.pendingQty,
@@ -143,12 +146,14 @@ export class ExceedOrderReportComponent {
   private buildExportRows(): any[][] {
     const rows = this.rows();
     const grandTotal = this.grandTotal();
-    const header = ['#', 'Style No', 'Product', 'Color', 'Size', 'Sleeve', 'Customer', 'Agent', 'Order Qty', 'Dispatched Qty', 'Extra Qty', 'DC No.', 'Dispatch Date'];
+    const header = ['#', 'Pick List No', 'Date', 'Customer', 'Agent', 'Style', 'Product', 'Color', 'Size', 'Sleeve', 'Order Qty', 'Picked Qty', 'Dispatched Qty', 'Extra Qty', 'Pending Qty', 'Status'];
     const body = rows.map((r, i) => [
-      i + 1, r.styleNo, r.group, r.color || '-', r.size, r.sleeveType || '-', r.clientName || 'Unknown Client', r.agentName,
-      r.orderQty, r.dispatchedQty, r.extraQty, r.lastDcNo || '-', this.formatDate(r.lastDcDate),
+      i + 1, r.pickListNo, this.formatDate(r.createdAt), r.clientName, r.agentName, r.styleNo, r.group,
+      r.color || '-', r.size, r.sleeveType || '-',
+      r.itemType === 'Additional' ? '-' : r.orderQty, r.pickedQty, r.dispatchedQty, r.extraQty,
+      r.itemType === 'Additional' ? '-' : r.pendingQty, r.displayStatus,
     ]);
-    body.push(['', 'Grand Total', '', '', '', '', '', '', grandTotal.orderQty, grandTotal.dispatchedQty, grandTotal.extraQty, '', '']);
+    body.push(['', 'Grand Total', '', '', '', '', '', '', '', '', grandTotal.orderQty, grandTotal.pickedQty, grandTotal.dispatchedQty, grandTotal.extraQty, grandTotal.pendingQty, '']);
     return [header, ...body];
   }
 }
