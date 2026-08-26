@@ -509,7 +509,11 @@ export class ReportCalcService {
         this.dcService.getDCsByPackingListIdOnce(packingList.id!),
       ]);
       const invoices = dcs.length ? await this.invoiceService.getInvoicesByDCIdsOnce(dcs.map((dc) => dc.id!)) : [];
-      const invoiceByDcId = new Map(invoices.filter((inv) => inv.dcId).map((inv) => [inv.dcId!, inv] as const));
+      // A single Invoice can now consolidate several legacy per-Sales-Order
+      // DCs (see InvoiceService.createInvoice) — map every one of its dcIds
+      // back to it, not just the primary dcId, so each DC still attributes
+      // correctly.
+      const invoiceByDcId = new Map(invoices.flatMap((inv) => inv.dcIds.map((id) => [id, inv] as const)));
 
       // Union of PickListLines across every Pick List contributing to this
       // Packing List (not just one Pick List in isolation) — a Packing List

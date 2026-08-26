@@ -41,9 +41,11 @@ export interface DeliveryChallan {
   items: DCItem[];
   sizes: string[];
   totalAmount?: number;
-  // Set atomically inside InvoiceService.createInvoice()'s transaction to
-  // prevent generating more than one Invoice per DC. A Packing List
-  // produces exactly one DC, so this also caps invoices at one per Packing List.
+  // Stamped atomically inside InvoiceService.createInvoice()'s transaction
+  // once its consolidated Invoice is created — informational/DC-keyed lookup
+  // only. The actual "at most one Invoice" gate lives on the owning Packing
+  // List's own `invoiceId` (see PackingList.invoiceId), not here, since a
+  // legacy Packing List can carry more than one DC doc.
   invoiceId?: string;
   invoiceNo?: string;
   createdAt: any;

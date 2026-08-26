@@ -28,6 +28,12 @@ export interface Invoice {
   invoiceDate: any;
   dcNo: string;
   dcId?: string;
+  // Every DC document consolidated into this invoice — normally just [dcId],
+  // but a Packing List that accumulated more than one DC under the pre-fix
+  // "one DC per Sales Order" scheme (see DeliveryChallanService.createDC)
+  // still needs a single Invoice covering all of them, so this can hold
+  // several ids. Always includes dcId.
+  dcIds: string[];
   packingListId: string;
   packingListNo: string;
   salesOrderIds: string[];

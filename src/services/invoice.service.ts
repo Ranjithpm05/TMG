@@ -16,11 +16,13 @@ import { from, Observable, shareReplay } from 'rxjs';
 import { Invoice, InvoiceItem, InvoiceTaxSummary } from '../models/invoice.model';
 import { fetchAllDocs } from './firestore-pagination.util';
 import { DeliveryChallanService } from './delivery-challan.service';
+import { PackingListService } from './packing-list.service';
 
 @Injectable({ providedIn: 'root' })
 export class InvoiceService {
   private firestore = inject(Firestore);
   private deliveryChallanService = inject(DeliveryChallanService);
+  private packingListService = inject(PackingListService);
   private invoicesRef = collection(this.firestore, 'invoices');
 
   // Read repeatedly (e-Invoice and Packing List screens, every generation
@@ -53,42 +55,63 @@ export class InvoiceService {
     return snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() }));
   }
 
-  // Chunked (Firestore 'in' caps at 30 values) lookup of every invoice
-  // already generated for a set of DCs — lets callers figure out which of a
-  // Packing List's (possibly several, one per Sales Order) DCs still need an
-  // invoice without a full collection scan.
+  // Chunked (Firestore 'in'/'array-contains-any' cap at 30 values) lookup of
+  // every invoice touching a set of DCs — used by reports to join a DC row to
+  // its invoice. Queries both the legacy singular `dcId` field and the
+  // `dcIds` array (a consolidated invoice covering several legacy per-SO DCs
+  // only matches the latter) and dedupes the results.
   async getInvoicesByDCIdsOnce(dcIds: string[]): Promise<Invoice[]> {
     const uniqueIds = [...new Set(dcIds.filter(Boolean))];
     if (!uniqueIds.length) return [];
     const chunks: string[][] = [];
     for (let i = 0; i < uniqueIds.length; i += 30) chunks.push(uniqueIds.slice(i, i + 30));
     const results = await Promise.all(
-      chunks.map((chunk) => getDocs(query(this.invoicesRef, where('dcId', 'in', chunk))))
+      chunks.flatMap((chunk) => [
+        getDocs(query(this.invoicesRef, where('dcId', 'in', chunk))),
+        getDocs(query(this.invoicesRef, where('dcIds', 'array-contains-any', chunk))),
+      ])
     );
-    return results.flatMap((snap) => snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() })));
+    const byId = new Map<string, Invoice>();
+    for (const snap of results) {
+      for (const d of snap.docs) {
+        const inv = this.normalize({ id: d.id, ...d.data() });
+        byId.set(inv.id!, inv);
+      }
+    }
+    return [...byId.values()];
   }
 
-  // Atomically enforces "at most one Invoice per Delivery Challan" — a
-  // Packing List can now produce several DCs (one per Sales Order), each of
-  // which is invoiced independently so the Invoice always mirrors exactly
-  // one DC's items. A transaction reads the DC's `invoiceId` and aborts if
-  // already set, closing the double-click/two-tab race that a plain
-  // pre-check can't. Throws 'already_has_invoice' unless
+  // Atomically enforces "at most one Invoice per Packing List" (and, by
+  // extension, per DC — a Packing List produces at most one DC going
+  // forward; see DeliveryChallanService.createDC). The gate lives on the
+  // Packing List doc's `invoiceId` field rather than on the DC(s), because a
+  // Packing List created before that DC fix can still carry several legacy
+  // per-Sales-Order DC docs — gating per-DC let each of those slip through
+  // and spawn its own Invoice. A transaction reads the Packing List's
+  // `invoiceId` and aborts if already set, closing the double-click/two-tab
+  // race a plain pre-check can't. Throws 'already_has_invoice' unless
   // `options.allowDuplicate` is set (an explicit, user-confirmed "Generate
-  // New Invoice" override).
+  // New Invoice" override). `input.dcIds` lists every DC (usually just one)
+  // being consolidated into this single Invoice; each gets invoiceId/invoiceNo
+  // stamped back so DC-keyed lookups (reports, e-Invoice) still resolve it.
   async createInvoice(
-    input: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceSeq' | 'invoiceDate' | 'createdAt' | 'updatedAt'> & { dcId: string },
+    input: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceSeq' | 'invoiceDate' | 'createdAt' | 'updatedAt'> & { dcIds: string[] },
     options?: { allowDuplicate?: boolean },
   ): Promise<Invoice> {
-    const dcRef = doc(this.firestore, `deliveryChallans/${input.dcId}`);
+    if (!input.dcIds.length) throw new Error('dc_not_found');
+    const packingListRef = doc(this.firestore, `packingLists/${input.packingListId}`);
+    const dcRefs = input.dcIds.map((id) => doc(this.firestore, `deliveryChallans/${id}`));
     const counterRef = doc(this.firestore, 'counters/invoiceCounter');
     const invoiceDocRef = doc(this.invoicesRef);
     const fyCode = this.getFyCode();
 
     const data = await runTransaction(this.firestore, async (transaction) => {
-      const dcSnap = await transaction.get(dcRef);
-      if (!dcSnap.exists()) throw new Error('dc_not_found');
-      if (dcSnap.data()?.['invoiceId'] && !options?.allowDuplicate) throw new Error('already_has_invoice');
+      const packingSnap = await transaction.get(packingListRef);
+      if (!packingSnap.exists()) throw new Error('packinglist_not_found');
+      if (packingSnap.data()?.['invoiceId'] && !options?.allowDuplicate) throw new Error('already_has_invoice');
+
+      const dcSnaps = await Promise.all(dcRefs.map((ref) => transaction.get(ref)));
+      if (dcSnaps.some((snap) => !snap.exists())) throw new Error('dc_not_found');
 
       const counterSnap = await transaction.get(counterRef);
       const currentSeq = counterSnap.exists() ? (Number(counterSnap.data()?.['seq']) || 0) : 0;
@@ -97,6 +120,7 @@ export class InvoiceService {
       const invoiceNo = 'TMGC' + fyCode + '-' + String(nextSeq).padStart(4, '0');
       const invoiceData = {
         ...input,
+        dcId: input.dcId ?? input.dcIds[0],
         invoiceNo,
         invoiceSeq: nextSeq,
         invoiceDate: serverTimestamp(),
@@ -105,7 +129,10 @@ export class InvoiceService {
       };
 
       transaction.set(invoiceDocRef, this.stripUndefined(invoiceData));
-      transaction.update(dcRef, { invoiceId: invoiceDocRef.id, invoiceNo, updatedAt: serverTimestamp() });
+      transaction.update(packingListRef, { invoiceId: invoiceDocRef.id, updatedAt: serverTimestamp() });
+      for (const dcRef of dcRefs) {
+        transaction.update(dcRef, { invoiceId: invoiceDocRef.id, invoiceNo, updatedAt: serverTimestamp() });
+      }
       if (counterSnap.exists()) {
         transaction.update(counterRef, { seq: nextSeq, updatedAt: serverTimestamp() });
       } else {
@@ -116,10 +143,12 @@ export class InvoiceService {
     });
 
     this.invalidateCache();
-    // This transaction also stamped invoiceId/invoiceNo onto the source DC doc —
-    // invalidate its cached list too so a subsequent Packing List/e-Invoice
-    // screen visit doesn't show the DC as still not-yet-invoiced.
+    // This transaction also stamped invoiceId/invoiceNo onto the source DC
+    // doc(s) and the Packing List doc — invalidate both caches too so a
+    // subsequent Packing List/e-Invoice screen visit doesn't show them as
+    // still not-yet-invoiced.
     this.deliveryChallanService.invalidateCache();
+    this.packingListService.invalidateCache();
     return { id: invoiceDocRef.id, ...data };
   }
 
@@ -158,6 +187,9 @@ export class InvoiceService {
       invoiceDate: raw?.invoiceDate,
       dcNo: String(raw?.dcNo ?? ''),
       dcId: raw?.dcId ? String(raw.dcId) : undefined,
+      dcIds: Array.isArray(raw?.dcIds) && raw.dcIds.length
+        ? raw.dcIds.map((s: any) => String(s))
+        : (raw?.dcId ? [String(raw.dcId)] : []),
       packingListId: String(raw?.packingListId ?? ''),
       packingListNo: String(raw?.packingListNo ?? ''),
       salesOrderIds: Array.isArray(raw?.salesOrderIds) ? raw.salesOrderIds.map(String) : [],

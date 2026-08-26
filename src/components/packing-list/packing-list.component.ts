@@ -1047,13 +1047,15 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   // ─── Invoice Generation ────────────────────────────────────────────────────
 
-  // A Packing List can produce several DCs (one per Sales Order — see
-  // generateAndPrintDC). Each DC is invoiced independently, one Invoice per
-  // DC, built directly from that DC's own items — so an Invoice's items and
-  // quantities always exactly mirror the DC it came from, including any
-  // additional/extra scanned items the DC already carries. A single click
-  // here generates an invoice for every DC on this Packing List that doesn't
-  // have one yet.
+  // Business rule: ONE Packing List / DC = ONE Invoice. Going forward a
+  // Packing List produces exactly one DC (see generateAndPrintDC), but a
+  // Packing List created before that fix can still carry several legacy
+  // per-Sales-Order DC docs — so this always consolidates every DC on the
+  // Packing List into a single Invoice covering all their items, rather than
+  // looping one Invoice per DC. InvoiceService.createInvoice() gates on the
+  // Packing List's own `invoiceId`, so at most one Invoice is ever created
+  // per Packing List no matter how many DC docs it has or how many times
+  // this is clicked/retried.
   async generateInvoice(packingList: PackingList): Promise<void> {
     if (!packingList.id || this.isGeneratingInvoice()) return;
 
@@ -1065,14 +1067,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
     // Set only on an explicit "Generate New Invoice" override below —
     // createInvoice() otherwise atomically rejects a second invoice for the
-    // same DC, closing the double-click/two-tab race a plain pre-check can't.
+    // same Packing List, closing the double-click/two-tab race a plain
+    // pre-check can't.
     let allowDuplicateInvoice = false;
 
-    const existingInvoices = await this.invoiceService.getInvoicesByDCIdsOnce(dcs.map((d) => d.id!));
-    const invoicedDcIds = new Set(existingInvoices.map((inv) => inv.dcId).filter(Boolean));
-    let dcsToInvoice = dcs.filter((dc) => !invoicedDcIds.has(dc.id));
+    const existingInvoices = await this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id);
+    let dcsToInvoice = dcs;
 
-    if (!dcsToInvoice.length) {
+    if (existingInvoices.length) {
       const result = await Swal.fire({
         icon: 'info',
         title: 'Invoice Already Generated',
@@ -1089,7 +1091,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
       if (result.isConfirmed) { for (const inv of existingInvoices) await this.reprintInvoice(inv); return; }
       if (!result.isDenied) return;
       allowDuplicateInvoice = true;
-      dcsToInvoice = dcs;
     }
 
     const primaryDc = dcsToInvoice[0];
@@ -1137,95 +1138,93 @@ export class PackingListComponent implements OnInit, OnDestroy {
       const discountPct = clientDiscountPct;
       const halfTax = taxRate / 2;
 
-      const generatedInvoices: Invoice[] = [];
-      for (const dc of dcsToInvoice) {
-        const clientName = dc.clientName || loaded.clientName;
-        const clientId = loaded.clientId;
+      // Consolidate every DC on this Packing List into ONE Invoice: items,
+      // Sales Orders and package count are merged across all of dcsToInvoice
+      // (normally just one DC; several only for pre-fix legacy Packing Lists —
+      // see the doc comment above) so the Invoice's items/quantities exactly
+      // mirror everything packed under this Packing List, including any
+      // additional/extra scanned items each DC already carries.
+      const clientName = primaryDc.clientName || loaded.clientName;
+      const clientId = loaded.clientId;
 
-        // Mirrors the DC exactly: one InvoiceItem per DCItem, same quantity.
-        // Price = MRP after Margin (Client Master), same basis as the DC —
-        // Discount is layered on top only here, at the invoice-total level below.
-        const invoiceItems = dc.items.map((dcItem) => {
-          const price = priceAfterMargin(dcItem.mrp, marginPct);
-          const amount = Math.round(dcItem.total * price * 100) / 100;
-          return { description: dcItem.partName, hsnSac, discountPct, taxRate, mrp: dcItem.mrp, uom: 'NOS', quantity: dcItem.total, price, amount };
-        });
+      // Price = MRP after Margin (Client Master), same basis as the DC —
+      // Discount is layered on top only here, at the invoice-total level below.
+      const invoiceItems = dcsToInvoice.flatMap((dc) => dc.items.map((dcItem) => {
+        const price = priceAfterMargin(dcItem.mrp, marginPct);
+        const amount = Math.round(dcItem.total * price * 100) / 100;
+        return { description: dcItem.partName, hsnSac, discountPct, taxRate, mrp: dcItem.mrp, uom: 'NOS', quantity: dcItem.total, price, amount };
+      }));
 
-        const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
-        const discountAmount = Math.round(grossAmount * discountPct / 100 * 100) / 100;
-        const taxableValue = Math.round((grossAmount - discountAmount) * 100) / 100;
-        const cgstAmount = Math.round(taxableValue * halfTax / 100 * 100) / 100;
-        const sgstAmount = cgstAmount;
-        const totalTaxAmount = Math.round((cgstAmount + sgstAmount) * 100) / 100;
-        const rawTotal = taxableValue + totalTaxAmount;
-        const totalAmount = Math.round(rawTotal);
-        const roundOff = Math.round((totalAmount - rawTotal) * 100) / 100;
+      const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+      const discountAmount = Math.round(grossAmount * discountPct / 100 * 100) / 100;
+      const taxableValue = Math.round((grossAmount - discountAmount) * 100) / 100;
+      const cgstAmount = Math.round(taxableValue * halfTax / 100 * 100) / 100;
+      const sgstAmount = cgstAmount;
+      const totalTaxAmount = Math.round((cgstAmount + sgstAmount) * 100) / 100;
+      const rawTotal = taxableValue + totalTaxAmount;
+      const totalAmount = Math.round(rawTotal);
+      const roundOff = Math.round((totalAmount - rawTotal) * 100) / 100;
 
-        const invoice = await this.invoiceService.createInvoice({
-          dcId: dc.id!,
-          dcNo: dc.dcNo,
-          packingListId: loaded.id!,
-          packingListNo: loaded.packingListNo,
-          salesOrderIds: dc.salesOrderIds.length ? dc.salesOrderIds : loaded.salesOrderIds,
-          salesNos: dc.salesNos.length ? dc.salesNos : loaded.salesNos,
-          orderNo: (dc.salesNos.length ? dc.salesNos : loaded.salesNos ?? []).join(', '),
-          clientId,
-          clientName,
-          // Invoice is a billing document — always the client's Bill To Address.
-          clientAddress: invoiceClient?.billingAddress ?? '',
-          clientPlace: invoiceClient?.place ?? '',
-          clientState: invoiceClient?.state ?? '',
-          clientZipCode: invoiceClient?.zipCode ?? '',
-          clientPhone: invoiceClient?.mobile ?? '',
-          clientGstin: invoiceClient?.gstNo ?? '',
-          destination: formValues.destination,
-          transport: dc.transport ?? loaded.transport ?? '',
-          transportId: dc.transportId ?? loaded.transportId ?? undefined,
-          transportAddress: dc.transportAddress ?? loaded.transportAddress ?? undefined,
-          transportGstNo: dc.transportGstNo ?? loaded.transportGstNo ?? undefined,
-          vehicleNo: formValues.vehicleNo,
-          docNo: formValues.docNo,
-          shipmentDate: dc.createdAt ?? null,
-          totalPkgs: dc.boxCount,
-          agentName: dc.agentName ?? loaded.agentName ?? '',
-          items: invoiceItems,
-          grossAmount, discountPct, discountAmount, taxableValue,
-          cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount,
-          igstRate: 0, igstAmount: 0, totalTaxAmount, roundOff, totalAmount,
-          amountInWords: this.amountToWords(totalAmount),
-          taxSummary: [{ hsnSac, taxableValue, cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount, igstRate: 0, igstAmount: 0 }],
-        }, { allowDuplicate: allowDuplicateInvoice });
-        generatedInvoices.push(invoice);
-      }
+      const mergedSalesOrderIds = [...new Set(dcsToInvoice.flatMap((dc) => dc.salesOrderIds.length ? dc.salesOrderIds : loaded.salesOrderIds))];
+      const mergedSalesNos = [...new Set(dcsToInvoice.flatMap((dc) => dc.salesNos.length ? dc.salesNos : loaded.salesNos))];
+
+      const invoice = await this.invoiceService.createInvoice({
+        dcIds: dcsToInvoice.map((dc) => dc.id!),
+        dcId: primaryDc.id!,
+        dcNo: dcsToInvoice.map((dc) => dc.dcNo).join(', '),
+        packingListId: loaded.id!,
+        packingListNo: loaded.packingListNo,
+        salesOrderIds: mergedSalesOrderIds,
+        salesNos: mergedSalesNos,
+        orderNo: mergedSalesNos.join(', '),
+        clientId,
+        clientName,
+        // Invoice is a billing document — always the client's Bill To Address.
+        clientAddress: invoiceClient?.billingAddress ?? '',
+        clientPlace: invoiceClient?.place ?? '',
+        clientState: invoiceClient?.state ?? '',
+        clientZipCode: invoiceClient?.zipCode ?? '',
+        clientPhone: invoiceClient?.mobile ?? '',
+        clientGstin: invoiceClient?.gstNo ?? '',
+        destination: formValues.destination,
+        transport: primaryDc.transport ?? loaded.transport ?? '',
+        transportId: primaryDc.transportId ?? loaded.transportId ?? undefined,
+        transportAddress: primaryDc.transportAddress ?? loaded.transportAddress ?? undefined,
+        transportGstNo: primaryDc.transportGstNo ?? loaded.transportGstNo ?? undefined,
+        vehicleNo: formValues.vehicleNo,
+        docNo: formValues.docNo,
+        shipmentDate: primaryDc.createdAt ?? null,
+        totalPkgs: dcsToInvoice.reduce((s, dc) => s + dc.boxCount, 0),
+        agentName: primaryDc.agentName ?? loaded.agentName ?? '',
+        items: invoiceItems,
+        grossAmount, discountPct, discountAmount, taxableValue,
+        cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount,
+        igstRate: 0, igstAmount: 0, totalTaxAmount, roundOff, totalAmount,
+        amountInWords: this.amountToWords(totalAmount),
+        taxSummary: [{ hsnSac, taxableValue, cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount, igstRate: 0, igstAmount: 0 }],
+      }, { allowDuplicate: allowDuplicateInvoice });
 
       await this.refreshInvoices();
 
-      const title = generatedInvoices.length > 1
-        ? generatedInvoices.length + ' Invoices Generated!'
-        : 'Invoice ' + generatedInvoices[0].invoiceNo + ' Generated!';
-      const html = '<p style="font-size:13px">' + generatedInvoices
-        .map((inv) => inv.invoiceNo + ': <strong>&#x20B9;' + inv.totalAmount.toLocaleString('en-IN') + '</strong>')
-        .join('<br>') + '</p>';
-
       await Swal.fire({
         icon: 'success',
-        title,
-        html,
+        title: 'Invoice ' + invoice.invoiceNo + ' Generated!',
+        html: '<p style="font-size:13px">' + invoice.invoiceNo + ': <strong>&#x20B9;' + invoice.totalAmount.toLocaleString('en-IN') + '</strong></p>',
         showConfirmButton: true,
         showDenyButton: true,
         showCancelButton: true,
-        confirmButtonText: generatedInvoices.length > 1 ? 'Print Invoices' : 'Print Invoice',
+        confirmButtonText: 'Print Invoice',
         denyButtonText: 'Download Excel',
         cancelButtonText: 'Close',
         confirmButtonColor: '#4f46e5',
         denyButtonColor: '#059669',
       }).then(async (res) => {
-        if (res.isConfirmed) { for (const inv of generatedInvoices) await this.reprintInvoice(inv); }
-        if (res.isDenied) { for (const inv of generatedInvoices) await this.downloadInvoiceExcel(inv); }
+        if (res.isConfirmed) await this.reprintInvoice(invoice);
+        if (res.isDenied) await this.downloadInvoiceExcel(invoice);
       });
     } catch (err: any) {
       const text = err?.message === 'already_has_invoice'
-        ? 'An invoice has already been generated for one of these Delivery Challans.'
+        ? 'An invoice has already been generated for this Packing List.'
         : err?.message ?? 'Unable to generate invoice.';
       await Swal.fire({ icon: 'error', title: 'Invoice Generation Failed', text });
       await this.refreshInvoices();
