@@ -1,8 +1,8 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import {
-  WEBTEL_CDKEY,
-  WEBTEL_EF_USERNAME,
-  WEBTEL_EF_PASSWORD,
+  WEBTEL_EWB_CDKEY,
+  WEBTEL_EWB_EF_USERNAME,
+  WEBTEL_EWB_EF_PASSWORD,
   WEBTEL_EWB_USERNAME,
   WEBTEL_EWB_PASSWORD,
   WEBTEL_EWAYBILL_BASE_URL,
@@ -72,11 +72,11 @@ export const generateEwayBillByIrn = onCall(
           ShipTo_Pin: data.shipTo?.pin || 0,
           ShipTo_Stcd: data.shipTo?.stcd || '',
           GSTIN: data.gstin,
-          CDKey: (parseInt(WEBTEL_CDKEY.value())).toString(),
+          CDKey: (parseInt(WEBTEL_EWB_CDKEY.value())).toString(),
           EWbUserName: WEBTEL_EWB_USERNAME.value(),
           EWbPassword: WEBTEL_EWB_PASSWORD.value(),
-          EFUserName: WEBTEL_EF_USERNAME.value(),
-          EFPassword: WEBTEL_EF_PASSWORD.value(),
+          EFUserName: WEBTEL_EWB_EF_USERNAME.value(),
+          EFPassword: WEBTEL_EWB_EF_PASSWORD.value(),
         },
       ],
     };
@@ -142,9 +142,9 @@ export const cancelEwayBill = onCall(
       ],
       Year: data.year,
       Month: data.month,
-      EFUserName: WEBTEL_EF_USERNAME.value(),
-      EFPassword: WEBTEL_EF_PASSWORD.value(),
-      CDKey: WEBTEL_CDKEY.value(),
+      EFUserName: WEBTEL_EWB_EF_USERNAME.value(),
+      EFPassword: WEBTEL_EWB_EF_PASSWORD.value(),
+      CDKey: WEBTEL_EWB_CDKEY.value(),
     };
 
     try {

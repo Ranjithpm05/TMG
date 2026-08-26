@@ -1,8 +1,8 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import {
-  WEBTEL_CDKEY,
-  WEBTEL_EF_USERNAME,
-  WEBTEL_EF_PASSWORD,
+  WEBTEL_EINV_CDKEY,
+  WEBTEL_EINV_EF_USERNAME,
+  WEBTEL_EINV_EF_PASSWORD,
   WEBTEL_EINV_USERNAME,
   WEBTEL_EINV_PASSWORD,
   WEBTEL_EINVOICE_BASE_URL,
@@ -41,11 +41,11 @@ export const generateEInvoiceIrn = onCall(
     }
 
     const body = {
-      CDKey: WEBTEL_CDKEY.value(),
+      CDKey: WEBTEL_EINV_CDKEY.value(),
       EInvUserName: WEBTEL_EINV_USERNAME.value(),
       EInvPassword: WEBTEL_EINV_PASSWORD.value(),
-      EFUserName: WEBTEL_EF_USERNAME.value(),
-      EFPassword: WEBTEL_EF_PASSWORD.value(),
+      EFUserName: WEBTEL_EINV_EF_USERNAME.value(),
+      EFPassword: WEBTEL_EINV_EF_PASSWORD.value(),
       // Business GSTIN comes from the caller (company.gstin, configured in
       // Company Settings) — never hardcoded. If testing against Webtel's
       // public sandbox, which only accepts its own pre-registered test
@@ -55,7 +55,6 @@ export const generateEInvoiceIrn = onCall(
       GetSignedInvoice: '1',
       ...data.payload,
     };
-    console.log("**********body", body)
     if (EINVOICE_DEBUG_LOG.value() === 'true') {
       console.log('generateEInvoiceIrn request URL:', `${WEBTEL_EINVOICE_BASE_URL.value()}/GenIRN2`);
       console.log('generateEInvoiceIrn request body (secrets redacted):', JSON.stringify(redactSecrets(body), null, 2));
@@ -110,9 +109,9 @@ export const cancelEInvoiceIrn = onCall(
             GSTIN: data.gstin,
             CnlRsn: data.reasonCode,
             CnlRem: data.remark || 'Cancelled',
-            CDKey: WEBTEL_CDKEY.value(),
-            EFUserName: WEBTEL_EF_USERNAME.value(),
-            EFPassword: WEBTEL_EF_PASSWORD.value(),
+            CDKey: WEBTEL_EINV_CDKEY.value(),
+            EFUserName: WEBTEL_EINV_EF_USERNAME.value(),
+            EFPassword: WEBTEL_EINV_EF_PASSWORD.value(),
             EInvUserName: WEBTEL_EINV_USERNAME.value(),
             EInvPassword: WEBTEL_EINV_PASSWORD.value(),
           },
