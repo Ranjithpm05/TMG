@@ -53,6 +53,30 @@ export class DeliveryChallanService {
     return snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() }));
   }
 
+  // Batched form of getDCsByPackingListIdOnce() — scoped to a whole set of
+  // Packing List ids in one chunked round trip instead of one query per
+  // Packing List (Firestore bills a zero-match query as a read, so looping
+  // this per Packing List — as Reports used to — burned a read for every
+  // not-yet-dispatched Packing List with nothing to show for it). Same
+  // chunking pattern as getDCsByPackingListIdOnce's callers /
+  // InvoiceService.getInvoicesByDCIdsOnce.
+  async getDCsByPackingListIdsOnce(packingListIds: string[]): Promise<DeliveryChallan[]> {
+    const uniqueIds = [...new Set(packingListIds.filter(Boolean))];
+    if (!uniqueIds.length) return [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += 30) chunks.push(uniqueIds.slice(i, i + 30));
+    const results = await Promise.all(
+      chunks.map((chunk) => getDocs(query(this.dcRef, where('packingListId', 'in', chunk))))
+    );
+    const byId = new Map<string, DeliveryChallan>();
+    for (const snap of results) {
+      for (const d of snap.docs) {
+        byId.set(d.id, this.normalize({ id: d.id, ...d.data() }));
+      }
+    }
+    return [...byId.values()];
+  }
+
   // Atomically enforces "at most one DC per Packing List" — a plain
   // check-then-create (even with a fresh Firestore read right before) still
   // has a race window between two near-simultaneous calls (double click, two

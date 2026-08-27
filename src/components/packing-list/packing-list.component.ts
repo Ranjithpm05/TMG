@@ -284,6 +284,32 @@ export class PackingListComponent implements OnInit, OnDestroy {
     });
   });
 
+  // O(1) per-row lookup for the Packing Lists tab's DC/Invoice status column
+  // — built once per deliveryChallans()/invoices() change instead of
+  // filtering the full list on every row on every change-detection cycle.
+  private dcsByPackingListId = computed(() => {
+    const map = new Map<string, DeliveryChallan[]>();
+    for (const dc of this.deliveryChallans()) {
+      const arr = map.get(dc.packingListId);
+      if (arr) arr.push(dc); else map.set(dc.packingListId, [dc]);
+    }
+    return map;
+  });
+
+  private invoiceByPackingListId = computed(() => {
+    const map = new Map<string, Invoice>();
+    for (const inv of this.invoices()) map.set(inv.packingListId, inv);
+    return map;
+  });
+
+  getDCsForPackingList(packingListId?: string): DeliveryChallan[] {
+    return packingListId ? this.dcsByPackingListId().get(packingListId) ?? [] : [];
+  }
+
+  getInvoiceForPackingList(packingListId?: string): Invoice | undefined {
+    return packingListId ? this.invoiceByPackingListId().get(packingListId) : undefined;
+  }
+
   filteredDCList = computed(() => {
     const term = this.searchTerm().trim().toLowerCase();
     return this.deliveryChallans().filter((dc) => {
@@ -1056,6 +1082,20 @@ export class PackingListComponent implements OnInit, OnDestroy {
   // Packing List's own `invoiceId`, so at most one Invoice is ever created
   // per Packing List no matter how many DC docs it has or how many times
   // this is clicked/retried.
+  // Entry point from the DC History tab — Invoice generation happens off the
+  // Delivery Challan now (DC must exist first), not off the Packing List
+  // screen. Resolves the owning Packing List and delegates to the existing
+  // generateInvoice() flow, which is unchanged.
+  async generateInvoiceForDC(dc: DeliveryChallan): Promise<void> {
+    if (!dc.packingListId || this.isGeneratingInvoice()) return;
+    const packingList = await this.packingListService.getPackingListByIdOnce(dc.packingListId);
+    if (!packingList) {
+      await Swal.fire({ icon: 'error', title: 'Packing List Not Found', text: 'The Packing List for this Delivery Challan could not be found.' });
+      return;
+    }
+    await this.generateInvoice(packingList);
+  }
+
   async generateInvoice(packingList: PackingList): Promise<void> {
     if (!packingList.id || this.isGeneratingInvoice()) return;
 

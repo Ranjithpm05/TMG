@@ -9,6 +9,7 @@ import { DeliveryChallanService } from '../../services/delivery-challan.service'
 import { InvoiceService } from '../../services/invoice.service';
 import type { PickList, PickListLine, PickListType } from '../../models/pick-list.model';
 import type { PackingList } from '../../models/packing-list.model';
+import type { DeliveryChallan } from '../../models/delivery-challan.model';
 
 /** One ordered (SalesOrder, style/color/size) line, flattened for joining against dispatch data. */
 export interface OrderLine {
@@ -470,15 +471,27 @@ export class ReportCalcService {
   }
 
   // ── Fan-out: Pick List -> Packing List -> DC -> Invoice ────────────────
+  //
+  // Every stage below is batched (chunked `in`/`array-contains-any` queries
+  // via PackingListService.getPackingListsForPickListIdsOnce /
+  // DeliveryChallanService.getDCsByPackingListIdsOnce), NOT one query per
+  // Pick List / Packing List. Firestore bills a zero-match query as a read,
+  // so the original per-item version burned ~2-3 reads for every Pick
+  // List/Packing List that simply hadn't been packed/dispatched yet — on a
+  // month with hundreds of Pick Lists this alone accounted for most of the
+  // Reports screen's read volume. Only the `lines` subcollection reads stay
+  // per-parent (Firestore has no batched way to read N different
+  // subcollections in one call) — those reads are proportional to real line
+  // data the report needs to display, not wasted existence checks.
   private async buildDispatchAttribution(pickLists: PickList[]): Promise<DispatchFanOutResult> {
     const tStage1 = performance.now();
-    const perPickList = await mapWithConcurrency(pickLists, 20, async (pickList) => {
-      const [lines, packingLists] = await Promise.all([
-        this.pickListService.getPickListLinesOnce(pickList.id!),
-        this.packingListService.getPackingListsReferencingPickListOnce(pickList.id!),
-      ]);
-      return { pickList, lines, packingLists };
-    });
+    const [perPickList, allPackingLists] = await Promise.all([
+      mapWithConcurrency(pickLists, 20, async (pickList) => ({
+        pickList,
+        lines: await this.pickListService.getPickListLinesOnce(pickList.id!),
+      })),
+      this.packingListService.getPackingListsForPickListIdsOnce(pickLists.map((pl) => pl.id!)),
+    ]);
     console.debug(`[Reports] fan-out stage 1 (lines+packing refs): ${pickLists.length} pick lists in ${Math.round(performance.now() - tStage1)}ms`);
 
     const linesByPickListId = new Map<string, PickListLine[]>();
@@ -503,25 +516,36 @@ export class ReportCalcService {
     }
 
     const packingListById = new Map<string, PackingList>();
-    for (const { packingLists } of perPickList) {
-      for (const pl of packingLists) if (pl.id) packingListById.set(pl.id, pl);
-    }
+    for (const pl of allPackingLists) if (pl.id) packingListById.set(pl.id, pl);
     if (!packingListById.size) return { lineRecords: [...lineRecords.values()], unassignedRecords: [] };
 
     const unassignedRecords: DispatchLineRecord[] = [];
     const tStage2 = performance.now();
 
+    // DCs for every in-scope Packing List, and Invoices for every one of
+    // those DCs, each fetched in ONE batched call up front — replaces what
+    // was previously a separate DC query (and, if any DCs existed, a
+    // separate Invoice query) issued inside the per-Packing-List loop below.
+    const packingListIdList = [...packingListById.keys()];
+    const allDCs = await this.dcService.getDCsByPackingListIdsOnce(packingListIdList);
+    const dcsByPackingListId = new Map<string, DeliveryChallan[]>();
+    for (const dc of allDCs) {
+      const arr = dcsByPackingListId.get(dc.packingListId);
+      if (arr) arr.push(dc); else dcsByPackingListId.set(dc.packingListId, [dc]);
+    }
+    const allDcIds = allDCs.map((dc) => dc.id!).filter(Boolean);
+    const allInvoices = allDcIds.length ? await this.invoiceService.getInvoicesByDCIdsOnce(allDcIds) : [];
+    // A single Invoice can now consolidate several legacy per-Sales-Order
+    // DCs (see InvoiceService.createInvoice) — map every one of its dcIds
+    // back to it, not just the primary dcId, so each DC still attributes
+    // correctly. Built once and shared by every Packing List below (this was
+    // previously rebuilt from a fresh per-Packing-List Invoice query on every
+    // loop iteration).
+    const invoiceByDcId = new Map(allInvoices.flatMap((inv) => inv.dcIds.map((id) => [id, inv] as const)));
+
     await mapWithConcurrency([...packingListById.values()], 20, async (packingList) => {
-      const [packingLines, dcs] = await Promise.all([
-        this.packingListService.getPackingListLinesOnce(packingList.id!),
-        this.dcService.getDCsByPackingListIdOnce(packingList.id!),
-      ]);
-      const invoices = dcs.length ? await this.invoiceService.getInvoicesByDCIdsOnce(dcs.map((dc) => dc.id!)) : [];
-      // A single Invoice can now consolidate several legacy per-Sales-Order
-      // DCs (see InvoiceService.createInvoice) — map every one of its dcIds
-      // back to it, not just the primary dcId, so each DC still attributes
-      // correctly.
-      const invoiceByDcId = new Map(invoices.flatMap((inv) => inv.dcIds.map((id) => [id, inv] as const)));
+      const packingLines = await this.packingListService.getPackingListLinesOnce(packingList.id!);
+      const dcs = dcsByPackingListId.get(packingList.id!) ?? [];
 
       // Union of PickListLines across every Pick List contributing to this
       // Packing List (not just one Pick List in isolation) — a Packing List

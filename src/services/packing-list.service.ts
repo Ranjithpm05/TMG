@@ -128,6 +128,35 @@ export class PackingListService {
     return [...byId.values()];
   }
 
+  // Batched form of getPackingListsReferencingPickListOnce() — same match
+  // semantics (singular pickListId OR pickListIds array), but scoped to a
+  // whole set of Pick List ids in one chunked round trip instead of one
+  // query pair per Pick List. Firestore bills even a zero-match query as a
+  // read, so calling the per-id version once per Pick List (as Reports used
+  // to, in a loop over every in-range Pick List) burned ~2 reads for every
+  // still-unpacked Pick List with nothing to show for it. Same chunking
+  // pattern as PickListService.getPickListsByOrderIdsOnce /
+  // InvoiceService.getInvoicesByDCIdsOnce.
+  async getPackingListsForPickListIdsOnce(pickListIds: string[]): Promise<PackingList[]> {
+    const uniqueIds = [...new Set(pickListIds.filter(Boolean))];
+    if (!uniqueIds.length) return [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += 30) chunks.push(uniqueIds.slice(i, i + 30));
+    const results = await Promise.all(
+      chunks.flatMap((chunk) => [
+        getDocs(query(this.packingRef, where('pickListId', 'in', chunk))),
+        getDocs(query(this.packingRef, where('pickListIds', 'array-contains-any', chunk))),
+      ])
+    );
+    const byId = new Map<string, PackingList>();
+    for (const snap of results) {
+      for (const docSnap of snap.docs) {
+        byId.set(docSnap.id, this.normalizePackingList({ id: docSnap.id, ...docSnap.data() }));
+      }
+    }
+    return [...byId.values()];
+  }
+
   // A Pick List may be packed in several batches over time (many Packing
   // Lists from one Pick List is expected, not a bug — see
   // PickListService.computeEffectiveStatus). So there is no "claim the whole

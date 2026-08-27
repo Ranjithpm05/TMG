@@ -155,11 +155,15 @@
                 <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Packed</th>
                 <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Cartons</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">DC</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Invoice</th>
                 <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 bg-white">
               @for (packingList of filteredPackingLists(); track packingList.id) {
+                @let pkDCs = getDCsForPackingList(packingList.id);
+                @let pkInvoice = getInvoiceForPackingList(packingList.id);
                 <tr class="hover:bg-gray-50">
                   <td class="px-4 py-3">
                     <div class="font-semibold text-gray-800">{{packingList.packingListNo}}</div>
@@ -172,6 +176,24 @@
                   <td class="px-4 py-3 text-center font-bold text-teal-700">{{packingList.cartonCount}}</td>
                   <td class="px-4 py-3">
                     <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="packingStatusBadge(packingList.status)">{{packingList.status}}</span>
+                  </td>
+                  <td class="px-4 py-3">
+                    @if (pkDCs.length) {
+                      <div class="flex flex-col gap-0.5">
+                        @for (dc of pkDCs; track dc.id) {
+                          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 w-fit">{{dc.dcNo}}</span>
+                        }
+                      </div>
+                    } @else {
+                      <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">Not generated</span>
+                    }
+                  </td>
+                  <td class="px-4 py-3">
+                    @if (pkInvoice) {
+                      <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 w-fit">{{pkInvoice.invoiceNo}}</span>
+                    } @else {
+                      <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">Not generated</span>
+                    }
                   </td>
                   <td class="px-4 py-3">
                     <div class="flex items-center justify-end gap-2 flex-wrap">
@@ -194,7 +216,7 @@
                 </tr>
               } @empty {
                 <tr>
-                  <td colspan="8" class="px-4 py-10 text-center text-sm text-gray-500">No Packing Lists generated yet.</td>
+                  <td colspan="10" class="px-4 py-10 text-center text-sm text-gray-500">No Packing Lists generated yet.</td>
                 </tr>
               }
             </tbody>
@@ -230,13 +252,19 @@
                   <td class="px-4 py-3 text-center font-semibold text-teal-700">{{dc.boxCount}}</td>
                   <td class="px-4 py-3 text-xs text-gray-500">{{formatDateTime(dc.createdAt)}}</td>
                   <td class="px-4 py-3 text-right">
-                    <button (click)="reprintDC(dc)"
-                      class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-lg transition-colors">
-                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-                      </svg>
-                      Reprint DC
-                    </button>
+                    <div class="flex items-center justify-end gap-2 flex-wrap">
+                      <button (click)="reprintDC(dc)"
+                        class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-lg transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+                        </svg>
+                        Reprint DC
+                      </button>
+                      <button (click)="generateInvoiceForDC(dc)" [disabled]="isGeneratingInvoice()"
+                        class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs rounded-lg transition-colors">
+                        {{isGeneratingInvoice() ? 'Generating...' : (dc.invoiceNo ? 'Reprint/New Invoice' : 'Generate Invoice')}}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               } @empty {
@@ -298,7 +326,7 @@
               } @empty {
                 <tr>
                   <td colspan="8" class="px-4 py-10 text-center text-sm text-gray-500">
-                    No invoices generated yet. Open a completed packing list and click "Generate Invoice".
+                    No invoices generated yet. Open the DC History tab and click "Generate Invoice" on a Delivery Challan.
                   </td>
                 </tr>
               }
@@ -424,10 +452,6 @@
               <button (click)="generateAndPrintDC(packingList)" [disabled]="isGeneratingDC()"
                 class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition-colors">
                 {{isGeneratingDC() ? 'Generating...' : 'Generate &amp; Print DC'}}
-              </button>
-              <button (click)="generateInvoice(packingList)" [disabled]="isGeneratingInvoice()"
-                class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition-colors">
-                {{isGeneratingInvoice() ? 'Generating...' : 'Invoice'}}
               </button>
               <button (click)="printEnhancedBoxLabels(packingList)"
                 class="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg transition-colors">
@@ -794,10 +818,6 @@
               <button (click)="generateAndPrintDC(packingList)" [disabled]="isGeneratingDC()"
                 class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
                 {{isGeneratingDC() ? 'Generating...' : 'Generate &amp; Print DC'}}
-              </button>
-              <button (click)="generateInvoice(packingList)" [disabled]="isGeneratingInvoice()"
-                class="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-                {{isGeneratingInvoice() ? 'Generating...' : 'Generate Invoice'}}
               </button>
               <button (click)="printEnhancedBoxLabels(packingList)"
                 class="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
