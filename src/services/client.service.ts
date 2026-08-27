@@ -17,7 +17,8 @@ import {
 } from '@angular/fire/firestore';
 
 import type { Client } from '../models/client.model';
-import { from, map, Observable, shareReplay } from 'rxjs';
+import { Observable } from 'rxjs';
+import { PersistentCollectionCache } from './persistent-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class ClientService {
@@ -27,24 +28,25 @@ export class ClientService {
 
   // Master data is read once and cached in memory; invalidated only when this
   // service writes to the collection, so every screen shares a single read.
-  private clientsCache$: Observable<Client[]> | null = null;
+  // Also persisted to localStorage (PersistentCollectionCache, TTL-based) —
+  // clients rarely change intra-day, so a fresh tab/reload can render
+  // instantly and skip a full Firestore re-fetch instead of re-running this
+  // query on every login (part of the read-quota fix — see project memory).
+  private readonly clientsCache = new PersistentCollectionCache<Client>('tmg:cache:clients:v1', async () => {
+    const q = query(this.clientRef, orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Client));
+  });
 
   // 🔹 Get all clients (cached one-time read — clients rarely change and every
   // mutation below invalidates the cache, so this stays in sync without a
   // standing realtime listener per screen).
   getClients(): Observable<Client[]> {
-    if (!this.clientsCache$) {
-      const q = query(this.clientRef, orderBy('createdAt', 'desc'));
-      this.clientsCache$ = from(getDocs(q)).pipe(
-        map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as Client))),
-        shareReplay(1)
-      );
-    }
-    return this.clientsCache$;
+    return this.clientsCache.get$();
   }
 
   private invalidateCache(): void {
-    this.clientsCache$ = null;
+    this.clientsCache.invalidate();
   }
 
     // 🔹 Create client

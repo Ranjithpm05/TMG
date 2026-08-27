@@ -14,7 +14,8 @@ import {
 } from '@angular/fire/firestore';
 
 import type { UserGroup } from '../models/user-group.model';
-import { from, map, Observable, shareReplay } from 'rxjs';
+import { Observable } from 'rxjs';
+import { PersistentCollectionCache } from './persistent-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class UserGroupService {
@@ -22,22 +23,23 @@ export class UserGroupService {
     private firestore = inject(Firestore);
     private groupRef = collection(this.firestore, 'userGroups');
 
-    // Small admin-only master list — cached one-time read, invalidated on write.
-    private groupsCache$: Observable<UserGroup[]> | null = null;
+    // Small admin-only master list — cached one-time read, invalidated on
+    // write. Also persisted to localStorage with a TTL
+    // (PersistentCollectionCache) — group permissions carry no credentials,
+    // unlike UserService (passwordHash), so this is safe to persist; see
+    // ClientService's clientsCache comment.
+    private readonly groupsCache = new PersistentCollectionCache<UserGroup>('tmg:cache:userGroups:v1', async () => {
+        const snap = await getDocs(this.groupRef);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() } as UserGroup));
+    });
 
     // 🔹 GET ALL GROUPS (cached one-time read — used only by the User Management screen)
     getGroups(): Observable<UserGroup[]> {
-        if (!this.groupsCache$) {
-            this.groupsCache$ = from(getDocs(this.groupRef)).pipe(
-                map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as UserGroup))),
-                shareReplay(1)
-            );
-        }
-        return this.groupsCache$;
+        return this.groupsCache.get$();
     }
 
     private invalidateCache(): void {
-        this.groupsCache$ = null;
+        this.groupsCache.invalidate();
     }
 
     // 🔹 CREATE GROUP

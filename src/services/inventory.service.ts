@@ -3,10 +3,11 @@ import {
   Firestore, collection, doc,
   updateDoc, query, orderBy, where, getDocs, serverTimestamp, writeBatch, WriteBatch, increment
 } from '@angular/fire/firestore';
-import { from, map, Observable, shareReplay } from 'rxjs';
+import { Observable } from 'rxjs';
 import type { InventoryItem } from '../models/inventory.model';
 import type { GoodsInwardItem } from '../models/goods-inward.model';
 import { fetchAllDocs } from './firestore-pagination.util';
+import { PatchableCollectionCache } from './patchable-cache.util';
 
 export type InventoryBatchOp = (batch: WriteBatch) => void;
 
@@ -26,22 +27,33 @@ export class InventoryService {
   // Pick List, Packing List, Inventory). Cache the one-time read and let any
   // stock-mutating write path (here or in Pick/Packing List services) call
   // invalidateCache() instead of every screen holding its own live listener.
-  private inventoryCache$: Observable<InventoryItem[]> | null = null;
-
+  //
   // Paged through in full via fetchAllDocs() — a prior fixed limit(5000) here
   // silently truncated the list once inventory passed that many rows (same
   // bug class as Design Master's export; see project memory).
+  //
+  // PatchableCollectionCache (not a plain shareReplay'd Observable): a single
+  // barcode scan only changes ONE inventory row, but a full invalidateCache()
+  // forces every open screen's next read to re-download the entire
+  // collection (thousands of rows) — this was the primary cause of a
+  // Firestore read-quota blowout (803K reads/day vs 50K quota) traced to
+  // per-scan invalidation in Pick/Packing List services. patchInventoryItem()
+  // lets those hot per-unit paths update the live cache in place instead.
+  private readonly inventoryCache = new PatchableCollectionCache<InventoryItem>(() =>
+    fetchAllDocs(this.invRef, [orderBy('styleNo', 'asc')], (d) => ({ id: d.id, ...d.data() } as InventoryItem))
+  );
+
   getInventory(): Observable<InventoryItem[]> {
-    if (!this.inventoryCache$) {
-      this.inventoryCache$ = from(
-        fetchAllDocs(this.invRef, [orderBy('styleNo', 'asc')], (d) => ({ id: d.id, ...d.data() } as InventoryItem))
-      ).pipe(shareReplay(1));
-    }
-    return this.inventoryCache$;
+    return this.inventoryCache.get$();
   }
 
   invalidateCache(): void {
-    this.inventoryCache$ = null;
+    this.inventoryCache.invalidate();
+  }
+
+  /** Updates one inventory row already known from a just-committed write (e.g. a scan transaction's new currentStock) without a Firestore round-trip. No-op if the cache hasn't loaded yet. */
+  patchInventoryItem(item: InventoryItem): void {
+    this.inventoryCache.patchOne(item);
   }
 
   /**

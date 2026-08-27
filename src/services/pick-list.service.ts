@@ -20,7 +20,7 @@ import {
   writeBatch,
   WriteBatch,
 } from '@angular/fire/firestore';
-import { from, firstValueFrom, Observable, map, shareReplay } from 'rxjs';
+import { firstValueFrom, Observable, map } from 'rxjs';
 import type { SalesOrder } from '../models/sales-order.model';
 import type {
   PickList,
@@ -36,6 +36,7 @@ import { InventoryService } from './inventory.service';
 import { DesignService } from './design.service';
 import { SalesOrderService } from './sales-order.service';
 import { fetchAllDocs } from './firestore-pagination.util';
+import { PatchableCollectionCache } from './patchable-cache.util';
 
 type StoredPickList = PickList & {
   orderSummaries?: PickListOrderSummary[];
@@ -61,20 +62,31 @@ export class PickListService {
   // fetchAllDocs() — a prior fixed limit(100) here silently truncated the
   // list once pick lists passed that count. The active picking session for a
   // single pick list uses getPickListById()/getPickListLines() below, which
-  // stay live. Cached, invalidated by every write in this service below.
-  private pickListsCache$: Observable<PickList[]> | null = null;
+  // stay live. Cached, invalidated by every bulk write in this service below.
+  //
+  // PatchableCollectionCache (not a plain shareReplay'd Observable): a single
+  // barcode scan only changes ONE pick list's aggregate totals, but a full
+  // invalidatePickListsCache() forces every open screen's next read to
+  // re-download the entire all-time pick-list history — this was the
+  // primary cause of a Firestore read-quota blowout (803K reads/day vs 50K
+  // quota) traced to per-scan invalidation here and in PackingListService.
+  // patchPickListInCache() lets the hot per-unit scan paths update the live
+  // cache in place instead.
+  private readonly pickListsCache = new PatchableCollectionCache<PickList>(() =>
+    fetchAllDocs(this.plRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePickList({ id: d.id, ...d.data() }))
+  );
 
   private invalidatePickListsCache(): void {
-    this.pickListsCache$ = null;
+    this.pickListsCache.invalidate();
+  }
+
+  /** Updates one pick list's cached top-level fields (aggregates, status) already known from a just-committed transaction, without a Firestore round-trip. No-op if the cache hasn't loaded yet. */
+  private patchPickListInCache(pickList: PickList): void {
+    this.pickListsCache.patchOne(pickList);
   }
 
   getPickLists(): Observable<PickList[]> {
-    if (!this.pickListsCache$) {
-      this.pickListsCache$ = from(
-        fetchAllDocs(this.plRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePickList({ id: d.id, ...d.data() }))
-      ).pipe(shareReplay(1));
-    }
-    return this.pickListsCache$;
+    return this.pickListsCache.get$();
   }
 
   getPickListById(id: string): Observable<PickList | null> {
@@ -696,6 +708,12 @@ export class PickListService {
       ? { ref: doc(this.firestore, `inventory/${line.inventoryId}`), seed: null }
       : await this.resolveInventoryRefForBarcode(trimmedBarcode);
 
+    // Populated inside the transaction with the exact values just committed,
+    // so the caches can be patched in place afterward instead of forcing a
+    // full re-download of the inventory/pick-lists collections on every scan.
+    let patchedInventoryItem: InventoryItem | null = null;
+    let patchedPickList: PickList | null = null;
+
     const result = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(pickListId, line.lineId);
       const pickListRef = doc(this.firestore, `pickLists/${pickListId}`);
@@ -769,11 +787,16 @@ export class PickListService {
             currentStock: currentStock - 1,
             updatedAt: serverTimestamp(),
           });
+          patchedInventoryItem = {
+            id: inventoryLookup.ref.id,
+            ...(inventorySnap.data() as any),
+            currentStock: currentStock - 1,
+          } as InventoryItem;
         } else if (inventoryLookup.seed) {
           // No inventory doc exists at all for this barcode (never received
           // via GRN) — create one now, going straight to -1, rather than
           // blocking a Design-Master-valid barcode for lack of a stock record.
-          transaction.set(inventoryLookup.ref, this.stripUndefined({
+          const seedData = {
             barcode: trimmedBarcode,
             designId: liveLine.designId,
             styleNo: liveLine.styleNo,
@@ -786,9 +809,13 @@ export class PickListService {
             totalReceived: 0,
             WSP: inventoryLookup.seed.wsp,
             price: inventoryLookup.seed.price,
+          };
+          transaction.set(inventoryLookup.ref, this.stripUndefined({
+            ...seedData,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           }));
+          patchedInventoryItem = { id: inventoryLookup.ref.id, ...seedData } as InventoryItem;
         }
       }
 
@@ -817,6 +844,14 @@ export class PickListService {
         updatedAt: serverTimestamp(),
       }));
 
+      patchedPickList = this.normalizePickList({
+        ...pickList,
+        totalPickedQty: nextTotalPickedQty,
+        completedLineCount: nextCompletedLineCount,
+        orderSummaries: nextOrderSummaries,
+        status: nextStatus,
+      });
+
       const updatedOrderSummary = nextOrderSummaries.find((summary) => summary.salesOrderId === liveLine.salesOrderId);
       return {
         line: updatedLine,
@@ -827,10 +862,11 @@ export class PickListService {
       } satisfies PickListScanResult;
     });
 
-    // The transaction may have deducted inventory.currentStock — drop the cached
-    // inventory list so the next read (Dashboard/Reports/Inventory screen) is fresh.
-    this.inventoryService.invalidateCache();
-    this.invalidatePickListsCache();
+    // Patch the caches in place with the values just committed above, instead
+    // of invalidating the full collection and forcing every open screen's
+    // next read to re-download it (see cache field comments for why).
+    if (patchedInventoryItem) this.inventoryService.patchInventoryItem(patchedInventoryItem);
+    if (patchedPickList) this.patchPickListInCache(patchedPickList);
     return result;
   }
 
@@ -1011,6 +1047,12 @@ export class PickListService {
       ? { ref: doc(this.firestore, `inventory/${knownInventoryId}`), seed: null }
       : await this.resolveInventoryRefForBarcode(trimmedBarcode);
 
+    // Populated inside the transaction with the exact values just committed,
+    // so the caches can be patched in place afterward instead of forcing a
+    // full re-download of the inventory/pick-lists collections on every scan.
+    let patchedInventoryItem: InventoryItem | null = null;
+    let patchedPickList: PickList | null = null;
+
     const result = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(pickListId, targetLineId);
       const pickListRef = doc(this.firestore, `pickLists/${pickListId}`);
@@ -1069,11 +1111,16 @@ export class PickListService {
             currentStock: currentStock - 1,
             updatedAt: serverTimestamp(),
           });
+          patchedInventoryItem = {
+            id: inventoryLookup.ref.id,
+            ...(inventorySnap.data() as any),
+            currentStock: currentStock - 1,
+          } as InventoryItem;
         } else if (inventoryLookup.seed) {
           // No inventory doc exists at all for this barcode (never received
           // via GRN) — create one now, going straight to -1, rather than
           // blocking a Design-Master-valid barcode for lack of a stock record.
-          transaction.set(inventoryLookup.ref, this.stripUndefined({
+          const seedData = {
             barcode: trimmedBarcode,
             designId: liveLine.designId,
             styleNo: liveLine.styleNo,
@@ -1086,9 +1133,13 @@ export class PickListService {
             totalReceived: 0,
             WSP: inventoryLookup.seed.wsp,
             price: inventoryLookup.seed.price,
+          };
+          transaction.set(inventoryLookup.ref, this.stripUndefined({
+            ...seedData,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           }));
+          patchedInventoryItem = { id: inventoryLookup.ref.id, ...seedData } as InventoryItem;
         }
       }
 
@@ -1125,6 +1176,15 @@ export class PickListService {
         updatedAt: serverTimestamp(),
       }));
 
+      patchedPickList = this.normalizePickList({
+        ...pickList,
+        totalPickedQty: nextTotalPickedQty,
+        totalAdditionalPickedQty: nextTotalAdditionalPickedQty,
+        completedLineCount: nextCompletedLineCount,
+        orderSummaries: nextOrderSummaries,
+        status: nextStatus,
+      });
+
       const updatedOrderSummary = nextOrderSummaries.find((summary) => summary.salesOrderId === liveLine.salesOrderId);
       return {
         line: updatedLine,
@@ -1135,8 +1195,8 @@ export class PickListService {
       } satisfies PickListScanResult;
     });
 
-    this.inventoryService.invalidateCache();
-    this.invalidatePickListsCache();
+    if (patchedInventoryItem) this.inventoryService.patchInventoryItem(patchedInventoryItem);
+    if (patchedPickList) this.patchPickListInCache(patchedPickList);
     return result;
   }
 
@@ -1155,6 +1215,12 @@ export class PickListService {
     lineId: string,
     _user: PickListClaimUser
   ): Promise<PickListLine | null> {
+    // Populated inside the transaction with the exact values just committed,
+    // so the caches can be patched in place afterward instead of forcing a
+    // full re-download of the inventory/pick-lists collections on every undo.
+    let patchedInventoryItem: InventoryItem | null = null;
+    let patchedPickList: PickList | null = null;
+
     const result = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(pickListId, lineId);
       const pickListRef = doc(this.firestore, `pickLists/${pickListId}`);
@@ -1176,6 +1242,14 @@ export class PickListService {
       const nextPickedQty = liveLine.pickedQty - 1;
       const inventoryReserved = !!pickList.inventoryReserved;
       const removedLineEntirely = liveLine.isAdditional && nextPickedQty <= 0;
+
+      // All transaction reads must happen before any writes below — resolve
+      // the inventory doc now (rather than blind-incrementing) so its new
+      // value is known locally and the cache can be patched without a
+      // separate Firestore round-trip.
+      const inventoryRef = liveLine.inventoryId ? doc(this.firestore, `inventory/${liveLine.inventoryId}`) : null;
+      const inventorySnap = (!inventoryReserved && inventoryRef) ? await transaction.get(inventoryRef) : null;
+      const currentStock = inventorySnap?.exists() ? (Number(inventorySnap.data()?.['currentStock']) || 0) : 0;
 
       if (removedLineEntirely) {
         transaction.delete(lineRef);
@@ -1200,11 +1274,17 @@ export class PickListService {
         }));
       }
 
-      if (!inventoryReserved && liveLine.inventoryId) {
-        transaction.update(doc(this.firestore, `inventory/${liveLine.inventoryId}`), {
-          currentStock: increment(1),
+      if (inventorySnap?.exists() && inventoryRef) {
+        const nextStock = currentStock + 1;
+        transaction.update(inventoryRef, {
+          currentStock: nextStock,
           updatedAt: serverTimestamp(),
         });
+        patchedInventoryItem = {
+          id: inventoryRef.id,
+          ...(inventorySnap.data() as any),
+          currentStock: nextStock,
+        } as InventoryItem;
       }
 
       const nextTotalPickedQty = liveLine.isAdditional
@@ -1237,11 +1317,20 @@ export class PickListService {
         updatedAt: serverTimestamp(),
       }));
 
+      patchedPickList = this.normalizePickList({
+        ...pickList,
+        totalPickedQty: nextTotalPickedQty,
+        totalAdditionalPickedQty: nextTotalAdditionalPickedQty,
+        completedLineCount: nextCompletedLineCount,
+        orderSummaries: nextOrderSummaries,
+        status: nextStatus,
+      });
+
       return removedLineEntirely ? null : this.normalizeLine({ ...liveLine, pickedQty: nextPickedQty });
     });
 
-    this.inventoryService.invalidateCache();
-    this.invalidatePickListsCache();
+    if (patchedInventoryItem) this.inventoryService.patchInventoryItem(patchedInventoryItem);
+    if (patchedPickList) this.patchPickListInCache(patchedPickList);
     return result;
   }
 

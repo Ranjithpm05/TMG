@@ -97,8 +97,9 @@ import {
   serverTimestamp
 } from '@angular/fire/firestore';
 import { Storage, ref, uploadBytes, getDownloadURL, deleteObject } from '@angular/fire/storage';
-import { firstValueFrom, from, map, Observable, shareReplay } from 'rxjs';
+import { firstValueFrom, Observable } from 'rxjs';
 import type { Design, SizePrice } from '../models/design.model';
+import { PersistentCollectionCache } from './persistent-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class DesignService {
@@ -107,8 +108,13 @@ export class DesignService {
     private storage = inject(Storage);
     private designRef = collection(this.firestore, 'designs');
 
-    // Master data — cached one-time read, invalidated on write (see ClientService for rationale).
-    private designsCache$: Observable<Design[]> | null = null;
+    // Master data — cached one-time read, invalidated on write (see
+    // ClientService for rationale), also persisted to localStorage with a
+    // TTL (PersistentCollectionCache) so a fresh tab/reload skips a full
+    // Firestore re-fetch — see ClientService's clientsCache comment.
+    private readonly designsCache = new PersistentCollectionCache<Design>('tmg:cache:designs:v1', () =>
+        this.fetchAllDesigns()
+    );
 
     // Page size for each individual Firestore request, NOT a cap on total
     // records returned — getDesigns() pages through with startAfter() until a
@@ -127,10 +133,7 @@ export class DesignService {
     // from every screen, including this export. Sort client-side instead — the
     // full list is already loaded into memory for client-side search/filter.
     getDesigns(): Observable<Design[]> {
-        if (!this.designsCache$) {
-            this.designsCache$ = from(this.fetchAllDesigns()).pipe(shareReplay(1));
-        }
-        return this.designsCache$;
+        return this.designsCache.get$();
     }
 
     private async fetchAllDesigns(): Promise<Design[]> {
@@ -166,7 +169,7 @@ export class DesignService {
     }
 
     private invalidateCache(): void {
-        this.designsCache$ = null;
+        this.designsCache.invalidate();
     }
 
     // 🔹 CREATE DESIGN (no id) — returns the new document's id

@@ -31,11 +31,11 @@ export const WEBTEL_EWAYBILL_BASE_URL = defineString('WEBTEL_EWAYBILL_BASE_URL',
 // Never gates credential redaction: secrets are stripped from the logged
 // payload regardless of this flag.
 export const EINVOICE_DEBUG_LOG = defineString('EINVOICE_DEBUG_LOG', {
-  default: 'true',
+  default: 'false',
 });
 
 export const EWAYBILL_DEBUG_LOG = defineString('EWAYBILL_DEBUG_LOG', {
-  default: 'true',
+  default: 'false',
 });
 
 export const EINVOICE_SECRETS = [

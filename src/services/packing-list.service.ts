@@ -19,7 +19,7 @@ import {
   writeBatch,
   WriteBatch,
 } from '@angular/fire/firestore';
-import { from, map, Observable, shareReplay } from 'rxjs';
+import { map, Observable } from 'rxjs';
 import { PickListLine } from '../models/pick-list.model';
 import {
   PackingCarton,
@@ -34,6 +34,7 @@ import {
 import { InventoryService } from './inventory.service';
 import { PickListService } from './pick-list.service';
 import { fetchAllDocs } from './firestore-pagination.util';
+import { PatchableCollectionCache } from './patchable-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class PackingListService {
@@ -47,23 +48,34 @@ export class PackingListService {
   // fetchAllDocs() — a prior fixed limit(100) here silently truncated the
   // list once packing lists passed that count. The active packing session for
   // a single packing list uses getPackingListById()/getPackingListLines()
-  // below, which stay live. Cached; invalidated by every write in this
+  // below, which stay live. Cached; invalidated by every bulk write in this
   // service below, and (via the public invalidateCache()) by
   // DeliveryChallanService.createDC, which stamps dcGeneratedKeys directly
   // onto this same top-level doc from outside this service.
-  private packingListsCache$: Observable<PackingList[]> | null = null;
+  //
+  // PatchableCollectionCache (not a plain shareReplay'd Observable): a single
+  // box/line scan only changes ONE packing list's aggregate totals, but a
+  // full invalidateCache() forces every open screen's next read to
+  // re-download the entire all-time packing-list history — this was a
+  // primary cause of a Firestore read-quota blowout (803K reads/day vs 50K
+  // quota) traced to per-scan invalidation here and in PickListService.
+  // patchPackingListInCache() lets the hot per-unit scan paths update the
+  // live cache in place instead.
+  private readonly packingListsCache = new PatchableCollectionCache<PackingList>(() =>
+    fetchAllDocs(this.packingRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePackingList({ id: d.id, ...d.data() }))
+  );
 
   invalidateCache(): void {
-    this.packingListsCache$ = null;
+    this.packingListsCache.invalidate();
+  }
+
+  /** Updates one packing list's cached top-level fields (aggregates, status) already known from a just-committed transaction, without a Firestore round-trip. No-op if the cache hasn't loaded yet. */
+  private patchPackingListInCache(packingList: PackingList): void {
+    this.packingListsCache.patchOne(packingList);
   }
 
   getPackingLists(): Observable<PackingList[]> {
-    if (!this.packingListsCache$) {
-      this.packingListsCache$ = from(
-        fetchAllDocs(this.packingRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePackingList({ id: d.id, ...d.data() }))
-      ).pipe(shareReplay(1));
-    }
-    return this.packingListsCache$;
+    return this.packingListsCache.get$();
   }
 
   getPackingListById(id: string): Observable<PackingList | null> {
@@ -242,6 +254,11 @@ export class PackingListService {
     const line = await this.resolveScannableLine(packingListId, trimmedBarcode, salesOrderId);
     if (!line) throw new Error('barcode_not_found');
 
+    // Populated inside the transaction with the exact values just committed,
+    // so the packing-lists cache can be patched in place afterward instead of
+    // forcing a full re-download of the entire collection on every scan.
+    let patchedPackingList: PackingList | null = null;
+
     const txResult = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(packingListId, line.lineId);
       const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
@@ -311,6 +328,17 @@ export class PackingListService {
         updatedAt: serverTimestamp(),
       }));
 
+      patchedPackingList = this.normalizePackingList({
+        ...packingList,
+        totalPackedQty: nextTotalPackedQty,
+        completedLineCount: nextCompletedLineCount,
+        cartonCount: cartons.length,
+        status: nextStatus,
+        partSummaries: nextPartSummaries,
+        partyProgress: nextPartyProgress,
+        cartons,
+      });
+
       return {
         line: updatedLine,
         carton,
@@ -327,9 +355,13 @@ export class PackingListService {
 
     let stockDeducted = false;
     if (txResult.packingListCompleted) {
+      // Deducts inventory across every line's inventory doc and stamps
+      // stockDeducted on the packing list — invalidates both caches itself
+      // when it actually runs (a bounded, once-per-completion cost), which
+      // supersedes the patch below.
       stockDeducted = await this.deductInventoryOnCompletion(packingListId);
     }
-    this.invalidateCache();
+    if (patchedPackingList) this.patchPackingListInCache(patchedPackingList);
 
     return { ...txResult, stockDeducted } satisfies PackingScanResult;
   }
@@ -350,6 +382,11 @@ export class PackingListService {
     status: PackingList['status'];
     partyProgress: PackingPartyProgress[];
   }> {
+    // Populated inside the transaction with the exact values just committed,
+    // so the packing-lists cache can be patched in place afterward instead of
+    // forcing a full re-download of the entire collection on every toggle.
+    let patchedPackingList: PackingList | null = null;
+
     const txResult = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(packingListId, lineId);
       const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
@@ -413,6 +450,17 @@ export class PackingListService {
         updatedAt: serverTimestamp(),
       }));
 
+      patchedPackingList = this.normalizePackingList({
+        ...packingList,
+        totalPackedQty: nextTotalPackedQty,
+        completedLineCount: nextCompletedLineCount,
+        cartonCount: cartons.length,
+        status: nextStatus,
+        partSummaries: nextPartSummaries,
+        partyProgress: nextPartyProgress,
+        cartons,
+      });
+
       return {
         line: updatedLine,
         cartons,
@@ -427,9 +475,13 @@ export class PackingListService {
 
     let stockDeducted = false;
     if (txResult.packingListCompleted) {
+      // Deducts inventory across every line's inventory doc and stamps
+      // stockDeducted on the packing list — invalidates both caches itself
+      // when it actually runs (a bounded, once-per-completion cost), which
+      // supersedes the patch below.
       stockDeducted = await this.deductInventoryOnCompletion(packingListId);
     }
-    this.invalidateCache();
+    if (patchedPackingList) this.patchPackingListInCache(patchedPackingList);
     return { ...txResult, stockDeducted };
   }
 

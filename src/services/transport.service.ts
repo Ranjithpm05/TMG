@@ -17,7 +17,8 @@ import {
 } from '@angular/fire/firestore';
 
 import type { Transport } from '../models/transport.model';
-import { from, map, Observable, shareReplay } from 'rxjs';
+import { Observable } from 'rxjs';
+import { PersistentCollectionCache } from './persistent-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class TransportService {
@@ -27,21 +28,20 @@ export class TransportService {
 
   // Master data is read once and cached in memory; invalidated only when this
   // service writes to the collection, so every screen shares a single read.
-  private transportsCache$: Observable<Transport[]> | null = null;
+  // Also persisted to localStorage with a TTL (PersistentCollectionCache) —
+  // see ClientService's clientsCache comment.
+  private readonly transportsCache = new PersistentCollectionCache<Transport>('tmg:cache:transports:v1', async () => {
+    const q = query(this.transportRef, orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => this.normalizeTransport({ id: d.id, ...d.data() }));
+  });
 
   getTransports(): Observable<Transport[]> {
-    if (!this.transportsCache$) {
-      const q = query(this.transportRef, orderBy('createdAt', 'desc'));
-      this.transportsCache$ = from(getDocs(q)).pipe(
-        map((snap) => snap.docs.map((d) => this.normalizeTransport({ id: d.id, ...d.data() }))),
-        shareReplay(1)
-      );
-    }
-    return this.transportsCache$;
+    return this.transportsCache.get$();
   }
 
   private invalidateCache(): void {
-    this.transportsCache$ = null;
+    this.transportsCache.invalidate();
   }
 
   async createTransport(transport: Omit<Transport, 'id'>): Promise<void> {
