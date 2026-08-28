@@ -110,6 +110,15 @@ export interface Invoice {
   ewbErrorCode?: string;
   ewbCancelReason?: string;
   ewbCancelledAt?: any;
+  // LR (Lorry Receipt) mapping — see LrEntry. lrNo/lrDate are denormalized
+  // from the mapped LrEntry doc purely for display without an extra lookup;
+  // lrEntryId is the source of truth (kept in sync by
+  // LrEntryService.mapInvoiceToLrEntry/unmapInvoiceFromLrEntry). At most one
+  // LR per invoice; the reverse (one LR -> many invoices) lives on
+  // LrEntry.invoiceIds.
+  lrEntryId?: string;
+  lrNo?: string;
+  lrDate?: any;
   createdAt?: any;
   updatedAt?: any;
 }

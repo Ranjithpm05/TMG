@@ -335,6 +335,9 @@ export class InvoiceService {
       ewbErrorCode: raw?.ewbErrorCode ? String(raw.ewbErrorCode) : undefined,
       ewbCancelReason: raw?.ewbCancelReason ? String(raw.ewbCancelReason) : undefined,
       ewbCancelledAt: raw?.ewbCancelledAt,
+      lrEntryId: raw?.lrEntryId ? String(raw.lrEntryId) : undefined,
+      lrNo: raw?.lrNo ? String(raw.lrNo) : undefined,
+      lrDate: raw?.lrDate,
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,
     };

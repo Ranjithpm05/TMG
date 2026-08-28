@@ -14,11 +14,13 @@ import Swal from 'sweetalert2';
 import { Invoice } from '../../models/invoice.model';
 import { CANCEL_REASONS, CompanySettings, INDIA_STATE_CODES } from '../../models/einvoice.model';
 import { Transport } from '../../models/transport.model';
+import { LrEntry } from '../../models/lr-entry.model';
 import { InvoiceService } from '../../services/invoice.service';
 import { EInvoiceService } from '../../services/einvoice.service';
 import { CompanySettingsService } from '../../services/company-settings.service';
 import { ClientService } from '../../services/client.service';
 import { TransportService } from '../../services/transport.service';
+import { LrEntryService } from '../../services/lr-entry.service';
 import { LoadingService } from '../../services/loading.service';
 import { exportInvoicesToTally } from './tally-export.util';
 import { fetchLogoDataUri } from '../../services/company-logo.util';
@@ -51,6 +53,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   private companySettingsService = inject(CompanySettingsService);
   private clientService = inject(ClientService);
   private transportService = inject(TransportService);
+  private lrEntryService = inject(LrEntryService);
   protected loadingService = inject(LoadingService);
   private subs: Subscription[] = [];
 
@@ -74,10 +77,14 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   showPayloadModal = signal(false);
   showCancelModal = signal(false);
   showTransportModal = signal(false);
+  showLrModal = signal(false);
+  isMappingLr = signal(false);
 
   cancelReason = signal('');
   cancelReasonOther = signal('');
   payloadJson = signal('');
+
+  lrEntries = signal<LrEntry[]>([]);
 
   transports = signal<Transport[]>([]);
   isSavingTransport = signal(false);
@@ -134,6 +141,19 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     return list;
   });
 
+  // "Eligible" LR Entries for the currently-selected invoice — same
+  // Transport (case/whitespace-insensitive), per the mapping rule: one LR
+  // commonly covers several invoices dispatched together with the same
+  // transporter. Not filtered further by invoiceIds — an LR already holding
+  // other invoices is still offered, since one LR -> many invoices is the
+  // whole point (see LrEntry doc comment).
+  eligibleLrEntries = computed(() => {
+    const invoice = this.selectedInvoice();
+    const transport = (invoice?.transport || '').trim().toLowerCase();
+    if (!transport) return [];
+    return this.lrEntries().filter((lr) => (lr.transport || '').trim().toLowerCase() === transport);
+  });
+
   stats = computed(() => {
     const all = this.invoices();
     return {
@@ -167,6 +187,11 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     this.subs.push(
       this.transportService.getTransports().subscribe((transports) => {
         this.transports.set(transports.filter((t) => t.status !== 'Inactive'));
+      })
+    );
+    this.subs.push(
+      this.lrEntryService.getLrEntries().subscribe((lrEntries) => {
+        this.lrEntries.set(lrEntries);
       })
     );
   }
@@ -400,6 +425,70 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       Swal.fire('Error', err?.message || 'Failed to save transport details.', 'error');
     } finally {
       this.isSavingTransport.set(false);
+    }
+  }
+
+  // ─── LR (Lorry Receipt) Mapping ────────────────────────────────────────────
+  // Maps this invoice to one of the LR Entries captured at DC-dispatch time
+  // (see PackingListComponent.generateAndPrintDC). At most one LR per
+  // invoice; a single LR can be mapped to several invoices (see LrEntry doc
+  // comment) — so re-picking a different LR here just moves this one invoice
+  // across, it never touches other invoices already on either LR.
+
+  openLrModal(): void {
+    this.showLrModal.set(true);
+  }
+
+  closeLrModal(): void {
+    this.showLrModal.set(false);
+  }
+
+  async mapLrEntry(lrEntry: LrEntry): Promise<void> {
+    const invoice = this.selectedInvoice();
+    if (!invoice?.id || !lrEntry.id || this.isMappingLr()) return;
+
+    this.isMappingLr.set(true);
+    try {
+      await this.lrEntryService.mapInvoiceToLrEntry(
+        { id: invoice.id, invoiceNo: invoice.invoiceNo, transport: invoice.transport, lrEntryId: invoice.lrEntryId },
+        lrEntry
+      );
+      const updated: Invoice = { ...invoice, lrEntryId: lrEntry.id, lrNo: lrEntry.lrNo, lrDate: lrEntry.lrDate };
+      this.selectedInvoice.set(updated);
+      this.invoices.update((list) => list.map((i) => (i.id === invoice.id ? updated : i)));
+      this.showLrModal.set(false);
+      Swal.fire({ title: 'Mapped', text: `Invoice mapped to LR ${lrEntry.lrNo}.`, icon: 'success', timer: 1500, showConfirmButton: false });
+    } catch (err: any) {
+      Swal.fire('Error', err?.message || 'Failed to map LR Entry.', 'error');
+    } finally {
+      this.isMappingLr.set(false);
+    }
+  }
+
+  async unmapLrEntry(): Promise<void> {
+    const invoice = this.selectedInvoice();
+    if (!invoice?.id || !invoice.lrEntryId || this.isMappingLr()) return;
+
+    const confirm = await Swal.fire({
+      title: 'Unmap LR Entry?',
+      html: `Remove the mapping to LR <strong>${invoice.lrNo}</strong> from this invoice?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Unmap',
+      confirmButtonColor: '#e11d48',
+    });
+    if (!confirm.isConfirmed) return;
+
+    this.isMappingLr.set(true);
+    try {
+      await this.lrEntryService.unmapInvoiceFromLrEntry({ id: invoice.id, invoiceNo: invoice.invoiceNo, lrEntryId: invoice.lrEntryId });
+      const updated: Invoice = { ...invoice, lrEntryId: undefined, lrNo: undefined, lrDate: undefined };
+      this.selectedInvoice.set(updated);
+      this.invoices.update((list) => list.map((i) => (i.id === invoice.id ? updated : i)));
+    } catch (err: any) {
+      Swal.fire('Error', err?.message || 'Failed to unmap LR Entry.', 'error');
+    } finally {
+      this.isMappingLr.set(false);
     }
   }
 

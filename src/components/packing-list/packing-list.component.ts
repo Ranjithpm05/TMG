@@ -23,6 +23,7 @@ import { TransportService } from '../../services/transport.service';
 import { DeliveryChallanService } from '../../services/delivery-challan.service';
 import { Invoice } from '../../models/invoice.model';
 import { InvoiceService } from '../../services/invoice.service';
+import { LrEntryService } from '../../services/lr-entry.service';
 import { InventoryService } from '../../services/inventory.service';
 import { DesignService } from '../../services/design.service';
 import { LoadingService } from '../../services/loading.service';
@@ -65,6 +66,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   private transportService = inject(TransportService);
   private dcService = inject(DeliveryChallanService);
   private invoiceService = inject(InvoiceService);
+  private lrEntryService = inject(LrEntryService);
   private inventoryService = inject(InventoryService);
   private designService = inject(DesignService);
   private loadingService = inject(LoadingService);
@@ -2154,6 +2156,42 @@ export class PackingListComponent implements OnInit, OnDestroy {
       allowDuplicate = true;
     }
 
+    // LR (Lorry Receipt) capture — only asked when a transporter is actually
+    // set (self/door delivery has no LR to record), and always skippable:
+    // Cancel/dismiss just means "no LR for this dispatch", it never aborts DC
+    // generation itself. Asked before the loading overlay so the interactive
+    // form isn't hidden behind it.
+    const transportForLr = this.transport().trim();
+    let lrNo = '';
+    let lrDate = '';
+    let lrVehicleNo = '';
+    if (transportForLr) {
+      const today = new Date().toISOString().slice(0, 10);
+      const { value } = await Swal.fire({
+        title: 'LR Details (optional)',
+        html: '<div style="text-align:left;font-size:13px">'
+          + '<p style="font-size:11px;color:#64748b;margin-bottom:10px">If the transporter issued an LR / Consignment Note for this dispatch, enter it here — it can then be mapped to the invoice from the Invoice screen. Leave blank for self/door delivery.</p>'
+          + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">LR No.</label>'
+          + '<input id="lr-no" class="swal2-input" style="margin:0;width:100%" placeholder="e.g. LR-4521"></div>'
+          + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">LR Date</label>'
+          + `<input id="lr-date" type="date" class="swal2-input" style="margin:0;width:100%" value="${today}"></div>`
+          + '<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Vehicle No. (optional)</label>'
+          + '<input id="lr-vehicle" class="swal2-input" style="margin:0;width:100%" placeholder="e.g. TN37AB1234"></div>'
+          + '</div>',
+        showCancelButton: true,
+        confirmButtonText: 'Continue',
+        cancelButtonText: 'Skip (No LR)',
+        confirmButtonColor: '#4f46e5',
+        preConfirm: () => ({
+          lrNo: (document.getElementById('lr-no') as HTMLInputElement).value.trim(),
+          lrDate: (document.getElementById('lr-date') as HTMLInputElement).value,
+          vehicleNo: (document.getElementById('lr-vehicle') as HTMLInputElement).value.trim().toUpperCase(),
+        }),
+      });
+      if (value?.lrNo) { lrNo = value.lrNo; lrDate = value.lrDate; }
+      lrVehicleNo = value?.vehicleNo || '';
+    }
+
     this.isGeneratingDC.set(true);
     try {
       await this.loadingService.run(async () => {
@@ -2187,6 +2225,22 @@ export class PackingListComponent implements OnInit, OnDestroy {
         const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
         const dc = await this.createDCForPackingList(loaded, lines, client, salesOrderIds, salesNos, loaded.clientName, agentName, transport, transportId, transportAddress, transportGstNo, allowDuplicate);
         const generatedDCs: DeliveryChallan[] = [dc];
+
+        if (lrNo) {
+          await this.lrEntryService.createLrEntry({
+            lrNo,
+            lrDate: lrDate ? new Date(lrDate) : new Date(),
+            transport,
+            transportId: transportId || undefined,
+            vehicleNo: lrVehicleNo || undefined,
+            packingListId: loaded.id!,
+            packingListNo: loaded.packingListNo,
+            dcId: dc.id!,
+            dcNo: dc.dcNo,
+            clientId: loaded.clientId,
+            clientName: loaded.clientName,
+          });
+        }
 
         await this.refreshDeliveryChallans();
         await this.printDCsWithLabels(generatedDCs, loaded, win);
