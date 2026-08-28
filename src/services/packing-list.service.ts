@@ -26,6 +26,7 @@ import {
   PackingCartonEntry,
   PackingList,
   PackingListLine,
+  PackingListLineSource,
   PackingMode,
   PackingPartSummary,
   PackingPartyProgress,
@@ -535,11 +536,25 @@ export class PackingListService {
   //    Packing List (i.e. deductInventoryOnCompletion already ran) — restores
   //    the old item's stock and, if identity changed, deducts the corrected
   //    qty from the new item (rejecting if it doesn't have enough stock).
+  // Edits a line's overall Qty (its Pick-List claim, `requiredQty`) — NOT
+  // just how much has been scanned so far. Reducing it also clamps
+  // `packedQty` down to match (so the excess is immediately un-packed, not
+  // left as a phantom "still to pack" gap) and releases the reduced amount
+  // back to its source Pick List line(s) via `sources`, symmetric with how
+  // deletePackingListLine() releases a whole line — otherwise the Pick List
+  // would go on treating the reduced quantity as permanently claimed by this
+  // Packing List, and it would never become available again for "Ready to
+  // Pack" / a future DC/Invoice. Decrease-only (same restriction as the Pick
+  // List line editor — see project_picklist_edit_delete_2026_08_11): an
+  // increase would need to re-validate against live Pick List/inventory
+  // availability, which this lightweight editor doesn't attempt.
   async updatePackingListLine(
     packingListId: string,
     lineId: string,
-    changes: { styleNo?: string; size?: string; packedQty: number; barcode?: string; inventoryId?: string; designId?: string },
+    changes: { styleNo?: string; size?: string; requiredQty: number; barcode?: string; inventoryId?: string; designId?: string },
   ): Promise<PackingListLine> {
+    const releasedSources: PackingListLineSource[] = [];
+
     const result = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(packingListId, lineId);
       const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
@@ -559,16 +574,18 @@ export class PackingListService {
 
       const nextStyleNo = (changes.styleNo ?? liveLine.styleNo).trim();
       const nextSize = (changes.size ?? liveLine.size).trim();
-      const nextPackedQty = Math.max(0, Math.floor(Number(changes.packedQty)));
-      if (!Number.isFinite(nextPackedQty)) throw new Error('qty_invalid');
-      if (nextPackedQty > liveLine.packedQty) throw new Error('qty_can_only_decrease');
+      const nextRequiredQty = Math.floor(Number(changes.requiredQty));
+      if (!Number.isFinite(nextRequiredQty) || nextRequiredQty <= 0) throw new Error('qty_invalid');
+      if (nextRequiredQty > liveLine.requiredQty) throw new Error('qty_can_only_decrease');
 
       const identityChanged = nextStyleNo !== liveLine.styleNo || nextSize !== liveLine.size;
       if (identityChanged && (!changes.barcode || !changes.inventoryId)) {
         throw new Error('inventory_not_resolved');
       }
 
-      const delta = liveLine.packedQty - nextPackedQty;
+      const requiredDelta = liveLine.requiredQty - nextRequiredQty; // released back to the Pick List
+      const nextPackedQty = Math.min(liveLine.packedQty, nextRequiredQty);
+      const packedDelta = liveLine.packedQty - nextPackedQty; // un-packed: restore inventory / strip cartons
       const nextBarcode = identityChanged ? changes.barcode! : liveLine.barcode;
       const nextInventoryId = identityChanged ? changes.inventoryId : liveLine.inventoryId;
       const nextDesignId = identityChanged ? (changes.designId || liveLine.designId) : liveLine.designId;
@@ -587,13 +604,13 @@ export class PackingListService {
             if (!newInvSnap.exists()) throw new Error('inventory_not_found');
             if ((Number(newInvSnap.data()?.['currentStock']) || 0) < nextPackedQty) throw new Error('insufficient_stock');
           }
-        } else if (delta > 0 && liveLine.inventoryId) {
+        } else if (packedDelta > 0 && liveLine.inventoryId) {
           oldInvSnap = await transaction.get(doc(this.firestore, `inventory/${liveLine.inventoryId}`));
         }
       }
 
-      // Carton reconciliation.
-      let toTrim = delta;
+      // Carton reconciliation — trim the un-packed amount off this line's entries.
+      let toTrim = packedDelta;
       const cartons = (packingList.cartons ?? []).map((c) => ({ ...c, entries: c.entries.map((e) => ({ ...e })) }));
       for (let ci = cartons.length - 1; ci >= 0 && toTrim > 0; ci--) {
         const entries = cartons[ci].entries;
@@ -619,7 +636,12 @@ export class PackingListService {
       }
       const nextCartons = cartons.map((c) => this.normalizeCarton({ ...c, totalQty: c.entries.reduce((s, e) => s + e.qty, 0) }));
 
-      const nextRemainingQty = Math.max(0, liveLine.requiredQty - nextPackedQty);
+      // Release requiredDelta back to whichever Pick List line(s) it came
+      // from — trims from the tail of `sources`, same idea as the carton trim above.
+      const { remaining: nextSources, released } = this.trimSources(liveLine.sources ?? [], requiredDelta);
+      releasedSources.push(...released);
+
+      const nextRemainingQty = Math.max(0, nextRequiredQty - nextPackedQty);
       const nextLineStatus: PackingListLine['status'] = nextRemainingQty <= 0 ? 'completed' : nextPackedQty > 0 ? 'in_progress' : 'ready';
       const updatedLine = this.normalizeLine({
         ...liveLine,
@@ -628,25 +650,13 @@ export class PackingListService {
         barcode: nextBarcode,
         inventoryId: nextInventoryId,
         designId: nextDesignId,
+        requiredQty: nextRequiredQty,
         packedQty: nextPackedQty,
         remainingQty: nextRemainingQty,
         status: nextLineStatus,
+        sources: nextSources,
         updatedAt: Date.now(),
       });
-
-      const wasCompleted = liveLine.remainingQty <= 0;
-      const nowCompleted = nextRemainingQty <= 0;
-      const completedDelta = (nowCompleted ? 1 : 0) - (wasCompleted ? 1 : 0);
-      const nextTotalPackedQty = Math.max(0, (packingList.totalPackedQty || 0) - delta);
-      const nextCompletedLineCount = Math.max(0, (packingList.completedLineCount || 0) + completedDelta);
-      const nextPartSummaries = this.applyPartSummaryDelta(packingList.partSummaries ?? [], liveLine.partName, -delta);
-      const nextPartyProgress = this.applyPartyProgressDelta(packingList.partyProgress ?? [], liveLine, -delta, packingList.clientName);
-      const nextStatus = this.computePackingListStatus(
-        packingList.totalRequiredQty || 0,
-        nextTotalPackedQty,
-        packingList.lineCount || 0,
-        nextCompletedLineCount,
-      );
 
       transaction.update(lineRef, this.stripUndefined({
         styleNo: updatedLine.styleNo,
@@ -654,20 +664,24 @@ export class PackingListService {
         barcode: updatedLine.barcode,
         inventoryId: updatedLine.inventoryId,
         designId: updatedLine.designId,
+        requiredQty: updatedLine.requiredQty,
         packedQty: updatedLine.packedQty,
         remainingQty: updatedLine.remainingQty,
         status: updatedLine.status,
+        sources: updatedLine.sources,
         updatedAt: serverTimestamp(),
       }));
 
+      // Aggregates (totals/partSummaries/partyProgress/status) are resynced
+      // from the line docs by recalculatePackingListStatus() right after this
+      // transaction commits, rather than hand-rolled here — requiredQty
+      // moving as well as packedQty makes the delta math error-prone to
+      // duplicate; cartons are the one packing-list-level field this
+      // transaction still owns directly since recalculatePackingListStatus
+      // doesn't touch them.
       transaction.update(packingListRef, this.stripUndefined({
-        totalPackedQty: nextTotalPackedQty,
-        completedLineCount: nextCompletedLineCount,
-        cartonCount: nextCartons.length,
-        status: nextStatus,
-        partSummaries: nextPartSummaries,
-        partyProgress: nextPartyProgress,
         cartons: nextCartons,
+        cartonCount: nextCartons.length,
         updatedAt: serverTimestamp(),
       }));
 
@@ -675,15 +689,60 @@ export class PackingListService {
         if (oldInvSnap) transaction.update(oldInvSnap.ref, { currentStock: increment(liveLine.packedQty), updatedAt: serverTimestamp() });
         if (newInvSnap) transaction.update(newInvSnap.ref, { currentStock: increment(-nextPackedQty), updatedAt: serverTimestamp() });
       } else if (oldInvSnap) {
-        transaction.update(oldInvSnap.ref, { currentStock: increment(delta), updatedAt: serverTimestamp() });
+        transaction.update(oldInvSnap.ref, { currentStock: increment(packedDelta), updatedAt: serverTimestamp() });
       }
 
       return { line: updatedLine, inventoryTouched: !!(oldInvSnap || newInvSnap) };
     });
 
     if (result.inventoryTouched) this.inventoryService.invalidateCache();
+
+    await this.recalculatePackingListStatus(packingListId);
+
+    if (releasedSources.length) {
+      const batch = writeBatch(this.firestore);
+      let hasOps = false;
+      for (const source of releasedSources) {
+        if (!source.pickListId || !source.pickListLineId || source.qty <= 0) continue;
+        batch.update(doc(this.firestore, `pickLists/${source.pickListId}/lines/${source.pickListLineId}`), {
+          packedIntoPackingListsQty: increment(-source.qty),
+          updatedAt: serverTimestamp(),
+        });
+        hasOps = true;
+      }
+      if (hasOps) {
+        await batch.commit();
+        const affectedPickListIds = [...new Set(releasedSources.map((s) => s.pickListId).filter(Boolean))];
+        await Promise.all(affectedPickListIds.map((id) => this.pickListService.recalculatePickListStatus(id)));
+      }
+    }
+
     this.invalidateCache();
     return result.line;
+  }
+
+  // Trims `amount` total qty off the tail of `sources`, returning the
+  // shrunk-but-still-accurate remainder plus exactly what was released (one
+  // entry per affected Pick List line) — shared shape with the carton-trim
+  // loops above. A manually added line (addPackingListLine) has no sources
+  // to begin with, so this is a no-op for it (nothing to release).
+  private trimSources(
+    sources: PackingListLineSource[],
+    amount: number,
+  ): { remaining: PackingListLineSource[]; released: PackingListLineSource[] } {
+    let toTrim = amount;
+    const remaining: PackingListLineSource[] = [];
+    const released: PackingListLineSource[] = [];
+    for (let i = sources.length - 1; i >= 0; i--) {
+      const source = sources[i];
+      if (toTrim <= 0) { remaining.unshift(source); continue; }
+      const take = Math.min(source.qty, toTrim);
+      toTrim -= take;
+      if (take > 0) released.unshift({ pickListId: source.pickListId, pickListLineId: source.pickListLineId, qty: take });
+      const keepQty = source.qty - take;
+      if (keepQty > 0) remaining.unshift({ ...source, qty: keepQty });
+    }
+    return { remaining, released };
   }
 
   // Adds a brand-new line to a Packing List before DC generation — for an

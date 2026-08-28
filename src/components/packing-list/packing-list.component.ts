@@ -2454,13 +2454,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const { value: formValues } = await Swal.fire({
       title: 'Edit Packing Line',
       html: '<div style="text-align:left;font-size:13px">'
-        + '<p style="font-size:11px;color:#64748b;margin-bottom:10px">Quantity can only be reduced, not increased. Changing Style/Size re-identifies these physical units against Design Master/Inventory.</p>'
+        + '<p style="font-size:11px;color:#64748b;margin-bottom:10px">Quantity can only be reduced, not increased — the reduced amount is released back to the Pick List as pending. Changing Style/Size re-identifies these physical units against Design Master/Inventory.</p>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Style No</label>'
         + `<input id="edit-style" class="swal2-input" style="margin:0;width:100%" value="${line.styleNo}"></div>`
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Size</label>'
         + `<input id="edit-size" class="swal2-input" style="margin:0;width:100%" value="${line.size}"></div>`
-        + `<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Packed Qty (max ${line.packedQty})</label>`
-        + `<input id="edit-qty" type="number" min="0" max="${line.packedQty}" class="swal2-input" style="margin:0;width:100%" value="${line.packedQty}"></div>`
+        + `<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Qty (max ${line.requiredQty})</label>`
+        + `<input id="edit-qty" type="number" min="1" max="${line.requiredQty}" class="swal2-input" style="margin:0;width:100%" value="${line.requiredQty}"></div>`
         + '</div>',
       showCancelButton: true,
       confirmButtonText: 'Save',
@@ -2468,11 +2468,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
       preConfirm: () => {
         const styleNo = (document.getElementById('edit-style') as HTMLInputElement).value.trim();
         const size = (document.getElementById('edit-size') as HTMLInputElement).value.trim();
-        const packedQty = Number((document.getElementById('edit-qty') as HTMLInputElement).value);
+        const requiredQty = Number((document.getElementById('edit-qty') as HTMLInputElement).value);
         if (!styleNo || !size) { Swal.showValidationMessage('Style No and Size are required.'); return; }
-        if (!Number.isFinite(packedQty) || packedQty < 0) { Swal.showValidationMessage('Enter a valid quantity.'); return; }
-        if (packedQty > line.packedQty) { Swal.showValidationMessage(`Quantity can only be reduced (max ${line.packedQty}).`); return; }
-        return { styleNo, size, packedQty };
+        if (!Number.isFinite(requiredQty) || requiredQty <= 0) { Swal.showValidationMessage('Enter a quantity of at least 1 (use Delete to remove the line entirely).'); return; }
+        if (requiredQty > line.requiredQty) { Swal.showValidationMessage(`Quantity can only be reduced (max ${line.requiredQty}).`); return; }
+        return { styleNo, size, requiredQty };
       },
     });
     if (!formValues) return;
@@ -2508,7 +2508,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         await this.packingListService.updatePackingListLine(packingList.id!, line.lineId, {
           styleNo: formValues.styleNo,
           size: formValues.size,
-          packedQty: formValues.packedQty,
+          requiredQty: formValues.requiredQty,
           barcode,
           inventoryId,
           designId,
@@ -2521,6 +2521,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         const messages: Record<string, string> = {
           dc_already_generated: 'A DC has already been generated for this Packing List — editing is locked.',
           qty_can_only_decrease: 'Quantity can only be reduced, not increased.',
+          qty_invalid: 'Enter a quantity of at least 1 (use Delete to remove the line entirely).',
           insufficient_stock: 'The corrected item does not have enough stock available.',
           inventory_not_found: 'The corrected item could not be found in Inventory.',
           inventory_not_resolved: 'Could not resolve the new Style/Size against Inventory.',
