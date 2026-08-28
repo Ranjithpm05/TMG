@@ -5,9 +5,12 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { provideStorage, getStorage } from '@angular/fire/storage';
-import { provideFunctions, getFunctions } from '@angular/fire/functions';
+import { provideFunctions, getFunctions, connectFunctionsEmulator } from '@angular/fire/functions';
 
 import { AppComponent } from './src/app.component';
+
+//const useFunctionsEmulator = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+
 
 const firebaseConfig = {
     apiKey: "AIzaSyB8g1fUiGZv_lBPm7FGWBTQtCpo0R35Xgg",
@@ -27,5 +30,12 @@ bootstrapApplication(AppComponent, {
     provideFirestore(() => getFirestore()),
     provideStorage(() => getStorage()),
     provideFunctions(() => getFunctions()),
+    // provideFunctions(() => {
+    //   const functions = getFunctions();
+    //   if (useFunctionsEmulator) {
+    //     connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+    //   }
+    //   return functions;
+    // }),
   ],
 }).catch(err => console.error(err));
