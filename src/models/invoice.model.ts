@@ -1,5 +1,7 @@
 export interface InvoiceItem {
   description: string;
+  styleNo?: string;
+  sleeveType?: string;
   hsnSac: string;
   discountPct: number;
   taxRate: number;

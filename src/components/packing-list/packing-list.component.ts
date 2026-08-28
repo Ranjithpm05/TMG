@@ -1192,7 +1192,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
       const invoiceItems = dcsToInvoice.flatMap((dc) => dc.items.map((dcItem) => {
         const price = priceAfterMargin(dcItem.mrp, marginPct);
         const amount = Math.round(dcItem.total * price * 100) / 100;
-        return { description: dcItem.partName, hsnSac, discountPct, taxRate, mrp: dcItem.mrp, uom: 'NOS', quantity: dcItem.total, price, amount };
+        return {
+          description: dcItem.partName,
+          styleNo: dcItem.styleNo || undefined,
+          sleeveType: dcItem.sleeveType || undefined,
+          hsnSac, discountPct, taxRate, mrp: dcItem.mrp, uom: 'NOS', quantity: dcItem.total, price, amount,
+        };
       }));
 
       const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
@@ -1277,10 +1282,25 @@ export class PackingListComponent implements OnInit, OnDestroy {
     // Opened synchronously, before any await — see printEnhancedBoxLabels.
     const win = window.open('', '_blank', 'width=1100,height=820');
     await this.loadingService.run(async () => {
-      const logoDataUri = await fetchLogoDataUri();
-      const html = this.buildInvoiceHtml(invoice, logoDataUri);
-      if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
-      else await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
+      if (!win) {
+        await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
+        return;
+      }
+      try {
+        const [logoDataUri, printInvoice] = await Promise.all([
+          fetchLogoDataUri(),
+          this.invoiceService.backfillItemDesignInfoIfNeeded(invoice),
+        ]);
+        const html = this.buildInvoiceHtml(printInvoice, logoDataUri);
+        win.document.write(html);
+        win.document.close();
+        setTimeout(() => win.print(), 600);
+      } catch (err: any) {
+        // A blank popup with no explanation is worse than a visible error —
+        // this is the same window already opened above, not a new one.
+        win.document.write(`<pre style="padding:20px;color:#b91c1c;font-family:monospace;white-space:pre-wrap">Failed to render the invoice print.\n\n${err?.message || err}</pre>`);
+        win.document.close();
+      }
     });
   }
 
@@ -3307,7 +3327,8 @@ ${allDCHtml}
     const addrLines = [invoice.clientAddress, [invoice.clientPlace, invoice.clientState].filter(Boolean).join(', ') + (invoice.clientZipCode ? ' - ' + invoice.clientZipCode : ''), invoice.clientPhone ? 'Mobile: ' + invoice.clientPhone : ''].filter(Boolean);
     const clientAddrHtml = addrLines.map((l) => '<div style="font-size:11px;margin-top:2px">' + l + '</div>').join('');
     const itemRows = invoice.items.map((item, i) => '<tr style="background:' + (i % 2 === 0 ? '#fff' : '#f9f9f9') + '">'
-      + td(i + 1) + td(item.description, 'text-align:left;font-weight:600') + td(item.hsnSac)
+      + td(i + 1) + td(item.description, 'text-align:left;font-weight:600')
+      + td(item.styleNo || '-') + td(item.sleeveType || '-') + td(item.hsnSac)
       + td(item.discountPct) + td(item.taxRate) + td(item.mrp.toFixed(2)) + td(item.uom)
       + td(item.quantity) + td(item.price.toFixed(2), 'font-weight:700') + td(item.amount.toFixed(2), 'font-weight:700') + '</tr>').join('');
     const taxSummaryRows = invoice.taxSummary.map((t) => '<tr>'
@@ -3344,9 +3365,9 @@ ${allDCHtml}
       + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Agent</td><td style="padding:3px 4px;font-size:11px">: ' + (invoice.agentName || '—') + '</td></tr>'
       + '</table></div></div>'
       + '<table style="margin-bottom:10px"><thead><tr>'
-      + th('S.No') + th('Description', 'text-align:left') + th('HSN/SAC') + th('Disc(%)') + th('Tax(%)') + th('MRP') + th('UOM') + th('Quantity') + th('Price') + th('Amount')
+      + th('S.No') + th('Description', 'text-align:left') + th('Design No') + th('Sleeve Type') + th('HSN/SAC') + th('Disc(%)') + th('Tax(%)') + th('MRP') + th('UOM') + th('Quantity') + th('Price') + th('Amount')
       + '</tr></thead><tbody>' + itemRows
-      + '<tr><td colspan="9" style="padding:5px 7px;' + B + 'font-weight:700;font-size:11px;text-align:right;background:#f0f0f0">Gross</td>'
+      + '<tr><td colspan="11" style="padding:5px 7px;' + B + 'font-weight:700;font-size:11px;text-align:right;background:#f0f0f0">Gross</td>'
       + '<td style="padding:5px 7px;' + B + 'font-weight:900;font-size:12px;text-align:center;background:#f0f0f0">' + invoice.grossAmount.toFixed(2) + '</td></tr>'
       + '</tbody></table>'
       + '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">'

@@ -21,9 +21,23 @@ export const COMPANY_LOGO_URL =
 // Still resolves to '' on failure so callers can fall back to a placeholder.
 export async function fetchLogoDataUri(url: string = COMPANY_LOGO_URL): Promise<string> {
   return new Promise<string>((resolve) => {
+    let settled = false;
+    const settle = (value: string) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
     const img = new Image();
-    img.onload = () => resolve(url);
-    img.onerror = () => resolve('');
+    img.onload = () => settle(url);
+    img.onerror = () => settle('');
     img.src = url;
+    // A print popup is opened synchronously and only gets its content once
+    // this promise resolves (see einvoice.component.ts/packing-list.component.ts
+    // printPdf/printEInvoicePdf/reprintInvoice) — if the image request stalls
+    // (flaky network, proxy silently dropping the connection) instead of
+    // firing either onload or onerror, this never resolved and the popup sat
+    // blank forever. The logo is cosmetic; the invoice content it's blocking
+    // is not, so give up on it after 4s and fall back to the text placeholder.
+    setTimeout(() => settle(''), 4000);
   });
 }

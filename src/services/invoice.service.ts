@@ -164,6 +164,45 @@ export class InvoiceService {
     this.invalidateCache();
   }
 
+  // Invoices created before styleNo/sleeveType were added to InvoiceItem
+  // (see project memory, added 2026-08-28) have items missing those fields
+  // even though the source DC always had them — the DC print already shows
+  // Design/Sleeve correctly, only the Invoice print didn't. Re-derives them
+  // from the invoice's source DC(s) by position: invoice.items was built via
+  // `dcsToInvoice.flatMap((dc) => dc.items.map(...))` in invoice.dcIds order
+  // (see PackingListComponent.createInvoiceForPackingList), so the same
+  // flatten-in-dcIds-order lines back up 1:1 with invoice.items as long as
+  // the item count hasn't changed since creation. Bails out (returns the
+  // invoice unchanged) rather than guess if the counts don't match, or if
+  // nothing is actually missing. Persists the fix so this only ever runs
+  // once per invoice, not on every print.
+  async backfillItemDesignInfoIfNeeded(invoice: Invoice): Promise<Invoice> {
+    if (!invoice.id) return invoice;
+    const needsBackfill = invoice.items.some((item) => !item.styleNo && !item.sleeveType);
+    if (!needsBackfill) return invoice;
+
+    const dcIds = invoice.dcIds.length ? invoice.dcIds : (invoice.dcId ? [invoice.dcId] : []);
+    if (!dcIds.length) return invoice;
+
+    const dcs = await this.deliveryChallanService.getDCsByIdsOnce(dcIds);
+    const dcById = new Map(dcs.map((dc) => [dc.id, dc]));
+    const orderedDcItems = dcIds.flatMap((id) => dcById.get(id)?.items ?? []);
+    if (orderedDcItems.length !== invoice.items.length) return invoice;
+
+    let changed = false;
+    const items = invoice.items.map((item, i) => {
+      if (item.styleNo && item.sleeveType) return item;
+      const src = orderedDcItems[i];
+      if (!src || (!src.styleNo && !src.sleeveType)) return item;
+      changed = true;
+      return { ...item, styleNo: item.styleNo || src.styleNo || undefined, sleeveType: item.sleeveType || src.sleeveType };
+    });
+    if (!changed) return invoice;
+
+    await this.updateInvoice(invoice.id, { items });
+    return { ...invoice, items };
+  }
+
   private getFyCode(): string {
     const d = new Date();
     const month = d.getMonth() + 1;
@@ -173,10 +212,30 @@ export class InvoiceService {
     return String(fyStart).slice(2) + String(fyEnd).slice(2);
   }
 
-  private stripUndefined(obj: Record<string, any>): Record<string, any> {
-    return Object.fromEntries(
-      Object.entries(obj).filter(([, v]) => v !== undefined)
-    );
+  // Deep — a shallow (top-level-only) filter isn't enough once Invoice.items
+  // (or any nested array of objects) can carry an optional field like
+  // styleNo/sleeveType left `undefined`: Firestore's SDK only auto-strips
+  // undefined at the top level of the object passed to updateDoc/set, not
+  // inside nested arrays/objects, so an `undefined` buried in items[] throws
+  // "Unsupported field value: undefined" instead of just being omitted (hit
+  // by backfillItemDesignInfoIfNeeded above). Leaves non-plain-object values
+  // (Date, serverTimestamp()'s FieldValue sentinel, etc.) untouched — only
+  // recurses into plain object literals and arrays, same pattern as
+  // DeliveryChallanService.stripUndefined.
+  private stripUndefined<T>(value: T): T {
+    if (Array.isArray(value)) {
+      return value.filter((entry) => entry !== undefined).map((entry) => this.stripUndefined(entry)) as T;
+    }
+    if (value && typeof value === 'object') {
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) return value;
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([, entry]) => entry !== undefined)
+          .map(([key, entry]) => [key, this.stripUndefined(entry)])
+      ) as T;
+    }
+    return value;
   }
 
   private normalize(raw: any): Invoice {
@@ -216,6 +275,8 @@ export class InvoiceService {
       items: Array.isArray(raw?.items)
         ? raw.items.map((item: any): InvoiceItem => ({
             description: String(item?.description ?? ''),
+            styleNo: item?.styleNo ? String(item.styleNo) : undefined,
+            sleeveType: item?.sleeveType ? String(item.sleeveType) : undefined,
             hsnSac: String(item?.hsnSac ?? ''),
             discountPct: Number(item?.discountPct) || 0,
             taxRate: Number(item?.taxRate) || 0,

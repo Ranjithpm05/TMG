@@ -3,6 +3,7 @@ import {
   Firestore,
   collection,
   doc,
+  documentId,
   getDocs,
   limit,
   orderBy,
@@ -67,6 +68,26 @@ export class DeliveryChallanService {
     for (let i = 0; i < uniqueIds.length; i += 30) chunks.push(uniqueIds.slice(i, i + 30));
     const results = await Promise.all(
       chunks.map((chunk) => getDocs(query(this.dcRef, where('packingListId', 'in', chunk))))
+    );
+    const byId = new Map<string, DeliveryChallan>();
+    for (const snap of results) {
+      for (const d of snap.docs) {
+        byId.set(d.id, this.normalize({ id: d.id, ...d.data() }));
+      }
+    }
+    return [...byId.values()];
+  }
+
+  // Batched lookup by document id — used to re-derive Invoice line data
+  // (e.g. styleNo/sleeveType, see InvoiceService.backfillItemDesignInfoIfNeeded)
+  // from the DC(s) an Invoice was originally built from.
+  async getDCsByIdsOnce(dcIds: string[]): Promise<DeliveryChallan[]> {
+    const uniqueIds = [...new Set(dcIds.filter(Boolean))];
+    if (!uniqueIds.length) return [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += 30) chunks.push(uniqueIds.slice(i, i + 30));
+    const results = await Promise.all(
+      chunks.map((chunk) => getDocs(query(this.dcRef, where(documentId(), 'in', chunk))))
     );
     const byId = new Map<string, DeliveryChallan>();
     for (const snap of results) {

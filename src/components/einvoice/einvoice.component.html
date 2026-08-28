@@ -232,6 +232,16 @@
       </button>
 
       @if (!inv.eInvoiceStatus || inv.eInvoiceStatus === 'pending' || inv.eInvoiceStatus === 'failed') {
+      <button (click)="openTransportModal()"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M3 5h18M5 5v14a2 2 0 002 2h10a2 2 0 002-2V5"/>
+        </svg>
+        Edit Transport Details
+      </button>
+      }
+
+      @if (!inv.eInvoiceStatus || inv.eInvoiceStatus === 'pending' || inv.eInvoiceStatus === 'failed') {
       <button (click)="generateEInvoice()" [disabled]="isGenerating()"
         class="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm">
         @if (isGenerating()) {
@@ -771,6 +781,100 @@
       <button (click)="confirmCancel()" [disabled]="isCancelling() || !cancelReason()"
         class="px-5 py-2 rounded-xl bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 disabled:opacity-60 transition-colors">
         {{ isCancelling() ? 'Cancelling…' : 'Confirm Cancellation' }}
+      </button>
+    </div>
+  </div>
+</div>
+}
+
+<!-- ── Edit Transport Details Modal ─────────────────────────────── -->
+@if (showTransportModal()) {
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" (click)="closeTransportModal()"></div>
+  <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+      <div>
+        <h2 class="text-lg font-black text-slate-800">Edit Transport Details</h2>
+        <p class="text-xs text-slate-400 mt-0.5">Update before generating the e-Invoice — locked once generated</p>
+      </div>
+      <button (click)="closeTransportModal()" class="p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Transport (Transport Master)</label>
+          <select [value]="transportForm().transportId"
+            (change)="onTransportSelected($any($event.target).value)"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white">
+            <option value="">— Free text (enter name below) —</option>
+            @for (t of transports(); track t.id) {
+              <option [value]="t.id">{{ t.transportName }}</option>
+            }
+          </select>
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Transport Name</label>
+          <input type="text" [value]="transportForm().transport"
+            (input)="updateTransportField('transport', $any($event.target).value)"
+            placeholder="Transporter / courier name"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Transport GSTIN</label>
+          <input type="text" [value]="transportForm().transportGstNo"
+            (input)="updateTransportField('transportGstNo', $any($event.target).value.toUpperCase())"
+            placeholder="Transporter's GSTIN (if any)"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Vehicle No.</label>
+          <input type="text" [value]="transportForm().vehicleNo"
+            (input)="updateTransportField('vehicleNo', $any($event.target).value.toUpperCase())"
+            placeholder="e.g. TN37AB1234"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Doc No.</label>
+          <input type="text" [value]="transportForm().docNo"
+            (input)="updateTransportField('docNo', $any($event.target).value)"
+            placeholder="LR / consignment no."
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Shipment Date</label>
+          <input type="date" [value]="transportForm().shipmentDate"
+            (input)="updateTransportField('shipmentDate', $any($event.target).value)"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Total Packages</label>
+          <input type="number" min="0" [value]="transportForm().totalPkgs"
+            (input)="updateTransportField('totalPkgs', $any($event.target).valueAsNumber || 0)"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Agent Name</label>
+          <input type="text" [value]="transportForm().agentName"
+            (input)="updateTransportField('agentName', $any($event.target).value)"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Destination</label>
+          <input type="text" [value]="transportForm().destination"
+            (input)="updateTransportField('destination', $any($event.target).value)"
+            class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+      </div>
+    </div>
+    <div class="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
+      <button (click)="closeTransportModal()" class="px-5 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
+      <button (click)="saveTransportDetails()" [disabled]="isSavingTransport()"
+        class="px-5 py-2 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60 transition-colors">
+        {{ isSavingTransport() ? 'Saving…' : 'Save Transport Details' }}
       </button>
     </div>
   </div>
