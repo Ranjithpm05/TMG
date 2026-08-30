@@ -8,6 +8,8 @@ import { GoodsInwardService } from '../../services/goods-inward.service';
 import { InventoryService } from '../../services/inventory.service';
 import { PickListService } from '../../services/pick-list.service';
 import { PackingListService } from '../../services/packing-list.service';
+import { DeliveryChallanService } from '../../services/delivery-challan.service';
+import { InvoiceService } from '../../services/invoice.service';
 import { AuthService } from '../../services/auth.service';
 import type { SalesOrder } from '../../models/sales-order.model';
 import type { GoodsInward } from '../../models/goods-inward.model';
@@ -60,6 +62,14 @@ interface MiniStatCard {
   detail: string;
 }
 
+interface TodayStatCard {
+  id: 'pick' | 'pack' | 'dc' | 'invoice';
+  label: string;
+  value: string;
+  detail: string;
+  accent: string;
+}
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -75,12 +85,16 @@ export class DashboardComponent {
   private readonly inventoryService = inject(InventoryService);
   private readonly pickListService = inject(PickListService);
   private readonly packingListService = inject(PackingListService);
+  private readonly deliveryChallanService = inject(DeliveryChallanService);
+  private readonly invoiceService = inject(InvoiceService);
 
   private readonly clients = toSignal(this.clientService.getClients(), { initialValue: [] });
   private readonly goodsInwards = toSignal(this.goodsInwardService.getGoodsInwards(), { initialValue: [] });
   private readonly inventory = toSignal(this.inventoryService.getInventory(), { initialValue: [] });
   private readonly pickLists = toSignal(this.pickListService.getPickLists(), { initialValue: [] });
   private readonly packingLists = toSignal(this.packingListService.getPackingLists(), { initialValue: [] });
+  private readonly deliveryChallans = toSignal(this.deliveryChallanService.getDeliveryChallans(), { initialValue: [] });
+  private readonly invoices = toSignal(this.invoiceService.getInvoices(), { initialValue: [] });
 
   readonly currentUser = computed(() => this.authService.currentUser());
   readonly currentUserName = computed(() => this.currentUser()?.username || 'Warehouse User');
@@ -330,6 +344,39 @@ export class DashboardComponent {
     },
   ]);
 
+  // Always "today" regardless of the selected date-range filter — sourced
+  // from the full (unfiltered) signals above, not filteredPickLists/etc.
+  readonly todayStatCards = computed<TodayStatCard[]>(() => [
+    {
+      id: 'pick',
+      label: 'Picking Qty',
+      value: this.formatNumber(this.pickedQtyToday()),
+      detail: `${this.pickCreatedToday()} pick lists today`,
+      accent: 'from-indigo-500 to-violet-600',
+    },
+    {
+      id: 'pack',
+      label: 'Packing Qty',
+      value: this.formatNumber(this.packedQtyToday()),
+      detail: `${this.packCreatedToday()} packing lists today`,
+      accent: 'from-emerald-500 to-teal-600',
+    },
+    {
+      id: 'dc',
+      label: 'DC Qty',
+      value: this.formatNumber(this.dcQtyToday()),
+      detail: `${this.dcCreatedToday()} delivery challans today`,
+      accent: 'from-amber-500 to-orange-500',
+    },
+    {
+      id: 'invoice',
+      label: 'Invoice Qty',
+      value: this.formatNumber(this.invoiceQtyToday()),
+      detail: `${this.invoiceCreatedToday()} invoices today`,
+      accent: 'from-sky-500 to-blue-600',
+    },
+  ]);
+
   readonly rangeLabel = computed(() => {
     const { start, end } = this.dateRange();
     return `${this.formatLongDate(start)} – ${this.formatLongDate(end)}`;
@@ -355,6 +402,10 @@ export class DashboardComponent {
     const start = this.shiftDays(end, -(days - 1));
     this.startDate.set(this.formatDateInput(start));
     this.endDate.set(this.formatDateInput(end));
+  }
+
+  formatToday(): string {
+    return this.formatLongDate(new Date());
   }
 
   rowWidth(value: number, total: number): number {
@@ -408,18 +459,49 @@ export class DashboardComponent {
       );
   }
 
+  // "Today" figures read the full unfiltered signals (not filteredPickLists/etc.)
+  // so they always reflect today regardless of the selected date-range filter.
   private pickCreatedToday(): number {
-    return this.filteredPickLists().filter((item) => this.isToday(this.parseUnknownDate(item.createdAt))).length;
+    return this.pickLists().filter((item) => this.isToday(this.parseUnknownDate(item.createdAt))).length;
   }
 
   private packCreatedToday(): number {
-    return this.filteredPackingLists().filter((item) => this.isToday(this.parseUnknownDate(item.createdAt))).length;
+    return this.packingLists().filter((item) => this.isToday(this.parseUnknownDate(item.createdAt))).length;
   }
 
   private packedQtyToday(): number {
-    return this.filteredPackingLists()
+    return this.packingLists()
       .filter((item) => this.isToday(this.parseUnknownDate(item.createdAt)))
       .reduce((sum, item) => sum + (Number(item.totalPackedQty) || 0), 0);
+  }
+
+  private pickedQtyToday(): number {
+    return this.pickLists()
+      .filter((item) => this.isToday(this.parseUnknownDate(item.createdAt)))
+      .reduce((sum, item) => sum + (Number(item.totalPickedQty) || 0), 0);
+  }
+
+  private dcQtyToday(): number {
+    return this.deliveryChallans()
+      .filter((dc) => this.isToday(this.parseUnknownDate(dc.createdAt)))
+      .reduce((sum, dc) => sum + (Number(dc.totalQty) || 0), 0);
+  }
+
+  private dcCreatedToday(): number {
+    return this.deliveryChallans().filter((dc) => this.isToday(this.parseUnknownDate(dc.createdAt))).length;
+  }
+
+  private invoiceQtyToday(): number {
+    return this.invoices()
+      .filter((invoice) => this.isToday(this.parseUnknownDate(invoice.createdAt)))
+      .reduce(
+        (sum, invoice) => sum + (invoice.items ?? []).reduce((itemTotal, item) => itemTotal + (Number(item.quantity) || 0), 0),
+        0
+      );
+  }
+
+  private invoiceCreatedToday(): number {
+    return this.invoices().filter((invoice) => this.isToday(this.parseUnknownDate(invoice.createdAt))).length;
   }
 
   private shipmentsOutToday(): number {

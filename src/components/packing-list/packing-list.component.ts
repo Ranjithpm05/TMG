@@ -1402,6 +1402,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
   // print action in this app — thermal label printers need exact
   // width/height/gap/density/speed control that only a direct print-agent
   // connection (QZ Tray) can give, and the browser's own print dialog can't.
+  async printBoxLabelsForDC(dc: DeliveryChallan): Promise<void> {
+    if (!dc.packingListId) return;
+    const packingList = await this.packingListService.getPackingListByIdOnce(dc.packingListId);
+    if (!packingList) return;
+    await this.printEnhancedBoxLabels(packingList);
+  }
+
   async printEnhancedBoxLabels(packingList: PackingList): Promise<void> {
     if (!packingList.id) return;
     await this.loadingService.run(async () => {
@@ -2642,6 +2649,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
   // the same status fields the E-Invoice/E-Way Bill screens use, via the
   // shared document-stage util, so this list stays in sync with them without
   // duplicating the status logic.
+  invoiceQty(invoice: Invoice): number {
+    return invoice.items.reduce((sum, item) => sum + item.quantity, 0);
+  }
+
   eInvoiceBadgeClass(invoice: Invoice): string {
     return getStageBadgeClass(invoice.eInvoiceStatus || 'pending');
   }
