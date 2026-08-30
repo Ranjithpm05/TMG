@@ -739,9 +739,9 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   private buildInvoiceHtml(invoice: Invoice, company: CompanySettings | null, logoDataUri: string): string {
     const B = 'border:1px solid #ccc;';
     const th = (txt: string, extra = '') =>
-      `<th style="padding:4px 6px;${B}background:#e8e8e8;font-size:9px;font-weight:700;text-align:center;${extra}">${txt}</th>`;
+      `<th style="padding:4px 6px;${B}background:#e8e8e8;font-size:11px;font-weight:700;text-align:center;${extra}">${txt}</th>`;
     const td = (txt: string | number, extra = '') =>
-      `<td style="padding:4px 6px;${B}font-size:9px;text-align:center;${extra}">${txt}</td>`;
+      `<td style="padding:4px 6px;${B}font-size:11px;text-align:center;${extra}">${txt}</td>`;
 
     const fmtDate = (raw: any): string => {
       if (!raw) return '-';
@@ -765,19 +765,19 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       [invoice.clientPlace, invoice.clientState].filter(Boolean).join(', ') + (invoice.clientZipCode ? ' - ' + invoice.clientZipCode : ''),
       invoice.clientPhone ? 'Mobile: ' + invoice.clientPhone : '',
     ].filter(Boolean);
-    const clientAddrHtml = addrLines.map((l) => `<div style="font-size:9px;margin-top:1px">${l}</div>`).join('');
+    const clientAddrHtml = addrLines.map((l) => `<div style="font-size:11px;margin-top:1px">${l}</div>`).join('');
 
     const shipToAddrLines = [
       invoice.clientShipToAddress || invoice.clientAddress,
       [invoice.clientShipToPlace || invoice.clientPlace, invoice.clientShipToState || invoice.clientState].filter(Boolean).join(', ') + ((invoice.clientShipToZipCode || invoice.clientZipCode) ? ' - ' + (invoice.clientShipToZipCode || invoice.clientZipCode) : ''),
     ].filter(Boolean);
-    const shipToAddrHtml = shipToAddrLines.map((l) => `<div style="font-size:9px;margin-top:1px">${l}</div>`).join('');
+    const shipToAddrHtml = shipToAddrLines.map((l) => `<div style="font-size:11px;margin-top:1px">${l}</div>`).join('');
 
     const itemRows = invoice.items.map((item, i) =>
       `<tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">` +
       td(i + 1) + td(item.description, 'text-align:left;font-weight:600') +
       td(item.styleNo || '-') + td(item.sleeveType || '-') + td(item.hsnSac) +
-      td(item.discountPct) + td(item.taxRate) + td(item.mrp.toFixed(2)) + td(item.uom) +
+      td(item.mrp.toFixed(2)) + td(item.uom) +
       td(item.quantity) + td(item.price.toFixed(2), 'font-weight:700') +
       td(item.amount.toFixed(2), 'font-weight:700') + '</tr>'
     ).join('');
@@ -795,19 +795,19 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
 
     const logoHtml = logoDataUri
       ? `<img src="${logoDataUri}" style="width:62px;height:62px;object-fit:contain;border-radius:4px;flex-shrink:0;margin-right:10px" alt="Logo">`
-      : `<div style="width:62px;height:62px;border:1.5px solid #1e3a8a;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:#1e3a8a;text-align:center;flex-shrink:0;margin-right:10px;line-height:1.3">TMG<br>CLOTHINGS</div>`;
+      : `<div style="width:62px;height:62px;border:1.5px solid #1e3a8a;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;color:#1e3a8a;text-align:center;flex-shrink:0;margin-right:10px;line-height:1.3">TMG<br>CLOTHINGS</div>`;
 
     // Bank details
     const hasBankDetails = co?.bankAccountName || co?.bankAccountNo || co?.bankIfscCode || co?.bankName;
     const bankSection = hasBankDetails
-      ? `<div style="border:1px solid #ccc;padding:5px 8px;font-size:9px">
+      ? `<div style="border:1px solid #ccc;padding:5px 8px;font-size:11px">
            <div style="font-weight:700;margin-bottom:3px">Company's Bank Details :</div>
            ${co?.bankAccountName ? `<div>Name of the Account : ${co.bankAccountName}</div>` : ''}
            ${co?.bankAccountNo ? `<div>A/C No : ${co.bankAccountNo}</div>` : ''}
            ${co?.bankIfscCode ? `<div>IFSC Code : ${co.bankIfscCode}</div>` : ''}
            ${co?.bankName ? `<div>Bank Name : ${co.bankName}</div>` : ''}
          </div>`
-      : `<div style="border:1px solid #ccc;padding:5px 8px;font-size:9px">
+      : `<div style="border:1px solid #ccc;padding:5px 8px;font-size:11px">
            <div style="font-weight:700;margin-bottom:3px">Company's Bank Details :</div>
            <div>Name of the Account : TMG Clothings</div>
            <div>A/C No : 44358238258</div>
@@ -816,14 +816,14 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
          </div>`;
 
     const eInvoiceBadge = isEInvoice
-      ? `<span style="display:inline-block;margin-left:8px;padding:1px 6px;background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:3px;font-size:8px;font-weight:700;vertical-align:middle">✓ E-INVOICE</span>`
+      ? `<span style="display:inline-block;margin-left:8px;padding:1px 6px;background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:3px;font-size:10px;font-weight:700;vertical-align:middle">✓ E-INVOICE</span>`
       : '';
 
     // IRN / Ack No / Eway Bill No — only meaningful once the e-Invoice is
     // actually generated; never shown for a pending/failed one.
     const irnBlock = isEInvoice
-      ? `<div style="border:1px solid #ccc;padding:5px 8px;font-size:9px">
-           <div>IRN : <span style="font-family:monospace;font-size:7px;word-break:break-all">${invoice.irn}</span></div>
+      ? `<div style="border:1px solid #ccc;padding:5px 8px;font-size:11px">
+           <div>IRN : <span style="font-family:monospace;font-size:9px;word-break:break-all">${invoice.irn}</span></div>
            <div style="display:flex;gap:20px;margin-top:2px;flex-wrap:wrap">
              <div>Ack No. : ${invoice.ackNo || '-'}</div>
              ${hasEwb ? `<div>Eway Bill No. : ${invoice.ewbNo}</div>` : ''}
@@ -846,57 +846,57 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
 <div style="display:flex;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:6px">
   ${logoHtml}
   <div style="flex:1;text-align:center">
-    <div style="font-size:22px;font-weight:900;letter-spacing:0.5px">${companyName}</div>
-    <div style="font-size:9px;color:#333;margin-top:2px">${companyAddr1}${companyAddr2}${companyPlace}</div>
-    <div style="font-size:9px;color:#333">Phone: ${companyPhone} | Email: ${companyEmail} | GSTIN: ${companyGstin}</div>
+    <div style="font-size:24px;font-weight:900;letter-spacing:0.5px">${companyName}</div>
+    <div style="font-size:11px;color:#333;margin-top:2px">${companyAddr1}${companyAddr2}${companyPlace}</div>
+    <div style="font-size:11px;color:#333">Phone: ${companyPhone} | Email: ${companyEmail} | GSTIN: ${companyGstin}</div>
   </div>
   <div style="text-align:right;min-width:90px">
-    <div style="font-size:8px;color:#666;margin-bottom:2px">${copyLabel}</div>
+    <div style="font-size:10px;color:#666;margin-bottom:2px">${copyLabel}</div>
     ${qrHtml}
   </div>
 </div>
 
-<div style="font-size:13px;font-weight:700;text-align:center;letter-spacing:2px;text-decoration:underline;margin-bottom:8px">
+<div style="font-size:15px;font-weight:700;text-align:center;letter-spacing:2px;text-decoration:underline;margin-bottom:8px">
   TAX INVOICE${eInvoiceBadge}
 </div>
 
 <div style="display:flex;border:1px solid #aaa;margin-bottom:8px">
   <div style="flex:1;padding:6px 8px;border-right:1px solid #aaa">
-    <div style="font-size:10px;font-weight:700;margin-bottom:3px">M/S : ${invoice.clientName}</div>
+    <div style="font-size:12px;font-weight:700;margin-bottom:3px">M/S : ${invoice.clientName}</div>
     ${clientAddrHtml}
-    ${invoice.clientGstin ? `<div style="font-size:9px;margin-top:3px;font-weight:600">GSTIN: ${invoice.clientGstin}</div>` : ''}
+    ${invoice.clientGstin ? `<div style="font-size:11px;margin-top:3px;font-weight:600">GSTIN: ${invoice.clientGstin}</div>` : ''}
   </div>
   <div style="flex:1;padding:6px 8px;border-right:1px solid #aaa">
-    <div style="font-size:9px;font-weight:700;margin-bottom:2px">Ship To : ${invoice.clientName}</div>
+    <div style="font-size:11px;font-weight:700;margin-bottom:2px">Ship To : ${invoice.clientName}</div>
     ${shipToAddrHtml}
-    ${invoice.clientPhone ? `<div style="font-size:9px;margin-top:2px">Mobile: ${invoice.clientPhone}</div>` : ''}
-    ${invoice.clientGstin ? `<div style="font-size:9px;margin-top:2px;font-weight:600">GSTIN: ${invoice.clientGstin}</div>` : ''}
+    ${invoice.clientPhone ? `<div style="font-size:11px;margin-top:2px">Mobile: ${invoice.clientPhone}</div>` : ''}
+    ${invoice.clientGstin ? `<div style="font-size:11px;margin-top:2px;font-weight:600">GSTIN: ${invoice.clientGstin}</div>` : ''}
   </div>
   <div style="min-width:215px;padding:4px 8px">
     <table style="border-collapse:collapse;width:100%">
-      <tr><td style="padding:2px 4px;font-size:9px;color:#555;white-space:nowrap">Invoice No.</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ${invoice.invoiceNo}</td></tr>
-      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Invoice Date</td><td style="padding:2px 4px;font-size:9px">: ${fmtDate(invoice.invoiceDate)}</td></tr>
-      <tr><td style="padding:2px 4px;font-size:9px;color:#555">DC No.</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ${invoice.dcNo || '—'}</td></tr>
-      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Order No.</td><td style="padding:2px 4px;font-size:9px;font-weight:600">: ${invoice.orderNo || '—'}</td></tr>
-      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Destination</td><td style="padding:2px 4px;font-size:9px">: ${invoice.destination || '—'}</td></tr>
-      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Transport</td><td style="padding:2px 4px;font-size:9px">: ${invoice.transport || '—'}</td></tr>
-      ${invoice.transportGstNo ? `<tr><td style="padding:2px 4px;font-size:9px;color:#555">Transport GSTIN</td><td style="padding:2px 4px;font-size:9px">: ${invoice.transportGstNo}</td></tr>` : ''}
-      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Doc No.</td><td style="padding:2px 4px;font-size:9px">: ${invoice.docNo || '—'}</td></tr>
-      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Shipment Date</td><td style="padding:2px 4px;font-size:9px">: ${invoice.shipmentDate ? fmtDate(invoice.shipmentDate) : '—'}</td></tr>
-      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Vehicle No.</td><td style="padding:2px 4px;font-size:9px">: ${invoice.vehicleNo || '—'}</td></tr>
-      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Total Pkgs</td><td style="padding:2px 4px;font-size:9px;font-weight:700">: ${invoice.totalPkgs}</td></tr>
-      <tr><td style="padding:2px 4px;font-size:9px;color:#555">Agent</td><td style="padding:2px 4px;font-size:9px">: ${invoice.agentName || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555;white-space:nowrap">Invoice No.</td><td style="padding:2px 4px;font-size:11px;font-weight:700">: ${invoice.invoiceNo}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Invoice Date</td><td style="padding:2px 4px;font-size:11px">: ${fmtDate(invoice.invoiceDate)}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">DC No.</td><td style="padding:2px 4px;font-size:11px;font-weight:700">: ${invoice.dcNo || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Order No.</td><td style="padding:2px 4px;font-size:11px;font-weight:600">: ${invoice.orderNo || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Destination</td><td style="padding:2px 4px;font-size:11px">: ${invoice.destination || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Transport</td><td style="padding:2px 4px;font-size:11px">: ${invoice.transport || '—'}</td></tr>
+      ${invoice.transportGstNo ? `<tr><td style="padding:2px 4px;font-size:11px;color:#555">Transport GSTIN</td><td style="padding:2px 4px;font-size:11px">: ${invoice.transportGstNo}</td></tr>` : ''}
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Doc No.</td><td style="padding:2px 4px;font-size:11px">: ${invoice.docNo || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Shipment Date</td><td style="padding:2px 4px;font-size:11px">: ${invoice.shipmentDate ? fmtDate(invoice.shipmentDate) : '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Vehicle No.</td><td style="padding:2px 4px;font-size:11px">: ${invoice.vehicleNo || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Total Pkgs</td><td style="padding:2px 4px;font-size:11px;font-weight:700">: ${invoice.totalPkgs}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Agent</td><td style="padding:2px 4px;font-size:11px">: ${invoice.agentName || '—'}</td></tr>
     </table>
   </div>
 </div>
 
 <table style="margin-bottom:8px"><thead><tr>
-  ${th('S.No')}${th('Description', 'text-align:left')}${th('Design No')}${th('Sleeve Type')}${th('HSN/SAC')}${th('Disc(%)')}${th('Tax(%)')}${th('MRP')}${th('UOM')}${th('Quantity')}${th('Price')}${th('Amount')}
+  ${th('S.No')}${th('Description', 'text-align:left')}${th('Design No')}${th('Sleeve Type')}${th('HSN/SAC')}${th('MRP')}${th('UOM')}${th('Quantity')}${th('Price')}${th('Amount')}
 </tr></thead><tbody>
   ${itemRows}
   <tr>
-    <td colspan="11" style="padding:4px 6px;${B}font-weight:700;font-size:9px;text-align:right;background:#f0f0f0">Gross</td>
-    <td style="padding:4px 6px;${B}font-weight:900;font-size:10px;text-align:center;background:#f0f0f0">${invoice.grossAmount.toFixed(2)}</td>
+    <td colspan="9" style="padding:4px 6px;${B}font-weight:700;font-size:11px;text-align:right;background:#f0f0f0">Gross</td>
+    <td style="padding:4px 6px;${B}font-weight:900;font-size:12px;text-align:center;background:#f0f0f0">${invoice.grossAmount.toFixed(2)}</td>
   </tr>
 </tbody></table>
 
@@ -904,21 +904,21 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   <div style="flex:1;display:flex;flex-direction:column;gap:8px">
     ${irnBlock}
     ${bankSection}
-    <div style="border:1px solid #ccc;padding:5px 8px;font-size:9px">
+    <div style="border:1px solid #ccc;padding:5px 8px;font-size:11px">
       <strong>Rupees :</strong> ${invoice.amountInWords}
     </div>
   </div>
   <table style="width:280px;border-collapse:collapse;flex-shrink:0">
-    ${invoice.discountAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Discount (${invoice.discountPct}%)</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">${invoice.discountAmount.toFixed(2)}</td></tr>` : ''}
-    <tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Taxable Value</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">${invoice.taxableValue.toFixed(2)}</td></tr>
-    ${invoice.cgstAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">CGST (${invoice.cgstRate}%)</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">${invoice.cgstAmount.toFixed(2)}</td></tr>` : ''}
-    ${invoice.sgstAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">SGST (${invoice.sgstRate}%)</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">${invoice.sgstAmount.toFixed(2)}</td></tr>` : ''}
-    ${invoice.igstAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">IGST (${invoice.igstRate}%)</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">${invoice.igstAmount.toFixed(2)}</td></tr>` : ''}
-    <tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd;font-weight:700">Total Tax Amount</td><td style="padding:3px 8px;font-size:9px;font-weight:700;text-align:right;border:1px solid #ddd">${invoice.totalTaxAmount.toFixed(2)}</td></tr>
-    <tr><td style="padding:3px 8px;font-size:9px;border:1px solid #ddd">Round Off</td><td style="padding:3px 8px;font-size:9px;text-align:right;border:1px solid #ddd">${invoice.roundOff.toFixed(2)}</td></tr>
+    ${invoice.discountAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd">Discount (${invoice.discountPct}%)</td><td style="padding:3px 8px;font-size:11px;font-weight:700;text-align:right;border:1px solid #ddd">${invoice.discountAmount.toFixed(2)}</td></tr>` : ''}
+    <tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd">Taxable Value</td><td style="padding:3px 8px;font-size:11px;font-weight:700;text-align:right;border:1px solid #ddd">${invoice.taxableValue.toFixed(2)}</td></tr>
+    ${invoice.cgstAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd">CGST (${invoice.cgstRate}%)</td><td style="padding:3px 8px;font-size:11px;text-align:right;border:1px solid #ddd">${invoice.cgstAmount.toFixed(2)}</td></tr>` : ''}
+    ${invoice.sgstAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd">SGST (${invoice.sgstRate}%)</td><td style="padding:3px 8px;font-size:11px;text-align:right;border:1px solid #ddd">${invoice.sgstAmount.toFixed(2)}</td></tr>` : ''}
+    ${invoice.igstAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd">IGST (${invoice.igstRate}%)</td><td style="padding:3px 8px;font-size:11px;text-align:right;border:1px solid #ddd">${invoice.igstAmount.toFixed(2)}</td></tr>` : ''}
+    <tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd;font-weight:700">Total Tax Amount</td><td style="padding:3px 8px;font-size:11px;font-weight:700;text-align:right;border:1px solid #ddd">${invoice.totalTaxAmount.toFixed(2)}</td></tr>
+    <tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd">Round Off</td><td style="padding:3px 8px;font-size:11px;text-align:right;border:1px solid #ddd">${invoice.roundOff.toFixed(2)}</td></tr>
     <tr style="background:#0f172a;color:#fff">
-      <td style="padding:5px 8px;font-size:11px;font-weight:900;border:1px solid #0f172a">TOTAL</td>
-      <td style="padding:5px 8px;font-size:12px;font-weight:900;text-align:right;border:1px solid #0f172a">&#x20B9; ${invoice.totalAmount.toLocaleString('en-IN')}</td>
+      <td style="padding:5px 8px;font-size:13px;font-weight:900;border:1px solid #0f172a">TOTAL</td>
+      <td style="padding:5px 8px;font-size:14px;font-weight:900;text-align:right;border:1px solid #0f172a">&#x20B9; ${invoice.totalAmount.toLocaleString('en-IN')}</td>
     </tr>
   </table>
 </div>
@@ -932,19 +932,19 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   </tr>
 </tbody></table>
 
-<div style="font-size:8px;border:1px solid #ccc;padding:4px 8px;margin-bottom:8px">
+<div style="font-size:10px;border:1px solid #ccc;padding:4px 8px;margin-bottom:8px">
   Amount of Tax (in words) : ${this.amountToWords(invoice.totalTaxAmount)}
 </div>
 
-<div style="font-size:9px;margin-bottom:12px">Remarks :</div>
+<div style="font-size:11px;margin-bottom:12px">Remarks :</div>
 
 <div style="display:flex;justify-content:space-between;margin-top:30px">
   <div style="text-align:center">
-    <div style="border-top:1px solid #555;padding-top:4px;font-size:9px;color:#444;width:120px">Checked By</div>
+    <div style="border-top:1px solid #555;padding-top:4px;font-size:11px;color:#444;width:120px">Checked By</div>
   </div>
   <div style="text-align:center">
-    <div style="font-size:10px;font-weight:700;color:#0f172a;margin-bottom:2px">For ${companyName}</div>
-    <div style="border-top:1px solid #555;padding-top:4px;font-size:9px;color:#444;width:150px;margin-top:30px">Authorised Signatory</div>
+    <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:2px">For ${companyName}</div>
+    <div style="border-top:1px solid #555;padding-top:4px;font-size:11px;color:#444;width:150px;margin-top:30px">Authorised Signatory</div>
   </div>
 </div>
 
@@ -958,7 +958,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice - ${invoice.invoiceNo}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,sans-serif;font-size:10px;color:#000}
+  body{font-family:Arial,sans-serif;font-size:12px;color:#000}
   table{width:100%;border-collapse:collapse}
   .page{padding:10px 14px}
   @media print{
