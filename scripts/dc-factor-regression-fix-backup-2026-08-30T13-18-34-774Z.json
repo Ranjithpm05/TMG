@@ -1,0 +1,3257 @@
+[
+  {
+    "dcId": "sWQmat73AzmgMBaca2fG",
+    "dcNo": "DCC2627-0134",
+    "beforeCurrentState": {
+      "id": "sWQmat73AzmgMBaca2fG",
+      "dcSeq": 134,
+      "invoiceId": "0pjiNP1a6hL5RlSOzR6N",
+      "invoiceNo": "TMGC2627-1245",
+      "clientGstin": "",
+      "packingListId": "ARvn17MZ2tn1oUp10UYM",
+      "zipCode": "",
+      "billingAddress": "",
+      "salesOrderIds": [
+        "zGW6mrVNJrfTXweDkcMG",
+        "2WCKZhYop6Q0O7U8cN2b"
+      ],
+      "state": "TAMILNADU",
+      "packingListNo": "PK-1786801484220",
+      "totalAmount": 23492.48,
+      "dcNo": "DCC2627-0134",
+      "updatedAt": "2026-08-30T11:54:55.757Z",
+      "packedOn": "2026-08-18T03:33:39.659Z",
+      "clientPhone": "",
+      "createdAt": "2026-08-18T03:33:39.659Z",
+      "clientName": "SRI PALANI ANDAVAR SILKS - DHARAPURAM",
+      "transport": "AKR Express",
+      "agentName": "D Hari Babu",
+      "place": "DHARAPURAM",
+      "boxCount": 1,
+      "salesNos": [
+        "SO-1785660376154",
+        "SO-1785661387750"
+      ],
+      "totalQty": 43,
+      "clientId": "dzEO4mYV4sOCDjFVRn4Q",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "items": [
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "1",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "46": 1
+          },
+          "total": 5,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2748.8,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "46": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "1",
+          "sleeveType": "Half",
+          "sizeQty": {
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2205.44,
+          "mrpBySize": {
+            "40": 849,
+            "42": 849,
+            "44": 849,
+            "46": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "2",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 2,
+            "44": 1
+          },
+          "total": 8,
+          "mrp": 849,
+          "price": 849,
+          "amount": 4346.88,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "2",
+          "sleeveType": "Half",
+          "sizeQty": {
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 3,
+          "mrp": 849,
+          "price": 849,
+          "amount": 1630.08,
+          "mrpBySize": {
+            "40": 849,
+            "42": 849,
+            "44": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "3",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 2,
+            "42": 2,
+            "44": 1,
+            "46": 1
+          },
+          "total": 8,
+          "mrp": 849,
+          "price": 849,
+          "amount": 4378.88,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849,
+            "46": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "6",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2173.44,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "7",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 1,
+            "42": 1
+          },
+          "total": 5,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2716.8,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "9",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2173.44,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "3",
+          "sleeveType": "Half",
+          "sizeQty": {
+            "44": 1,
+            "46": 1
+          },
+          "total": 2,
+          "mrp": 849,
+          "price": 849,
+          "amount": 1118.72,
+          "mrpBySize": {
+            "44": 849,
+            "46": 899
+          }
+        }
+      ]
+    }
+  },
+  {
+    "dcId": "1ybGVkSZNA6RRkTr35dO",
+    "dcNo": "DCC2627-0274",
+    "beforeCurrentState": {
+      "id": "1ybGVkSZNA6RRkTr35dO",
+      "clientGstin": "33BFPPA9987R1ZB",
+      "totalQty": 42,
+      "transportId": "0tTX7y60lP59v92Dj1sl",
+      "place": "MAYILADUTHURAI",
+      "updatedAt": "2026-08-30T11:54:57.864Z",
+      "transportAddress": "THOTTIPALAYAM,\nCOIMBATORE",
+      "clientId": "HQKSUo6j5FNF21jENfMe",
+      "invoiceId": "1SQUp31Ar5hFgi8H5wEC",
+      "dcNo": "DCC2627-0274",
+      "dcSeq": 274,
+      "clientName": "K.S.READYMADES - MAYILADUTHURAI",
+      "packingListNo": "PK-1787376258474",
+      "packedOn": "2026-08-22T09:11:05.533Z",
+      "salesOrderIds": [
+        "B46mrULLCEtvjf7mQKDt"
+      ],
+      "items": [
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "ROYAL-A",
+          "color": "07-OLIVE",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "total": 4,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 3197.44,
+          "mrpBySize": {
+            "32": 1249,
+            "34": 1249,
+            "36": 1249,
+            "38": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA165",
+          "color": "03-OLIVE",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1
+          },
+          "total": 3,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 2398.08,
+          "mrpBySize": {
+            "32": 1249,
+            "34": 1249,
+            "36": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA194",
+          "color": "02-ASH",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "total": 4,
+          "mrp": 1349,
+          "price": 1349,
+          "amount": 3453.44,
+          "mrpBySize": {
+            "32": 1349,
+            "34": 1349,
+            "36": 1349,
+            "38": 1349
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA194",
+          "color": "03-NAVY",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "total": 4,
+          "mrp": 1349,
+          "price": 1349,
+          "amount": 3453.44,
+          "mrpBySize": {
+            "32": 1349,
+            "34": 1349,
+            "36": 1349,
+            "38": 1349
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA194",
+          "color": "04-BLACK",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "total": 4,
+          "mrp": 1349,
+          "price": 1349,
+          "amount": 3453.44,
+          "mrpBySize": {
+            "32": 1349,
+            "34": 1349,
+            "36": 1349,
+            "38": 1349
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA199",
+          "color": "02-GREY",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "total": 5,
+          "mrp": 1199,
+          "price": 1199,
+          "amount": 3836.8,
+          "mrpBySize": {
+            "30": 1199,
+            "32": 1199,
+            "34": 1199,
+            "36": 1199,
+            "38": 1199
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA199",
+          "color": "04-OLIVE",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 7,
+          "mrp": 1199,
+          "price": 1199,
+          "amount": 5403.52,
+          "mrpBySize": {
+            "30": 1199,
+            "32": 1199,
+            "34": 1199,
+            "36": 1199,
+            "38": 1199,
+            "42": 1199,
+            "44": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA199",
+          "color": "05-BLACK",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 7,
+          "mrp": 1199,
+          "price": 1199,
+          "amount": 5403.52,
+          "mrpBySize": {
+            "30": 1199,
+            "32": 1199,
+            "34": 1199,
+            "36": 1199,
+            "38": 1199,
+            "42": 1199,
+            "44": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS153",
+          "color": "04-NAVY",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 1,
+            "36": 1
+          },
+          "total": 4,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 3197.44,
+          "mrpBySize": {
+            "30": 1249,
+            "32": 1249,
+            "34": 1249,
+            "36": 1249
+          }
+        }
+      ],
+      "transportGstNo": "33AAECA2701K1Z4",
+      "sizes": [
+        "30",
+        "32",
+        "34",
+        "36",
+        "38",
+        "42",
+        "44"
+      ],
+      "transport": "AKR EXPRESS",
+      "billingAddress": "NO: 104 M.G.ROAD, KORANADU, \nMAYILADUTHURAI-609001",
+      "packingListId": "7rNOX3Fl1rLxIyAz6gy1",
+      "zipCode": "609001",
+      "totalAmount": 33797.12,
+      "createdAt": "2026-08-22T09:11:05.533Z",
+      "agentName": "A.PUNNAIVANAM",
+      "salesNos": [
+        "SO-1785501502466"
+      ],
+      "boxCount": 1,
+      "state": "TAMILNADU",
+      "invoiceNo": "TMGC2627-0218",
+      "clientPhone": "04364223012"
+    }
+  },
+  {
+    "dcId": "bjDeyj7ZoxAEsG9OYRd4",
+    "dcNo": "DCC2627-0331",
+    "beforeCurrentState": {
+      "id": "bjDeyj7ZoxAEsG9OYRd4",
+      "salesOrderIds": [
+        "I38MYzyZ8yws4sB7HkFU"
+      ],
+      "packingListId": "n0LRjZPkReMysH9a5X5F",
+      "packedOn": "2026-08-24T10:58:28.610Z",
+      "items": [
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA180",
+          "color": "04-NAVY",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 6,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 4060.16,
+          "mrpBySize": {
+            "34": 1049,
+            "36": 1049,
+            "38": 1049,
+            "40": 1049,
+            "42": 1049,
+            "44": 1099
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA180",
+          "color": "05-BLACK",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 6,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 4060.16,
+          "mrpBySize": {
+            "34": 1049,
+            "36": 1049,
+            "38": 1049,
+            "40": 1049,
+            "42": 1049,
+            "44": 1099
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA199",
+          "color": "01-CREAM",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 6,
+          "mrp": 1199,
+          "price": 1199,
+          "amount": 4668.16,
+          "mrpBySize": {
+            "34": 1199,
+            "36": 1199,
+            "40": 1199,
+            "42": 1199,
+            "44": 1249,
+            "46": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA199",
+          "color": "02-GREY",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 6,
+          "mrp": 1199,
+          "price": 1199,
+          "amount": 4668.16,
+          "mrpBySize": {
+            "34": 1199,
+            "36": 1199,
+            "40": 1199,
+            "42": 1199,
+            "44": 1249,
+            "46": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA199",
+          "color": "05-BLACK",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "40": 1,
+            "42": 1,
+            "46": 1
+          },
+          "total": 5,
+          "mrp": 1199,
+          "price": 1199,
+          "amount": 3868.8,
+          "mrpBySize": {
+            "34": 1199,
+            "36": 1199,
+            "40": 1199,
+            "42": 1199,
+            "46": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS153",
+          "color": "01-CREAM",
+          "sizeQty": {
+            "34": 1,
+            "36": 1
+          },
+          "total": 2,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 1598.72,
+          "mrpBySize": {
+            "34": 1249,
+            "36": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS203",
+          "color": "04-BLACK",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "total": 3,
+          "mrp": 1199,
+          "price": 1199,
+          "amount": 2302.08,
+          "mrpBySize": {
+            "36": 1199,
+            "38": 1199,
+            "40": 1199
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS205",
+          "color": "06-NAVY",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "total": 3,
+          "mrp": 1199,
+          "price": 1199,
+          "amount": 2302.08,
+          "mrpBySize": {
+            "34": 1199,
+            "36": 1199,
+            "38": 1199
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS207",
+          "color": "01-KHAKI",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "40": 1
+          },
+          "total": 3,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 2398.08,
+          "mrpBySize": {
+            "34": 1249,
+            "36": 1249,
+            "40": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS207",
+          "color": "04-BLUE",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "40": 1
+          },
+          "total": 3,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 2398.08,
+          "mrpBySize": {
+            "34": 1249,
+            "36": 1249,
+            "40": 1249
+          }
+        }
+      ],
+      "sizes": [
+        "34",
+        "36",
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "zipCode": "625516",
+      "createdAt": "2026-08-24T10:58:28.610Z",
+      "transportAddress": "COIMBATORE",
+      "transport": "SUPAA TRAVELSS",
+      "agentName": "N Ramesh",
+      "transportId": "ldF0AdljQIgCRoQd92ej",
+      "place": "CUMBUM",
+      "billingAddress": "341, L.F.ROAD,CUMBUM - 625516",
+      "packingListNo": "PK-1787382026507",
+      "clientName": "HOME TEX FASHION STUDIO-CUMBUM",
+      "totalAmount": 32324.48,
+      "state": "TAMILNADU",
+      "clientPhone": "9095622677",
+      "clientId": "FsqFgrBOX0KrfKusZhq1",
+      "invoiceNo": "TMGC2627-0257",
+      "transportGstNo": "33AIZPP2368P2Z6",
+      "invoiceId": "7AaZhzNWTgx0AaDc4fJj",
+      "updatedAt": "2026-08-30T11:55:01.008Z",
+      "dcSeq": 331,
+      "dcNo": "DCC2627-0331",
+      "totalQty": 43,
+      "boxCount": 1,
+      "clientGstin": "33BUJPD4507K1ZR",
+      "salesNos": [
+        "SO-1785482523452"
+      ]
+    }
+  },
+  {
+    "dcId": "mX4mR8pwjG8UcdecuozS",
+    "dcNo": "DCC2627-0167",
+    "beforeCurrentState": {
+      "id": "mX4mR8pwjG8UcdecuozS",
+      "state": "TAMILNADU",
+      "billingAddress": "103-KOTHAGIRI COMPLEX,RAILWAY STATION ROAD,METTUPALAYAM - 641301,PH: 04254 222710",
+      "packingListNo": "PK-1786800342781",
+      "transportId": "0tTX7y60lP59v92Dj1sl",
+      "clientId": "u7JoZJ7oXw7l2thplsfV",
+      "transportAddress": "THOTTIPALAYAM,\nCOIMBATORE",
+      "dcSeq": 167,
+      "totalQty": 37,
+      "salesOrderIds": [
+        "QNBxgEmNMZXNlEMQ8SyF"
+      ],
+      "packingListId": "9kFP0yugRnVRdQBd6NDX",
+      "salesNos": [
+        "SO-1785487537900"
+      ],
+      "createdAt": "2026-08-19T05:15:27.025Z",
+      "agentName": "D Hari Babu",
+      "boxCount": 1,
+      "transport": "AKR EXPRESS",
+      "updatedAt": "2026-08-30T11:55:03.044Z",
+      "packedOn": "2026-08-19T05:15:27.025Z",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "items": [
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "1",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 5,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2876.8,
+          "mrpBySize": {
+            "36": 899,
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "44": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "21",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 5,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2876.8,
+          "mrpBySize": {
+            "36": 899,
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "44": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "22",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 5,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2876.8,
+          "mrpBySize": {
+            "36": 899,
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "44": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "3",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 6,
+          "mrp": 899,
+          "price": 899,
+          "amount": 3484.16,
+          "mrpBySize": {
+            "36": 899,
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "44": 899,
+            "46": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "6",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 5,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2876.8,
+          "mrpBySize": {
+            "36": 899,
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "44": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "RCS1317",
+          "color": "3",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 2014.08,
+          "mrpBySize": {
+            "38": 1049,
+            "40": 1049,
+            "42": 1049
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "RCS1317",
+          "color": "6",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 2685.44,
+          "mrpBySize": {
+            "38": 1049,
+            "40": 1049,
+            "42": 1049,
+            "44": 1049
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "RCS1317",
+          "color": "8",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 2685.44,
+          "mrpBySize": {
+            "38": 1049,
+            "40": 1049,
+            "42": 1049,
+            "44": 1049
+          }
+        }
+      ],
+      "clientGstin": "33AADFY2589F1Z0",
+      "totalAmount": 22376.32,
+      "clientName": "YOGASRI TEXTILE - METTUPALAYAM",
+      "place": "METTUPALAYAM",
+      "clientPhone": "04254 222710",
+      "transportGstNo": "33AAECA2701K1Z4",
+      "zipCode": "641301",
+      "invoiceNo": "TMGC2627-0131",
+      "dcNo": "DCC2627-0167",
+      "invoiceId": "B0csErc45DWRv4SaIb4V"
+    }
+  },
+  {
+    "dcId": "sLbfEwE0d3OhW5Gt2d6S",
+    "dcNo": "DCC2627-0206",
+    "beforeCurrentState": {
+      "id": "sLbfEwE0d3OhW5Gt2d6S",
+      "packingListNo": "PK-1786807726742",
+      "dcNo": "DCC2627-0206",
+      "dcSeq": 206,
+      "transportGstNo": "33AAUFK1187A1ZF",
+      "packingListId": "vX5kp03gWRzOwSwYUhTE",
+      "transportAddress": "AVARAMPALAYAM,\nCOIMBATORE",
+      "packedOn": "2026-08-20T04:38:26.610Z",
+      "salesOrderIds": [
+        "BosGR3FCoV5ACsWktEqo"
+      ],
+      "zipCode": "624001",
+      "state": "33",
+      "transport": "KMP SPEED PARCEL SERVICE",
+      "transportId": "05mBE0zfq7O3NXKPaEbn",
+      "agentName": "N Ramesh",
+      "createdAt": "2026-08-20T04:38:26.610Z",
+      "updatedAt": "2026-08-30T11:55:06.930Z",
+      "totalQty": 43,
+      "boxCount": 1,
+      "clientPhone": "9677702004",
+      "salesNos": [
+        "SO-1785590347043"
+      ],
+      "place": "DINDIGUL",
+      "totalAmount": 24516.48,
+      "clientGstin": "33AABFN3571G1ZJ",
+      "clientId": "JZU010AqQJO2wylaxTjJ",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "billingAddress": "140-A, EAST CAR STREET,, DINDIGUL - 624001",
+      "items": [
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "CLASSY LYCRA",
+          "color": "14",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 1099,
+          "price": 1099,
+          "amount": 2813.44,
+          "mrpBySize": {
+            "38": 1099,
+            "40": 1099,
+            "42": 1099,
+            "44": 1099
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "CLASSY LYCRA",
+          "color": "8",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 1099,
+          "price": 1099,
+          "amount": 2110.08,
+          "mrpBySize": {
+            "38": 1099,
+            "40": 1099,
+            "42": 1099
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "11",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 2,
+            "40": 1,
+            "42": 2
+          },
+          "total": 5,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2716.8,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "11",
+          "sleeveType": "Half",
+          "sizeQty": {
+            "38": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 3,
+          "mrp": 849,
+          "price": 849,
+          "amount": 1630.08,
+          "mrpBySize": {
+            "38": 849,
+            "42": 849,
+            "44": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "13",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 1,
+            "42": 2,
+            "44": 1,
+            "46": 1
+          },
+          "total": 8,
+          "mrp": 849,
+          "price": 849,
+          "amount": 4378.88,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849,
+            "46": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "13",
+          "sleeveType": "Half",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 849,
+          "price": 849,
+          "amount": 1630.08,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "8",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2173.44,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "8",
+          "sleeveType": "Half",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2173.44,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "12",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 849,
+          "price": 849,
+          "amount": 1630.08,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "17",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 849,
+          "price": 849,
+          "amount": 1630.08,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "17",
+          "sleeveType": "Half",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 849,
+          "price": 849,
+          "amount": 1630.08,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        }
+      ],
+      "invoiceNo": "TMGC2627-0167",
+      "invoiceId": "FmJiH1VT3bLhKtEDItYB",
+      "clientName": "N.PARVATHI TEXTILES - DINDIGUL"
+    }
+  },
+  {
+    "dcId": "VuaYlPc6dHcpgQlJY9pf",
+    "dcNo": "DCC2627-0298",
+    "beforeCurrentState": {
+      "id": "VuaYlPc6dHcpgQlJY9pf",
+      "zipCode": "625516",
+      "transportAddress": "COIMBATORE",
+      "transport": "SUPAA TRAVELSS",
+      "sizes": [
+        "32",
+        "34",
+        "36",
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "items": [
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "ROYAL-A",
+          "color": "03-BISCUIT",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 7,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 5627.52,
+          "mrpBySize": {
+            "32": 1249,
+            "34": 1249,
+            "36": 1249,
+            "38": 1249,
+            "40": 1249,
+            "42": 1249,
+            "44": 1299
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "ROYAL-A",
+          "color": "04-KHAKI",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "total": 5,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 3996.8,
+          "mrpBySize": {
+            "32": 1249,
+            "34": 1249,
+            "36": 1249,
+            "38": 1249,
+            "40": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "ROYAL-A",
+          "color": "09-NAVY",
+          "sizeQty": {
+            "38": 1,
+            "40": 1
+          },
+          "total": 2,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 1598.72,
+          "mrpBySize": {
+            "38": 1249,
+            "40": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA119",
+          "color": "01-CREAM",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "total": 3,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 2398.08,
+          "mrpBySize": {
+            "34": 1249,
+            "36": 1249,
+            "38": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA119",
+          "color": "02-KHAKI",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "total": 4,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 3197.44,
+          "mrpBySize": {
+            "34": 1249,
+            "36": 1249,
+            "38": 1249,
+            "40": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA119",
+          "color": "04-L.GREY",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "total": 5,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 3996.8,
+          "mrpBySize": {
+            "32": 1249,
+            "34": 1249,
+            "36": 1249,
+            "38": 1249,
+            "40": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA119",
+          "color": "05-BLACK",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "total": 5,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 3996.8,
+          "mrpBySize": {
+            "32": 1249,
+            "34": 1249,
+            "36": 1249,
+            "38": 1249,
+            "40": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA175",
+          "color": "01-CREAM",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 8,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 5434.88,
+          "mrpBySize": {
+            "32": 1049,
+            "34": 1049,
+            "36": 1049,
+            "38": 1049,
+            "40": 1049,
+            "42": 1049,
+            "44": 1099,
+            "46": 1099
+          }
+        }
+      ],
+      "dcNo": "DCC2627-0298",
+      "clientGstin": "33BUJPD4507K1ZR",
+      "invoiceNo": "TMGC2627-0240",
+      "packingListId": "qxUkPlBCR1cphPSAXuGd",
+      "state": "TAMILNADU",
+      "transportId": "ldF0AdljQIgCRoQd92ej",
+      "boxCount": 1,
+      "salesNos": [
+        "SO-1785482523452"
+      ],
+      "agentName": "N Ramesh",
+      "createdAt": "2026-08-23T06:40:24.173Z",
+      "transportGstNo": "33AIZPP2368P2Z6",
+      "clientId": "FsqFgrBOX0KrfKusZhq1",
+      "invoiceId": "FnWwW01hij2V8iiE1DAj",
+      "salesOrderIds": [
+        "I38MYzyZ8yws4sB7HkFU"
+      ],
+      "packingListNo": "PK-1787382530875",
+      "updatedAt": "2026-08-30T11:55:08.028Z",
+      "place": "CUMBUM",
+      "clientName": "HOME TEX FASHION STUDIO-CUMBUM",
+      "totalQty": 39,
+      "clientPhone": "9095622677",
+      "billingAddress": "341, L.F.ROAD,CUMBUM - 625516",
+      "packedOn": "2026-08-23T06:40:24.173Z",
+      "dcSeq": 298,
+      "totalAmount": 30247.04
+    }
+  },
+  {
+    "dcId": "qtEvm5qI4MW8KwSeQDO5",
+    "dcNo": "DCC2627-0203",
+    "beforeCurrentState": {
+      "id": "qtEvm5qI4MW8KwSeQDO5",
+      "clientName": "N.PARVATHY SILKS - THENI",
+      "invoiceNo": "TMGC2627-0164",
+      "invoiceId": "R0y5mjgEwbHg69QLCfSb",
+      "state": "TAMILNADU",
+      "dcNo": "DCC2627-0203",
+      "totalAmount": 20679.68,
+      "transportAddress": "AVARAMPALAYAM,\nCOIMBATORE",
+      "clientPhone": "6381782341",
+      "packedOn": "2026-08-20T03:47:01.843Z",
+      "dcSeq": 203,
+      "clientGstin": "33AAHCN4049E1ZO",
+      "updatedAt": "2026-08-30T11:55:11.133Z",
+      "transportGstNo": "33AAUFK1187A1ZF",
+      "billingAddress": "S.NO.23/1C.W. NO.15.D.15.1.2,CUMBUM ROAD VEERAPANDI,THENI - 625531",
+      "totalQty": 38,
+      "zipCode": "625531",
+      "salesOrderIds": [
+        "ol2dKo3QAkXCzxVlUsKo"
+      ],
+      "transport": "KMP SPEED PARCEL SERVICE",
+      "agentName": "N Ramesh",
+      "packingListId": "1JkyziRnTwsKrUGZqcPM",
+      "createdAt": "2026-08-20T03:47:01.843Z",
+      "items": [
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "10",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 5,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2716.8,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "11",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 1,
+            "42": 2
+          },
+          "total": 6,
+          "mrp": 849,
+          "price": 849,
+          "amount": 3260.16,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "12",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2173.44,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "15",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 2
+          },
+          "total": 5,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2716.8,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "16",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 1,
+            "42": 2,
+            "46": 1
+          },
+          "total": 7,
+          "mrp": 849,
+          "price": 849,
+          "amount": 3835.52,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "46": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "17",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2173.44,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "18",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2173.44,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "7",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "42": 1
+          },
+          "total": 2,
+          "mrp": 849,
+          "price": 849,
+          "amount": 1086.72,
+          "mrpBySize": {
+            "38": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "7",
+          "sleeveType": "Half",
+          "sizeQty": {
+            "40": 1
+          },
+          "total": 1,
+          "mrp": 849,
+          "price": 849,
+          "amount": 543.36,
+          "mrpBySize": {
+            "40": 849
+          }
+        }
+      ],
+      "boxCount": 1,
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "salesNos": [
+        "SO-1785593321158"
+      ],
+      "clientId": "ThcCfUA6UjkhiVAMkLzb",
+      "place": "THENI",
+      "packingListNo": "PK-1786945645709",
+      "transportId": "05mBE0zfq7O3NXKPaEbn"
+    }
+  },
+  {
+    "dcId": "ImUBAFK37aHvrpoQkazp",
+    "dcNo": "DCC2627-0253",
+    "beforeCurrentState": {
+      "id": "ImUBAFK37aHvrpoQkazp",
+      "place": "CUMBUM",
+      "billingAddress": "317& 318, L F Main Road,CUMBUM - 625516,PH: 7418819481",
+      "clientGstin": "33HUEPS8152L2ZZ",
+      "transportId": "0tTX7y60lP59v92Dj1sl",
+      "totalQty": 38,
+      "clientName": "FRIENDS COLLECTION - CUMBUM",
+      "packingListNo": "PK-1786788822551",
+      "updatedAt": "2026-08-30T11:55:13.694Z",
+      "salesOrderIds": [
+        "nNqbB5rfgxQ6seKik0eM"
+      ],
+      "invoiceId": "Y8yduKnxxSU8SIqQVbCW",
+      "clientId": "Ol03FFm0OKAS2u7vbQyg",
+      "transportGstNo": "33AAECA2701K1Z4",
+      "dcSeq": 253,
+      "zipCode": "625516",
+      "packedOn": "2026-08-21T11:34:47.815Z",
+      "sizes": [
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "items": [
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "12",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 5,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2908.8,
+          "mrpBySize": {
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "44": 899,
+            "46": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "14",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "46": 1
+          },
+          "total": 4,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2333.44,
+          "mrpBySize": {
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "46": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "17",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 5,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2908.8,
+          "mrpBySize": {
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "44": 899,
+            "46": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "2",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "46": 1
+          },
+          "total": 4,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2333.44,
+          "mrpBySize": {
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "46": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "21",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 5,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2908.8,
+          "mrpBySize": {
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "44": 899,
+            "46": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "23",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 5,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2908.8,
+          "mrpBySize": {
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "44": 899,
+            "46": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "6",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 5,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2908.8,
+          "mrpBySize": {
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "44": 899,
+            "46": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "13",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 5,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2748.8,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849,
+            "46": 899
+          }
+        }
+      ],
+      "transportAddress": "THOTTIPALAYAM,\nCOIMBATORE",
+      "transport": "AKR EXPRESS",
+      "totalAmount": 21959.68,
+      "dcNo": "DCC2627-0253",
+      "createdAt": "2026-08-21T11:34:47.815Z",
+      "agentName": "N Ramesh",
+      "salesNos": [
+        "SO-1785673184521"
+      ],
+      "boxCount": 1,
+      "state": "TAMILNADU",
+      "packingListId": "Pxn0Z3iXMdl9Qcr8SH80",
+      "invoiceNo": "TMGC2627-0207",
+      "clientPhone": "9790048866"
+    }
+  },
+  {
+    "dcId": "gdj5T487qgcqScSYgLih",
+    "dcNo": "DCC2627-0252",
+    "beforeCurrentState": {
+      "id": "gdj5T487qgcqScSYgLih",
+      "salesOrderIds": [
+        "nNqbB5rfgxQ6seKik0eM"
+      ],
+      "salesNos": [
+        "SO-1785673184521"
+      ],
+      "packingListId": "KaIGk7sXlXz25tvmUejq",
+      "dcSeq": 252,
+      "boxCount": 1,
+      "totalQty": 25,
+      "updatedAt": "2026-08-30T11:55:14.783Z",
+      "transportGstNo": "33AAECA2701K1Z4",
+      "clientName": "FRIENDS COLLECTION - CUMBUM",
+      "packingListNo": "PK-1786788352288",
+      "transportId": "0tTX7y60lP59v92Dj1sl",
+      "invoiceId": "ZsXwIm0nLQmygzDOGz0P",
+      "invoiceNo": "TMGC2627-0206",
+      "state": "TAMILNADU",
+      "clientId": "Ol03FFm0OKAS2u7vbQyg",
+      "totalAmount": 14352,
+      "dcNo": "DCC2627-0252",
+      "place": "CUMBUM",
+      "clientPhone": "9790048866",
+      "billingAddress": "317& 318, L F Main Road,CUMBUM - 625516,PH: 7418819481",
+      "transportAddress": "THOTTIPALAYAM,\nCOIMBATORE",
+      "createdAt": "2026-08-21T11:22:38.576Z",
+      "agentName": "N Ramesh",
+      "transport": "AKR EXPRESS",
+      "zipCode": "625516",
+      "items": [
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LINO COT REGULAR",
+          "color": "11",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "46": 1
+          },
+          "total": 4,
+          "mrp": 899,
+          "price": 899,
+          "amount": 2333.44,
+          "mrpBySize": {
+            "38": 899,
+            "40": 899,
+            "42": 899,
+            "46": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LUSTRE OXFORD 9081",
+          "color": "4",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 949,
+          "price": 949,
+          "amount": 2429.44,
+          "mrpBySize": {
+            "38": 949,
+            "40": 949,
+            "42": 949,
+            "44": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "LUSTRE OXFORD 9081",
+          "color": "5",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 949,
+          "price": 949,
+          "amount": 2429.44,
+          "mrpBySize": {
+            "38": 949,
+            "40": 949,
+            "42": 949,
+            "44": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "17",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "46": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2205.44,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "46": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "2",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 5,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2748.8,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849,
+            "46": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ROYAL OXFORD",
+          "color": "4",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "46": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2205.44,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "46": 899
+          }
+        }
+      ],
+      "sizes": [
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "packedOn": "2026-08-21T11:22:38.576Z",
+      "clientGstin": "33HUEPS8152L2ZZ"
+    }
+  },
+  {
+    "dcId": "gRNJtkkkqA23ihzeoSfa",
+    "dcNo": "DCC2627-0299",
+    "beforeCurrentState": {
+      "id": "gRNJtkkkqA23ihzeoSfa",
+      "packingListId": "lll73NB8Fl3FJrq8LgCV",
+      "transportAddress": "COIMBATORE",
+      "clientGstin": "33BUJPD4507K1ZR",
+      "totalQty": 44,
+      "salesOrderIds": [
+        "I38MYzyZ8yws4sB7HkFU"
+      ],
+      "place": "CUMBUM",
+      "billingAddress": "341, L.F.ROAD,CUMBUM - 625516",
+      "salesNos": [
+        "SO-1785482523452"
+      ],
+      "createdAt": "2026-08-23T06:42:24.069Z",
+      "agentName": "N Ramesh",
+      "boxCount": 1,
+      "transport": "SUPAA TRAVELSS",
+      "clientName": "HOME TEX FASHION STUDIO-CUMBUM",
+      "packingListNo": "PK-1787383225379",
+      "items": [
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA181",
+          "color": "02-KHAKI",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 5,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 3388.8,
+          "mrpBySize": {
+            "34": 1049,
+            "36": 1049,
+            "40": 1049,
+            "42": 1049,
+            "44": 1099
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS123",
+          "color": "01-ASH",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1
+          },
+          "total": 3,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 2398.08,
+          "mrpBySize": {
+            "32": 1249,
+            "34": 1249,
+            "36": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS123",
+          "color": "03-NAVY",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1
+          },
+          "total": 3,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 2398.08,
+          "mrpBySize": {
+            "32": 1249,
+            "34": 1249,
+            "36": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS123",
+          "color": "04-BLACK",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1
+          },
+          "total": 3,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 2398.08,
+          "mrpBySize": {
+            "32": 1249,
+            "34": 1249,
+            "36": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS153",
+          "color": "03-GREY",
+          "sizeQty": {
+            "34": 1,
+            "36": 1
+          },
+          "total": 2,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 1598.72,
+          "mrpBySize": {
+            "34": 1249,
+            "36": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS153",
+          "color": "04-NAVY",
+          "sizeQty": {
+            "34": 1,
+            "36": 1
+          },
+          "total": 2,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 1598.72,
+          "mrpBySize": {
+            "34": 1249,
+            "36": 1249
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS186",
+          "color": "02-BEIGE",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 6,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 4860.16,
+          "mrpBySize": {
+            "34": 1249,
+            "36": 1249,
+            "40": 1249,
+            "42": 1249,
+            "44": 1299,
+            "46": 1299
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS186",
+          "color": "03-NAVY",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "40": 1,
+            "46": 1
+          },
+          "total": 4,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 3229.44,
+          "mrpBySize": {
+            "34": 1249,
+            "36": 1249,
+            "40": 1249,
+            "46": 1299
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS186",
+          "color": "04-BLACK",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 6,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 4860.16,
+          "mrpBySize": {
+            "34": 1249,
+            "36": 1249,
+            "40": 1249,
+            "42": 1249,
+            "44": 1299,
+            "46": 1299
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS187",
+          "color": "04-BLACK",
+          "sizeQty": {
+            "36": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 2717.44,
+          "mrpBySize": {
+            "36": 1049,
+            "40": 1049,
+            "42": 1049,
+            "44": 1099
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA179",
+          "color": "03-NAVY",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1
+          },
+          "total": 3,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 2014.08,
+          "mrpBySize": {
+            "32": 1049,
+            "34": 1049,
+            "36": 1049
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTS123",
+          "color": "02-KHAKI",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1
+          },
+          "total": 3,
+          "mrp": 1249,
+          "price": 1249,
+          "amount": 2398.08,
+          "mrpBySize": {
+            "32": 1249,
+            "34": 1249,
+            "36": 1249
+          }
+        }
+      ],
+      "sizes": [
+        "32",
+        "34",
+        "36",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "clientId": "FsqFgrBOX0KrfKusZhq1",
+      "totalAmount": 33859.84,
+      "clientPhone": "9095622677",
+      "transportId": "ldF0AdljQIgCRoQd92ej",
+      "invoiceNo": "TMGC2627-0241",
+      "zipCode": "625516",
+      "dcSeq": 299,
+      "invoiceId": "bBtJkyPcBuFt9qXqx19r",
+      "transportGstNo": "33AIZPP2368P2Z6",
+      "updatedAt": "2026-08-30T11:55:15.898Z",
+      "packedOn": "2026-08-23T06:42:24.069Z",
+      "dcNo": "DCC2627-0299",
+      "state": "TAMILNADU"
+    }
+  },
+  {
+    "dcId": "D7KlBaysI99ZtU3fDJOF",
+    "dcNo": "DCC2627-0244",
+    "beforeCurrentState": {
+      "id": "D7KlBaysI99ZtU3fDJOF",
+      "clientName": "FRIENDS COLLECTION - CUMBUM",
+      "invoiceNo": "TMGC2627-0199",
+      "totalAmount": 22537.6,
+      "clientId": "Ol03FFm0OKAS2u7vbQyg",
+      "agentName": "N Ramesh",
+      "totalQty": 35,
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "createdAt": "2026-08-21T08:56:27.230Z",
+      "packingListId": "iUcIjcfHyvH6JWbrNgZw",
+      "items": [
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "DUSTY DOBBY 1818",
+          "color": "5",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 2685.44,
+          "mrpBySize": {
+            "38": 1049,
+            "40": 1049,
+            "42": 1049,
+            "44": 1049
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "DUSTY DOBBY 2727",
+          "color": "2",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 5,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 3388.8,
+          "mrpBySize": {
+            "38": 1049,
+            "40": 1049,
+            "42": 1049,
+            "44": 1049,
+            "46": 1099
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "DUSTY DOBBY 2727",
+          "color": "4",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 2014.08,
+          "mrpBySize": {
+            "38": 1049,
+            "40": 1049,
+            "42": 1049
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "DUSTY DOBBY 2727",
+          "color": "5",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "46": 1
+          },
+          "total": 4,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 2717.44,
+          "mrpBySize": {
+            "38": 1049,
+            "40": 1049,
+            "42": 1049,
+            "46": 1099
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "DUSTY DOBBY 2727",
+          "color": "6",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 1049,
+          "price": 1049,
+          "amount": 2014.08,
+          "mrpBySize": {
+            "38": 1049,
+            "40": 1049,
+            "42": 1049
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "DUSTY DOBBY 8181",
+          "color": "1",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 949,
+          "price": 949,
+          "amount": 1822.08,
+          "mrpBySize": {
+            "36": 949,
+            "40": 949,
+            "42": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "DUSTY DOBBY 8181",
+          "color": "3",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 3,
+          "mrp": 949,
+          "price": 949,
+          "amount": 1822.08,
+          "mrpBySize": {
+            "40": 949,
+            "42": 949,
+            "44": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "DUSTY DOBBY 8181",
+          "color": "4",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 949,
+          "price": 949,
+          "amount": 1822.08,
+          "mrpBySize": {
+            "38": 949,
+            "40": 949,
+            "42": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "DUSTY DOBBY 8181",
+          "color": "6",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 949,
+          "price": 949,
+          "amount": 1822.08,
+          "mrpBySize": {
+            "38": 949,
+            "40": 949,
+            "42": 949
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "SLUB LEE 6390",
+          "color": "4",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 949,
+          "price": 949,
+          "amount": 2429.44,
+          "mrpBySize": {
+            "38": 949,
+            "40": 949,
+            "42": 949,
+            "44": 949
+          }
+        }
+      ],
+      "packedOn": "2026-08-21T08:56:27.230Z",
+      "state": "TAMILNADU",
+      "clientPhone": "9790048866",
+      "transport": "AKR EXPRESS",
+      "transportGstNo": "33AAECA2701K1Z4",
+      "billingAddress": "317& 318, L F Main Road,CUMBUM - 625516,PH: 7418819481",
+      "transportId": "0tTX7y60lP59v92Dj1sl",
+      "clientGstin": "33HUEPS8152L2ZZ",
+      "place": "CUMBUM",
+      "boxCount": 1,
+      "invoiceId": "g6EtcPOxWKOR71hUEL4I",
+      "dcNo": "DCC2627-0244",
+      "updatedAt": "2026-08-30T11:55:18.034Z",
+      "dcSeq": 244,
+      "zipCode": "625516",
+      "packingListNo": "PK-1786966397027",
+      "salesOrderIds": [
+        "nNqbB5rfgxQ6seKik0eM"
+      ],
+      "transportAddress": "THOTTIPALAYAM,\nCOIMBATORE",
+      "salesNos": [
+        "SO-1785673184521"
+      ]
+    }
+  },
+  {
+    "dcId": "f9jk2hVRykmvQOt5QVlq",
+    "dcNo": "DCC2627-0185",
+    "beforeCurrentState": {
+      "id": "f9jk2hVRykmvQOt5QVlq",
+      "place": "THENI",
+      "packingListId": "0wdxVTRSOiAZWB0Yhfe8",
+      "salesOrderIds": [
+        "ol2dKo3QAkXCzxVlUsKo"
+      ],
+      "updatedAt": "2026-08-30T11:55:21.193Z",
+      "clientGstin": "33AAHCN4049E1ZO",
+      "transportGstNo": "33AAUFK1187A1ZF",
+      "clientId": "ThcCfUA6UjkhiVAMkLzb",
+      "boxCount": 1,
+      "salesNos": [
+        "SO-1785593321158"
+      ],
+      "packingListNo": "PK-1786944122613",
+      "zipCode": "625531",
+      "clientName": "N.PARVATHY SILKS - THENI",
+      "invoiceId": "qhTulEQOAgbKIjYhpXSh",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "transportAddress": "AVARAMPALAYAM,\nCOIMBATORE",
+      "items": [
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "1",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 5,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2716.8,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "10",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 849,
+          "price": 849,
+          "amount": 1630.08,
+          "mrpBySize": {
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "12",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 6,
+          "mrp": 849,
+          "price": 849,
+          "amount": 3292.16,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849,
+            "46": 899
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "13",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 1,
+            "42": 1
+          },
+          "total": 5,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2716.8,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "15",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2173.44,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "2",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 5,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2716.8,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849,
+            "44": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "8",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2173.44,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "6",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 4,
+          "mrp": 849,
+          "price": 849,
+          "amount": 2173.44,
+          "mrpBySize": {
+            "36": 849,
+            "38": 849,
+            "40": 849,
+            "42": 849
+          }
+        },
+        {
+          "partName": "CASUAL SHIRTS",
+          "styleNo": "ICE TWILL",
+          "color": "15",
+          "sleeveType": "Half",
+          "sizeQty": {
+            "44": 1
+          },
+          "total": 1,
+          "mrp": 849,
+          "price": 849,
+          "amount": 543.36,
+          "mrpBySize": {
+            "44": 849
+          }
+        }
+      ],
+      "totalAmount": 20136.32,
+      "totalQty": 37,
+      "clientPhone": "6381782341",
+      "invoiceNo": "TMGC2627-0147",
+      "dcSeq": 185,
+      "dcNo": "DCC2627-0185",
+      "transportId": "05mBE0zfq7O3NXKPaEbn",
+      "packedOn": "2026-08-19T12:05:03.178Z",
+      "billingAddress": "S.NO.23/1C.W. NO.15.D.15.1.2,CUMBUM ROAD VEERAPANDI,THENI - 625531",
+      "state": "TAMILNADU",
+      "transport": "KMP SPEED PARCEL SERVICE",
+      "agentName": "N Ramesh",
+      "createdAt": "2026-08-19T12:05:03.178Z"
+    }
+  },
+  {
+    "dcId": "FxbhazcgcXFcY27RCmaV",
+    "dcNo": "DCC2627-0255",
+    "beforeCurrentState": {
+      "id": "FxbhazcgcXFcY27RCmaV",
+      "clientId": "RGuVJ8jjdKfJ524EyKPb",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "items": [
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "HONOR DOBBY 5490",
+          "color": "1",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "40": 1,
+            "42": 1
+          },
+          "total": 2,
+          "mrp": 775,
+          "price": 775,
+          "amount": 992,
+          "mrpBySize": {
+            "40": 775,
+            "42": 775
+          }
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "HONOR DOBBY 5490",
+          "color": "2",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 775,
+          "price": 775,
+          "amount": 1488,
+          "mrpBySize": {
+            "38": 775,
+            "40": 775,
+            "42": 775
+          }
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "HONOR DOBBY 5490",
+          "color": "3",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 775,
+          "price": 775,
+          "amount": 1488,
+          "mrpBySize": {
+            "38": 775,
+            "40": 775,
+            "42": 775
+          }
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "HONOR DOBBY 5490",
+          "color": "4",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 775,
+          "price": 775,
+          "amount": 1488,
+          "mrpBySize": {
+            "38": 775,
+            "40": 775,
+            "42": 775
+          }
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "HONOR DOBBY 5490",
+          "color": "5",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "40": 1,
+            "42": 1
+          },
+          "total": 2,
+          "mrp": 775,
+          "price": 775,
+          "amount": 992,
+          "mrpBySize": {
+            "40": 775,
+            "42": 775
+          }
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "ROYAL PICK LITE",
+          "color": "15",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 1099,
+          "price": 1099,
+          "amount": 2110.08,
+          "mrpBySize": {
+            "38": 1099,
+            "40": 1099,
+            "42": 1099
+          }
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "ROYAL PICK LITE",
+          "color": "17",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 5,
+          "mrp": 1099,
+          "price": 1099,
+          "amount": 3516.8,
+          "mrpBySize": {
+            "36": 1099,
+            "38": 1099,
+            "40": 1099,
+            "42": 1099,
+            "44": 1099
+          }
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "ROYAL PICK LITE",
+          "color": "18",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 1099,
+          "price": 1099,
+          "amount": 2110.08,
+          "mrpBySize": {}
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "ROYAL PICK LITE",
+          "color": "2",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 1099,
+          "price": 1099,
+          "amount": 2110.08,
+          "mrpBySize": {
+            "38": 1099,
+            "40": 1099,
+            "42": 1099
+          }
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "ROYAL PICK LITE",
+          "color": "6",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          },
+          "total": 6,
+          "mrp": 1099,
+          "price": 1099,
+          "amount": 4252.16,
+          "mrpBySize": {
+            "36": 1099,
+            "38": 1099,
+            "40": 1099,
+            "42": 1099,
+            "44": 1099,
+            "46": 1149
+          }
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "ROYAL PICK LITE",
+          "color": "10",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrp": 1099,
+          "price": 1099,
+          "amount": 2110.08,
+          "mrpBySize": {
+            "38": 1099,
+            "40": 1099,
+            "42": 1099
+          }
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "XYNO MILANGE 1836",
+          "color": "5",
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "total": 4,
+          "mrp": 775,
+          "price": 775,
+          "amount": 1984,
+          "mrpBySize": {
+            "38": 775,
+            "40": 775,
+            "42": 775,
+            "44": 775
+          }
+        }
+      ],
+      "clientGstin": "33AACFT6386N1ZM",
+      "transportId": "05mBE0zfq7O3NXKPaEbn",
+      "invoiceId": "x6qpBZsHY2lpALW4SsSS",
+      "packingListNo": "PK-1786787114361",
+      "totalQty": 40,
+      "salesOrderIds": [
+        "8nm9u99rvzYHsmat43ze",
+        "aLy59hRIYnFpjNnrmp2K"
+      ],
+      "updatedAt": "2026-08-30T11:55:25.618Z",
+      "transportAddress": "AVARAMPALAYAM,\nCOIMBATORE",
+      "dcNo": "DCC2627-0255",
+      "packedOn": "2026-08-21T12:16:27.891Z",
+      "state": "TAMILNADU",
+      "place": "TRICHY",
+      "totalAmount": 24641.28,
+      "clientName": "THAILA AGENCIES - TRICHY",
+      "transport": "KMP SPEED PARCEL SERVICE",
+      "agentName": "A.PUNNAIVANAM",
+      "dcSeq": 255,
+      "zipCode": "620002",
+      "transportGstNo": "33AAUFK1187A1ZF",
+      "boxCount": 1,
+      "clientPhone": "9361705454",
+      "createdAt": "2026-08-21T12:16:27.891Z",
+      "salesNos": [
+        "SO-1785648319715",
+        "SO-1785649879578"
+      ],
+      "invoiceNo": "TMGC2627-0209",
+      "packingListId": "f5yrknF8CsetNCBbPZuj",
+      "billingAddress": "NO. 55 BIG BAZAAR STREET,TRICHY-620002"
+    }
+  }
+]

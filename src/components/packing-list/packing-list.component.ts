@@ -1191,15 +1191,27 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
       // Price = MRP after Margin (Client Master), same basis as the DC —
       // Discount is layered on top only here, at the invoice-total level below.
-      const invoiceItems = dcsToInvoice.flatMap((dc) => dc.items.map((dcItem) => {
-        const price = priceAfterMargin(dcItem.mrp, marginPct);
-        const amount = Math.round(dcItem.total * price * 100) / 100;
-        return {
-          description: dcItem.partName,
-          styleNo: dcItem.styleNo || undefined,
-          sleeveType: dcItem.sleeveType || undefined,
-          hsnSac, discountPct, taxRate, mrp: dcItem.mrp, uom: 'NOS', quantity: dcItem.total, price, amount,
-        };
+      // A DC item can carry more than one MRP across its sizes (mrpBySize),
+      // but an Invoice line has no size columns to show that in — so split
+      // each DC item into one Invoice line per distinct MRP, quantity being
+      // the sum of just the sizes billed at that MRP.
+      const invoiceItems = dcsToInvoice.flatMap((dc) => dc.items.flatMap((dcItem) => {
+        const qtyByMrp = new Map<number, number>();
+        for (const [size, qty] of Object.entries(dcItem.sizeQty)) {
+          const mrp = dcItem.mrpBySize?.[size] ?? dcItem.mrp;
+          qtyByMrp.set(mrp, (qtyByMrp.get(mrp) ?? 0) + qty);
+        }
+        if (qtyByMrp.size === 0) qtyByMrp.set(dcItem.mrp, dcItem.total);
+        return [...qtyByMrp.entries()].map(([mrp, quantity]) => {
+          const price = priceAfterMargin(mrp, marginPct);
+          const amount = Math.round(quantity * price * 100) / 100;
+          return {
+            description: dcItem.partName,
+            styleNo: dcItem.styleNo || undefined,
+            sleeveType: dcItem.sleeveType || undefined,
+            hsnSac, discountPct, taxRate, mrp, uom: 'NOS', quantity, price, amount,
+          };
+        });
       }));
 
       const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
@@ -1226,13 +1238,19 @@ export class PackingListComponent implements OnInit, OnDestroy {
         orderNo: mergedSalesNos.join(', '),
         clientId,
         clientName,
-        // Invoice is a billing document — always the client's Bill To Address.
+        // Invoice is a billing document — the client's Bill To Address.
         clientAddress: invoiceClient?.billingAddress ?? '',
         clientPlace: invoiceClient?.place ?? '',
         clientState: invoiceClient?.state ?? '',
         clientZipCode: invoiceClient?.zipCode ?? '',
         clientPhone: invoiceClient?.mobile ?? '',
         clientGstin: invoiceClient?.gstNo ?? '',
+        // Ship To Address — from Client Master, falling back to the billing
+        // address when the client has no distinct shipping address.
+        clientShipToAddress: invoiceClient?.shipToAddress || invoiceClient?.billingAddress || '',
+        clientShipToPlace: invoiceClient?.shipToPlace || invoiceClient?.place || '',
+        clientShipToState: invoiceClient?.shipToState || invoiceClient?.state || '',
+        clientShipToZipCode: invoiceClient?.shipToZipCode || invoiceClient?.zipCode || '',
         destination: formValues.destination,
         transport: primaryDc.transport ?? loaded.transport ?? '',
         transportId: primaryDc.transportId ?? loaded.transportId ?? undefined,
@@ -1289,10 +1307,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
         return;
       }
       try {
-        const [logoDataUri, printInvoice] = await Promise.all([
+        const [logoDataUri, invoiceWithDesign] = await Promise.all([
           fetchLogoDataUri(),
           this.invoiceService.backfillItemDesignInfoIfNeeded(invoice),
         ]);
+        const printInvoice = await this.invoiceService.backfillClientShipToIfNeeded(invoiceWithDesign);
         const html = this.buildInvoiceHtml(printInvoice, logoDataUri);
         win.document.write(html);
         win.document.close();
@@ -1310,6 +1329,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     try {
       await this.loadingService.run(async () => {
         const XLSX = await import('xlsx');
+        invoice = await this.invoiceService.backfillClientShipToIfNeeded(invoice);
         const rows: any[][] = [
           ['TMG Clothings', '', '', '', 'GSTIN: 33AAYFT2559B1ZY'],
           ['Door No.334/2, Serayampalaym, Vellanaipatti Post, Coimbatore - 641048'],
@@ -1325,6 +1345,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
           [],
           ['Customer:', invoice.clientName],
           ['Address:', [invoice.clientAddress, invoice.clientPlace, invoice.clientState, invoice.clientZipCode].filter(Boolean).join(', ')],
+          ['Ship To:', [invoice.clientShipToAddress || invoice.clientAddress, invoice.clientShipToPlace || invoice.clientPlace, invoice.clientShipToState || invoice.clientState, invoice.clientShipToZipCode || invoice.clientZipCode].filter(Boolean).join(', ')],
           ['GSTIN:', invoice.clientGstin, '', 'Phone:', invoice.clientPhone],
           [],
           ['S.No', 'Description', 'HSN/SAC', 'Disc%', 'Tax%', 'MRP', 'UOM', 'Qty', 'Price', 'Amount'],
@@ -2775,13 +2796,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
     const mrpByBarcode = await this.designService.getMrpByBarcodeMap();
 
-    const rowMap = new Map<string, { partName: string; styleNo: string; color: string; sleeveType?: string; sizeQty: Record<string, number>; total: number; mrp: number }>();
+    const rowMap = new Map<string, { partName: string; styleNo: string; color: string; sleeveType?: string; sizeQty: Record<string, number>; mrpBySize: Record<string, number>; total: number; mrp: number }>();
     const sizeSet = new Set<string>();
 
     for (const line of packedLines) {
       const qty = line.packedQty;
       if (qty <= 0) continue;
       sizeSet.add(line.size);
+      const mrp = mrpByBarcode.get(line.barcode ?? '') ?? 0;
       const key = `${line.partName}||${line.styleNo}||${line.color}||${line.sleeveType ?? ''}`;
       if (!rowMap.has(key)) {
         rowMap.set(key, {
@@ -2790,12 +2812,17 @@ export class PackingListComponent implements OnInit, OnDestroy {
           color: line.color,
           sleeveType: line.sleeveType,
           sizeQty: {},
+          mrpBySize: {},
           total: 0,
-          mrp: mrpByBarcode.get(line.barcode ?? '') ?? 0,
+          mrp,
         });
       }
       const row = rowMap.get(key)!;
       row.sizeQty[line.size] = (row.sizeQty[line.size] ?? 0) + qty;
+      // The same design/color/sleeve can carry a different MRP per size (e.g.
+      // 36/38 at ₹795 vs 40/42 at ₹825) — record it per size rather than one
+      // flat value for the whole row.
+      if (mrp > 0) row.mrpBySize[line.size] = mrp;
       row.total += qty;
     }
 
@@ -2803,8 +2830,15 @@ export class PackingListComponent implements OnInit, OnDestroy {
     // DC applies Margin only — never Discount, which is Invoice-only.
     const marginPct = client?.marginPct ?? 0;
     const items: DCItem[] = [...rowMap.values()].map((row) => {
+      // Amount sums each size's own margin-adjusted price × its qty, so a
+      // row with mixed MRPs across sizes still totals correctly instead of
+      // applying one flat price to the combined quantity.
+      const amount = Object.entries(row.sizeQty).reduce((sum, [size, qty]) => {
+        const sizeMrp = row.mrpBySize[size] ?? row.mrp;
+        return sum + qty * priceAfterMargin(sizeMrp, marginPct);
+      }, 0);
       const price = priceAfterMargin(row.mrp, marginPct);
-      return { ...row, price, amount: Math.round(row.total * price * 100) / 100 };
+      return { ...row, price, amount: Math.round(amount * 100) / 100 };
     });
     const totalQty = items.reduce((s, r) => s + r.total, 0);
     const totalAmount = Math.round(items.reduce((s, r) => s + (r.amount ?? 0), 0) * 100) / 100;
@@ -2891,7 +2925,9 @@ ${allDCHtml}
       }
     }
 
-    // Two-row header: Description | Design | Sleeve | Shade | MRP | Amount | Size(colspan) | Total
+    // Two-row header: Description | Design | Sleeve | Shade | Amount | Size(colspan, Qty over MRP per cell) | Total
+    // MRP is shown per size cell (not as one flat column) because the same
+    // design/sleeve/shade can carry a different MRP per size.
     const sizeHeaderCells = dc.sizes.map((s) => th2(s)).join('');
     const rs2 = (label: string, extra = '') =>
       `<th rowspan="2" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center;vertical-align:middle;${extra}">${label}</th>`;
@@ -2901,9 +2937,8 @@ ${allDCHtml}
       ${rs2('Design', 'text-align:left')}
       ${rs2('Sleeve')}
       ${rs2('Shade')}
-      ${rs2('MRP')}
       ${rs2('Amount')}
-      ${dc.sizes.length > 0 ? `<th colspan="${dc.sizes.length}" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center">Size</th>` : ''}
+      ${dc.sizes.length > 0 ? `<th colspan="${dc.sizes.length}" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center">Size (Qty / MRP)</th>` : ''}
       ${rs2('Total')}
     </tr>
     <tr>${sizeHeaderCells}</tr>
@@ -2914,7 +2949,13 @@ ${allDCHtml}
     for (const [partName, items] of partGroups) {
       items.forEach((item, idx) => {
         const isFirst = idx === 0;
-        const sizeCells = dc.sizes.map((s) => td2(item.sizeQty[s] ?? '')).join('');
+        const sizeCells = dc.sizes.map((s) => {
+          const qty = item.sizeQty[s] ?? 0;
+          if (qty <= 0) return td2('-');
+          const mrp = item.mrpBySize?.[s] ?? item.mrp;
+          const mrpHtml = mrp > 0 ? `<span style="display:block;font-size:8.5px;color:#666;margin-top:1px">${mrp.toFixed(2).replace(/\.00$/, '')}</span>` : '';
+          return `<td style="padding:5px 7px;${B}font-size:10px;text-align:center"><span style="font-weight:700">${qty}</span>${mrpHtml}</td>`;
+        }).join('');
         const rowBg = bodyRows.length % 2 === 0 ? '#fff' : '#f9f9f9';
         bodyRows.push(`<tr style="background:${rowBg}">
           ${isFirst
@@ -2923,7 +2964,6 @@ ${allDCHtml}
           ${td2(item.styleNo, 'font-weight:700;text-align:left')}
           ${td2(item.sleeveType || '-')}
           ${td2(item.color || '-')}
-          ${td2(item.mrp > 0 ? item.mrp.toFixed(2) : '-')}
           ${td2(item.amount ? item.amount.toFixed(2) : '-')}
           ${sizeCells}
           ${td2(item.total, 'font-weight:700')}
@@ -2934,7 +2974,7 @@ ${allDCHtml}
     const totalAmount = dc.totalAmount || dc.items.reduce((s, i) => s + (i.amount ?? 0), 0);
     const totalCells = dc.sizes.map((s) => td2(sizeTotals[s] ?? '', 'font-weight:700;background:#f0f0f0')).join('');
     const totalRow = `<tr>
-      <td colspan="5" style="padding:5px 7px;${B}font-weight:700;font-size:10px;text-align:right;background:#f0f0f0">Total</td>
+      <td colspan="4" style="padding:5px 7px;${B}font-weight:700;font-size:10px;text-align:right;background:#f0f0f0">Total</td>
       <td style="padding:5px 7px;${B}font-weight:900;font-size:10px;text-align:center;background:#f0f0f0">${totalAmount > 0 ? totalAmount.toFixed(2) : '-'}</td>
       ${totalCells}
       <td style="padding:5px 7px;${B}font-weight:900;font-size:11px;text-align:center;background:#f0f0f0">${grandTotal}</td>
@@ -3381,6 +3421,8 @@ ${allDCHtml}
       : '<div style="width:80px;height:60px;border:1px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:#1e3a8a;text-align:center;flex-shrink:0;margin-right:14px">TMG<br>CLOTHINGS</div>';
     const addrLines = [invoice.clientAddress, [invoice.clientPlace, invoice.clientState].filter(Boolean).join(', ') + (invoice.clientZipCode ? ' - ' + invoice.clientZipCode : ''), invoice.clientPhone ? 'Mobile: ' + invoice.clientPhone : ''].filter(Boolean);
     const clientAddrHtml = addrLines.map((l) => '<div style="font-size:11px;margin-top:2px">' + l + '</div>').join('');
+    const shipToAddrLines = [invoice.clientShipToAddress || invoice.clientAddress, [invoice.clientShipToPlace || invoice.clientPlace, invoice.clientShipToState || invoice.clientState].filter(Boolean).join(', ') + ((invoice.clientShipToZipCode || invoice.clientZipCode) ? ' - ' + (invoice.clientShipToZipCode || invoice.clientZipCode) : '')].filter(Boolean);
+    const shipToAddrHtml = shipToAddrLines.map((l) => '<div style="font-size:11px;margin-top:2px">' + l + '</div>').join('');
     const itemRows = invoice.items.map((item, i) => '<tr style="background:' + (i % 2 === 0 ? '#fff' : '#f9f9f9') + '">'
       + td(i + 1) + td(item.description, 'text-align:left;font-weight:600')
       + td(item.styleNo || '-') + td(item.sleeveType || '-') + td(item.hsnSac)
@@ -3405,7 +3447,7 @@ ${allDCHtml}
       + clientAddrHtml + (invoice.clientGstin ? '<div style="font-size:11px;margin-top:4px;font-weight:600">GSTIN: ' + invoice.clientGstin + '</div>' : '') + '</div>'
       + '<div style="flex:1;padding:7px 10px;border-right:1px solid #aaa">'
       + '<div style="font-size:11px;font-weight:700;margin-bottom:3px">Ship To : ' + invoice.clientName + '</div>'
-      + clientAddrHtml + '</div>'
+      + shipToAddrHtml + '</div>'
       + '<div style="min-width:210px;padding:5px 10px"><table style="border-collapse:collapse;width:100%">'
       + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Invoice No.</td><td style="padding:3px 4px;font-size:11px;font-weight:700">: ' + invoice.invoiceNo + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:11px;color:#555">Invoice Date</td><td style="padding:3px 4px;font-size:11px">: ' + fmtDate(invoice.invoiceDate) + '</td></tr>'

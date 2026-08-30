@@ -238,6 +238,7 @@ export class DeliveryChallanService {
             sizeQty: item?.sizeQty && typeof item.sizeQty === 'object' ? item.sizeQty : {},
             total: Number(item?.total) || 0,
             mrp: Number(item?.mrp) || 0,
+            mrpBySize: item?.mrpBySize && typeof item.mrpBySize === 'object' ? item.mrpBySize : undefined,
             price: Number(item?.price) || 0,
             amount: Number(item?.amount) || 0,
           }))

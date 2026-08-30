@@ -49,6 +49,12 @@ export interface Invoice {
   clientZipCode: string;
   clientPhone: string;
   clientGstin: string;
+  // Ship To Address — from Client.shipToAddress etc. Falls back to the
+  // billing fields above when the client has no distinct shipping address.
+  clientShipToAddress?: string;
+  clientShipToPlace?: string;
+  clientShipToState?: string;
+  clientShipToZipCode?: string;
   destination: string;
   // Transport Master fields — see PackingList.transport/transportId for how
   // these are sourced.

@@ -247,8 +247,8 @@
         <div class="border-t border-slate-100 mt-4 pt-4">
           <p class="text-xs text-slate-400 mb-1">Ship To</p>
           <p class="font-bold text-slate-800">{{ inv.clientName }}</p>
-          <p class="text-sm text-slate-500 mt-0.5">{{ inv.clientAddress }}</p>
-          <p class="text-sm text-slate-500">{{ inv.clientPlace }}, {{ inv.clientState }} – {{ inv.clientZipCode }}</p>
+          <p class="text-sm text-slate-500 mt-0.5">{{ inv.clientShipToAddress || inv.clientAddress }}</p>
+          <p class="text-sm text-slate-500">{{ inv.clientShipToPlace || inv.clientPlace }}, {{ inv.clientShipToState || inv.clientState }} – {{ inv.clientShipToZipCode || inv.clientZipCode }}</p>
         </div>
       </div>
 

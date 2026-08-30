@@ -143,6 +143,11 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   viewInvoice(invoice: Invoice): void {
     this.selectedInvoice.set(invoice);
     this.mode.set('view');
+    this.invoiceService.backfillClientShipToIfNeeded(invoice).then((updated) => {
+      if (updated === invoice) return;
+      if (this.selectedInvoice()?.id === updated.id) this.selectedInvoice.set(updated);
+      this.allInvoices.update((list) => list.map((i) => (i.id === updated.id ? updated : i)));
+    });
   }
 
   backToList(): void {
@@ -218,8 +223,9 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   }
 
   async submitGenerate(): Promise<void> {
-    const invoice = this.selectedInvoice();
+    let invoice = this.selectedInvoice();
     if (!invoice?.id) return;
+    invoice = await this.invoiceService.backfillClientShipToIfNeeded(invoice);
 
     const settings = this.companySettings();
     if (!settings?.gstin?.trim()) {
@@ -248,9 +254,9 @@ export class EwayBillComponent implements OnInit, OnDestroy {
           form,
           settings.gstin,
           {
-            addr1: invoice.clientAddress,
-            loc: invoice.clientPlace || invoice.destination,
-            pin: parseInt(invoice.clientZipCode) || undefined,
+            addr1: invoice.clientShipToAddress || invoice.clientAddress,
+            loc: invoice.clientShipToPlace || invoice.clientPlace || invoice.destination,
+            pin: parseInt(invoice.clientShipToZipCode || invoice.clientZipCode) || undefined,
             stcd: stateCode,
           },
           {
@@ -393,7 +399,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   // pending/failed generation, so this print can never claim success when
   // generateEwayBillByIrn didn't succeed.
   async printEwayBillPdf(invoiceOverride?: Invoice): Promise<void> {
-    const invoice = invoiceOverride ?? this.selectedInvoice();
+    let invoice = invoiceOverride ?? this.selectedInvoice();
     if (!invoice?.ewbNo || invoice.ewbStatus !== 'generated') {
       Swal.fire('Not Available', 'Generate the E-Way Bill successfully first to print this document.', 'warning');
       return;
@@ -405,6 +411,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
       Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try again.' });
       return;
     }
+    invoice = await this.invoiceService.backfillClientShipToIfNeeded(invoice);
     const logoDataUri = await fetchLogoDataUri();
     const html = await this.buildEwayBillDocumentHtml(invoice, this.companySettings(), logoDataUri);
     win.document.write(html);
@@ -464,7 +471,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
     const dispatchPlace = company
       ? `${esc(company.place || '-')}, ${this.stateNameFromCode(company.stateCode)}-${esc(company.pinCode || '-')}`
       : '-';
-    const deliveryPlace = `${esc(invoice.clientPlace || '-')}, ${(invoice.clientState || '-').toUpperCase()}${invoice.clientZipCode ? '-' + esc(invoice.clientZipCode) : ''}`;
+    const deliveryPlace = `${esc(invoice.clientShipToPlace || invoice.clientPlace || '-')}, ${(invoice.clientShipToState || invoice.clientState || '-').toUpperCase()}${(invoice.clientShipToZipCode || invoice.clientZipCode) ? '-' + esc(invoice.clientShipToZipCode || invoice.clientZipCode) : ''}`;
 
     const items = invoice.items || [];
     const primaryItem = items[0];

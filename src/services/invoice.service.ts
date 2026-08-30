@@ -17,12 +17,14 @@ import { Invoice, InvoiceItem, InvoiceTaxSummary } from '../models/invoice.model
 import { fetchAllDocs } from './firestore-pagination.util';
 import { DeliveryChallanService } from './delivery-challan.service';
 import { PackingListService } from './packing-list.service';
+import { ClientService } from './client.service';
 
 @Injectable({ providedIn: 'root' })
 export class InvoiceService {
   private firestore = inject(Firestore);
   private deliveryChallanService = inject(DeliveryChallanService);
   private packingListService = inject(PackingListService);
+  private clientService = inject(ClientService);
   private invoicesRef = collection(this.firestore, 'invoices');
 
   // Read repeatedly (e-Invoice and Packing List screens, every generation
@@ -203,6 +205,31 @@ export class InvoiceService {
     return { ...invoice, items };
   }
 
+  // Invoices created before the Ship To Address fix (2026-08-30) have no
+  // clientShipToAddress field at all — normalize() reads it as `undefined`,
+  // never '' (invoices created after the fix always populate it, falling
+  // back to the billing address when the client has none, so it's never
+  // truly undefined there). Re-fetches the live Client Master record for
+  // exactly those old invoices and persists the result, so this only ever
+  // runs once per invoice, not on every print — same pattern as
+  // backfillItemDesignInfoIfNeeded above.
+  async backfillClientShipToIfNeeded(invoice: Invoice): Promise<Invoice> {
+    if (!invoice.id || invoice.clientShipToAddress !== undefined) return invoice;
+    if (!invoice.clientId) return invoice;
+
+    const client = await this.clientService.getClientForDC(invoice.clientId, invoice.clientName);
+    if (!client) return invoice;
+
+    const patch = {
+      clientShipToAddress: client.shipToAddress || client.billingAddress || invoice.clientAddress || '',
+      clientShipToPlace: client.shipToPlace || client.place || invoice.clientPlace || '',
+      clientShipToState: client.shipToState || client.state || invoice.clientState || '',
+      clientShipToZipCode: client.shipToZipCode || client.zipCode || invoice.clientZipCode || '',
+    };
+    await this.updateInvoice(invoice.id, patch);
+    return { ...invoice, ...patch };
+  }
+
   private getFyCode(): string {
     const d = new Date();
     const month = d.getMonth() + 1;
@@ -262,6 +289,10 @@ export class InvoiceService {
       clientZipCode: String(raw?.clientZipCode ?? ''),
       clientPhone: String(raw?.clientPhone ?? ''),
       clientGstin: String(raw?.clientGstin ?? ''),
+      clientShipToAddress: raw?.clientShipToAddress ? String(raw.clientShipToAddress) : undefined,
+      clientShipToPlace: raw?.clientShipToPlace ? String(raw.clientShipToPlace) : undefined,
+      clientShipToState: raw?.clientShipToState ? String(raw.clientShipToState) : undefined,
+      clientShipToZipCode: raw?.clientShipToZipCode ? String(raw.clientShipToZipCode) : undefined,
       destination: String(raw?.destination ?? ''),
       transport: String(raw?.transport ?? ''),
       transportId: raw?.transportId ? String(raw.transportId) : undefined,

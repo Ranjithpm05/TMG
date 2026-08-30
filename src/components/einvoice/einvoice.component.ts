@@ -203,6 +203,11 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   viewInvoice(invoice: Invoice): void {
     this.selectedInvoice.set(invoice);
     this.mode.set('view');
+    this.invoiceService.backfillClientShipToIfNeeded(invoice).then((updated) => {
+      if (updated === invoice) return;
+      if (this.selectedInvoice()?.id === updated.id) this.selectedInvoice.set(updated);
+      this.invoices.update((list) => list.map((i) => (i.id === updated.id ? updated : i)));
+    });
   }
 
   backToList(): void {
@@ -542,10 +547,11 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       return;
     }
     try {
-      const [logoDataUri, printInvoice] = await Promise.all([
+      const [logoDataUri, invoiceWithDesign] = await Promise.all([
         fetchLogoDataUri(),
         this.invoiceService.backfillItemDesignInfoIfNeeded(invoice),
       ]);
+      const printInvoice = await this.invoiceService.backfillClientShipToIfNeeded(invoiceWithDesign);
       if (printInvoice !== invoice) {
         this.selectedInvoice.set(printInvoice);
         this.invoices.update((list) => list.map((i) => (i.id === invoice.id ? printInvoice : i)));
@@ -761,6 +767,12 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     ].filter(Boolean);
     const clientAddrHtml = addrLines.map((l) => `<div style="font-size:9px;margin-top:1px">${l}</div>`).join('');
 
+    const shipToAddrLines = [
+      invoice.clientShipToAddress || invoice.clientAddress,
+      [invoice.clientShipToPlace || invoice.clientPlace, invoice.clientShipToState || invoice.clientState].filter(Boolean).join(', ') + ((invoice.clientShipToZipCode || invoice.clientZipCode) ? ' - ' + (invoice.clientShipToZipCode || invoice.clientZipCode) : ''),
+    ].filter(Boolean);
+    const shipToAddrHtml = shipToAddrLines.map((l) => `<div style="font-size:9px;margin-top:1px">${l}</div>`).join('');
+
     const itemRows = invoice.items.map((item, i) =>
       `<tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">` +
       td(i + 1) + td(item.description, 'text-align:left;font-weight:600') +
@@ -856,7 +868,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   </div>
   <div style="flex:1;padding:6px 8px;border-right:1px solid #aaa">
     <div style="font-size:9px;font-weight:700;margin-bottom:2px">Ship To : ${invoice.clientName}</div>
-    ${clientAddrHtml}
+    ${shipToAddrHtml}
     ${invoice.clientPhone ? `<div style="font-size:9px;margin-top:2px">Mobile: ${invoice.clientPhone}</div>` : ''}
     ${invoice.clientGstin ? `<div style="font-size:9px;margin-top:2px;font-weight:600">GSTIN: ${invoice.clientGstin}</div>` : ''}
   </div>
@@ -979,6 +991,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       DocDtls?: { Typ?: string; No?: string; Dt?: string };
       SellerDtls?: { Gstin?: string; LglNm?: string; TrdNm?: string; Addr1?: string; Addr2?: string; Loc?: string; Pin?: number; Ph?: string; Em?: string };
       BuyerDtls?: { Gstin?: string; LglNm?: string; Addr1?: string; Addr2?: string; Loc?: string; Pin?: number; Stcd?: string; Pos?: string; Ph?: string };
+      ShipDtls?: { Gstin?: string; LglNm?: string; Addr1?: string; Addr2?: string; Loc?: string; Pin?: number; Stcd?: string };
       ItemList?: Array<{
         SlNo: string; PrdDesc?: string; HsnCd: string; Qty?: number; Unit?: string; UnitPrice: number;
         Discount?: number; AssAmt: number; GstRt: number; CesRt?: number; StateCesRt?: number; StateCesNonAdvlAmt?: number;
@@ -1009,6 +1022,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
 
     const seller = payload.SellerDtls;
     const buyer = payload.BuyerDtls;
+    const shipTo = payload.ShipDtls;
     const posName = this.stateNameFromCode(buyer?.Pos);
     const igstDespiteSameState = payload.TranDtls?.IgstOnIntra === 'Y' ? 'Yes' : 'No';
 
@@ -1129,6 +1143,14 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       <div style="font-size:9px">Place of Supply : ${posName}</div>
       ${buyer?.Ph ? `<div style="font-size:9px">Phone: ${esc(buyer.Ph)}</div>` : ''}
     </div>
+    ${shipTo ? `<div style="flex:1;border:1px solid #ddd;padding:6px">
+      <div style="font-size:10px;font-weight:700;margin-bottom:4px">Consignee (Ship To)</div>
+      <div style="font-size:9px">GSTIN : ${esc(shipTo.Gstin || '-')}</div>
+      <div style="font-size:9px;font-weight:700;margin-top:2px">${esc(shipTo.LglNm || '-')}</div>
+      <div style="font-size:9px;margin-top:2px">${esc(shipTo.Addr1 || '-')}${shipTo.Addr2 ? ', ' + esc(shipTo.Addr2) : ''}</div>
+      <div style="font-size:9px">${esc(shipTo.Loc || '-')} - ${esc(shipTo.Pin || '-')}</div>
+      <div style="font-size:9px">${this.stateNameFromCode(shipTo.Stcd)}</div>
+    </div>` : ''}
   </div>
 </section>
 

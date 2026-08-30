@@ -5,9 +5,18 @@ export interface DCItem {
   sleeveType?: string;
   sizeQty: Record<string, number>;
   total: number;
+  // Same design/color/sleeve can carry a different MRP per size (e.g. size
+  // 36/38 at ₹795 vs 40/42 at ₹825) — mrpBySize is the source of truth for
+  // display and amount calculation. `mrp` is kept only as a legacy
+  // single-value fallback (first size encountered) for older DC documents
+  // written before mrpBySize existed and for call sites that haven't been
+  // updated to read per-size MRP.
   mrp: number;
+  mrpBySize?: Record<string, number>;
   // Margin-adjusted unit price (Client Master Margin%) and its line total —
-  // no Discount is ever applied here, only in the Invoice.
+  // no Discount is ever applied here, only in the Invoice. When a row mixes
+  // more than one MRP across its sizes, amount is the sum of each size's
+  // qty × its own margin-adjusted price, not a single flat price × total.
   price?: number;
   amount?: number;
 }
