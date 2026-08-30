@@ -22,6 +22,7 @@ import { Transport } from '../../models/transport.model';
 import { TransportService } from '../../services/transport.service';
 import { DeliveryChallanService } from '../../services/delivery-challan.service';
 import { Invoice } from '../../models/invoice.model';
+import { resolveHsnCode } from '../../models/hsn-code.model';
 import { InvoiceService } from '../../services/invoice.service';
 import { LrEntryService } from '../../services/lr-entry.service';
 import { InventoryService } from '../../services/inventory.service';
@@ -1147,7 +1148,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const { value: formValues } = await Swal.fire({
       title: 'Invoice Settings',
       html: '<div style="text-align:left;font-size:13px">'
-        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">HSN/SAC Code</label>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Default HSN/SAC Code (used only if a product isn\'t in the standard list)</label>'
         + '<input id="inv-hsn" class="swal2-input" style="margin:0;width:100%" value="62059090"></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Discount % (from Client Master)</label>'
         + '<input class="swal2-input" style="margin:0;width:100%;background:#f3f4f6" value="' + clientDiscountPct + '" disabled></div>'
@@ -1176,7 +1177,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.isGeneratingInvoice.set(true);
     try {
       const loaded = (await this.packingListService.getPackingListByIdOnce(packingList.id)) ?? packingList;
-      const { taxRate, hsnSac } = formValues;
+      const { taxRate, hsnSac: defaultHsnSac } = formValues;
       const discountPct = clientDiscountPct;
       const halfTax = taxRate / 2;
 
@@ -1202,6 +1203,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
           qtyByMrp.set(mrp, (qtyByMrp.get(mrp) ?? 0) + qty);
         }
         if (qtyByMrp.size === 0) qtyByMrp.set(dcItem.mrp, dcItem.total);
+        // HSN/SAC is looked up per product (Design.group, carried through as
+        // partName) from the standard list, not typed in by hand — the
+        // dialog's HSN field is only a fallback for a product not in it.
+        const hsnSac = resolveHsnCode(dcItem.partName, defaultHsnSac);
         return [...qtyByMrp.entries()].map(([mrp, quantity]) => {
           const price = priceAfterMargin(mrp, marginPct);
           const amount = Math.round(quantity * price * 100) / 100;
@@ -1223,6 +1228,21 @@ export class PackingListComponent implements OnInit, OnDestroy {
       const rawTotal = taxableValue + totalTaxAmount;
       const totalAmount = Math.round(rawTotal);
       const roundOff = Math.round((totalAmount - rawTotal) * 100) / 100;
+
+      // GST invoices break the tax summary down per HSN/SAC code, not one
+      // blended row — items can now carry different codes (see
+      // resolveHsnCode above). Each group's own gross gets the same
+      // Discount%/Tax% applied as the invoice-level totals above; the
+      // invoice's own taxableValue/cgstAmount/sgstAmount (used for the
+      // printed "Total" row) stay computed from the overall gross, not a sum
+      // of these per-group roundings.
+      const grossByHsn = new Map<string, number>();
+      for (const item of invoiceItems) grossByHsn.set(item.hsnSac, (grossByHsn.get(item.hsnSac) ?? 0) + item.amount);
+      const taxSummary = [...grossByHsn.entries()].map(([hsn, groupGross]) => {
+        const groupTaxable = Math.round((groupGross - groupGross * discountPct / 100) * 100) / 100;
+        const groupCgst = Math.round(groupTaxable * halfTax / 100 * 100) / 100;
+        return { hsnSac: hsn, taxableValue: groupTaxable, cgstRate: halfTax, cgstAmount: groupCgst, sgstRate: halfTax, sgstAmount: groupCgst, igstRate: 0, igstAmount: 0 };
+      });
 
       const mergedSalesOrderIds = [...new Set(dcsToInvoice.flatMap((dc) => dc.salesOrderIds.length ? dc.salesOrderIds : loaded.salesOrderIds))];
       const mergedSalesNos = [...new Set(dcsToInvoice.flatMap((dc) => dc.salesNos.length ? dc.salesNos : loaded.salesNos))];
@@ -1266,7 +1286,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount,
         igstRate: 0, igstAmount: 0, totalTaxAmount, roundOff, totalAmount,
         amountInWords: this.amountToWords(totalAmount),
-        taxSummary: [{ hsnSac, taxableValue, cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount, igstRate: 0, igstAmount: 0 }],
+        taxSummary,
       }, { allowDuplicate: allowDuplicateInvoice });
 
       await this.refreshInvoices();
