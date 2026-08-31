@@ -475,10 +475,16 @@ export class DashboardComponent {
       .reduce((sum, item) => sum + (Number(item.totalPackedQty) || 0), 0);
   }
 
+  // Includes totalAdditionalPickedQty (extra/unplanned items scanned beyond
+  // the Sales Order requirement) alongside totalPickedQty — see
+  // PickList.totalAdditionalPickedQty doc comment.
   private pickedQtyToday(): number {
     return this.pickLists()
       .filter((item) => this.isToday(this.parseUnknownDate(item.createdAt)))
-      .reduce((sum, item) => sum + (Number(item.totalPickedQty) || 0), 0);
+      .reduce(
+        (sum, item) => sum + (Number(item.totalPickedQty) || 0) + (Number(item.totalAdditionalPickedQty) || 0),
+        0
+      );
   }
 
   private dcQtyToday(): number {

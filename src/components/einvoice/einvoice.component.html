@@ -148,6 +148,12 @@
                     class="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 transition-colors">
                     Export
                   </button>
+                  @if (inv.transport) {
+                  <button (click)="openLrModalForInvoice(inv)" [title]="inv.lrEntryId ? 'Change LR Entry' : 'Map LR Entry'"
+                    class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
+                    {{ inv.lrEntryId ? 'Change LR' : 'Map LR' }}
+                  </button>
+                  }
                 </div>
               </td>
             </tr>
@@ -238,6 +244,16 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M3 5h18M5 5v14a2 2 0 002 2h10a2 2 0 002-2V5"/>
         </svg>
         Edit Transport Details
+      </button>
+      }
+
+      @if (inv.transport) {
+      <button (click)="openLrModal()"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 13l1.5-4.5A2 2 0 016.4 7H15v6M3 13h13m0-6h2.5a1 1 0 01.9.55L18 10h2a1 1 0 011 1v2a1 1 0 01-1 1h-1m-9-1a2 2 0 11-4 0 2 2 0 014 0zm10 0a2 2 0 11-4 0 2 2 0 014 0z"/>
+        </svg>
+        {{ inv.lrEntryId ? 'Change LR Entry' : 'Map LR Entry' }}
       </button>
       }
 
@@ -369,10 +385,7 @@
         <div class="flex items-center justify-between mb-3">
           <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest">LR Mapping</h3>
           @if (inv.lrEntryId) {
-          <div class="flex items-center gap-2">
-            <button (click)="openLrModal()" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800">Change</button>
-            <button (click)="unmapLrEntry()" [disabled]="isMappingLr()" class="text-xs font-semibold text-rose-600 hover:text-rose-800 disabled:opacity-50">Unmap</button>
-          </div>
+          <button (click)="unmapLrEntry()" [disabled]="isMappingLr()" class="text-xs font-semibold text-rose-600 hover:text-rose-800 disabled:opacity-50">Unmap</button>
           }
         </div>
         @if (inv.lrEntryId) {
@@ -388,7 +401,7 @@
           </div>
         </div>
         } @else {
-        <div class="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3">
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
           <p class="text-sm text-slate-400 italic">
             @if (!inv.transport) {
               Set Transport on this invoice first (Edit Transport Details) to map an LR Entry.
@@ -396,12 +409,6 @@
               No LR Entry mapped yet.
             }
           </p>
-          @if (inv.transport) {
-          <button (click)="openLrModal()"
-            class="flex-shrink-0 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
-            Map LR Entry
-          </button>
-          }
         </div>
         }
       </div>
@@ -948,12 +955,12 @@
       </button>
     </div>
     <div class="flex-1 overflow-y-auto p-4">
-      @if (eligibleLrEntries().length === 0) {
+      @if (eligibleLrEntries().length === 0 && !showNewLrForm()) {
         <div class="text-center py-10 text-slate-400">
           <p class="text-sm font-semibold">No matching LR Entries found</p>
           <p class="text-xs mt-1">LR Entries are captured when generating the DC for a dispatch. None exist yet with Transport "{{ lrInv.transport }}".</p>
         </div>
-      } @else {
+      } @else if (!showNewLrForm()) {
         <div class="space-y-2">
           @for (lr of eligibleLrEntries(); track lr.id) {
             <div class="flex items-center justify-between gap-3 p-3 rounded-xl border"
@@ -977,9 +984,42 @@
           }
         </div>
       }
+      @if (showNewLrForm()) {
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">LR No.</label>
+            <input type="text" [ngModel]="newLrForm().lrNo" (ngModelChange)="updateNewLrField('lrNo', $event)"
+              placeholder="e.g. LR-4521"
+              class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">LR Date</label>
+            <input type="date" [ngModel]="newLrForm().lrDate" (ngModelChange)="updateNewLrField('lrDate', $event)"
+              class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">Vehicle No. (optional)</label>
+            <input type="text" [ngModel]="newLrForm().vehicleNo" (ngModelChange)="updateNewLrField('vehicleNo', $event)"
+              placeholder="e.g. TN37AB1234"
+              class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200">
+          </div>
+        </div>
+      } @else {
+        <button (click)="openNewLrForm()"
+          class="mt-3 w-full px-3 py-2.5 rounded-xl border border-dashed border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 transition-colors">
+          + Create New LR Entry
+        </button>
+      }
     </div>
     <div class="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
-      <button (click)="closeLrModal()" class="px-5 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Close</button>
+      @if (showNewLrForm()) {
+        <button (click)="closeNewLrForm()" [disabled]="isCreatingLr()"
+          class="px-5 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 transition-colors">Back</button>
+        <button (click)="createAndMapLrEntry()" [disabled]="isCreatingLr()"
+          class="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 transition-colors">Create &amp; Map</button>
+      } @else {
+        <button (click)="closeLrModal()" class="px-5 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Close</button>
+      }
     </div>
   </div>
 </div>

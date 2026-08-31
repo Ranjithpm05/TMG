@@ -2835,7 +2835,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
       if (qty <= 0) continue;
       sizeSet.add(line.size);
       const mrp = mrpByBarcode.get(line.barcode ?? '') ?? 0;
-      const key = `${line.partName}||${line.styleNo}||${line.color}||${line.sleeveType ?? ''}`;
+      // MRP is part of the row key (not just an annotation on the size
+      // cell) — the same design/sleeve/shade prints as separate rows when
+      // its MRP changes across sizes, instead of one row with a per-size
+      // MRP subscript.
+      const key = `${line.partName}||${line.styleNo}||${line.color}||${line.sleeveType ?? ''}||${mrp}`;
       if (!rowMap.has(key)) {
         rowMap.set(key, {
           partName: line.partName,
@@ -2850,9 +2854,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
       }
       const row = rowMap.get(key)!;
       row.sizeQty[line.size] = (row.sizeQty[line.size] ?? 0) + qty;
-      // The same design/color/sleeve can carry a different MRP per size (e.g.
-      // 36/38 at ₹795 vs 40/42 at ₹825) — record it per size rather than one
-      // flat value for the whole row.
+      // Row is keyed by MRP too, so every size folded into it already shares
+      // row.mrp — mrpBySize is kept only for older call sites/documents that
+      // still read it (e.g. invoice generation), populated uniformly here.
       if (mrp > 0) row.mrpBySize[line.size] = mrp;
       row.total += qty;
     }
@@ -2861,14 +2865,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
     // DC applies Margin only — never Discount, which is Invoice-only.
     const marginPct = client?.marginPct ?? 0;
     const items: DCItem[] = [...rowMap.values()].map((row) => {
-      // Amount sums each size's own margin-adjusted price × its qty, so a
-      // row with mixed MRPs across sizes still totals correctly instead of
-      // applying one flat price to the combined quantity.
-      const amount = Object.entries(row.sizeQty).reduce((sum, [size, qty]) => {
-        const sizeMrp = row.mrpBySize[size] ?? row.mrp;
-        return sum + qty * priceAfterMargin(sizeMrp, marginPct);
-      }, 0);
       const price = priceAfterMargin(row.mrp, marginPct);
+      const amount = row.total * price;
       return { ...row, price, amount: Math.round(amount * 100) / 100 };
     });
     const totalQty = items.reduce((s, r) => s + r.total, 0);
@@ -2938,9 +2936,34 @@ ${allDCHtml}
     const td2 = (txt: string | number, extra = '') =>
       `<td style="padding:5px 7px;${B}font-size:10px;text-align:center;${extra}">${txt}</td>`;
 
+    // Older DCs (created before the DC row was keyed by MRP) can still carry
+    // one item whose sizes span more than one MRP via mrpBySize — split those
+    // into one display row per distinct MRP so a stray size at a different
+    // MRP never gets silently shown under the item's single flat `mrp`.
+    // Margin factor (price/mrp) is assumed uniform across an item's sizes,
+    // which holds since it's the same client's Margin% for the whole DC.
+    const items: DCItem[] = dc.items.flatMap((item) => {
+      const byMrp = new Map<number, Record<string, number>>();
+      for (const [size, qty] of Object.entries(item.sizeQty)) {
+        if (qty <= 0) continue;
+        const mrp = item.mrpBySize?.[size] ?? item.mrp;
+        const bucket = byMrp.get(mrp) ?? {};
+        bucket[size] = (bucket[size] ?? 0) + qty;
+        byMrp.set(mrp, bucket);
+      }
+      if (byMrp.size <= 1) return [item];
+      const factor = item.mrp > 0 && item.price != null ? item.price / item.mrp : 1;
+      return [...byMrp.entries()].map(([mrp, sizeQty]) => {
+        const total = Object.values(sizeQty).reduce((s, q) => s + q, 0);
+        const price = Math.round(mrp * factor * 100) / 100;
+        const amount = Math.round(total * price * 100) / 100;
+        return { ...item, mrp, sizeQty, total, price, amount };
+      });
+    });
+
     // Group items by partName for rowspan
-    const partGroups = new Map<string, typeof dc.items>();
-    for (const item of dc.items) {
+    const partGroups = new Map<string, typeof items>();
+    for (const item of items) {
       const existing = partGroups.get(item.partName) ?? [];
       existing.push(item);
       partGroups.set(item.partName, existing);
@@ -2956,9 +2979,11 @@ ${allDCHtml}
       }
     }
 
-    // Two-row header: Description | Design | Sleeve | Shade | Amount | Size(colspan, Qty over MRP per cell) | Total
-    // MRP is shown per size cell (not as one flat column) because the same
-    // design/sleeve/shade can carry a different MRP per size.
+    // Two-row header: Description | Design | Sleeve | Shade | MRP | Amount | Size(colspan, Qty only) | Total
+    // MRP is its own column (one flat value per row) instead of a per-size
+    // subscript — a design/sleeve/shade that carries more than one MRP
+    // across its sizes now prints as separate rows (see the row key in
+    // createDCForPackingList), each with a single MRP.
     const sizeHeaderCells = dc.sizes.map((s) => th2(s)).join('');
     const rs2 = (label: string, extra = '') =>
       `<th rowspan="2" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center;vertical-align:middle;${extra}">${label}</th>`;
@@ -2968,8 +2993,9 @@ ${allDCHtml}
       ${rs2('Design', 'text-align:left')}
       ${rs2('Sleeve')}
       ${rs2('Shade')}
+      ${rs2('MRP')}
       ${rs2('Amount')}
-      ${dc.sizes.length > 0 ? `<th colspan="${dc.sizes.length}" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center">Size (Qty / MRP)</th>` : ''}
+      ${dc.sizes.length > 0 ? `<th colspan="${dc.sizes.length}" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center">Size (Qty)</th>` : ''}
       ${rs2('Total')}
     </tr>
     <tr>${sizeHeaderCells}</tr>
@@ -2983,9 +3009,7 @@ ${allDCHtml}
         const sizeCells = dc.sizes.map((s) => {
           const qty = item.sizeQty[s] ?? 0;
           if (qty <= 0) return td2('-');
-          const mrp = item.mrpBySize?.[s] ?? item.mrp;
-          const mrpHtml = mrp > 0 ? `<span style="display:block;font-size:8.5px;color:#666;margin-top:1px">${mrp.toFixed(2).replace(/\.00$/, '')}</span>` : '';
-          return `<td style="padding:5px 7px;${B}font-size:10px;text-align:center"><span style="font-weight:700">${qty}</span>${mrpHtml}</td>`;
+          return `<td style="padding:5px 7px;${B}font-size:10px;text-align:center;font-weight:700">${qty}</td>`;
         }).join('');
         const rowBg = bodyRows.length % 2 === 0 ? '#fff' : '#f9f9f9';
         bodyRows.push(`<tr style="background:${rowBg}">
@@ -2995,6 +3019,7 @@ ${allDCHtml}
           ${td2(item.styleNo, 'font-weight:700;text-align:left')}
           ${td2(item.sleeveType || '-')}
           ${td2(item.color || '-')}
+          ${td2(item.mrp ? item.mrp.toFixed(2).replace(/\.00$/, '') : '-')}
           ${td2(item.amount ? item.amount.toFixed(2) : '-')}
           ${sizeCells}
           ${td2(item.total, 'font-weight:700')}
@@ -3005,7 +3030,7 @@ ${allDCHtml}
     const totalAmount = dc.totalAmount || dc.items.reduce((s, i) => s + (i.amount ?? 0), 0);
     const totalCells = dc.sizes.map((s) => td2(sizeTotals[s] ?? '', 'font-weight:700;background:#f0f0f0')).join('');
     const totalRow = `<tr>
-      <td colspan="4" style="padding:5px 7px;${B}font-weight:700;font-size:10px;text-align:right;background:#f0f0f0">Total</td>
+      <td colspan="5" style="padding:5px 7px;${B}font-weight:700;font-size:10px;text-align:right;background:#f0f0f0">Total</td>
       <td style="padding:5px 7px;${B}font-weight:900;font-size:10px;text-align:center;background:#f0f0f0">${totalAmount > 0 ? totalAmount.toFixed(2) : '-'}</td>
       ${totalCells}
       <td style="padding:5px 7px;${B}font-weight:900;font-size:11px;text-align:center;background:#f0f0f0">${grandTotal}</td>
@@ -3066,7 +3091,7 @@ ${allDCHtml}
 <table style="width:100%;border-collapse:collapse">
   ${thead}
   <tbody>
-    ${bodyRows.join('') || `<tr><td colspan="${5 + dc.sizes.length + 1}" style="padding:10px;text-align:center;color:#888">No items packed.</td></tr>`}
+    ${bodyRows.join('') || `<tr><td colspan="${6 + dc.sizes.length + 1}" style="padding:10px;text-align:center;color:#888">No items packed.</td></tr>`}
     ${totalRow}
   </tbody>
 </table>
@@ -3458,7 +3483,8 @@ ${allDCHtml}
       + td(i + 1) + td(item.description, 'text-align:left;font-weight:600')
       + td(item.styleNo || '-') + td(item.sleeveType || '-') + td(item.hsnSac)
       + td(item.mrp.toFixed(2)) + td(item.uom)
-      + td(item.quantity) + td(item.price.toFixed(2), 'font-weight:700') + td(item.amount.toFixed(2), 'font-weight:700') + '</tr>').join('');
+      + td(item.quantity) + td(item.price.toFixed(2), 'font-weight:700;text-align:right') + td(item.amount.toFixed(2), 'font-weight:700;text-align:right') + '</tr>').join('');
+    const totalQty = invoice.items.reduce((sum, item) => sum + item.quantity, 0);
     const taxSummaryRows = invoice.taxSummary.map((t) => '<tr>'
       + td(t.hsnSac) + td(t.taxableValue.toFixed(2), 'font-weight:700') + td(t.cgstRate) + td(t.cgstAmount.toFixed(2), 'font-weight:700')
       + td(t.sgstRate) + td(t.sgstAmount.toFixed(2), 'font-weight:700') + td(t.igstRate || '-') + td(t.igstAmount ? t.igstAmount.toFixed(2) : '-') + '</tr>').join('');
@@ -3495,7 +3521,9 @@ ${allDCHtml}
       + '<table style="margin-bottom:10px"><thead><tr>'
       + th('S.No') + th('Description', 'text-align:left') + th('Design No') + th('Sleeve Type') + th('HSN/SAC') + th('MRP') + th('UOM') + th('Quantity') + th('Price') + th('Amount')
       + '</tr></thead><tbody>' + itemRows
-      + '<tr><td colspan="9" style="padding:5px 7px;' + B + 'font-weight:700;font-size:13px;text-align:right;background:#f0f0f0">Gross</td>'
+      + '<tr><td colspan="7" style="padding:5px 7px;' + B + 'font-weight:700;font-size:13px;text-align:right;background:#f0f0f0">Gross</td>'
+      + '<td style="padding:5px 7px;' + B + 'font-weight:900;font-size:14px;text-align:center;background:#f0f0f0">' + totalQty + '</td>'
+      + '<td style="padding:5px 7px;' + B + 'background:#f0f0f0"></td>'
       + '<td style="padding:5px 7px;' + B + 'font-weight:900;font-size:14px;text-align:center;background:#f0f0f0">' + invoice.grossAmount.toFixed(2) + '</td></tr>'
       + '</tbody></table>'
       + '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">'
@@ -3528,10 +3556,10 @@ ${allDCHtml}
   }
 
   private amountToWords(amount: number): string {
-    const rounded = Math.round(amount);
     const parts = amount.toFixed(2).split('.');
+    const rupees = parseInt(parts[0], 10);
     const paisa = parseInt(parts[1], 10);
-    const rupeeWords = this.numberToWords(rounded);
+    const rupeeWords = this.numberToWords(rupees);
     if (paisa > 0) return rupeeWords + ' AND ' + this.numberToWords(paisa) + ' PAISE ONLY';
     return rupeeWords + ' RUPEES ONLY';
   }

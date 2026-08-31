@@ -79,6 +79,9 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   showTransportModal = signal(false);
   showLrModal = signal(false);
   isMappingLr = signal(false);
+  showNewLrForm = signal(false);
+  isCreatingLr = signal(false);
+  newLrForm = signal({ lrNo: '', lrDate: '', vehicleNo: '' });
 
   cancelReason = signal('');
   cancelReasonOther = signal('');
@@ -441,11 +444,73 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   // across, it never touches other invoices already on either LR.
 
   openLrModal(): void {
+    this.showNewLrForm.set(false);
     this.showLrModal.set(true);
+  }
+
+  // Lets the list view open the mapping modal for a row directly (mode stays
+  // 'list' — this isn't viewInvoice(), so it doesn't navigate into the full
+  // detail screen just to map an LR).
+  openLrModalForInvoice(invoice: Invoice): void {
+    this.selectedInvoice.set(invoice);
+    this.openLrModal();
   }
 
   closeLrModal(): void {
     this.showLrModal.set(false);
+    this.showNewLrForm.set(false);
+  }
+
+  // Only DCs generated after the LR-capture prompt existed — and where a
+  // Transport was already set at that moment (see PackingListComponent
+  // generateAndPrintDC) — get an LR Entry automatically. An invoice whose
+  // Transport was set/changed afterwards, or whose LR prompt was skipped,
+  // otherwise has nothing to map to. This lets that LR be recorded directly
+  // from the Invoice screen instead of being a dead end.
+  openNewLrForm(): void {
+    this.newLrForm.set({ lrNo: '', lrDate: new Date().toISOString().slice(0, 10), vehicleNo: '' });
+    this.showNewLrForm.set(true);
+  }
+
+  closeNewLrForm(): void {
+    this.showNewLrForm.set(false);
+  }
+
+  updateNewLrField<K extends keyof ReturnType<typeof this.newLrForm>>(field: K, value: string): void {
+    this.newLrForm.update((f) => ({ ...f, [field]: value }));
+  }
+
+  async createAndMapLrEntry(): Promise<void> {
+    const invoice = this.selectedInvoice();
+    const form = this.newLrForm();
+    if (!invoice?.id || this.isCreatingLr()) return;
+    if (!form.lrNo.trim()) {
+      Swal.fire('Required', 'Please enter the LR No.', 'warning');
+      return;
+    }
+
+    this.isCreatingLr.set(true);
+    try {
+      const lrEntry = await this.lrEntryService.createLrEntry({
+        lrNo: form.lrNo.trim(),
+        lrDate: form.lrDate ? new Date(form.lrDate) : new Date(),
+        transport: invoice.transport,
+        transportId: invoice.transportId || undefined,
+        vehicleNo: form.vehicleNo.trim().toUpperCase() || undefined,
+        packingListId: invoice.packingListId,
+        packingListNo: invoice.packingListNo,
+        dcId: invoice.dcId || '',
+        dcNo: invoice.dcNo,
+        clientId: invoice.clientId,
+        clientName: invoice.clientName,
+      });
+      this.showNewLrForm.set(false);
+      await this.mapLrEntry(lrEntry);
+    } catch (err: any) {
+      Swal.fire('Error', err?.message || 'Failed to create LR Entry.', 'error');
+    } finally {
+      this.isCreatingLr.set(false);
+    }
   }
 
   async mapLrEntry(lrEntry: LrEntry): Promise<void> {
@@ -778,9 +843,10 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       td(i + 1) + td(item.description, 'text-align:left;font-weight:600') +
       td(item.styleNo || '-') + td(item.sleeveType || '-') + td(item.hsnSac) +
       td(item.mrp.toFixed(2)) + td(item.uom) +
-      td(item.quantity) + td(item.price.toFixed(2), 'font-weight:700') +
-      td(item.amount.toFixed(2), 'font-weight:700') + '</tr>'
+      td(item.quantity) + td(item.price.toFixed(2), 'font-weight:700;text-align:right') +
+      td(item.amount.toFixed(2), 'font-weight:700;text-align:right') + '</tr>'
     ).join('');
+    const totalQty = invoice.items.reduce((sum, item) => sum + item.quantity, 0);
 
     const taxSummaryRows = invoice.taxSummary.map((t, i) =>
       '<tr>' +
@@ -895,7 +961,9 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
 </tr></thead><tbody>
   ${itemRows}
   <tr>
-    <td colspan="9" style="padding:4px 6px;${B}font-weight:700;font-size:11px;text-align:right;background:#f0f0f0">Gross</td>
+    <td colspan="7" style="padding:4px 6px;${B}font-weight:700;font-size:11px;text-align:right;background:#f0f0f0">Gross</td>
+    <td style="padding:4px 6px;${B}font-weight:900;font-size:12px;text-align:center;background:#f0f0f0">${totalQty}</td>
+    <td style="padding:4px 6px;${B}background:#f0f0f0"></td>
     <td style="padding:4px 6px;${B}font-weight:900;font-size:12px;text-align:center;background:#f0f0f0">${invoice.grossAmount.toFixed(2)}</td>
   </tr>
 </tbody></table>
@@ -1038,11 +1106,12 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     }).join('');
 
     const val = payload.ValDtls;
+    const totalQty = items.reduce((sum: number, it: any) => sum + (it.Qty ?? 0), 0);
     const valSummaryHtml = val
       ? `<table style="margin-top:6px"><thead><tr>
-           ${th('Taxable Amt')}${th('CGST Amt')}${th('SGST Amt')}${th('IGST Amt')}${th('CESS Amt')}${th('State CESS Amt')}${th('Discount')}${th('Other Charges')}${th('Round Off')}${th('Total Inv. Amt')}
+           ${th('Total Qty')}${th('Taxable Amt')}${th('CGST Amt')}${th('SGST Amt')}${th('IGST Amt')}${th('CESS Amt')}${th('State CESS Amt')}${th('Discount')}${th('Other Charges')}${th('Round Off')}${th('Total Inv. Amt')}
          </tr></thead><tbody><tr style="background:#f0f0f0;font-weight:700">
-           ${td(val.AssVal.toFixed(2))}${td(val.CgstVal.toFixed(2))}${td(val.SgstVal.toFixed(2))}${td(val.IgstVal.toFixed(2))}
+           ${td(totalQty)}${td(val.AssVal.toFixed(2))}${td(val.CgstVal.toFixed(2))}${td(val.SgstVal.toFixed(2))}${td(val.IgstVal.toFixed(2))}
            ${td((val.CesVal ?? 0).toFixed(2))}${td((val.StCesVal ?? 0).toFixed(2))}${td((val.Discount ?? 0).toFixed(2))}
            ${td((val.OthChrg ?? 0).toFixed(2))}${td((val.RndOffAmt ?? 0).toFixed(2))}${td(val.TotInvVal.toFixed(2))}
          </tr></tbody></table>`
@@ -1174,10 +1243,10 @@ ${ewbSection}
   }
 
   private amountToWords(amount: number): string {
-    const rounded = Math.round(amount);
     const parts = amount.toFixed(2).split('.');
+    const rupees = parseInt(parts[0], 10);
     const paisa = parseInt(parts[1], 10);
-    const rupeeWords = this.numberToWords(rounded);
+    const rupeeWords = this.numberToWords(rupees);
     if (paisa > 0) return rupeeWords + ' AND ' + this.numberToWords(paisa) + ' PAISE ONLY';
     return rupeeWords + ' RUPEES ONLY';
   }
