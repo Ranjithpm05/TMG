@@ -539,22 +539,21 @@ export class PackingListService {
   // Edits a line's overall Qty (its Pick-List claim, `requiredQty`) — NOT
   // just how much has been scanned so far. Reducing it also clamps
   // `packedQty` down to match (so the excess is immediately un-packed, not
-  // left as a phantom "still to pack" gap) and releases the reduced amount
-  // back to its source Pick List line(s) via `sources`, symmetric with how
-  // deletePackingListLine() releases a whole line — otherwise the Pick List
-  // would go on treating the reduced quantity as permanently claimed by this
-  // Packing List, and it would never become available again for "Ready to
-  // Pack" / a future DC/Invoice. Decrease-only (same restriction as the Pick
-  // List line editor — see project_picklist_edit_delete_2026_08_11): an
-  // increase would need to re-validate against live Pick List/inventory
-  // availability, which this lightweight editor doesn't attempt.
+  // left as a phantom "still to pack" gap). The reduced amount's claim on
+  // its source Pick List line(s) is deliberately NOT released back — same
+  // "permanently gone" rule as deletePackingListLine(), so the reduced
+  // quantity is never re-offered by a future "Generate Packing List" pass.
+  // `sources` is still trimmed (via trimSources below) purely to keep the
+  // line's own provenance record proportional to its new requiredQty.
+  // Decrease-only (same restriction as the Pick List line editor — see
+  // project_picklist_edit_delete_2026_08_11): an increase would need to
+  // re-validate against live Pick List/inventory availability, which this
+  // lightweight editor doesn't attempt.
   async updatePackingListLine(
     packingListId: string,
     lineId: string,
     changes: { styleNo?: string; size?: string; requiredQty: number; barcode?: string; inventoryId?: string; designId?: string },
   ): Promise<PackingListLine> {
-    const releasedSources: PackingListLineSource[] = [];
-
     const result = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(packingListId, lineId);
       const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
@@ -636,10 +635,10 @@ export class PackingListService {
       }
       const nextCartons = cartons.map((c) => this.normalizeCarton({ ...c, totalQty: c.entries.reduce((s, e) => s + e.qty, 0) }));
 
-      // Release requiredDelta back to whichever Pick List line(s) it came
-      // from — trims from the tail of `sources`, same idea as the carton trim above.
-      const { remaining: nextSources, released } = this.trimSources(liveLine.sources ?? [], requiredDelta);
-      releasedSources.push(...released);
+      // Trim requiredDelta off the tail of `sources` — same idea as the
+      // carton trim above — WITHOUT releasing it back to the source Pick
+      // List line(s); see the "permanently gone" note above the method.
+      const { remaining: nextSources } = this.trimSources(liveLine.sources ?? [], requiredDelta);
 
       const nextRemainingQty = Math.max(0, nextRequiredQty - nextPackedQty);
       const nextLineStatus: PackingListLine['status'] = nextRemainingQty <= 0 ? 'completed' : nextPackedQty > 0 ? 'in_progress' : 'ready';
@@ -698,24 +697,6 @@ export class PackingListService {
     if (result.inventoryTouched) this.inventoryService.invalidateCache();
 
     await this.recalculatePackingListStatus(packingListId);
-
-    if (releasedSources.length) {
-      const batch = writeBatch(this.firestore);
-      let hasOps = false;
-      for (const source of releasedSources) {
-        if (!source.pickListId || !source.pickListLineId || source.qty <= 0) continue;
-        batch.update(doc(this.firestore, `pickLists/${source.pickListId}/lines/${source.pickListLineId}`), {
-          packedIntoPackingListsQty: increment(-source.qty),
-          updatedAt: serverTimestamp(),
-        });
-        hasOps = true;
-      }
-      if (hasOps) {
-        await batch.commit();
-        const affectedPickListIds = [...new Set(releasedSources.map((s) => s.pickListId).filter(Boolean))];
-        await Promise.all(affectedPickListIds.map((id) => this.pickListService.recalculatePickListStatus(id)));
-      }
-    }
 
     this.invalidateCache();
     return result.line;
@@ -877,12 +858,12 @@ export class PackingListService {
 
   // Row-wise delete, pre-DC only — locked out by the same dcGeneratedKeys/
   // invoiceId fields as updatePackingListLine (see there for why that's a
-  // safe atomic gate). Unlike an edit, deleting a row removes its
-  // requiredQty too, so — beyond the carton/inventory reconciliation shared
-  // with updatePackingListLine — this also releases the quantity this line
-  // had claimed from its source Pick List line(s) (via `sources`), so a
-  // future "Generate Packing List" pass can re-offer it instead of it being
-  // permanently stuck against a packing-list line that no longer exists.
+  // safe atomic gate). A deleted line's claim on its source Pick List
+  // line(s) (via `sources`) is deliberately NOT released back — the
+  // deleted quantity must never be re-offered by a future "Generate Packing
+  // List" pass. It stays picked (and, if stock had already been deducted,
+  // is restored to inventory below) but is permanently excluded from
+  // packing for this Pick List; re-including it requires a manual re-add.
   async deletePackingListLine(packingListId: string, lineId: string): Promise<void> {
     const result = await runTransaction(this.firestore, async (transaction) => {
       const lineRef = this.lineDoc(packingListId, lineId);
@@ -946,25 +927,6 @@ export class PackingListService {
 
     if (result.inventoryTouched) this.inventoryService.invalidateCache();
     this.invalidateCache();
-
-    const sources = result.line.sources ?? [];
-    if (sources.length) {
-      const batch = writeBatch(this.firestore);
-      let hasOps = false;
-      for (const source of sources) {
-        if (!source.pickListId || !source.pickListLineId || source.qty <= 0) continue;
-        batch.update(doc(this.firestore, `pickLists/${source.pickListId}/lines/${source.pickListLineId}`), {
-          packedIntoPackingListsQty: increment(-source.qty),
-          updatedAt: serverTimestamp(),
-        });
-        hasOps = true;
-      }
-      if (hasOps) {
-        await batch.commit();
-        const affectedPickListIds = [...new Set(sources.map((s) => s.pickListId).filter(Boolean))];
-        await Promise.all(affectedPickListIds.map((id) => this.pickListService.recalculatePickListStatus(id)));
-      }
-    }
   }
 
   private removeLineFromPartSummaries(

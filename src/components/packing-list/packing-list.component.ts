@@ -1607,7 +1607,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   }
 
   // Mirrors mrpLabelTagFields in mrp-label-zpl.util.ts exactly — same field
-  // content/order (Design/Style/Size/Qty/Shade/MRP/tax as separate
+  // content/order (Design/Style/Shade/Size/Qty/MRP/tax as separate
   // columns), same `^A0B`-confirmed rotation, and the same layout: QR as a
   // full-width band across the TOP 25% of the tag's height (sized to
   // nearly fill it, also rotated), fields anchored just below the QR band
@@ -1654,10 +1654,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
       };
       push(2.8, `Design : ${data.design || '-'}`);
       push(2.4, `Style : ${data.style}`);
+      push(2.4, `Shade : ${data.shade}`);
       push(2.4, `Size : ${data.size || '-'}`);
       push(2.4, 'Qty : 1 No');
-      push(2.4, `Shade : ${data.shade}`);
-      push(4.2, `MRP : Rs. ${data.mrp.toFixed(2)}`, true);
+      push(4.2, `MRP : ₹ ${data.mrp.toFixed(2)}`, true);
       push(1.8, '(Incl. of all Taxes)');
 
       return qrHtml + codeHtml + fieldsHtml.join('');
@@ -2502,7 +2502,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const { value: formValues } = await Swal.fire({
       title: 'Edit Packing Line',
       html: '<div style="text-align:left;font-size:13px">'
-        + '<p style="font-size:11px;color:#64748b;margin-bottom:10px">Quantity can only be reduced, not increased — the reduced amount is released back to the Pick List as pending. Changing Style/Size re-identifies these physical units against Design Master/Inventory.</p>'
+        + '<p style="font-size:11px;color:#64748b;margin-bottom:10px">Quantity can only be reduced, not increased — the reduced amount is permanently removed and will not be offered again in a future Packing List. Changing Style/Size re-identifies these physical units against Design Master/Inventory.</p>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Style No</label>'
         + `<input id="edit-style" class="swal2-input" style="margin:0;width:100%" value="${line.styleNo}"></div>`
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Size</label>'
@@ -2595,7 +2595,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const result = await Swal.fire({
       icon: 'warning',
       title: 'Delete this item?',
-      text: 'Are you sure you want to delete this item from the Packing List?',
+      text: 'This permanently removes the quantity from this Packing List and its source Pick List — it will not be offered again in any future Packing List for this order.',
       showCancelButton: true,
       confirmButtonText: 'Delete',
       confirmButtonColor: '#dc2626',

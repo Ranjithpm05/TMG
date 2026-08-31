@@ -101,8 +101,8 @@ const REF_HALF_W = 39;
 const PRE_PRINTED_ZONE_H = 11;
 
 /**
- * The MRP tag's PRINTABLE (variable) content only — Design, Style, Size,
- * Qty, Shade, MRP, and "(Incl. of all Taxes)" as SEPARATE ROTATED text
+ * The MRP tag's PRINTABLE (variable) content only — Design, Style, Shade,
+ * Size, Qty, MRP, and "(Incl. of all Taxes)" as SEPARATE ROTATED text
  * columns (not combined — confirmed against a physical reference sample
  * that each field is its own aligned line, not several fields crammed
  * onto one), plus a QR code (also rotated, matching the fields) with its
@@ -163,7 +163,7 @@ function mrpLabelTagFields(
   lines.push(`^FO${d(offsetXMm + qrX)},${d(qrY)}^BQB,2,${qrMagnification}^FDQA,${esc(data.code)}^FS`);
   lines.push(`^FO${d(offsetXMm + qrX)},${d(qrY + qrZoneMm + 1)}${font(1.2, false)}^FD${esc(data.code)}^FS`);
 
-  // ── Design / Style / Size / Qty / Shade / MRP / tax caption — each its
+  // ── Design / Style / Shade / Size / Qty / MRP / tax caption — each its
   // OWN rotated 90° column (not combined), anchored just BELOW the QR
   // band (not the tag's bottom edge). IMPORTANT — anchoring at the very
   // bottom edge (an earlier revision's attempt) broke printing entirely:
@@ -183,10 +183,10 @@ function mrpLabelTagFields(
   };
   push(2.8, `Design : ${data.design || '-'}`);
   push(2.4, `Style : ${data.style}`);
+  push(2.4, `Shade : ${data.shade}`);
   push(2.4, `Size : ${data.size || '-'}`);
   push(2.4, 'Qty : 1 No');
-  push(2.4, `Shade : ${data.shade}`);
-  push(4.2, `MRP : Rs. ${data.mrp.toFixed(2)}`);
+  push(4.2, `MRP : ₹ ${data.mrp.toFixed(2)}`);
   push(1.8, '(Incl. of all Taxes)');
 
   return lines;
