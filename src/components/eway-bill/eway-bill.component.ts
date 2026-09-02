@@ -234,10 +234,6 @@ export class EwayBillComponent implements OnInit, OnDestroy {
     }
 
     const form = this.generateForm();
-    if (form.transMode === '1' && !form.vehicleNo?.trim()) {
-      Swal.fire('Required', 'Vehicle number is required when the transport mode is Road.', 'warning');
-      return;
-    }
 
     this.isGenerating.set(true);
     try {

@@ -49,6 +49,17 @@ export const generateEwayBillByIrn = onCall(
       throw new HttpsError('invalid-argument', 'irn, gstin, distance and transMode are required.');
     }
 
+    // Part-B (vehicle/transport document) is only meaningful when there is
+    // something to report: a vehicle number for Road transport (door
+    // delivery), or a transport document for Rail/Air/Ship — which have no
+    // vehicle number at all. If Road transport has no vehicle number yet
+    // (e.g. handed to a transporter who will fill it in later), Part-B is
+    // left out of the request entirely rather than sending blank/default
+    // values.
+    const hasVehicle = !!(data.vehicleNo && data.vehicleNo.trim());
+    const isRoad = data.transMode === '1';
+    const includePartB = hasVehicle || !isRoad;
+
     const body = {
       Push_Data_List: [
         {
@@ -57,10 +68,10 @@ export const generateEwayBillByIrn = onCall(
           Transid: data.transporterId || '',
           Transname: data.transporterName || '',
           Distance: data.distance,
-          Transdocno: data.transDocNo || '',
-          TransdocDt: data.transDocDt || '',
-          Vehno: data.vehicleNo || '',
-          Vehtype: data.vehicleType || 'R',
+          Transdocno: includePartB ? (data.transDocNo || '') : '',
+          TransdocDt: includePartB ? (data.transDocDt || '') : '',
+          Vehno: hasVehicle ? data.vehicleNo || '' : '',
+          Vehtype: hasVehicle ? (data.vehicleType || 'R') : '',
           ShipFrom_Addr1: '',
           ShipFrom_Addr2: '',
           ShipFrom_Loc: '',
