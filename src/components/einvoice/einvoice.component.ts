@@ -63,6 +63,9 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   mode = signal<'list' | 'view'>('list');
   filterTab = signal<FilterTab>('all');
   searchTerm = signal('');
+  filterFromDate = signal<string>('');
+  filterToDate = signal<string>('');
+  filterClientId = signal<string>('');
 
   invoices = signal<Invoice[]>([]);
   selectedInvoice = signal<Invoice | null>(null);
@@ -124,9 +127,26 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   readonly stateCodes = INDIA_STATE_CODES;
   readonly cancelReasons = CANCEL_REASONS;
 
+  // Distinct clients from the currently loaded invoices, for the client
+  // filter dropdown — no separate lookup needed since every invoice already
+  // carries its own clientId/clientName.
+  filterClientOptions = computed((): { clientId: string; clientName: string }[] => {
+    const map = new Map<string, string>();
+    for (const inv of this.invoices()) {
+      if (!inv.clientId) continue;
+      if (!map.has(inv.clientId)) map.set(inv.clientId, inv.clientName);
+    }
+    return [...map.entries()]
+      .map(([clientId, clientName]) => ({ clientId, clientName }))
+      .sort((a, b) => a.clientName.localeCompare(b.clientName, undefined, { numeric: true }));
+  });
+
   filteredInvoices = computed(() => {
     const term = this.searchTerm().toLowerCase().trim();
     const tab = this.filterTab();
+    const clientId = this.filterClientId();
+    const fromMs = this.filterFromDate() ? new Date(this.filterFromDate()).setHours(0, 0, 0, 0) : -Infinity;
+    const toMs = this.filterToDate() ? new Date(this.filterToDate()).setHours(23, 59, 59, 999) : Infinity;
     let list = this.invoices();
 
     if (tab !== 'all') {
@@ -141,8 +161,27 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
           inv.dcNo.toLowerCase().includes(term)
       );
     }
+
+    if (clientId) {
+      list = list.filter((inv) => inv.clientId === clientId);
+    }
+
+    if (fromMs !== -Infinity || toMs !== Infinity) {
+      list = list.filter((inv) => {
+        const raw = inv.invoiceDate;
+        const ms = raw ? (raw?.toDate ? raw.toDate() : new Date(raw)).getTime() : NaN;
+        return Number.isFinite(ms) && ms >= fromMs && ms <= toMs;
+      });
+    }
+
     return list;
   });
+
+  clearFilters(): void {
+    this.filterFromDate.set('');
+    this.filterToDate.set('');
+    this.filterClientId.set('');
+  }
 
   // "Eligible" LR Entries for the currently-selected invoice — same
   // Transport (case/whitespace-insensitive), per the mapping rule: one LR

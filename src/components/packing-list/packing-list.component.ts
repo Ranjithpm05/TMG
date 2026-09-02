@@ -24,6 +24,8 @@ import { DeliveryChallanService } from '../../services/delivery-challan.service'
 import { Invoice } from '../../models/invoice.model';
 import { resolveHsnCode } from '../../models/hsn-code.model';
 import { InvoiceService } from '../../services/invoice.service';
+import { CompanySettingsService } from '../../services/company-settings.service';
+import { resolveGstPlaceOfSupply } from '../../services/gst-state.util';
 import { LrEntryService } from '../../services/lr-entry.service';
 import { InventoryService } from '../../services/inventory.service';
 import { DesignService } from '../../services/design.service';
@@ -67,6 +69,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   private transportService = inject(TransportService);
   private dcService = inject(DeliveryChallanService);
   private invoiceService = inject(InvoiceService);
+  private companySettingsService = inject(CompanySettingsService);
   private lrEntryService = inject(LrEntryService);
   private inventoryService = inject(InventoryService);
   private designService = inject(DesignService);
@@ -79,6 +82,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
   mode = signal<ViewMode>('list');
   listTab = signal<'ready' | 'packing' | 'dc-history' | 'invoices'>('ready');
   searchTerm = signal('');
+
+  // ─── Invoices tab filters (date range + client) ────────────────────────────
+  invoiceFilterFromDate = signal<string>('');
+  invoiceFilterToDate = signal<string>('');
+  invoiceFilterClientId = signal<string>('');
 
   // ─── Data ──────────────────────────────────────────────────────────────────
   pickLists = signal<PickList[]>([]);
@@ -350,15 +358,50 @@ export class PackingListComponent implements OnInit, OnDestroy {
     return this.livePackingList()?.partyProgress ?? [];
   });
 
+  // Distinct clients from the currently loaded invoices, for the client
+  // filter dropdown — no separate ClientService call needed since every
+  // invoice already carries its own clientId/clientName.
+  invoiceFilterClientOptions = computed((): { clientId: string; clientName: string }[] => {
+    const map = new Map<string, string>();
+    for (const inv of this.invoices()) {
+      if (!inv.clientId) continue;
+      if (!map.has(inv.clientId)) map.set(inv.clientId, inv.clientName);
+    }
+    return [...map.entries()]
+      .map(([clientId, clientName]) => ({ clientId, clientName }))
+      .sort((a, b) => a.clientName.localeCompare(b.clientName, undefined, { numeric: true }));
+  });
+
   filteredInvoiceList = computed(() => {
     const term = this.searchTerm().trim().toLowerCase();
+    const clientId = this.invoiceFilterClientId();
+    const fromMs = this.invoiceFilterFromDate() ? new Date(this.invoiceFilterFromDate()).setHours(0, 0, 0, 0) : -Infinity;
+    const toMs = this.invoiceFilterToDate() ? new Date(this.invoiceFilterToDate()).setHours(23, 59, 59, 999) : Infinity;
+
     return this.invoices().filter((inv) => {
-      if (!term) return true;
-      return inv.invoiceNo.toLowerCase().includes(term)
-        || inv.clientName.toLowerCase().includes(term)
-        || inv.salesNos.some((s) => s.toLowerCase().includes(term));
+      if (term
+        && !inv.invoiceNo.toLowerCase().includes(term)
+        && !inv.clientName.toLowerCase().includes(term)
+        && !inv.salesNos.some((s) => s.toLowerCase().includes(term))
+      ) return false;
+
+      if (clientId && inv.clientId !== clientId) return false;
+
+      if (fromMs !== -Infinity || toMs !== Infinity) {
+        const raw = inv.invoiceDate;
+        const ms = raw ? (raw?.toDate ? raw.toDate() : new Date(raw)).getTime() : NaN;
+        if (!Number.isFinite(ms) || ms < fromMs || ms > toMs) return false;
+      }
+
+      return true;
     });
   });
+
+  clearInvoiceFilters(): void {
+    this.invoiceFilterFromDate.set('');
+    this.invoiceFilterToDate.set('');
+    this.invoiceFilterClientId.set('');
+  }
 
   openCartonsCount = computed(() =>
     (this.livePackingList()?.cartons ?? []).filter((c) => c.cartonStatus !== 'sealed').length
@@ -1222,9 +1265,29 @@ export class PackingListComponent implements OnInit, OnDestroy {
       const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
       const discountAmount = Math.round(grossAmount * discountPct / 100 * 100) / 100;
       const taxableValue = Math.round((grossAmount - discountAmount) * 100) / 100;
-      const cgstAmount = Math.round(taxableValue * halfTax / 100 * 100) / 100;
+
+      // GST type (CGST+SGST for an intra-state sale vs IGST for inter-state)
+      // depends on the seller's own state (Company Settings) vs the client's
+      // Place of Supply — the client's Ship To state when it genuinely
+      // differs from the Bill To Address, otherwise their Bill To state.
+      // Shared with the E-Invoice/IRN payload builder (einvoice.service.ts)
+      // via resolveGstPlaceOfSupply so the printed Invoice and its e-Invoice
+      // always agree on which tax type was charged.
+      const company = await this.companySettingsService.getCompanySettingsOnce();
+      const shipToDiffers = !!invoiceClient?.shipToAddress && !invoiceClient.shipToSameAsBilling &&
+        invoiceClient.shipToAddress.trim() !== (invoiceClient?.billingAddress ?? '').trim();
+      const { isInterState } = resolveGstPlaceOfSupply(
+        company?.stateCode ?? '',
+        invoiceClient?.gstNo,
+        invoiceClient?.state,
+        shipToDiffers,
+        invoiceClient?.shipToState
+      );
+
+      const cgstAmount = isInterState ? 0 : Math.round(taxableValue * halfTax / 100 * 100) / 100;
       const sgstAmount = cgstAmount;
-      const totalTaxAmount = Math.round((cgstAmount + sgstAmount) * 100) / 100;
+      const igstAmount = isInterState ? Math.round(taxableValue * taxRate / 100 * 100) / 100 : 0;
+      const totalTaxAmount = Math.round((cgstAmount + sgstAmount + igstAmount) * 100) / 100;
       const rawTotal = taxableValue + totalTaxAmount;
       const totalAmount = Math.round(rawTotal);
       const roundOff = Math.round((totalAmount - rawTotal) * 100) / 100;
@@ -1240,8 +1303,15 @@ export class PackingListComponent implements OnInit, OnDestroy {
       for (const item of invoiceItems) grossByHsn.set(item.hsnSac, (grossByHsn.get(item.hsnSac) ?? 0) + item.amount);
       const taxSummary = [...grossByHsn.entries()].map(([hsn, groupGross]) => {
         const groupTaxable = Math.round((groupGross - groupGross * discountPct / 100) * 100) / 100;
-        const groupCgst = Math.round(groupTaxable * halfTax / 100 * 100) / 100;
-        return { hsnSac: hsn, taxableValue: groupTaxable, cgstRate: halfTax, cgstAmount: groupCgst, sgstRate: halfTax, sgstAmount: groupCgst, igstRate: 0, igstAmount: 0 };
+        const groupCgst = isInterState ? 0 : Math.round(groupTaxable * halfTax / 100 * 100) / 100;
+        const groupIgst = isInterState ? Math.round(groupTaxable * taxRate / 100 * 100) / 100 : 0;
+        return {
+          hsnSac: hsn,
+          taxableValue: groupTaxable,
+          cgstRate: isInterState ? 0 : halfTax, cgstAmount: groupCgst,
+          sgstRate: isInterState ? 0 : halfTax, sgstAmount: groupCgst,
+          igstRate: isInterState ? taxRate : 0, igstAmount: groupIgst,
+        };
       });
 
       const mergedSalesOrderIds = [...new Set(dcsToInvoice.flatMap((dc) => dc.salesOrderIds.length ? dc.salesOrderIds : loaded.salesOrderIds))];
@@ -1283,8 +1353,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
         agentName: primaryDc.agentName ?? loaded.agentName ?? '',
         items: invoiceItems,
         grossAmount, discountPct, discountAmount, taxableValue,
-        cgstRate: halfTax, cgstAmount, sgstRate: halfTax, sgstAmount,
-        igstRate: 0, igstAmount: 0, totalTaxAmount, roundOff, totalAmount,
+        cgstRate: isInterState ? 0 : halfTax, cgstAmount,
+        sgstRate: isInterState ? 0 : halfTax, sgstAmount,
+        igstRate: isInterState ? taxRate : 0, igstAmount, totalTaxAmount, roundOff, totalAmount,
         amountInWords: this.amountToWords(totalAmount),
         taxSummary,
       }, { allowDuplicate: allowDuplicateInvoice });
@@ -1350,6 +1421,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
       await this.loadingService.run(async () => {
         const XLSX = await import('xlsx');
         invoice = await this.invoiceService.backfillClientShipToIfNeeded(invoice);
+        const taxRows: any[][] = [
+          ...(invoice.cgstAmount > 0 ? [['', '', '', '', '', '', '', '', 'CGST (' + invoice.cgstRate + '%):', invoice.cgstAmount]] : []),
+          ...(invoice.sgstAmount > 0 ? [['', '', '', '', '', '', '', '', 'SGST (' + invoice.sgstRate + '%):', invoice.sgstAmount]] : []),
+          ...(invoice.igstAmount > 0 ? [['', '', '', '', '', '', '', '', 'IGST (' + invoice.igstRate + '%):', invoice.igstAmount]] : []),
+        ];
         const rows: any[][] = [
           ['TMG Clothings', '', '', '', 'GSTIN: 33AAYFT2559B1ZY'],
           ['Door No.334/2, Serayampalaym, Vellanaipatti Post, Coimbatore - 641048'],
@@ -1374,8 +1450,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
           ['', '', '', '', '', '', '', '', 'Gross Amount:', invoice.grossAmount],
           ['', '', '', '', '', '', '', '', 'Discount (' + invoice.discountPct + '%):', invoice.discountAmount],
           ['', '', '', '', '', '', '', '', 'Taxable Value:', invoice.taxableValue],
-          ['', '', '', '', '', '', '', '', 'CGST (' + invoice.cgstRate + '%):', invoice.cgstAmount],
-          ['', '', '', '', '', '', '', '', 'SGST (' + invoice.sgstRate + '%):', invoice.sgstAmount],
+          ...taxRows,
           ['', '', '', '', '', '', '', '', 'Total Tax:', invoice.totalTaxAmount],
           ['', '', '', '', '', '', '', '', 'Round Off:', invoice.roundOff],
           ['', '', '', '', '', '', '', '', 'TOTAL:', invoice.totalAmount],
@@ -3530,8 +3605,9 @@ ${allDCHtml}
       + '<table style="width:300px;border-collapse:collapse">'
       + '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">Discount (' + invoice.discountPct + '%)</td><td style="padding:4px 10px;font-size:13px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.discountAmount.toFixed(2) + '</td></tr>'
       + '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">Taxable Value</td><td style="padding:4px 10px;font-size:13px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.taxableValue.toFixed(2) + '</td></tr>'
-      + '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">CGST (' + invoice.cgstRate + '%)</td><td style="padding:4px 10px;font-size:13px;text-align:right;border:1px solid #ddd">' + invoice.cgstAmount.toFixed(2) + '</td></tr>'
-      + '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">SGST (' + invoice.sgstRate + '%)</td><td style="padding:4px 10px;font-size:13px;text-align:right;border:1px solid #ddd">' + invoice.sgstAmount.toFixed(2) + '</td></tr>'
+      + (invoice.cgstAmount > 0 ? '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">CGST (' + invoice.cgstRate + '%)</td><td style="padding:4px 10px;font-size:13px;text-align:right;border:1px solid #ddd">' + invoice.cgstAmount.toFixed(2) + '</td></tr>' : '')
+      + (invoice.sgstAmount > 0 ? '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">SGST (' + invoice.sgstRate + '%)</td><td style="padding:4px 10px;font-size:13px;text-align:right;border:1px solid #ddd">' + invoice.sgstAmount.toFixed(2) + '</td></tr>' : '')
+      + (invoice.igstAmount > 0 ? '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">IGST (' + invoice.igstRate + '%)</td><td style="padding:4px 10px;font-size:13px;text-align:right;border:1px solid #ddd">' + invoice.igstAmount.toFixed(2) + '</td></tr>' : '')
       + '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd;font-weight:700">Total Tax Amount</td><td style="padding:4px 10px;font-size:13px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.totalTaxAmount.toFixed(2) + '</td></tr>'
       + '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">Round Off</td><td style="padding:4px 10px;font-size:13px;text-align:right;border:1px solid #ddd">' + invoice.roundOff.toFixed(2) + '</td></tr>'
       + '<tr style="background:#0f172a;color:#fff"><td style="padding:6px 10px;font-size:15px;font-weight:900;border:1px solid #0f172a">TOTAL</td>'

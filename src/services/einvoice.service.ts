@@ -10,11 +10,11 @@ import {
   EInvoicePayload,
   EInvoiceShipDtls,
   EInvoiceSupplyType,
-  INDIA_STATE_CODES,
 } from '../models/einvoice.model';
 import { CompanySettingsService } from './company-settings.service';
 import { InvoiceService } from './invoice.service';
 import { ClientService } from './client.service';
+import { resolveGstPlaceOfSupply, stateCodeFromName } from './gst-state.util';
 
 // Appendix-5 (E-Invoice sandbox doc) — Cancel Reasons numeric codes. The UI
 // (CANCEL_REASONS in einvoice.model.ts) shows the labels; this maps a chosen
@@ -56,20 +56,11 @@ export class EInvoiceService {
     // is, so CGST+SGST got charged instead of IGST for real inter-state B2C
     // sales — GST rules never permit charging both splits on one invoice, so
     // the fix is getting isInterState right, not summing them after the fact.
-    const buyerStateCodeFromGstin = this.extractStateCodeFromGstin(invoice.clientGstin);
-    const buyerStateCodeFromName = this.stateCodeFromName(invoice.clientState);
-    // Only a genuinely unknown buyer location (no GSTIN, no state on file)
-    // falls back to "assume same as seller" — a state name that's present
-    // but didn't match INDIA_STATE_CODES is a data problem to fix in Client
-    // Master, not something to silently paper over (validatePayload flags it
-    // below), since guessing wrong here means charging CGST+SGST instead of
-    // IGST, or vice versa.
-    const buyerStateUnresolved = !buyerStateCodeFromGstin && !buyerStateCodeFromName && !!invoice.clientState?.trim();
-    const buyerStateCode = buyerStateCodeFromGstin || buyerStateCodeFromName || sellerStateCode;
     const hasValidBuyerGstin = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(
       invoice.clientGstin?.toUpperCase() || ''
     );
     const supplyType: EInvoiceSupplyType = hasValidBuyerGstin ? 'B2B' : 'B2C';
+    const buyerAddr1 = invoice.clientAddress || 'N/A';
 
     const sellerDtls: EInvoicePartyDtls = {
       Gstin: company.gstin,
@@ -84,44 +75,39 @@ export class EInvoiceService {
       ...(company.email ? { Em: company.email } : {}),
     };
 
-    const buyerDtls: EInvoiceBuyerDtls = {
-      Gstin: hasValidBuyerGstin ? invoice.clientGstin.toUpperCase() : 'URP',
-      LglNm: invoice.clientName,
-      Addr1: invoice.clientAddress || 'N/A',
-      Loc: invoice.clientPlace || invoice.destination || 'N/A',
-      Pin: parseInt(invoice.clientZipCode) || 0,
-      // Buyer's own Bill To/GSTIN-registration state. This is deliberately
-      // NOT what decides IGST vs CGST+SGST below — see posStateCode.
-      Stcd: buyerStateCode,
-      // Placeholder — set for real once posStateCode (below) is known, since
-      // that needs the client's Ship To state, fetched next.
-      Pos: buyerStateCode,
-      ...(invoice.clientPhone ? { Ph: invoice.clientPhone } : {}),
-    };
-
     // Ship-to is only sent when the client's Ship To Address is actually a
     // different location from the Bill To Address used above for BuyerDtls —
     // otherwise NIC/Webtel treat the buyer's own address as the ship-to.
     const client = invoice.clientId ? await this.clientService.getClientByIdOnce(invoice.clientId) : null;
     const shipToDiffers = !!client?.shipToAddress && !client.shipToSameAsBilling &&
-      client.shipToAddress.trim() !== buyerDtls.Addr1.trim();
-    const shipToStateCode = shipToDiffers ? this.stateCodeFromName(client!.shipToState) : '';
-    // Flagged in validatePayload — a real Ship To Address with a State field
-    // that doesn't resolve is a data problem to fix in Client Master, not
-    // something to silently fall back past (same reasoning as
-    // buyerStateUnresolved above).
-    const shipToStateUnresolved = shipToDiffers && !shipToStateCode && !!client!.shipToState?.trim();
+      client.shipToAddress.trim() !== buyerAddr1.trim();
+
     // Place of Supply is where the goods are actually delivered — under
     // GST's Bill-To-Ship-To rule (IGST Act s.10(1)(b)) that's the Ship To
     // state whenever it genuinely differs from the Bill To Address, NOT the
-    // buyer's Bill To/GSTIN-registration state (buyerDtls.Stcd above). A
-    // buyer registered in the same state as the seller but having goods
-    // delivered to a different state is still an inter-state (IGST) supply —
-    // comparing sellerStateCode to buyerStateCode instead of to the real POS
-    // was why IgstAmt/IgstVal stayed 0 for exactly that case.
-    const posStateCode = shipToStateCode || buyerStateCode;
-    const isInterState = sellerStateCode !== posStateCode;
-    buyerDtls.Pos = posStateCode;
+    // buyer's Bill To/GSTIN-registration state. A buyer registered in the
+    // same state as the seller but having goods delivered to a different
+    // state is still an inter-state (IGST) supply — comparing sellerStateCode
+    // to the buyer's own state instead of to the real POS was why
+    // IgstAmt/IgstVal stayed 0 for exactly that case. Shared with Invoice
+    // generation (packing-list.component.ts) so both always agree on
+    // CGST+SGST vs IGST for the same invoice.
+    const { buyerStateCode, posStateCode, isInterState, buyerStateUnresolved, shipToStateUnresolved } =
+      resolveGstPlaceOfSupply(sellerStateCode, invoice.clientGstin, invoice.clientState, shipToDiffers, client?.shipToState);
+    const shipToStateCode = shipToDiffers ? stateCodeFromName(client!.shipToState) : '';
+
+    const buyerDtls: EInvoiceBuyerDtls = {
+      Gstin: hasValidBuyerGstin ? invoice.clientGstin.toUpperCase() : 'URP',
+      LglNm: invoice.clientName,
+      Addr1: buyerAddr1,
+      Loc: invoice.clientPlace || invoice.destination || 'N/A',
+      Pin: parseInt(invoice.clientZipCode) || 0,
+      // Buyer's own Bill To/GSTIN-registration state. This is deliberately
+      // NOT what decides IGST vs CGST+SGST below — see posStateCode.
+      Stcd: buyerStateCode,
+      Pos: posStateCode,
+      ...(invoice.clientPhone ? { Ph: invoice.clientPhone } : {}),
+    };
     const shipDtls = this.buildShipDtls(client, buyerDtls, shipToStateCode);
 
     const itemList: EInvoiceItem[] = invoice.items.map((item, index) => {
@@ -421,28 +407,4 @@ export class EInvoiceService {
     return `${dd}/${mm}/${d.getFullYear()}`;
   }
 
-  private extractStateCodeFromGstin(gstin: string): string {
-    if (!gstin || gstin.length < 2) return '';
-    return gstin.substring(0, 2);
-  }
-
-  // Common alternate spellings seen in free-text Client Master "State" fields
-  // (it's a plain text input, not a dropdown) that don't literally match
-  // INDIA_STATE_CODES' official names.
-  private static readonly STATE_NAME_ALIASES: Record<string, string> = {
-    'tamilnadu': 'tamil nadu',
-    'pondicherry': 'puducherry',
-    'orissa': 'odisha',
-    'uttaranchal': 'uttarakhand',
-    'nct of delhi': 'delhi',
-    'new delhi': 'delhi',
-    'andhra pradesh': 'andhra pradesh (new)',
-  };
-
-  private stateCodeFromName(stateName: string | undefined): string {
-    if (!stateName) return '';
-    const norm = stateName.trim().toLowerCase().replace(/\s+/g, ' ');
-    const resolved = EInvoiceService.STATE_NAME_ALIASES[norm] || norm;
-    return INDIA_STATE_CODES.find((s) => s.name.toLowerCase() === resolved)?.code || '';
-  }
 }

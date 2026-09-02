@@ -84,6 +84,37 @@
       </div>
     </div>
 
+    <!-- Date range + Client filters -->
+    <div class="flex flex-wrap items-end gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">From</label>
+        <input type="date" [ngModel]="filterFromDate()" (ngModelChange)="filterFromDate.set($event)"
+          class="border border-slate-200 rounded-lg text-sm px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">To</label>
+        <input type="date" [ngModel]="filterToDate()" (ngModelChange)="filterToDate.set($event)"
+          class="border border-slate-200 rounded-lg text-sm px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Client</label>
+        <select [ngModel]="filterClientId()" (ngModelChange)="filterClientId.set($event)"
+          class="border border-slate-200 rounded-lg text-sm px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-[180px]">
+          <option value="">All Clients</option>
+          @for (c of filterClientOptions(); track c.clientId) {
+            <option [value]="c.clientId">{{ c.clientName }}</option>
+          }
+        </select>
+      </div>
+      <button (click)="clearFilters()"
+        class="px-3 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100">
+        Clear Filters
+      </button>
+      <div class="text-xs text-slate-500 ml-auto self-end pb-1">
+        {{ filteredInvoices().length }} of {{ invoices().length }} invoice(s)
+      </div>
+    </div>
+
     <!-- Invoice Table -->
     @if (isLoading()) {
       <div class="flex items-center justify-center py-16 text-slate-400">
