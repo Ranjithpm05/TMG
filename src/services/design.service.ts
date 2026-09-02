@@ -272,6 +272,36 @@ export class DesignService {
         return map;
     }
 
+    // Barcode -> full SizePrice entry (MRP, WSP, fabric, sleeve type, etc.),
+    // for exports that need more than just MRP (see getMrpByBarcodeMap
+    // above) — e.g. the PT File export, which needs WSP and
+    // FabricDescription per barcode alongside MRP.
+    async getSizeEntryByBarcodeMap(): Promise<Map<string, SizePrice>> {
+        const designs = await firstValueFrom(this.getDesigns());
+        const map = new Map<string, SizePrice>();
+        for (const design of designs) {
+            for (const sizeEntry of design.sizes ?? []) {
+                const barcode = String(sizeEntry.BARCODE ?? '').trim();
+                if (barcode) map.set(barcode, sizeEntry);
+            }
+        }
+        return map;
+    }
+
+    // Fallback join key for Packing List lines missing a barcode — matches
+    // the same Design/size a barcode lookup would, by styleNo+color+size.
+    async getSizeEntryByStyleColorSizeMap(): Promise<Map<string, SizePrice>> {
+        const designs = await firstValueFrom(this.getDesigns());
+        const map = new Map<string, SizePrice>();
+        for (const design of designs) {
+            for (const sizeEntry of design.sizes ?? []) {
+                const key = `${design.styleNo ?? ''}|${design.color ?? ''}|${sizeEntry.size ?? ''}`;
+                map.set(key, sizeEntry);
+            }
+        }
+        return map;
+    }
+
     async findDesignByStyleNo(styleNo: string): Promise<Design | null> {
         const q = query(
             collection(this.firestore, 'designs'),

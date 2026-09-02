@@ -9,9 +9,10 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { firstValueFrom, Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
 import { Invoice } from '../../models/invoice.model';
+import { PackingList } from '../../models/packing-list.model';
 import { CANCEL_REASONS, CompanySettings, INDIA_STATE_CODES } from '../../models/einvoice.model';
 import { Transport } from '../../models/transport.model';
 import { LrEntry } from '../../models/lr-entry.model';
@@ -22,7 +23,10 @@ import { ClientService } from '../../services/client.service';
 import { TransportService } from '../../services/transport.service';
 import { LrEntryService } from '../../services/lr-entry.service';
 import { LoadingService } from '../../services/loading.service';
+import { PackingListService } from '../../services/packing-list.service';
+import { DesignService } from '../../services/design.service';
 import { exportInvoicesToTally } from './tally-export.util';
+import { exportInvoicesToPtFile, PtFileSizeMaps } from './pt-file-export.util';
 import { fetchLogoDataUri } from '../../services/company-logo.util';
 
 interface TransportDetailsForm {
@@ -54,11 +58,14 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   private clientService = inject(ClientService);
   private transportService = inject(TransportService);
   private lrEntryService = inject(LrEntryService);
+  private packingListService = inject(PackingListService);
+  private designService = inject(DesignService);
   protected loadingService = inject(LoadingService);
   private subs: Subscription[] = [];
 
   clientCodeByClientId = signal<Map<string, string>>(new Map());
   isExportingTally = signal(false);
+  isExportingPt = signal(false);
 
   mode = signal<'list' | 'view'>('list');
   filterTab = signal<FilterTab>('all');
@@ -718,6 +725,41 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       await exportInvoicesToTally(eligible, this.clientCodeByClientId(), 'TallyInvoice_All');
     } finally {
       this.isExportingTally.set(false);
+    }
+  }
+
+  // Resolves the two lookups the PT File export needs (Packing List lines —
+  // for barcode/size-level billed qty — and Design Master — for MRP/WSP/
+  // Fabric per barcode) once per export, shared across every invoice in the
+  // batch rather than one Firestore round-trip per invoice.
+  private async buildPtFileLookups(invoices: Invoice[]): Promise<{ packingListsById: Map<string, PackingList>; sizeMaps: PtFileSizeMaps }> {
+    const [packingLists, byBarcode, byStyleColorSize] = await Promise.all([
+      firstValueFrom(this.packingListService.getPackingLists()),
+      this.designService.getSizeEntryByBarcodeMap(),
+      this.designService.getSizeEntryByStyleColorSizeMap(),
+    ]);
+    const neededIds = new Set(invoices.map((i) => i.packingListId));
+    const packingListsById = new Map(packingLists.filter((pl) => pl.id && neededIds.has(pl.id)).map((pl) => [pl.id!, pl]));
+    return { packingListsById, sizeMaps: { byBarcode, byStyleColorSize } };
+  }
+
+  async exportInvoicePtFile(invoice: Invoice): Promise<void> {
+    const { packingListsById, sizeMaps } = await this.buildPtFileLookups([invoice]);
+    await exportInvoicesToPtFile([invoice], packingListsById, sizeMaps, `PTFile_${invoice.invoiceNo}`);
+  }
+
+  async exportAllInvoicesPtFile(): Promise<void> {
+    const eligible = this.invoices().filter((i) => i.eInvoiceStatus !== 'cancelled');
+    if (!eligible.length) {
+      Swal.fire('No Invoices', 'There are no eligible invoices to export.', 'info');
+      return;
+    }
+    this.isExportingPt.set(true);
+    try {
+      const { packingListsById, sizeMaps } = await this.buildPtFileLookups(eligible);
+      await exportInvoicesToPtFile(eligible, packingListsById, sizeMaps, 'PTFile_All');
+    } finally {
+      this.isExportingPt.set(false);
     }
   }
 

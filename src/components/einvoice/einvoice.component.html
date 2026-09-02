@@ -179,6 +179,10 @@
                     class="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 transition-colors">
                     Export
                   </button>
+                  <button (click)="exportInvoicePtFile(inv)" title="Export PT File"
+                    class="px-3 py-1.5 bg-sky-600 text-white text-xs font-semibold rounded-lg hover:bg-sky-700 transition-colors">
+                    PT File
+                  </button>
                   @if (inv.transport) {
                   <button (click)="openLrModalForInvoice(inv)" [title]="inv.lrEntryId ? 'Change LR Entry' : 'Map LR Entry'"
                     class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
@@ -196,7 +200,7 @@
   </div>
 
   @if (!isLoading() && filteredInvoices().length > 0) {
-  <div class="flex justify-end mt-4">
+  <div class="flex justify-end gap-3 mt-4">
     <button (click)="exportAllInvoicesTally()" [disabled]="isExportingTally()"
       class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow">
       @if (isExportingTally()) {
@@ -210,6 +214,21 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
         </svg>
         Export All Invoices (Tally)
+      }
+    </button>
+    <button (click)="exportAllInvoicesPtFile()" [disabled]="isExportingPt()"
+      class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 disabled:opacity-60 transition-colors shadow">
+      @if (isExportingPt()) {
+        <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        Exporting…
+      } @else {
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+        Export All Invoices (PT File)
       }
     </button>
   </div>
@@ -258,6 +277,14 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
         </svg>
         Export Tally
+      </button>
+
+      <button (click)="exportInvoicePtFile(inv)"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 transition-colors shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+        Export PT File
       </button>
 
       <button (click)="viewPayload()"

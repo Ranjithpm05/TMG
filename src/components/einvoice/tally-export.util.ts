@@ -2,16 +2,20 @@ import Swal from 'sweetalert2';
 import { Invoice, InvoiceItem } from '../../models/invoice.model';
 
 // Exact two-row header of TallyInvoice.XLSX (sheet "REPORT"), column-for-column (A..AR).
+// Columns beyond AR (44+) are our own addition, appended after the fixed
+// template so the Tally-import mapping (which reads A..AR positionally)
+// is completely unaffected — see buildItemRow's doc comment.
 const HEADER_ROW_1 = [
   'Supplier', 'Supplier', 'VchDate', 'Invoice No.', 'State Name', 'GSTIN', 'pin', 'Customer Name', 'Code',
   'ADDRESS1', 'Address2', 'Voucher Type', 'Product Name', 'Product Name/Alais', 'stock', 'category', 'MRP',
   'HSNCODE', 'Units', 'godown', 'batch', 'mfg date', 'expdate', 'serialno\\ItemDescription', 'Actual', 'Billed ',
   'Rate', 'Amount', 'CGST %', 'CGST', 'SGST %', 'SGST', 'IGST %', 'IGST', 'cess', 'TCS', 'Accounting', 'Ledger1',
   'Ledger2', 'ExpLed1', 'ExpLed2', 'Vch', 'GST', 'Cess',
+  'Gross Amount', 'Discount %', 'Discount Amount', 'Net Amount', 'Final Amount',
 ];
 // Built by explicit column index (0=A .. 43=AR) rather than a hand-counted blank
 // run, since a single miscounted blank silently shifts every column after it.
-const HEADER_ROW_2: string[] = new Array(44).fill('');
+const HEADER_ROW_2: string[] = new Array(49).fill('');
 Object.assign(HEADER_ROW_2, {
   0: 'Inv.No', 1: 'Inv.Date', 2: 'Date', 4: 'Name', 5: 'No', 6: 'code', 7: 'p', 8: 'Alais',
   14: 'group(NEWLYADDED)', 15: 'category', 16: '(NEWLADDED',
@@ -53,14 +57,21 @@ function formatTimestamp(): string {
 /**
  * One Tally row per invoice item. The invoice only tracks a single discount %
  * and CGST/SGST/IGST rate for the whole invoice (see packing-list.component's
- * generateInvoice), so each item's Rate/Amount is netted down by that discount
- * — the Tally template has no separate discount column, and its own reference
- * rows show Amount tying directly to Rate*Qty with tax computed straight off it.
+ * generateInvoice), so each item's Rate/Amount (the fixed-template A..AR
+ * columns Tally imports positionally) is netted down by that discount — the
+ * Tally template itself has no separate discount column, and its own
+ * reference rows show Amount tying directly to Rate*Qty with tax computed
+ * straight off it. Gross/Discount %/Discount Amount/Net Amount/Final Amount
+ * are appended past AR purely for visibility — they mirror Amount/CGST/SGST/
+ * IGST above rather than replacing them, so the Tally import is unaffected.
  */
 function buildItemRow(invoice: Invoice, item: InvoiceItem, clientCode: string): (string | number)[] {
   const dateStr = formatTallyDate(invoice.invoiceDate);
-  const discountFactor = 1 - (invoice.discountPct || 0) / 100;
+  const grossAmount = r2(item.amount);
+  const discountPct = invoice.discountPct || 0;
+  const discountFactor = 1 - discountPct / 100;
   const netAmount = r2(item.amount * discountFactor);
+  const discountAmount = r2(grossAmount - netAmount);
   const netRate = item.quantity ? r2(netAmount / item.quantity) : r2(item.price * discountFactor);
 
   const isInterstate = (invoice.igstRate || 0) > 0;
@@ -72,6 +83,7 @@ function buildItemRow(invoice: Invoice, item: InvoiceItem, clientCode: string): 
   const igstAmt = r2(netAmount * igstRate / 100);
   const ledgerName = isInterstate ? 'Local IGST Sales' : 'Local GST Sales';
   const totalGstRate = item.taxRate || cgstRate + sgstRate + igstRate;
+  const finalAmount = r2(netAmount + cgstAmt + sgstAmt + igstAmt);
 
   return [
     invoice.invoiceNo, dateStr, dateStr, invoice.invoiceNo,
@@ -93,6 +105,7 @@ function buildItemRow(invoice: Invoice, item: InvoiceItem, clientCode: string): 
     invoice.invoiceNo,
     totalGstRate,
     '',
+    grossAmount, discountPct, discountAmount, netAmount, finalAmount,
   ];
 }
 
