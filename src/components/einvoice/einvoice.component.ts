@@ -717,7 +717,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   }
 
   async exportAllInvoicesTally(): Promise<void> {
-    const eligible = this.invoices().filter((i) => i.eInvoiceStatus !== 'cancelled');
+    const eligible = this.filteredInvoices().filter((i) => i.eInvoiceStatus !== 'cancelled');
     if (!eligible.length) {
       Swal.fire('No Invoices', 'There are no eligible invoices to export.', 'info');
       return;
