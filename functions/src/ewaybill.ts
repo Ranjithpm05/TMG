@@ -58,7 +58,7 @@ export const generateEwayBillByIrn = onCall(
     // values.
     const hasVehicle = !!(data.vehicleNo && data.vehicleNo.trim());
     const isRoad = data.transMode === '1';
-    const includePartB = hasVehicle || !isRoad;
+    const includePartB = hasVehicle
 
     const body = {
       Push_Data_List: [
