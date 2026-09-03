@@ -545,10 +545,11 @@ export class PackingListService {
   // quantity is never re-offered by a future "Generate Packing List" pass.
   // `sources` is still trimmed (via trimSources below) purely to keep the
   // line's own provenance record proportional to its new requiredQty.
-  // Decrease-only (same restriction as the Pick List line editor — see
-  // project_picklist_edit_delete_2026_08_11): an increase would need to
-  // re-validate against live Pick List/inventory availability, which this
-  // lightweight editor doesn't attempt.
+  // Increasing requiredQty leaves packedQty untouched (nextPackedQty is
+  // capped at the current packedQty either way) — it just grows how much is
+  // still left to pack on this line, same as any other still-to-pack unit;
+  // no Pick List/inventory availability check, consistent with this screen
+  // not gating adds on stock (see addPackingListLine).
   async updatePackingListLine(
     packingListId: string,
     lineId: string,
@@ -575,7 +576,6 @@ export class PackingListService {
       const nextSize = (changes.size ?? liveLine.size).trim();
       const nextRequiredQty = Math.floor(Number(changes.requiredQty));
       if (!Number.isFinite(nextRequiredQty) || nextRequiredQty <= 0) throw new Error('qty_invalid');
-      if (nextRequiredQty > liveLine.requiredQty) throw new Error('qty_can_only_decrease');
 
       const identityChanged = nextStyleNo !== liveLine.styleNo || nextSize !== liveLine.size;
       if (identityChanged && (!changes.barcode || !changes.inventoryId)) {
@@ -782,11 +782,14 @@ export class PackingListService {
         throw new Error('dc_already_generated');
       }
 
+      // Stock is checked (and, below, decremented — possibly negative) but
+      // does not gate the add: the item must be allowed in regardless of
+      // available inventory (see Pick List's scan-time stock handling for
+      // the same rule).
       let invSnap: DocumentSnapshot | null = null;
       if (packingList.stockDeducted) {
-        invSnap = await transaction.get(doc(this.firestore, `inventory/${inventoryId}`));
-        if (!invSnap.exists()) throw new Error('inventory_not_found');
-        if ((Number(invSnap.data()?.['currentStock']) || 0) < qty) throw new Error('insufficient_stock');
+        const snap = await transaction.get(doc(this.firestore, `inventory/${inventoryId}`));
+        if (snap.exists()) invSnap = snap;
       }
 
       const now = Date.now();
