@@ -11,8 +11,9 @@ import { ExceedOrderReportComponent } from './exceed-order-report/exceed-order-r
 import { StyleWiseReportComponent } from './style-wise-report/style-wise-report.component';
 import { StyleCustomerWiseReportComponent } from './style-customer-wise-report/style-customer-wise-report.component';
 import { PickListWiseReportComponent } from './pick-list-wise-report/pick-list-wise-report.component';
+import { HsnGstWiseReportComponent } from './hsn-gst-wise-report/hsn-gst-wise-report.component';
 
-export type ReportTab = 'customer' | 'agent' | 'product' | 'exceed' | 'styleWise' | 'styleCustomerWise' | 'pickList';
+export type ReportTab = 'customer' | 'agent' | 'product' | 'exceed' | 'styleWise' | 'styleCustomerWise' | 'pickList' | 'hsnGst';
 
 @Component({
   selector: 'app-reports',
@@ -27,6 +28,7 @@ export type ReportTab = 'customer' | 'agent' | 'product' | 'exceed' | 'styleWise
     StyleWiseReportComponent,
     StyleCustomerWiseReportComponent,
     PickListWiseReportComponent,
+    HsnGstWiseReportComponent,
   ],
   providers: [ReportsDataService, ReportCalcService],
   templateUrl: './reports.component.html',
