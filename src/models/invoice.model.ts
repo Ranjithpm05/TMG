@@ -119,9 +119,9 @@ export interface Invoice {
   // LR (Lorry Receipt) mapping — see LrEntry. lrNo/lrDate are denormalized
   // from the mapped LrEntry doc purely for display without an extra lookup;
   // lrEntryId is the source of truth (kept in sync by
-  // LrEntryService.mapInvoiceToLrEntry/unmapInvoiceFromLrEntry). At most one
-  // LR per invoice; the reverse (one LR -> many invoices) lives on
-  // LrEntry.invoiceIds.
+  // LrEntryService.mapInvoiceToLrEntry/unmapInvoiceFromLrEntry). Strictly
+  // one LR per invoice and one invoice per LR (LrEntry.invoiceIds holds at
+  // most this one id).
   lrEntryId?: string;
   lrNo?: string;
   lrDate?: any;

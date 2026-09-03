@@ -1,6 +1,6 @@
 import Swal from 'sweetalert2';
 import { Invoice } from '../../models/invoice.model';
-import { PackingList } from '../../models/packing-list.model';
+import { PackingListLine } from '../../models/packing-list.model';
 import { SizePrice } from '../../models/design.model';
 
 // Column order matches the "PT FILE FORMAT.xls" reference template exactly.
@@ -43,9 +43,15 @@ export interface PtFileSizeMaps {
  * carries no barcode/WSP/fabric columns, so this reads back the source
  * Packing List's lines (already one row per barcode/size, with the actual
  * billed quantity in packedQty) and joins Design Master for MRP/WSP/Fabric.
+ *
+ * Reads the live `lines` subcollection (via getPackingListLinesOnce), not
+ * the top-level PackingList.items array — that array is frozen at
+ * packedQty: 0 from creation and never updated (see packing-list.service's
+ * processScan/deductInventoryOnCompletion comments), so filtering it always
+ * yields zero rows.
  */
-function buildInvoiceRows(invoice: Invoice, packingList: PackingList | undefined, sizeMaps: PtFileSizeMaps): (string | number)[][] {
-  const lines = (packingList?.items ?? []).filter((line) => line.packedQty > 0);
+function buildInvoiceRows(invoice: Invoice, packingListLines: PackingListLine[] | undefined, sizeMaps: PtFileSizeMaps): (string | number)[][] {
+  const lines = (packingListLines ?? []).filter((line) => line.packedQty > 0);
   const billNo = invoice.invoiceNo;
   const billDate = formatPtDate(invoice.invoiceDate);
   // The invoice tracks one discount % and one CGST/SGST-or-IGST rate for the
@@ -81,10 +87,10 @@ function buildInvoiceRows(invoice: Invoice, packingList: PackingList | undefined
   });
 }
 
-export function buildPtFileRows(invoices: Invoice[], packingListsById: Map<string, PackingList>, sizeMaps: PtFileSizeMaps): (string | number)[][] {
+export function buildPtFileRows(invoices: Invoice[], packingListLinesById: Map<string, PackingListLine[]>, sizeMaps: PtFileSizeMaps): (string | number)[][] {
   const rows: (string | number)[][] = [HEADERS];
   for (const invoice of invoices) {
-    rows.push(...buildInvoiceRows(invoice, packingListsById.get(invoice.packingListId), sizeMaps));
+    rows.push(...buildInvoiceRows(invoice, packingListLinesById.get(invoice.packingListId), sizeMaps));
   }
   return rows;
 }
@@ -92,12 +98,12 @@ export function buildPtFileRows(invoices: Invoice[], packingListsById: Map<strin
 /** Builds and downloads a PT-File-Format .xlsx for one or more invoices (single/all export share this). */
 export async function exportInvoicesToPtFile(
   invoices: Invoice[],
-  packingListsById: Map<string, PackingList>,
+  packingListLinesById: Map<string, PackingListLine[]>,
   sizeMaps: PtFileSizeMaps,
   fileNamePrefix: string
 ): Promise<void> {
   try {
-    const rows = buildPtFileRows(invoices, packingListsById, sizeMaps);
+    const rows = buildPtFileRows(invoices, packingListLinesById, sizeMaps);
     const XLSX = await import('xlsx');
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const wb = XLSX.utils.book_new();

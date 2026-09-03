@@ -9,10 +9,10 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { firstValueFrom, Subscription } from 'rxjs';
+import { Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
 import { Invoice } from '../../models/invoice.model';
-import { PackingList } from '../../models/packing-list.model';
+import { PackingListLine } from '../../models/packing-list.model';
 import { CANCEL_REASONS, CompanySettings, INDIA_STATE_CODES } from '../../models/einvoice.model';
 import { Transport } from '../../models/transport.model';
 import { LrEntry } from '../../models/lr-entry.model';
@@ -191,16 +191,18 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   }
 
   // "Eligible" LR Entries for the currently-selected invoice — same
-  // Transport (case/whitespace-insensitive), per the mapping rule: one LR
-  // commonly covers several invoices dispatched together with the same
-  // transporter. Not filtered further by invoiceIds — an LR already holding
-  // other invoices is still offered, since one LR -> many invoices is the
-  // whole point (see LrEntry doc comment).
+  // Transport (case/whitespace-insensitive) and not already mapped to a
+  // different invoice: mapping is strictly one LR <-> one invoice, so an LR
+  // that already has any invoiceIds is only offered back for the invoice
+  // it's already mapped to (so it still shows as "Mapped" in the picker).
   eligibleLrEntries = computed(() => {
     const invoice = this.selectedInvoice();
     const transport = (invoice?.transport || '').trim().toLowerCase();
     if (!transport) return [];
-    return this.lrEntries().filter((lr) => (lr.transport || '').trim().toLowerCase() === transport);
+    return this.lrEntries().filter((lr) =>
+      (lr.transport || '').trim().toLowerCase() === transport
+      && (lr.invoiceIds.length === 0 || lr.id === invoice?.lrEntryId)
+    );
   });
 
   stats = computed(() => {
@@ -732,20 +734,26 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   // for barcode/size-level billed qty — and Design Master — for MRP/WSP/
   // Fabric per barcode) once per export, shared across every invoice in the
   // batch rather than one Firestore round-trip per invoice.
-  private async buildPtFileLookups(invoices: Invoice[]): Promise<{ packingListsById: Map<string, PackingList>; sizeMaps: PtFileSizeMaps }> {
-    const [packingLists, byBarcode, byStyleColorSize] = await Promise.all([
-      firstValueFrom(this.packingListService.getPackingLists()),
+  //
+  // Reads each needed Packing List's `lines` subcollection (via
+  // getPackingListLinesOnce), not PackingList.items — that top-level array
+  // is written once at creation with packedQty frozen at 0 and never
+  // updated (see packing-list.service's processScan comment), so every row
+  // built from it gets filtered out and the export comes back empty.
+  private async buildPtFileLookups(invoices: Invoice[]): Promise<{ packingListLinesById: Map<string, PackingListLine[]>; sizeMaps: PtFileSizeMaps }> {
+    const neededIds = [...new Set(invoices.map((i) => i.packingListId).filter((id): id is string => !!id))];
+    const [linesByPackingList, byBarcode, byStyleColorSize] = await Promise.all([
+      Promise.all(neededIds.map((id) => this.packingListService.getPackingListLinesOnce(id))),
       this.designService.getSizeEntryByBarcodeMap(),
       this.designService.getSizeEntryByStyleColorSizeMap(),
     ]);
-    const neededIds = new Set(invoices.map((i) => i.packingListId));
-    const packingListsById = new Map(packingLists.filter((pl) => pl.id && neededIds.has(pl.id)).map((pl) => [pl.id!, pl]));
-    return { packingListsById, sizeMaps: { byBarcode, byStyleColorSize } };
+    const packingListLinesById = new Map(neededIds.map((id, i) => [id, linesByPackingList[i]]));
+    return { packingListLinesById, sizeMaps: { byBarcode, byStyleColorSize } };
   }
 
   async exportInvoicePtFile(invoice: Invoice): Promise<void> {
-    const { packingListsById, sizeMaps } = await this.buildPtFileLookups([invoice]);
-    await exportInvoicesToPtFile([invoice], packingListsById, sizeMaps, `PTFile_${invoice.invoiceNo}`);
+    const { packingListLinesById, sizeMaps } = await this.buildPtFileLookups([invoice]);
+    await exportInvoicesToPtFile([invoice], packingListLinesById, sizeMaps, `PTFile_${invoice.invoiceNo}`);
   }
 
   async exportAllInvoicesPtFile(): Promise<void> {
@@ -756,8 +764,8 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     }
     this.isExportingPt.set(true);
     try {
-      const { packingListsById, sizeMaps } = await this.buildPtFileLookups(eligible);
-      await exportInvoicesToPtFile(eligible, packingListsById, sizeMaps, 'PTFile_All');
+      const { packingListLinesById, sizeMaps } = await this.buildPtFileLookups(eligible);
+      await exportInvoicesToPtFile(eligible, packingListLinesById, sizeMaps, 'PTFile_All');
     } finally {
       this.isExportingPt.set(false);
     }

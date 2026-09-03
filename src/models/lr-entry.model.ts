@@ -1,10 +1,9 @@
 // LR Entry — the transporter's Lorry Receipt/Consignment Note issued for a
 // Packing List's dispatch (DC generation). Captured once at DC-generation
-// time (see PackingListComponent.generateAndPrintDC), then mapped to one or
-// more Invoices from the Invoice screen — a single LR commonly covers
-// several invoices dispatched together in the same consignment, so the
-// relationship is one LR Entry -> many Invoices, never the reverse (an
-// Invoice maps to at most one LR Entry at a time, see Invoice.lrEntryId).
+// time (see PackingListComponent.generateAndPrintDC), then mapped to at
+// most one Invoice from the Invoice screen — the relationship is strictly
+// one LR Entry <-> one Invoice (enforced by LrEntryService.mapInvoiceToLrEntry),
+// so `invoiceIds`/`invoiceNos` below hold at most a single entry each.
 export interface LrEntry {
   id?: string;
   lrNo: string;

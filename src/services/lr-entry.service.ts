@@ -57,12 +57,11 @@ export class LrEntryService {
     return this.normalize({ id: docRef.id, ...data });
   }
 
-  // Maps (or re-maps) one invoice to an LR Entry. At most one LR per invoice
-  // (Invoice.lrEntryId), but one LR can hold many invoices — so this only
-  // ever adds/moves this single invoice id, never touches any other invoice
-  // already on either LR. Runs as a transaction so switching from LR A to LR
-  // B atomically drops it from A's invoiceIds and adds it to B's, and two
-  // rapid clicks can't add the same invoice twice.
+  // Maps (or re-maps) one invoice to an LR Entry — strictly one LR <-> one
+  // invoice, so this rejects mapping onto an LR that's already mapped to a
+  // different invoice. Runs as a transaction so switching from LR A to LR B
+  // atomically drops it from A's invoiceIds and adds it to B's, and two
+  // rapid clicks can't add the same invoice twice or double-book an LR.
   //
   // Validates the LR Entry's transporter actually matches the invoice's
   // Transport before mapping — the Invoice screen's picker already only
@@ -94,6 +93,9 @@ export class LrEntryService {
       const newLrData: any = newLrSnap.data();
       const newInvoiceIds: string[] = Array.isArray(newLrData?.invoiceIds) ? newLrData.invoiceIds : [];
       const newInvoiceNos: string[] = Array.isArray(newLrData?.invoiceNos) ? newLrData.invoiceNos : [];
+      if (newInvoiceIds.length > 0 && !newInvoiceIds.includes(invoice.id)) {
+        throw new Error('This LR Entry is already mapped to another invoice.');
+      }
       if (!newInvoiceIds.includes(invoice.id)) {
         tx.update(newLrRef, {
           invoiceIds: [...newInvoiceIds, invoice.id],
