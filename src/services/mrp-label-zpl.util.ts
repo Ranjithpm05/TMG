@@ -102,34 +102,28 @@ const PRE_PRINTED_ZONE_H = 11;
 
 /**
  * The MRP tag's PRINTABLE (variable) content only — Design, Style, Shade,
- * Size, Qty, MRP, and "(Incl. of all Taxes)" as SEPARATE ROTATED text
- * columns (not combined — confirmed against a physical reference sample
- * that each field is its own aligned line, not several fields crammed
- * onto one), plus a QR code (also rotated, matching the fields) with its
- * code text. The TMG CLOTHINGS branding, email, and "Made in India" are
- * already physically printed as a horizontal bar at the BOTTOM of the
- * label stock and are DELIBERATELY NOT drawn here — printing them again
- * would double-ink the pre-printed strip. `PRE_PRINTED_ZONE_H` reserves
- * that bar's height so nothing below overlaps it.
+ * Size, Qty stacked in a column top-left, a QR code (with its code text)
+ * top-right, then MRP and "(Incl. of all Taxes)" prominent below, all
+ * UPRIGHT (not rotated) — matching a physical reference sample the user
+ * supplied. The TMG CLOTHINGS branding, email, and "Made in India" are
+ * still physically printed as a horizontal bar at the BOTTOM of the label
+ * stock (CONFIRMED unchanged when this layout was revised) and are
+ * DELIBERATELY NOT drawn here — printing them again would double-ink the
+ * pre-printed strip. `PRE_PRINTED_ZONE_H` reserves that bar's height so
+ * nothing below overlaps it.
  *
- * ROTATION — confirmed via `buildRotationDiagnosticZpl`'s physical test
- * print: `^A0B` (scalable font, orientation "B" — 270° clockwise / 90°
- * counter-clockwise) is the technique this printer's firmware actually
- * honors. Both `^A0R` and the bitmap-font `^ADR` were tried first and
- * confirmed NOT to rotate on this hardware; `^A0B` is CONFIRMED correct,
- * unlike those two. IMPORTANT: `^A0B` text grows DOWNWARD from its `^FO`
- * origin (confirmed the hard way — anchoring near the tag's bottom edge
- * left almost no room for that downward growth and printed nothing at
- * all). Anchor field text near the TOP of its available space, never the
- * bottom.
+ * ORIENTATION — an earlier revision of this layout rotated every field 90°
+ * (`^A0B`, confirmed via `buildRotationDiagnosticZpl`'s physical test
+ * print) because the reference sample available at the time showed
+ * sideways text. The user has since supplied a second reference sample
+ * showing fields printed upright, so this layout uses plain `^A0N`
+ * (unrotated). `buildRotationDiagnosticZpl` is kept for reference in case
+ * a future sample calls for rotation again.
  *
- * LAYOUT — the QR is a horizontal band spanning the tag's FULL WIDTH at
- * the TOP, taking the top 25% of the tag's height (`hMm`) and sized to
- * nearly fill that band; field columns run left to right, anchored just
- * below the QR band and growing downward through the remaining 75%.
- * `offsetXMm` places this tag in the left or right half of the physical
- * 80×70mm sheet; `halfWMm` is that half's actual available width (used to
- * derive `scaleW` against `REF_HALF_W`).
+ * LAYOUT — `offsetXMm` places this tag in the left or right half of the
+ * physical 80×70mm sheet; `halfWMm` is that half's actual available width
+ * (used to derive `scaleW` against `REF_HALF_W`, since the sheet's two
+ * portrait halves are narrow — about 39mm each).
  */
 function mrpLabelTagFields(
   data: MrpLabelData,
@@ -140,54 +134,52 @@ function mrpLabelTagFields(
   esc: (s: unknown) => string,
 ): string[] {
   const scaleW = halfWMm / REF_HALF_W;
-  const font = (heightMm: number, rotate: boolean) => {
-    const h = d(heightMm * scaleW);
+  const rendered = (mm: number) => mm * scaleW;
+  const font = (heightMm: number) => {
+    const h = d(rendered(heightMm));
     const w = Math.max(1, Math.round(h * 0.58));
-    return `^A0${rotate ? 'B' : 'N'},${h},${w}`;
+    return `^A0N,${h},${w}`;
   };
 
   const lines: string[] = [];
 
-  // ── QR code + code text, a horizontal band across the FULL WIDTH at the
-  // TOP, taking the top 25% of the tag's height — sized to nearly fill
-  // that band (1mm margin). ROTATED to match the confirmed-correct `^A0B`
-  // text orientation (`^BQB` instead of `^BQN`) so the whole label reads
-  // consistently in one orientation, per explicit request — a QR scans
-  // fine at any rotation, so this is purely a visual-consistency choice,
-  // not a functional requirement. ──
-  const qrBandHMm = hMm * 0.25;
-  const qrZoneMm = Math.min(qrBandHMm - 1, halfWMm - 2);
-  const qrX = (halfWMm - qrZoneMm) / 2;
-  const qrY = (qrBandHMm - qrZoneMm) / 2;
-  const qrMagnification = Math.max(1, Math.min(8, Math.round((qrZoneMm / 25) * 5)));
-  lines.push(`^FO${d(offsetXMm + qrX)},${d(qrY)}^BQB,2,${qrMagnification}^FDQA,${esc(data.code)}^FS`);
-  lines.push(`^FO${d(offsetXMm + qrX)},${d(qrY + qrZoneMm + 1)}${font(1.2, false)}^FD${esc(data.code)}^FS`);
+  // ── QR code + code text, top-right corner, upright. ──
+  const qrSizeMm = Math.min(20, halfWMm * 0.5);
+  const qrX = halfWMm - qrSizeMm - 1.5;
+  const qrY = 2;
+  const qrCodeFontHMm = 1.3;
+  const qrMagnification = Math.max(1, Math.min(8, Math.round((qrSizeMm / 25) * 5)));
+  lines.push(`^FO${d(offsetXMm + qrX)},${d(qrY)}^BQN,2,${qrMagnification}^FDQA,${esc(data.code)}^FS`);
+  lines.push(`^FO${d(offsetXMm + qrX)},${d(qrY + qrSizeMm + 1)}${font(qrCodeFontHMm)}^FD${esc(data.code)}^FS`);
 
-  // ── Design / Style / Shade / Size / Qty / MRP / tax caption — each its
-  // OWN rotated 90° column (not combined), anchored just BELOW the QR
-  // band (not the tag's bottom edge). IMPORTANT — anchoring at the very
-  // bottom edge (an earlier revision's attempt) broke printing entirely:
-  // `^A0B` extends text DOWNWARD from its origin, so an origin placed only
-  // ~2mm above the bottom edge left almost no room before running off the
-  // physical label, rendering nothing. Anchoring near the top (right after
-  // the QR band) gives the full remaining height for the downward-growing
-  // text to actually appear. ──
-  const topYMm = qrBandHMm + 4;
-  const col = (xMm: number, heightMm: number, value: string) =>
-    `^FO${d(offsetXMm + xMm * scaleW)},${d(topYMm)}${font(heightMm, true)}^FD${esc(value)}^FS`;
-
-  let x = 1.5;
-  const push = (heightMm: number, value: string) => {
-    lines.push(col(x, heightMm, value));
-    x += (heightMm * scaleW + 0.5) / scaleW;
+  // ── Design / Style / Shade / Size / Qty, top-left, stacked upright next
+  // to the QR block. ──
+  const fieldColXMm = 1.5;
+  const fieldFontHMm = 2;
+  const fieldLineHMm = rendered(fieldFontHMm) + 1.8;
+  let fieldY = 2;
+  const pushField = (value: string) => {
+    lines.push(`^FO${d(offsetXMm + fieldColXMm)},${d(fieldY)}${font(fieldFontHMm)}^FD${esc(value)}^FS`);
+    fieldY += fieldLineHMm;
   };
-  push(2.8, `Design : ${data.design || '-'}`);
-  push(2.4, `Style : ${data.style}`);
-  push(2.4, `Shade : ${data.shade}`);
-  push(2.4, `Size : ${data.size || '-'}`);
-  push(2.4, 'Qty : 1 No');
-  push(4.2, `MRP : ₹ ${data.mrp.toFixed(2)}`);
-  push(1.8, '(Incl. of all Taxes)');
+  pushField(`Design : ${data.design || '-'}`);
+  pushField(`Style : ${data.style}`);
+  pushField(`Shade : ${data.shade}`);
+  pushField(`Size : ${data.size || '-'}`);
+  pushField('Qty : 1 No');
+
+  // ── MRP, prominent, spanning the tag's printable width, below both the
+  // field column and the QR block. ──
+  const qrBlockBottomMm = qrY + qrSizeMm + 1 + rendered(qrCodeFontHMm);
+  const topBlockBottomMm = Math.max(fieldY, qrBlockBottomMm);
+  const mrpFontHMm = 5;
+  const mrpYMm = topBlockBottomMm + 2.5;
+  lines.push(`^FO${d(offsetXMm + 1.5)},${d(mrpYMm)}${font(mrpFontHMm)}^FDMRP : ₹ ${data.mrp.toFixed(2)}^FS`);
+
+  // ── Tax caption, directly below MRP. ──
+  const taxFontHMm = 1.9;
+  const taxYMm = mrpYMm + rendered(mrpFontHMm) + 1.5;
+  lines.push(`^FO${d(offsetXMm + 1.5)},${d(taxYMm)}${font(taxFontHMm)}^FD(Incl. of all Taxes)^FS`);
 
   return lines;
 }
@@ -207,10 +199,9 @@ function mrpLabelTagFields(
  *
  * This label's media is loaded in the SAME orientation the design is
  * authored in (width 80mm > height 70mm) so there is no whole-canvas
- * rotation model here (unlike the Box Label) — each field is individually
- * rotated instead via `^A0B`, confirmed correct for this printer against
- * an actual physical diagnostic test print. See `mrpLabelTagFields`'s doc
- * comment for this field's rotation history.
+ * rotation model here (unlike the Box Label) — fields are drawn upright
+ * (`^A0N`), matching the user's reference sample. See `mrpLabelTagFields`'s
+ * doc comment for this field's orientation history.
  */
 export function buildMrpLabelZpl(left: MrpLabelData, right: MrpLabelData | null, settings: MrpLabelPrinterSettings): string {
   const dotsPerMm = settings.dpi / 25.4;

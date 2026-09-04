@@ -1682,60 +1682,56 @@ export class PackingListComponent implements OnInit, OnDestroy {
   }
 
   // Mirrors mrpLabelTagFields in mrp-label-zpl.util.ts exactly — same field
-  // content/order (Design/Style/Shade/Size/Qty/MRP/tax as separate
-  // columns), same `^A0B`-confirmed rotation, and the same layout: QR as a
-  // full-width band across the TOP 25% of the tag's height (sized to
-  // nearly fill it, also rotated), fields anchored just below the QR band
-  // and growing downward through the remaining 75%.
+  // content/order (Design/Style/Shade/Size/Qty stacked top-left, QR
+  // top-right, MRP + tax caption prominent below), all UPRIGHT (no
+  // rotation), matching the user's reference sample.
   private buildMrpLabelPreviewInnerHtml(left: MrpLabelData, right: MrpLabelData, settings: MrpLabelPrinterSettings): string {
     const REF_HALF_W = 39;
 
     const W = settings.labelWidthMm;
-    const H = settings.labelHeightMm;
     const DIVIDER_GAP_MM = 2;
     const halfW = (W - DIVIDER_GAP_MM) / 2;
     const scaleW = halfW / REF_HALF_W;
+    const rendered = (mm: number) => mm * scaleW;
 
     const buildHalf = (offsetXMm: number, data: MrpLabelData): string => {
-      // QR + code text — full-width band, top 25% of the tag's height, sized to nearly fill it.
-      const qrBandHMm = H * 0.25;
-      const qrZoneMm = Math.min(qrBandHMm - 1, halfW - 2);
-      const qrX = (halfW - qrZoneMm) / 2;
-      const qrY = (qrBandHMm - qrZoneMm) / 2;
-      const qrHtml = `<div style="position:absolute;left:${offsetXMm + qrX}mm;top:${qrY}mm;width:${qrZoneMm}mm;height:${qrZoneMm}mm;border:0.3mm solid #0f172a;display:flex;align-items:center;justify-content:center;font-size:${2 * scaleW}mm;color:#888">QR</div>`;
-      const codeHtml = `<div style="position:absolute;left:${offsetXMm + qrX}mm;top:${qrY + qrZoneMm + 1}mm;width:${qrZoneMm}mm;font-size:${1.2 * scaleW}mm;color:#555;text-align:center;word-break:break-all">${data.code}</div>`;
+      // QR + code text, top-right corner, upright.
+      const qrSizeMm = Math.min(20, halfW * 0.5);
+      const qrX = halfW - qrSizeMm - 1.5;
+      const qrY = 2;
+      const qrCodeFontHMm = 1.3;
+      const qrHtml = `<div style="position:absolute;left:${offsetXMm + qrX}mm;top:${qrY}mm;width:${qrSizeMm}mm;height:${qrSizeMm}mm;border:0.3mm solid #0f172a;display:flex;align-items:center;justify-content:center;font-size:${rendered(2)}mm;color:#888">QR</div>`;
+      const codeHtml = `<div style="position:absolute;left:${offsetXMm + qrX}mm;top:${qrY + qrSizeMm + 1}mm;width:${qrSizeMm}mm;font-size:${rendered(qrCodeFontHMm)}mm;color:#555;text-align:center;word-break:break-all">${data.code}</div>`;
 
-      // Design / Style / Size / Qty / Shade / MRP / tax — each its OWN
-      // rotated column (not combined — matches mrp-label-zpl.util.ts
-      // exactly), anchored just BELOW the QR band and growing DOWNWARD —
-      // matching the ACTUAL confirmed ZPL behavior (`^A0B` text grows
-      // downward from its origin; an earlier revision anchored at the
-      // tag's bottom edge assuming upward growth, which broke the real
-      // print entirely since there was no room left to grow into).
-      // rotate(90deg) (CW) with a top-left origin (no centering translate)
-      // extends text downward from the literal anchor point.
-      const topYMm = qrBandHMm + 4;
-      const col = (xMm: number, heightMm: number, value: string, bold = false): string => {
-        const scaledH = heightMm * scaleW;
-        const leftX = offsetXMm + xMm * scaleW;
-        return `<div style="position:absolute;left:${leftX}mm;top:${topYMm}mm;transform:rotate(90deg);transform-origin:top left;color:#0f172a;font-weight:${bold ? 900 : 600};font-size:${scaledH}mm;white-space:nowrap;line-height:1">${value}</div>`;
-      };
-
-      let x = 1.5;
+      // Design / Style / Shade / Size / Qty, top-left, stacked upright.
+      const fieldColXMm = 1.5;
+      const fieldFontHMm = 2;
+      const fieldLineHMm = rendered(fieldFontHMm) + 1.8;
+      let fieldY = 2;
       const fieldsHtml: string[] = [];
-      const push = (heightMm: number, value: string, bold = false) => {
-        fieldsHtml.push(col(x, heightMm, value, bold));
-        x += (heightMm * scaleW + 0.5) / scaleW;
+      const pushField = (value: string) => {
+        fieldsHtml.push(`<div style="position:absolute;left:${offsetXMm + fieldColXMm}mm;top:${fieldY}mm;color:#0f172a;font-weight:600;font-size:${rendered(fieldFontHMm)}mm;white-space:nowrap;line-height:1">${value}</div>`);
+        fieldY += fieldLineHMm;
       };
-      push(2.8, `Design : ${data.design || '-'}`);
-      push(2.4, `Style : ${data.style}`);
-      push(2.4, `Shade : ${data.shade}`);
-      push(2.4, `Size : ${data.size || '-'}`);
-      push(2.4, 'Qty : 1 No');
-      push(4.2, `MRP : ₹ ${data.mrp.toFixed(2)}`, true);
-      push(1.8, '(Incl. of all Taxes)');
+      pushField(`Design : ${data.design || '-'}`);
+      pushField(`Style : ${data.style}`);
+      pushField(`Shade : ${data.shade}`);
+      pushField(`Size : ${data.size || '-'}`);
+      pushField('Qty : 1 No');
 
-      return qrHtml + codeHtml + fieldsHtml.join('');
+      // MRP, prominent, below both the field column and the QR block.
+      const qrBlockBottomMm = qrY + qrSizeMm + 1 + rendered(qrCodeFontHMm);
+      const topBlockBottomMm = Math.max(fieldY, qrBlockBottomMm);
+      const mrpFontHMm = 5;
+      const mrpYMm = topBlockBottomMm + 2.5;
+      const mrpHtml = `<div style="position:absolute;left:${offsetXMm + 1.5}mm;top:${mrpYMm}mm;color:#0f172a;font-weight:900;font-size:${rendered(mrpFontHMm)}mm;white-space:nowrap;line-height:1">MRP : ₹ ${data.mrp.toFixed(2)}</div>`;
+
+      // Tax caption, directly below MRP.
+      const taxFontHMm = 1.9;
+      const taxYMm = mrpYMm + rendered(mrpFontHMm) + 1.5;
+      const taxHtml = `<div style="position:absolute;left:${offsetXMm + 1.5}mm;top:${taxYMm}mm;color:#0f172a;font-weight:600;font-size:${rendered(taxFontHMm)}mm;white-space:nowrap;line-height:1">(Incl. of all Taxes)</div>`;
+
+      return qrHtml + codeHtml + fieldsHtml.join('') + mrpHtml + taxHtml;
     };
 
     const rightOffsetXMm = halfW + DIVIDER_GAP_MM;
