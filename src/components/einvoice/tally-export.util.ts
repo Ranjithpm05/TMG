@@ -55,9 +55,8 @@ function formatTimestamp(): string {
  * (pre-discount) Price/Amount columns; the invoice's single overall discount
  * % (see packing-list.component's generateInvoice) is instead carried as its
  * own value in ExpLed1, same as the invoice applies it once at the bottom
- * against Gross to get Taxable Value. CGST/SGST/IGST are computed on that
- * post-discount (net) amount, matching the tax actually charged on the
- * invoice, even though this row's own Amount is the gross figure.
+ * against Gross to get Taxable Value. CGST/SGST/IGST are computed straight
+ * off that same gross Amount so each row's own numbers tie out (%×Amount).
  */
 function buildItemRow(invoice: Invoice, item: InvoiceItem, clientCode: string): (string | number)[] {
   const dateStr = formatTallyDate(invoice.invoiceDate);
@@ -71,9 +70,9 @@ function buildItemRow(invoice: Invoice, item: InvoiceItem, clientCode: string): 
   const cgstRate = isInterstate ? 0 : invoice.cgstRate || 0;
   const sgstRate = isInterstate ? 0 : invoice.sgstRate || 0;
   const igstRate = isInterstate ? invoice.igstRate || 0 : 0;
-  const cgstAmt = r2(netAmount * cgstRate / 100);
-  const sgstAmt = r2(netAmount * sgstRate / 100);
-  const igstAmt = r2(netAmount * igstRate / 100);
+  const cgstAmt = r2(grossAmount * cgstRate / 100);
+  const sgstAmt = r2(grossAmount * sgstRate / 100);
+  const igstAmt = r2(grossAmount * igstRate / 100);
   const ledgerName = isInterstate ? 'Local IGST Sales' : 'Local GST Sales';
   const totalGstRate = item.taxRate || cgstRate + sgstRate + igstRate;
 
