@@ -717,7 +717,18 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   }
 
   async exportAllInvoicesTally(): Promise<void> {
-    const eligible = this.filteredInvoices().filter((i) => i.eInvoiceStatus !== 'cancelled');
+    // filteredInvoices() is newest-first (see InvoiceService.getInvoices' orderBy
+    // 'createdAt', 'desc') — Tally expects the sheet in invoice-date order, oldest
+    // first, so re-sort ascending here rather than changing the on-screen list order.
+    const eligible = this.filteredInvoices()
+      .filter((i) => i.eInvoiceStatus !== 'cancelled')
+      .sort((a, b) => {
+        const toMs = (raw: any) => (raw ? (raw?.toDate ? raw.toDate() : new Date(raw)).getTime() : NaN);
+        const aMs = toMs(a.invoiceDate);
+        const bMs = toMs(b.invoiceDate);
+        if (Number.isFinite(aMs) && Number.isFinite(bMs) && aMs !== bMs) return aMs - bMs;
+        return a.invoiceNo.localeCompare(b.invoiceNo, undefined, { numeric: true });
+      });
     if (!eligible.length) {
       Swal.fire('No Invoices', 'There are no eligible invoices to export.', 'info');
       return;
@@ -1032,7 +1043,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       <tr><td style="padding:2px 4px;font-size:11px;color:#555;white-space:nowrap">Invoice No.</td><td style="padding:2px 4px;font-size:11px;font-weight:700">: ${invoice.invoiceNo}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Invoice Date</td><td style="padding:2px 4px;font-size:11px">: ${fmtDate(invoice.invoiceDate)}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">DC No.</td><td style="padding:2px 4px;font-size:11px;font-weight:700">: ${invoice.dcNo || '—'}</td></tr>
-      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Order No.</td><td style="padding:2px 4px;font-size:11px;font-weight:600">: ${invoice.orderNo || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Order No.</td><td style="padding:2px 4px;font-size:11px;font-weight:600">: ${invoice.orderNo || invoice.salesNos.join(', ') || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Destination</td><td style="padding:2px 4px;font-size:11px">: ${invoice.destination || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Transport</td><td style="padding:2px 4px;font-size:11px">: ${invoice.transport || '—'}</td></tr>
       ${invoice.transportGstNo ? `<tr><td style="padding:2px 4px;font-size:11px;color:#555">Transport GSTIN</td><td style="padding:2px 4px;font-size:11px">: ${invoice.transportGstNo}</td></tr>` : ''}

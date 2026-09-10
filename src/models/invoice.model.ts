@@ -40,6 +40,10 @@ export interface Invoice {
   packingListNo: string;
   salesOrderIds: string[];
   salesNos: string[];
+  // Customer PO Number(s) — merged from the invoiced DC(s)' own orderNo (see
+  // DeliveryChallan.orderNo), which in turn comes from SalesOrder.poNumber.
+  // Printed as "Order No."; falls back to salesNos for invoices generated
+  // before SalesOrder.poNumber existed.
   orderNo: string;
   clientId: string;
   clientName: string;

@@ -82,6 +82,7 @@ const EMPTY_MANUAL_SELECTION_STATE: ManualDesignSelectionState = {
 type SalesOrderDraft = {
   selectedClientId: string | null;
   deliveryDate: string;
+  poNumber?: string;
   orderItems: OrderItem[];
   scannedBarcodes: string[];
   consolidatedEntryState: ConsolidatedEntryState;
@@ -126,6 +127,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     orderItems = signal<OrderItem[]>([]);
     selectedClientId = signal<string | null>(null);
     deliveryDate = signal<string>('');
+    poNumber = signal<string>('');
 
     // --- State for new batch item addition ---
     isBatchScanning = signal(false);
@@ -165,6 +167,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       const isEdit = this.isEditMode();
       const selectedClientId = this.selectedClientId();
       const deliveryDate = this.deliveryDate();
+      const poNumber = this.poNumber();
       const orderItems = this.orderItems();
       const scannedBarcodes = this.scannedBarcodes();
       const consolidatedEntryState = this.consolidatedEntryState();
@@ -178,6 +181,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
         this.persistDraft({
           selectedClientId,
           deliveryDate,
+          poNumber,
           orderItems,
           scannedBarcodes,
           consolidatedEntryState,
@@ -606,6 +610,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.orderItems.set([]);
     this.selectedClientId.set(null);
     this.deliveryDate.set('');
+    this.poNumber.set('');
   }
 
   async showAddForm() {
@@ -636,6 +641,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.orderItems.set([]);
     this.selectedClientId.set(null);
     this.deliveryDate.set('');
+    this.poNumber.set('');
     this.scannedBarcodes.set([]);
     this.consolidatedEntryState.set(EMPTY_CONSOLIDATED_ENTRY_STATE);
     this.manualDesignSelectionState.set(EMPTY_MANUAL_SELECTION_STATE);
@@ -647,6 +653,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.editableOrder.set(null);
     this.selectedClientId.set(draft.selectedClientId);
     this.deliveryDate.set(draft.deliveryDate);
+    this.poNumber.set(draft.poNumber ?? '');
     this.orderItems.set(draft.orderItems);
     this.scannedBarcodes.set(draft.scannedBarcodes ?? []);
     this.manualDesignSelectionState.set(draft.manualDesignSelectionState);
@@ -729,6 +736,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       ? formatDate(rawDate.toDate(), 'yyyy-MM-dd', 'en-US')
       : order.deliveryDate;
     this.deliveryDate.set(date);
+    this.poNumber.set(order.poNumber ?? '');
     this.mode.set('form');
 
     // Jump straight into the Fabric Description quantity modal, pre-filled with the order's
@@ -2191,6 +2199,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
         ...editableOrder,
         clientId: this.selectedClientId()!,
         deliveryDate: this.deliveryDate(),
+        poNumber: this.poNumber().trim(),
         items: this.orderItems()
       };
       this.salesOrderService.updateSalesOrder(updatedOrder).subscribe({
@@ -2208,6 +2217,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
       const orderData = {
         clientId: this.selectedClientId()!,
         deliveryDate: this.deliveryDate(),
+        poNumber: this.poNumber().trim(),
         items: this.orderItems()
       };
       this.salesOrderService.createSalesOrder(orderData as any).subscribe({
@@ -2243,6 +2253,7 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.orderItems.set([]);
     this.selectedClientId.set(order.clientId);
     this.deliveryDate.set('');
+    this.poNumber.set('');
     this.mode.set('form');
 
     this.consolidatedEntryState.set({

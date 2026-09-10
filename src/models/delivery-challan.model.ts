@@ -29,6 +29,11 @@ export interface DeliveryChallan {
   packingListNo: string;
   salesOrderIds: string[];
   salesNos: string[];
+  // Customer PO Number(s) behind this DC's Sales Orders (SalesOrder.poNumber),
+  // merged/joined the same way salesNos is when more than one Sales Order is
+  // covered. Printed as "Order No." — falls back to salesNos/packingListNo
+  // when blank (older DCs, or Sales Orders with no PO recorded).
+  orderNo: string;
   clientId: string;
   clientName: string;
   billingAddress: string;

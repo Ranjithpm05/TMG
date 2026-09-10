@@ -109,6 +109,14 @@ export class EInvoiceService {
       ...(invoice.clientPhone ? { Ph: invoice.clientPhone } : {}),
     };
     const shipDtls = this.buildShipDtls(client, buyerDtls, shipToStateCode);
+    // Customer PO Number — sourced from Invoice.orderNo (itself merged from
+    // the invoice's Sales Orders' poNumber, see packing-list.component.ts
+    // invoice generation). Falls back to the Sales Order number(s) for older
+    // invoices that predate SalesOrder.poNumber. RefDtls/ContrDtls is only
+    // sent when there's something to report — NIC rejects an empty ContrDtls
+    // entry.
+    const poNumber = (invoice.orderNo || invoice.salesNos.join(', ')).trim();
+    const refDtls = poNumber ? { ContrDtls: [{ Porefr: poNumber }] } : undefined;
 
     const itemList: EInvoiceItem[] = invoice.items.map((item, index) => {
       const totAmt = Math.round(item.price * item.quantity * 100) / 100;
@@ -175,6 +183,7 @@ export class EInvoiceService {
       SellerDtls: sellerDtls,
       BuyerDtls: buyerDtls,
       ...(shipDtls ? { ShipDtls: shipDtls } : {}),
+      ...(refDtls ? { RefDtls: refDtls } : {}),
       ItemList: itemList,
       // Summed from ItemList itself, not from invoice.cgstAmount/sgstAmount/
       // igstAmount — those are computed at invoice-creation time in

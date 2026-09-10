@@ -578,6 +578,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
     ${row('Place of Delivery', deliveryPlace)}
     ${row('Document No.', esc(invoice.invoiceNo))}
     ${row('Document Date', esc(this.fmtDateNumeric(invoice.invoiceDate)))}
+    ${row('Order No.', esc(invoice.orderNo || invoice.salesNos.join(', ') || '-'))}
     ${row('Transaction Type', 'Regular')}
     ${row('Value of Goods', esc(this.formatCurrency(invoice.totalAmount)))}
     ${row('HSN Code', hsnCell)}

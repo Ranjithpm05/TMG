@@ -21,6 +21,7 @@ import { ClientService } from '../../services/client.service';
 import { Transport } from '../../models/transport.model';
 import { TransportService } from '../../services/transport.service';
 import { DeliveryChallanService } from '../../services/delivery-challan.service';
+import { SalesOrderService } from '../../services/sales-order.service';
 import { Invoice } from '../../models/invoice.model';
 import { resolveHsnCode } from '../../models/hsn-code.model';
 import { InvoiceService } from '../../services/invoice.service';
@@ -68,6 +69,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   private clientService = inject(ClientService);
   private transportService = inject(TransportService);
   private dcService = inject(DeliveryChallanService);
+  private salesOrderService = inject(SalesOrderService);
   private invoiceService = inject(InvoiceService);
   private companySettingsService = inject(CompanySettingsService);
   private lrEntryService = inject(LrEntryService);
@@ -80,6 +82,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   // ─── Navigation ────────────────────────────────────────────────────────────
   mode = signal<ViewMode>('list');
+  // Mode to restore to when leaving box-label-print/mrp-label-print — those
+  // screens can be opened from 'list', 'live-pack', or 'view', so closing
+  // them can't hardcode a single destination.
+  labelPrintReturnMode = signal<ViewMode>('list');
   listTab = signal<'ready' | 'packing' | 'dc-history' | 'invoices'>('ready');
   searchTerm = signal('');
 
@@ -1316,6 +1322,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
       const mergedSalesOrderIds = [...new Set(dcsToInvoice.flatMap((dc) => dc.salesOrderIds.length ? dc.salesOrderIds : loaded.salesOrderIds))];
       const mergedSalesNos = [...new Set(dcsToInvoice.flatMap((dc) => dc.salesNos.length ? dc.salesNos : loaded.salesNos))];
+      // PO Number(s) — sourced from the DC(s)' own orderNo (already merged from
+      // their Sales Orders' poNumber), re-merged across all DCs going into
+      // this invoice the same way salesNos/salesOrderIds are above.
+      const mergedOrderNos = [...new Set(
+        dcsToInvoice.flatMap((dc) => (dc.orderNo || '').split(',').map((s) => s.trim()).filter(Boolean))
+      )];
 
       const invoice = await this.invoiceService.createInvoice({
         dcIds: dcsToInvoice.map((dc) => dc.id!),
@@ -1325,7 +1337,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         packingListNo: loaded.packingListNo,
         salesOrderIds: mergedSalesOrderIds,
         salesNos: mergedSalesNos,
-        orderNo: mergedSalesNos.join(', '),
+        orderNo: mergedOrderNos.join(', '),
         clientId,
         clientName,
         // Invoice is a billing document — the client's Bill To Address.
@@ -1434,7 +1446,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
           ['TAX INVOICE'],
           [],
           ['Invoice No:', invoice.invoiceNo, '', 'Invoice Date:', this.formatDate(invoice.invoiceDate)],
-          ['DC No:', invoice.dcNo, '', 'Order No:', invoice.orderNo],
+          ['DC No:', invoice.dcNo, '', 'Order No:', invoice.orderNo || invoice.salesNos.join(', ')],
           ['Vehicle No:', invoice.vehicleNo, '', 'Total Pkgs:', invoice.totalPkgs],
           ['Transport:', invoice.transport, '', 'Destination:', invoice.destination],
           ['Agent:', invoice.agentName],
@@ -1499,6 +1511,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
       this.boxLabelPreviewIndex.set(0);
       this.boxLabelQzStatus.set('unknown');
       this.boxLabelQzError.set('');
+      this.labelPrintReturnMode.set(this.mode());
       this.mode.set('box-label-print');
     });
     // Detect printers right away so the dropdown isn't empty on open — errors
@@ -1508,7 +1521,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   closeBoxLabelPrintModal(): void {
     this.boxLabelPackingList.set(null);
-    this.mode.set('view');
+    this.mode.set(this.labelPrintReturnMode());
   }
 
   // Returns a full standalone HTML document (not a fragment) so it can be
@@ -1653,6 +1666,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
       this.mrpLabelPreviewLineIndex.set(0);
       this.mrpLabelQzStatus.set('unknown');
       this.mrpLabelQzError.set('');
+      this.labelPrintReturnMode.set(this.mode());
       this.mode.set('mrp-label-print');
     });
     this.detectMrpLabelPrinters();
@@ -1661,7 +1675,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   closeMrpLabelPrintModal(): void {
     this.mrpLabelPackingList.set(null);
     this.mrpLabelLines.set([]);
-    this.mode.set('view');
+    this.mode.set(this.labelPrintReturnMode());
   }
 
   // Mirrors buildMrpLabelZpl's 2-up layout in mm-based absolute-positioned
@@ -2179,9 +2193,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
     if (!packingList.id) return;
     try {
       await this.loadingService.run(async () => {
-        const [fresh, lines] = await Promise.all([
+        const [fresh, lines, mrpByBarcode] = await Promise.all([
           this.packingListService.getPackingListByIdOnce(packingList.id!),
           this.packingListService.getPackingListLinesOnce(packingList.id!),
+          this.designService.getMrpByBarcodeMap(),
         ]);
         const loaded = fresh ?? packingList;
         const XLSX = await import('xlsx');
@@ -2190,16 +2205,16 @@ export class PackingListComponent implements OnInit, OnDestroy {
           ['Source Pick List(s):', (loaded.pickListNos ?? []).join(', ')],
           ['Customer:', loaded.clientName, '', 'Orders:', (loaded.salesNos ?? []).join(', ')],
           [],
-          ['S.No', 'Style No', 'Color', 'Part', 'Size', 'Sleeve', 'Barcode', 'Required Qty', 'Packed Qty'],
+          ['S.No', 'Style No', 'Color', 'Part', 'Size', 'Sleeve', 'Barcode', 'MRP', 'Required Qty', 'Packed Qty'],
           ...lines.map((line, i) => [
             i + 1, line.styleNo, line.color, line.partName, line.size, line.sleeveType ?? '',
-            line.barcode ?? '', line.requiredQty, line.packedQty,
+            line.barcode ?? '', mrpByBarcode.get(String(line.barcode ?? '').trim()) ?? 0, line.requiredQty, line.packedQty,
           ]),
           [],
-          ['', '', '', '', '', '', 'TOTAL:', loaded.totalRequiredQty, loaded.totalPackedQty],
+          ['', '', '', '', '', '', '', 'TOTAL:', loaded.totalRequiredQty, loaded.totalPackedQty],
         ];
         const ws = XLSX.utils.aoa_to_sheet(rows);
-        ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 12 }, { wch: 12 }];
+        ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Packing List');
         XLSX.writeFile(wb, `${loaded.packingListNo}.xlsx`);
@@ -2342,7 +2357,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
           ? [...new Set(partyProgress.map((p) => p.salesNo).filter(Boolean))]
           : (loaded.salesNos ?? []);
         const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
-        const dc = await this.createDCForPackingList(loaded, lines, client, salesOrderIds, salesNos, loaded.clientName, agentName, transport, transportId, transportAddress, transportGstNo, allowDuplicate);
+        const orderNo = await this.buildOrderNoFromSalesOrderIds(salesOrderIds);
+        const dc = await this.createDCForPackingList(loaded, lines, client, salesOrderIds, salesNos, orderNo, loaded.clientName, agentName, transport, transportId, transportAddress, transportGstNo, allowDuplicate);
         const generatedDCs: DeliveryChallan[] = [dc];
 
         if (lrNo) {
@@ -2886,12 +2902,25 @@ export class PackingListComponent implements OnInit, OnDestroy {
     }));
   }
 
+  // Resolves each Sales Order's poNumber (SalesOrder.poNumber) and merges them
+  // into one comma-joined string — mirrors how salesNos is merged when a DC
+  // covers more than one Sales Order. Blank/missing PO numbers are dropped
+  // rather than shown as empty entries.
+  private async buildOrderNoFromSalesOrderIds(salesOrderIds: string[]): Promise<string> {
+    if (!salesOrderIds.length) return '';
+    const salesOrders = await firstValueFrom(this.salesOrderService.getSalesOrders());
+    const poNumberById = new Map(salesOrders.map((o) => [o.id, o.poNumber?.trim() ?? '']));
+    const poNumbers = [...new Set(salesOrderIds.map((id) => poNumberById.get(id)).filter(Boolean))];
+    return poNumbers.join(', ');
+  }
+
   private async createDCForPackingList(
     packingList: PackingList,
     lines: PackingListLine[],
     client: any,
     salesOrderIds: string[],
     salesNos: string[],
+    orderNo: string,
     clientName: string,
     agentName: string,
     transport: string,
@@ -2960,6 +2989,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
       packingListNo: packingList.packingListNo,
       salesOrderIds,
       salesNos,
+      orderNo,
       clientId: packingList.clientId,
       clientName: clientName || packingList.clientName,
       // DC is a shipping document — always use the client's Ship To Address, not Bill To.
@@ -3159,7 +3189,7 @@ ${allDCHtml}
     <table style="border-collapse:collapse;width:100%">
       <tr><td style="padding:3px 6px;font-size:10px;color:#555;white-space:nowrap">DC No.</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${dc.dcNo}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Packed On</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order No.</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.salesNos.length ? dc.salesNos.join(', ') : dc.packingListNo}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order No.</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.orderNo || (dc.salesNos.length ? dc.salesNos.join(', ') : dc.packingListNo)}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order Date</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Total Qty</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${grandTotal}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">No.of Box</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${dc.boxCount}</td></tr>
@@ -3591,7 +3621,7 @@ ${allDCHtml}
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Invoice No.</td><td style="padding:3px 4px;font-size:13px;font-weight:700">: ' + invoice.invoiceNo + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Invoice Date</td><td style="padding:3px 4px;font-size:13px">: ' + fmtDate(invoice.invoiceDate) + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">DC No.</td><td style="padding:3px 4px;font-size:13px;font-weight:700">: ' + (invoice.dcNo || '—') + '</td></tr>'
-      + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Order No.</td><td style="padding:3px 4px;font-size:13px;font-weight:600">: ' + invoice.orderNo + '</td></tr>'
+      + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Order No.</td><td style="padding:3px 4px;font-size:13px;font-weight:600">: ' + (invoice.orderNo || invoice.salesNos.join(', ') || '—') + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Destination</td><td style="padding:3px 4px;font-size:13px">: ' + (invoice.destination || '—') + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Transport</td><td style="padding:3px 4px;font-size:13px">: ' + (invoice.transport || '—') + '</td></tr>'
       + (invoice.transportGstNo ? '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Transport GSTIN</td><td style="padding:3px 4px;font-size:13px">: ' + invoice.transportGstNo + '</td></tr>' : '')

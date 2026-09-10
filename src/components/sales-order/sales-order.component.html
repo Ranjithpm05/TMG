@@ -752,6 +752,7 @@
               <thead class="bg-gray-50">
                   <tr>
                       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PO Number</th>
                       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
                       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created Date</th>
                       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Delivery Date</th>
@@ -765,6 +766,7 @@
                   @for(order of filteredSalesOrders(); track order.salesNo) {
                     <tr class="hover:bg-gray-50">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ order.salesNo }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.poNumber || '-' }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{{ getClientName(order.clientId) }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ getOrderCreatedAtDisplay(order) }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.deliveryDate }}</td>
@@ -871,6 +873,13 @@
           <div>
             <label for="deliveryDate" class="block text-sm font-medium text-gray-700">Delivery Date</label>
             <input type="date" id="deliveryDate" [ngModel]="deliveryDate()" (ngModelChange)="deliveryDate.set($event)"
+                   class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+          </div>
+          <!-- PO Number -->
+          <div>
+            <label for="poNumber" class="block text-sm font-medium text-gray-700">PO Number</label>
+            <input type="text" id="poNumber" [ngModel]="poNumber()" (ngModelChange)="poNumber.set($event)"
+                   placeholder="Customer's Purchase Order No. (optional)"
                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
           </div>
         </div>

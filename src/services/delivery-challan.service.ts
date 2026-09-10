@@ -213,6 +213,7 @@ export class DeliveryChallanService {
       salesNos: Array.isArray(raw?.salesNos)
         ? raw.salesNos.map((s: any) => String(s))
         : (raw?.salesNo ? [String(raw.salesNo)] : []),
+      orderNo: String(raw?.orderNo ?? ''),
       clientId: String(raw?.clientId ?? ''),
       clientName: String(raw?.clientName ?? ''),
       billingAddress: String(raw?.billingAddress ?? ''),
