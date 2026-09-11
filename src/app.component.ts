@@ -16,9 +16,22 @@ import { PackingListComponent } from './components/packing-list/packing-list.com
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { EInvoiceComponent } from './components/einvoice/einvoice.component';
 import { EwayBillComponent } from './components/eway-bill/eway-bill.component';
-import { ReportsComponent } from './components/reports/reports.component';
+import { SalesReportProductWise1Component } from './components/reports/sales-report-product-wise-1/sales-report-product-wise-1.component';
+import { SalesReportProductWise2Component } from './components/reports/sales-report-product-wise-2/sales-report-product-wise-2.component';
+import { SalesOrderSupplyPendingReportComponent } from './components/reports/sales-order-supply-pending-report/sales-order-supply-pending-report.component';
+import { PendingOrderCustomerWiseReportComponent } from './components/reports/pending-order-customer-wise-report/pending-order-customer-wise-report.component';
+import { CustomerWiseReportComponent } from './components/reports/customer-wise-report/customer-wise-report.component';
+import { AgentWiseReportComponent } from './components/reports/agent-wise-report/agent-wise-report.component';
+import { ProductWiseReportComponent } from './components/reports/product-wise-report/product-wise-report.component';
+import { ExceedOrderReportComponent } from './components/reports/exceed-order-report/exceed-order-report.component';
+import { StyleWiseReportComponent } from './components/reports/style-wise-report/style-wise-report.component';
+import { StyleCustomerWiseReportComponent } from './components/reports/style-customer-wise-report/style-customer-wise-report.component';
+import { PickListWiseReportComponent } from './components/reports/pick-list-wise-report/pick-list-wise-report.component';
+import { HsnGstWiseReportComponent } from './components/reports/hsn-gst-wise-report/hsn-gst-wise-report.component';
 
-type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'transportMaster' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'einvoice' | 'ewayBill' | 'reports';
+type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'transportMaster' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'einvoice' | 'ewayBill'
+  | 'salesReportProductWise1' | 'salesReportProductWise2' | 'salesOrderSupplyPendingReport' | 'pendingOrderCustomerWiseReport'
+  | 'customerWiseReport' | 'agentWiseReport' | 'productWiseReport' | 'exceedOrderReport' | 'styleWiseReport' | 'styleCustomerWiseReport' | 'pickListWiseReport' | 'hsnGstWiseReport';
 type ViewHistoryState = { view: View };
 
 interface NavItem {
@@ -36,7 +49,13 @@ interface NavGroup {
 }
 
 const VIEW_STORAGE_KEY = 'gom.activeView';
-const VIEW_SEQUENCE: View[] = ['dashboard', 'sales', 'clients', 'designs', 'transportMaster', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList', 'einvoice', 'ewayBill', 'reports'];
+const VIEW_SEQUENCE: View[] = [
+  'dashboard', 'sales', 'clients', 'designs', 'transportMaster', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList', 'einvoice', 'ewayBill',
+  'customerWiseReport', 'agentWiseReport', 'salesReportProductWise1', 'salesReportProductWise2', 'productWiseReport', 'salesOrderSupplyPendingReport',
+  'pendingOrderCustomerWiseReport', 'exceedOrderReport', 'styleWiseReport', 'styleCustomerWiseReport', 'pickListWiseReport', 'hsnGstWiseReport',
+];
+
+const REPORT_ICON_PATHS = ['M11 3.055A9 9 0 1020.945 13H11V3.055z', 'M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z'];
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -45,7 +64,25 @@ const NAV_GROUPS: NavGroup[] = [
     iconPaths: ['M3 13h8V3H3v10zm10 8h8V11h-8v10zM3 21h8v-6H3v6zm10-10h8V3h-8v8z'],
     items: [
       { view: 'dashboard', label: 'Dashboard', screen: null, iconPaths: ['M3 13h8V3H3v10zm10 8h8V11h-8v10zM3 21h8v-6H3v6zm10-10h8V3h-8v8z'] },
-      { view: 'reports', label: 'Reports', screen: 'reports', iconPaths: ['M11 3.055A9 9 0 1020.945 13H11V3.055z', 'M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z'] },
+    ],
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    iconPaths: REPORT_ICON_PATHS,
+    items: [
+      { view: 'customerWiseReport', label: 'Customer Wise', screen: 'customerWiseReport', iconPaths: REPORT_ICON_PATHS },
+      { view: 'agentWiseReport', label: 'Agent Wise', screen: 'agentWiseReport', iconPaths: REPORT_ICON_PATHS },
+      { view: 'salesReportProductWise1', label: 'Product-wise (Format 1)', screen: 'salesReportProductWise1', iconPaths: REPORT_ICON_PATHS },
+      { view: 'salesReportProductWise2', label: 'Product-wise (Format 2)', screen: 'salesReportProductWise2', iconPaths: REPORT_ICON_PATHS },
+      { view: 'productWiseReport', label: 'Product Wise', screen: 'productWiseReport', iconPaths: REPORT_ICON_PATHS },
+      { view: 'salesOrderSupplyPendingReport', label: 'Sales Order vs Supply vs Pending', screen: 'salesOrderSupplyPendingReport', iconPaths: REPORT_ICON_PATHS },
+      { view: 'pendingOrderCustomerWiseReport', label: 'Pending Orders — Customer-wise', screen: 'pendingOrderCustomerWiseReport', iconPaths: REPORT_ICON_PATHS },
+      { view: 'exceedOrderReport', label: 'Exceed Order', screen: 'exceedOrderReport', iconPaths: REPORT_ICON_PATHS },
+      { view: 'styleWiseReport', label: 'Style No. Wise', screen: 'styleWiseReport', iconPaths: REPORT_ICON_PATHS },
+      { view: 'styleCustomerWiseReport', label: 'Style No. & Customer Wise', screen: 'styleCustomerWiseReport', iconPaths: REPORT_ICON_PATHS },
+      { view: 'pickListWiseReport', label: 'Pick List Wise', screen: 'pickListWiseReport', iconPaths: REPORT_ICON_PATHS },
+      { view: 'hsnGstWiseReport', label: 'HSN / GST Wise', screen: 'hsnGstWiseReport', iconPaths: REPORT_ICON_PATHS },
     ],
   },
   {
@@ -119,7 +156,18 @@ const NAV_GROUPS: NavGroup[] = [
     DashboardComponent,
     EInvoiceComponent,
     EwayBillComponent,
-    ReportsComponent,
+    SalesReportProductWise1Component,
+    SalesReportProductWise2Component,
+    SalesOrderSupplyPendingReportComponent,
+    PendingOrderCustomerWiseReportComponent,
+    CustomerWiseReportComponent,
+    AgentWiseReportComponent,
+    ProductWiseReportComponent,
+    ExceedOrderReportComponent,
+    StyleWiseReportComponent,
+    StyleCustomerWiseReportComponent,
+    PickListWiseReportComponent,
+    HsnGstWiseReportComponent,
   ],
 })
 export class AppComponent {

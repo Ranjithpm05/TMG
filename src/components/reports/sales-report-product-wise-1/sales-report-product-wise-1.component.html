@@ -1,0 +1,142 @@
+<div class="animate-fade-in">
+  <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-4 border-b pb-4 mb-6">
+      <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">{{ reportTitle }}</h2>
+    </div>
+
+    <app-report-filter-bar />
+
+    <div class="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-2 mb-4">
+      <button (click)="exportExcel()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export Excel
+      </button>
+      <button (click)="exportPdf()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export PDF
+      </button>
+      <button (click)="printReport()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+        Print
+      </button>
+    </div>
+    <p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
+
+    <app-report-status [loading]="isLoading()" [error]="error()" label="Sales Report - Product-wise Format 1" (retry)="retry()" />
+
+    @if (!isLoading() && !error()) {
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+      <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Qty Invoiced</p>
+        <p class="mt-1 text-2xl font-semibold text-gray-900">{{ grandTotal().qty | number }}</p>
+      </div>
+      <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+        <p class="text-xs font-medium text-blue-600 uppercase tracking-wide">Taxable Value</p>
+        <p class="mt-1 text-2xl font-semibold text-blue-900">{{ grandTotal().grossAmount2 | number:'1.2-2' }}</p>
+      </div>
+      <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+        <p class="text-xs font-medium text-amber-600 uppercase tracking-wide">Total Tax</p>
+        <p class="mt-1 text-2xl font-semibold text-amber-900">{{ (grandTotal().cgstAmount + grandTotal().sgstAmount + grandTotal().igstAmount) | number:'1.2-2' }}</p>
+      </div>
+      <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+        <p class="text-xs font-medium text-emerald-600 uppercase tracking-wide">Total Amount</p>
+        <p class="mt-1 text-2xl font-semibold text-emerald-900">{{ grandTotal().totalAmount | number:'1.2-2' }}</p>
+      </div>
+    </div>
+
+    <div>
+      @if (rows().length > 0) {
+        <div class="overflow-x-auto border border-gray-200 rounded-lg">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-800 text-white">
+            <tr>
+              <th class="px-3 py-3 text-center font-medium">#</th>
+              <th class="px-4 py-3 text-left font-medium whitespace-nowrap">Invoice#</th>
+              <th class="px-3 py-3 text-center font-medium whitespace-nowrap">Invoice Date</th>
+              <th class="px-4 py-3 text-left font-medium">Customer</th>
+              <th class="px-4 py-3 text-left font-medium whitespace-nowrap">Barcode</th>
+              <th class="px-4 py-3 text-left font-medium whitespace-nowrap">Group</th>
+              <th class="px-4 py-3 text-left font-medium whitespace-nowrap">Fabric Description</th>
+              <th class="px-4 py-3 text-left font-medium whitespace-nowrap">Styleno</th>
+              <th class="px-3 py-3 text-center font-medium">Color</th>
+              <th class="px-3 py-3 text-center font-medium whitespace-nowrap">Sleevetype</th>
+              <th class="px-3 py-3 text-center font-medium">Size</th>
+              <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Cost Price</th>
+              <th class="px-4 py-3 text-right font-medium">MRP</th>
+              <th class="px-4 py-3 text-right font-medium">WSP</th>
+              <th class="px-3 py-3 text-center font-medium whitespace-nowrap">Qty Invoiced</th>
+              <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Gross Amount1</th>
+              <th class="px-4 py-3 text-right font-medium">Discount</th>
+              <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Gross Amount2</th>
+              <th class="px-3 py-3 text-center font-medium whitespace-nowrap">CGST %</th>
+              <th class="px-4 py-3 text-right font-medium whitespace-nowrap">CGST Amount</th>
+              <th class="px-3 py-3 text-center font-medium whitespace-nowrap">SGST %</th>
+              <th class="px-4 py-3 text-right font-medium whitespace-nowrap">SGST Amount</th>
+              <th class="px-3 py-3 text-center font-medium whitespace-nowrap">IGST %</th>
+              <th class="px-4 py-3 text-right font-medium whitespace-nowrap">IGST Amount</th>
+              <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Total Amount</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            @for (row of pagedRows(); track row.invoiceNo + '||' + row.styleNo + '||' + row.color + '||' + row.size; let i = $index) {
+              <tr class="hover:bg-gray-50">
+                <td class="px-3 py-2 text-center text-gray-500">{{ (currentPage() - 1) * pageSize() + i + 1 }}</td>
+                <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ row.invoiceNo }}</td>
+                <td class="px-3 py-2 text-center text-gray-700 whitespace-nowrap">{{ formatDate(row.invoiceDate) }}</td>
+                <td class="px-4 py-2 text-gray-700">{{ row.clientName }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.barcode }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.group }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.fabricDescription }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.styleNo }}</td>
+                <td class="px-3 py-2 text-center text-gray-700">{{ row.color }}</td>
+                <td class="px-3 py-2 text-center text-gray-700">{{ row.sleeveType }}</td>
+                <td class="px-3 py-2 text-center font-semibold text-gray-900">{{ row.size }}</td>
+                <td class="px-4 py-2 text-right text-gray-700">{{ row.costPrice | number:'1.2-2' }}</td>
+                <td class="px-4 py-2 text-right text-gray-700">{{ row.mrp | number:'1.2-2' }}</td>
+                <td class="px-4 py-2 text-right text-gray-700">{{ row.wsp | number:'1.2-2' }}</td>
+                <td class="px-3 py-2 text-center font-semibold text-gray-900">{{ row.qty | number }}</td>
+                <td class="px-4 py-2 text-right text-gray-700">{{ row.grossAmount1 | number:'1.2-2' }}</td>
+                <td class="px-4 py-2 text-right text-gray-700">{{ row.discount | number:'1.2-2' }}</td>
+                <td class="px-4 py-2 text-right text-gray-700">{{ row.grossAmount2 | number:'1.2-2' }}</td>
+                <td class="px-3 py-2 text-center text-gray-700">{{ row.cgstRate }}</td>
+                <td class="px-4 py-2 text-right text-gray-700">{{ row.cgstAmount | number:'1.2-2' }}</td>
+                <td class="px-3 py-2 text-center text-gray-700">{{ row.sgstRate }}</td>
+                <td class="px-4 py-2 text-right text-gray-700">{{ row.sgstAmount | number:'1.2-2' }}</td>
+                <td class="px-3 py-2 text-center text-gray-700">{{ row.igstRate }}</td>
+                <td class="px-4 py-2 text-right text-gray-700">{{ row.igstAmount | number:'1.2-2' }}</td>
+                <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ row.totalAmount | number:'1.2-2' }}</td>
+              </tr>
+            }
+          </tbody>
+          <tfoot class="bg-gray-100 font-bold">
+            <tr>
+              <td colspan="14" class="px-4 py-3 text-gray-900">Grand Total</td>
+              <td class="px-3 py-3 text-center text-gray-900">{{ grandTotal().qty | number }}</td>
+              <td class="px-4 py-3 text-right text-gray-900">{{ grandTotal().grossAmount1 | number:'1.2-2' }}</td>
+              <td class="px-4 py-3 text-right text-gray-900">{{ grandTotal().discount | number:'1.2-2' }}</td>
+              <td class="px-4 py-3 text-right text-gray-900">{{ grandTotal().grossAmount2 | number:'1.2-2' }}</td>
+              <td class="px-3 py-3"></td>
+              <td class="px-4 py-3 text-right text-gray-900">{{ grandTotal().cgstAmount | number:'1.2-2' }}</td>
+              <td class="px-3 py-3"></td>
+              <td class="px-4 py-3 text-right text-gray-900">{{ grandTotal().sgstAmount | number:'1.2-2' }}</td>
+              <td class="px-3 py-3"></td>
+              <td class="px-4 py-3 text-right text-gray-900">{{ grandTotal().igstAmount | number:'1.2-2' }}</td>
+              <td class="px-4 py-3 text-right text-gray-900">{{ grandTotal().totalAmount | number:'1.2-2' }}</td>
+            </tr>
+          </tfoot>
+        </table>
+        </div>
+        <app-report-pagination
+          [total]="rows().length"
+          [page]="currentPage()"
+          [pageSize]="pageSize()"
+          [pageSizeOptions]="[25, 50, 100, 200]"
+          (pageChange)="setPage($event)"
+          (pageSizeChange)="setPageSize($event)"
+        />
+      } @else {
+        <div class="text-center py-10">
+          <p class="text-sm text-gray-500">No invoices match the current filters.</p>
+        </div>
+      }
+    </div>
+    }
+  </div>
+</div>

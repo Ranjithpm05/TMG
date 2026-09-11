@@ -5,6 +5,7 @@ import { switchMap, catchError, finalize, of } from 'rxjs';
 import Swal from 'sweetalert2';
 
 import { ReportsDataService } from '../reports-data.service';
+import { ReportFilterBarComponent } from '../report-filter-bar/report-filter-bar.component';
 import { InvoiceService } from '../../../services/invoice.service';
 import type { Invoice, InvoiceTaxSummary } from '../../../models/invoice.model';
 import { LoadingService } from '../../../services/loading.service';
@@ -53,11 +54,13 @@ interface HsnGstReport {
 @Component({
   selector: 'app-hsn-gst-wise-report',
   standalone: true,
-  imports: [CommonModule, ReportStatusComponent, ReportPaginationComponent],
+  imports: [CommonModule, ReportFilterBarComponent, ReportStatusComponent, ReportPaginationComponent],
+  providers: [ReportsDataService],
   templateUrl: './hsn-gst-wise-report.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HsnGstWiseReportComponent {
+  protected readonly reportTitle = REPORT_TITLE;
   protected readonly data = inject(ReportsDataService);
   private readonly invoiceService = inject(InvoiceService);
   protected readonly loadingService = inject(LoadingService);

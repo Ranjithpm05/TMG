@@ -1,23 +1,28 @@
-<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-  <h3 class="text-lg font-semibold text-gray-800">Style No. & Customer Wise Report</h3>
-  <div class="flex gap-2">
-    <button (click)="exportExcel()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
-      Export Excel
-    </button>
-    <button (click)="exportPdf()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
-      Export PDF
-    </button>
-    <button (click)="printReport()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
-      Print
-    </button>
-  </div>
-</div>
-<p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
+<div class="animate-fade-in">
+  <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-4 border-b pb-4 mb-6">
+      <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">{{ reportTitle }}</h2>
+    </div>
 
-<app-report-status [loading]="isLoading()" [error]="error()" label="Style No. & Customer Wise" (retry)="retry()" />
+    <app-report-filter-bar />
 
-@if (!isLoading() && !error()) {
-@let styleCustomerWise = report();
+    <div class="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-2 mb-4">
+      <button (click)="exportExcel()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export Excel
+      </button>
+      <button (click)="exportPdf()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export PDF
+      </button>
+      <button (click)="printReport()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+        Print
+      </button>
+    </div>
+    <p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
+
+    <app-report-status [loading]="isLoading()" [error]="error()" label="Style No. & Customer Wise" (retry)="retry()" />
+
+    @if (!isLoading() && !error()) {
+    @let styleCustomerWise = report();
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
   <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
     <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Order Qty</p>
@@ -147,3 +152,5 @@
   }
 </div>
 }
+  </div>
+</div>

@@ -2,6 +2,7 @@ export interface SizePrice {
   size: string;
   price: number;
   WSP: number;
+  costPrice?: number;
   BARCODE:any
   sleeveType: string | null | undefined
   fabricType?: string;

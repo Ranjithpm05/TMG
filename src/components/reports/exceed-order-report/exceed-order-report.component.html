@@ -1,93 +1,100 @@
-<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-  <h3 class="text-lg font-semibold text-gray-800">Exceed Order Report</h3>
-  <div class="flex gap-2">
-    <button (click)="exportExcel()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
-      Export Excel
-    </button>
-    <button (click)="exportPdf()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
-      Export PDF
-    </button>
-    <button (click)="printReport()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
-      Print
-    </button>
+<div class="animate-fade-in">
+  <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-4 border-b pb-4 mb-6">
+      <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">{{ reportTitle }}</h2>
+    </div>
+
+    <app-report-filter-bar />
+
+    <div class="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-2 mb-4">
+      <button (click)="exportExcel()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export Excel
+      </button>
+      <button (click)="exportPdf()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export PDF
+      </button>
+      <button (click)="printReport()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+        Print
+      </button>
+    </div>
+    <p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
+    <p class="text-xs text-gray-500 mb-4">Showing SKUs dispatched beyond their ordered quantity (Dispatched Qty &gt; Order Qty).</p>
+
+    <app-report-status [loading]="isLoading()" [error]="error()" label="Exceed Order" (retry)="retry()" />
+
+    @if (!isLoading() && !error()) {
+    <app-report-summary-cards
+      [orderQty]="grandTotal().orderQty"
+      [dispatchedQty]="grandTotal().dispatchedQty"
+      [extraQty]="grandTotal().extraQty"
+      [pendingQty]="grandTotal().pendingQty"
+    />
+
+    <div>
+      @if (rows().length > 0) {
+        <div class="overflow-x-auto border border-gray-200 rounded-lg">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-800 text-white">
+            <tr>
+              <th class="px-3 py-3 text-center font-medium">#</th>
+              <th class="px-4 py-3 text-left font-medium">Style No</th>
+              <th class="px-4 py-3 text-left font-medium">Product</th>
+              <th class="px-4 py-3 text-left font-medium">Color</th>
+              <th class="px-3 py-3 text-center font-medium">Size</th>
+              <th class="px-4 py-3 text-left font-medium">Sleeve</th>
+              <th class="px-4 py-3 text-left font-medium">Customer</th>
+              <th class="px-4 py-3 text-left font-medium">Agent</th>
+              <th class="px-3 py-3 text-center font-medium">Order Qty</th>
+              <th class="px-3 py-3 text-center font-medium">Dispatched Qty</th>
+              <th class="px-3 py-3 text-center font-medium">Extra Qty</th>
+              <th class="px-4 py-3 text-left font-medium">DC No.</th>
+              <th class="px-4 py-3 text-left font-medium">Dispatch Date</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            @for (row of pagedRows(); track row.joinKey; let i = $index) {
+              <tr class="bg-amber-50 hover:bg-amber-100">
+                <td class="px-3 py-2 text-center text-gray-500">{{ (currentPage() - 1) * pageSize() + i + 1 }}</td>
+                <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ row.styleNo }}</td>
+                <td class="px-4 py-2 text-gray-700">{{ row.group }}</td>
+                <td class="px-4 py-2 text-gray-700">{{ row.color || '-' }}</td>
+                <td class="px-3 py-2 text-center text-gray-700">{{ row.size }}</td>
+                <td class="px-4 py-2 text-gray-700">{{ row.sleeveType || '-' }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.clientName || 'Unknown Client' }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.agentName }}</td>
+                <td class="px-3 py-2 text-center text-gray-700">{{ row.orderQty }}</td>
+                <td class="px-3 py-2 text-center text-blue-700 font-medium">{{ row.dispatchedQty }}</td>
+                <td class="px-3 py-2 text-center text-amber-800 font-bold">{{ row.extraQty }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.lastDcNo || '-' }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ formatDate(row.lastDcDate) }}</td>
+              </tr>
+            }
+          </tbody>
+          <tfoot class="bg-gray-100 font-bold">
+            <tr>
+              <td colspan="8" class="px-4 py-3 text-gray-900">Grand Total</td>
+              <td class="px-3 py-3 text-center text-gray-900">{{ grandTotal().orderQty }}</td>
+              <td class="px-3 py-3 text-center text-blue-900">{{ grandTotal().dispatchedQty }}</td>
+              <td class="px-3 py-3 text-center text-amber-900">{{ grandTotal().extraQty }}</td>
+              <td class="px-4 py-3"></td>
+              <td class="px-4 py-3"></td>
+            </tr>
+          </tfoot>
+        </table>
+        </div>
+        <app-report-pagination
+          [total]="rows().length"
+          [page]="currentPage()"
+          [pageSize]="pageSize()"
+          (pageChange)="setPage($event)"
+          (pageSizeChange)="setPageSize($event)"
+        />
+      } @else {
+        <div class="text-center py-10">
+          <p class="text-sm text-gray-500">No SKUs are dispatched beyond their ordered quantity for the current filters.</p>
+        </div>
+      }
+    </div>
+    }
   </div>
 </div>
-<p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
-<p class="text-xs text-gray-500 mb-4">Showing SKUs dispatched beyond their ordered quantity (Dispatched Qty &gt; Order Qty).</p>
-
-<app-report-status [loading]="isLoading()" [error]="error()" label="Exceed Order" (retry)="retry()" />
-
-@if (!isLoading() && !error()) {
-<app-report-summary-cards
-  [orderQty]="grandTotal().orderQty"
-  [dispatchedQty]="grandTotal().dispatchedQty"
-  [extraQty]="grandTotal().extraQty"
-  [pendingQty]="grandTotal().pendingQty"
-/>
-
-<div>
-  @if (rows().length > 0) {
-    <div class="overflow-x-auto border border-gray-200 rounded-lg">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-800 text-white">
-        <tr>
-          <th class="px-3 py-3 text-center font-medium">#</th>
-          <th class="px-4 py-3 text-left font-medium">Style No</th>
-          <th class="px-4 py-3 text-left font-medium">Product</th>
-          <th class="px-4 py-3 text-left font-medium">Color</th>
-          <th class="px-3 py-3 text-center font-medium">Size</th>
-          <th class="px-4 py-3 text-left font-medium">Sleeve</th>
-          <th class="px-4 py-3 text-left font-medium">Customer</th>
-          <th class="px-4 py-3 text-left font-medium">Agent</th>
-          <th class="px-3 py-3 text-center font-medium">Order Qty</th>
-          <th class="px-3 py-3 text-center font-medium">Dispatched Qty</th>
-          <th class="px-3 py-3 text-center font-medium">Extra Qty</th>
-          <th class="px-4 py-3 text-left font-medium">DC No.</th>
-          <th class="px-4 py-3 text-left font-medium">Dispatch Date</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-gray-200">
-        @for (row of pagedRows(); track row.joinKey; let i = $index) {
-          <tr class="bg-amber-50 hover:bg-amber-100">
-            <td class="px-3 py-2 text-center text-gray-500">{{ (currentPage() - 1) * pageSize() + i + 1 }}</td>
-            <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ row.styleNo }}</td>
-            <td class="px-4 py-2 text-gray-700">{{ row.group }}</td>
-            <td class="px-4 py-2 text-gray-700">{{ row.color || '-' }}</td>
-            <td class="px-3 py-2 text-center text-gray-700">{{ row.size }}</td>
-            <td class="px-4 py-2 text-gray-700">{{ row.sleeveType || '-' }}</td>
-            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.clientName || 'Unknown Client' }}</td>
-            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.agentName }}</td>
-            <td class="px-3 py-2 text-center text-gray-700">{{ row.orderQty }}</td>
-            <td class="px-3 py-2 text-center text-blue-700 font-medium">{{ row.dispatchedQty }}</td>
-            <td class="px-3 py-2 text-center text-amber-800 font-bold">{{ row.extraQty }}</td>
-            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.lastDcNo || '-' }}</td>
-            <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ formatDate(row.lastDcDate) }}</td>
-          </tr>
-        }
-      </tbody>
-      <tfoot class="bg-gray-100 font-bold">
-        <tr>
-          <td colspan="8" class="px-4 py-3 text-gray-900">Grand Total</td>
-          <td class="px-3 py-3 text-center text-gray-900">{{ grandTotal().orderQty }}</td>
-          <td class="px-3 py-3 text-center text-blue-900">{{ grandTotal().dispatchedQty }}</td>
-          <td class="px-3 py-3 text-center text-amber-900">{{ grandTotal().extraQty }}</td>
-          <td class="px-4 py-3"></td>
-          <td class="px-4 py-3"></td>
-        </tr>
-      </tfoot>
-    </table>
-    </div>
-    <app-report-pagination
-      [total]="rows().length"
-      [page]="currentPage()"
-      [pageSize]="pageSize()"
-      (pageChange)="setPage($event)"
-      (pageSizeChange)="setPageSize($event)"
-    />
-  } @else {
-    <div class="text-center py-10">
-      <p class="text-sm text-gray-500">No SKUs are dispatched beyond their ordered quantity for the current filters.</p>
-    </div>
-  }
-</div>
-}

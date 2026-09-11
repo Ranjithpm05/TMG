@@ -1,0 +1,122 @@
+<div class="animate-fade-in">
+  <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-4 border-b pb-4 mb-6">
+      <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">{{ reportTitle }}</h2>
+    </div>
+
+    <app-report-filter-bar />
+
+    <div class="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-2 mb-4">
+      <button (click)="exportExcel()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export Excel
+      </button>
+      <button (click)="exportPdf()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export PDF
+      </button>
+      <button (click)="printReport()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+        Print
+      </button>
+    </div>
+    <p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
+
+    <app-report-status [loading]="isLoading()" [error]="error()" label="Sales Order vs Supply vs Pending" (retry)="retry()" />
+
+    @if (!isLoading() && !error()) {
+    @let supplyPending = report();
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Order Qty</p>
+        <p class="mt-1 text-2xl font-semibold text-gray-900">{{ supplyPending.grandOrderTotal | number }}</p>
+      </div>
+      <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+        <p class="text-xs font-medium text-blue-600 uppercase tracking-wide">Total Supply Qty</p>
+        <p class="mt-1 text-2xl font-semibold text-blue-900">{{ supplyPending.grandDispatchedTotal | number }}</p>
+      </div>
+      <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+        <p class="text-xs font-medium text-rose-600 uppercase tracking-wide">Total Pending Qty</p>
+        <p class="mt-1 text-2xl font-semibold text-rose-900">{{ supplyPending.grandPendingTotal | number }}</p>
+      </div>
+    </div>
+
+    <div>
+      @if (supplyPending.rows.length > 0) {
+        <div class="overflow-x-auto border border-gray-200 rounded-lg">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-800 text-white">
+            <tr>
+              <th rowspan="2" class="px-4 py-3 text-left font-medium align-bottom border-r border-gray-600">Customer Name</th>
+              <th rowspan="2" class="px-4 py-3 text-left font-medium align-bottom border-r border-gray-600">Agent Name</th>
+              <th [attr.colspan]="supplyPending.groups.length + 1" class="px-3 py-2 text-center font-medium border-r border-gray-600">Order Qty</th>
+              <th [attr.colspan]="supplyPending.groups.length + 1" class="px-3 py-2 text-center font-medium border-r border-gray-600">Supply Qty</th>
+              <th [attr.colspan]="supplyPending.groups.length + 1" class="px-3 py-2 text-center font-medium">Pending Qty</th>
+            </tr>
+            <tr>
+              @for (group of supplyPending.groups; track group) {
+                <th class="px-3 py-2 text-center font-medium whitespace-nowrap">{{ group }}</th>
+              }
+              <th class="px-3 py-2 text-center font-medium border-r border-gray-600">Total</th>
+              @for (group of supplyPending.groups; track group) {
+                <th class="px-3 py-2 text-center font-medium whitespace-nowrap">{{ group }}</th>
+              }
+              <th class="px-3 py-2 text-center font-medium border-r border-gray-600">Total</th>
+              @for (group of supplyPending.groups; track group) {
+                <th class="px-3 py-2 text-center font-medium whitespace-nowrap">{{ group }}</th>
+              }
+              <th class="px-3 py-2 text-center font-medium">Total</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            @for (row of pagedRows(); track row.key) {
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.clientName }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.agentName }}</td>
+                @for (group of supplyPending.groups; track group) {
+                  <td class="px-3 py-2 text-center text-gray-700">{{ row.byGroup[group]?.orderQty ?? 0 }}</td>
+                }
+                <td class="px-3 py-2 text-center font-semibold text-gray-900">{{ row.orderTotal }}</td>
+                @for (group of supplyPending.groups; track group) {
+                  <td class="px-3 py-2 text-center text-blue-700">{{ row.byGroup[group]?.dispatchedQty ?? 0 }}</td>
+                }
+                <td class="px-3 py-2 text-center font-semibold text-blue-900">{{ row.dispatchedTotal }}</td>
+                @for (group of supplyPending.groups; track group) {
+                  <td class="px-3 py-2 text-center" [class.text-rose-700]="(row.byGroup[group]?.pendingQty ?? 0) > 0">{{ row.byGroup[group]?.pendingQty ?? 0 }}</td>
+                }
+                <td class="px-3 py-2 text-center font-semibold" [class.text-rose-900]="row.pendingTotal > 0">{{ row.pendingTotal }}</td>
+              </tr>
+            }
+          </tbody>
+          <tfoot class="bg-gray-100 font-bold">
+            <tr>
+              <td colspan="2" class="px-4 py-3 text-gray-900">Grand Total</td>
+              @for (group of supplyPending.groups; track group) {
+                <td class="px-3 py-3 text-center text-gray-900">{{ supplyPending.grandByGroup[group]?.orderQty ?? 0 }}</td>
+              }
+              <td class="px-3 py-3 text-center text-gray-900">{{ supplyPending.grandOrderTotal }}</td>
+              @for (group of supplyPending.groups; track group) {
+                <td class="px-3 py-3 text-center text-blue-900">{{ supplyPending.grandByGroup[group]?.dispatchedQty ?? 0 }}</td>
+              }
+              <td class="px-3 py-3 text-center text-blue-900">{{ supplyPending.grandDispatchedTotal }}</td>
+              @for (group of supplyPending.groups; track group) {
+                <td class="px-3 py-3 text-center text-rose-900">{{ supplyPending.grandByGroup[group]?.pendingQty ?? 0 }}</td>
+              }
+              <td class="px-3 py-3 text-center text-rose-900">{{ supplyPending.grandPendingTotal }}</td>
+            </tr>
+          </tfoot>
+        </table>
+        </div>
+        <app-report-pagination
+          [total]="supplyPending.rows.length"
+          [page]="currentPage()"
+          [pageSize]="pageSize()"
+          (pageChange)="setPage($event)"
+          (pageSizeChange)="setPageSize($event)"
+        />
+      } @else {
+        <div class="text-center py-10">
+          <p class="text-sm text-gray-500">No orders match the current filters.</p>
+        </div>
+      }
+    </div>
+    }
+  </div>
+</div>

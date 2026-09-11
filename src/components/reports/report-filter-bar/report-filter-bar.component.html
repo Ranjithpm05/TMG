@@ -1,0 +1,71 @@
+<div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+  <div class="flex flex-wrap items-end gap-3 mb-3">
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">From</label>
+      <input type="date" [ngModel]="data.startDate()" (ngModelChange)="data.updateStartDate($event)"
+             class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">To</label>
+      <input type="date" [ngModel]="data.endDate()" (ngModelChange)="data.updateEndDate($event)"
+             class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+    </div>
+    <div class="flex gap-2">
+      <button (click)="data.setPreset(1)" class="px-3 py-2 text-xs font-medium rounded-md bg-white border border-gray-300 hover:bg-gray-100">Today</button>
+      <button (click)="data.setPreset(7)" class="px-3 py-2 text-xs font-medium rounded-md bg-white border border-gray-300 hover:bg-gray-100">7 Days</button>
+      <button (click)="data.resetToCurrentMonth()" class="px-3 py-2 text-xs font-medium rounded-md bg-white border border-gray-300 hover:bg-gray-100">This Month</button>
+      <button (click)="data.setPreset(365)" class="px-3 py-2 text-xs font-medium rounded-md bg-white border border-gray-300 hover:bg-gray-100">This Year</button>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap items-end gap-3">
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Customer</label>
+      <select [ngModel]="data.selectedCustomerId()" (ngModelChange)="data.selectedCustomerId.set($event)"
+              class="block w-48 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+        <option value="">All Customers</option>
+        @for (client of data.sortedClients(); track client.id) {
+          <option [value]="client.id">{{ client.clientName }}</option>
+        }
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Agent</label>
+      <select [ngModel]="data.selectedAgent()" (ngModelChange)="data.selectedAgent.set($event)"
+              class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+        <option value="">All Agents</option>
+        @for (agent of data.agentOptions(); track agent) {
+          <option [value]="agent">{{ agent }}</option>
+        }
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Product / Group</label>
+      <select [ngModel]="data.selectedGroup()" (ngModelChange)="data.selectedGroup.set($event)"
+              class="block w-44 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+        <option value="">All Products</option>
+        @for (group of data.groupOptions(); track group) {
+          <option [value]="group">{{ group }}</option>
+        }
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Design / Style No</label>
+      <input type="text" placeholder="Search style no..." [ngModel]="data.designSearch()" (ngModelChange)="data.designSearch.set($event)"
+             class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
+      <select [ngModel]="data.selectedStatus()" (ngModelChange)="data.selectedStatus.set($event)"
+              class="block w-36 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+        <option value="">All Status</option>
+        @for (status of data.statusOptions; track status) {
+          <option [value]="status">{{ status }}</option>
+        }
+      </select>
+    </div>
+    <button (click)="data.resetFilters()" class="px-3 py-2 text-xs font-medium rounded-md bg-white border border-gray-300 hover:bg-gray-100 text-gray-600">
+      Clear Filters
+    </button>
+  </div>
+</div>

@@ -204,6 +204,10 @@
                   <label [for]="'sizeWSP' + i" class="block text-sm font-medium text-gray-700">WSP (&#8377;)</label>
                   <input type="number" [id]="'sizeWSP' + i" [name]="'sizeWSP' + i" [(ngModel)]="size.WSP" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Wholesale Price">
                 </div>
+                <div>
+                  <label [for]="'sizeCostPrice' + i" class="block text-sm font-medium text-gray-700">Cost Price (&#8377;)</label>
+                  <input type="number" [id]="'sizeCostPrice' + i" [name]="'sizeCostPrice' + i" [(ngModel)]="size.costPrice" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Cost Price">
+                </div>
                 <div class="md:col-span-2">
                    <label [for]="'sizeBarcode' + i" class="block text-sm font-medium text-gray-700">Barcode</label>
                    <input type="text" [id]="'sizeBarcode' + i" [name]="'sizeBarcode' + i" [(ngModel)]="size.BARCODE" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">

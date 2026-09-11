@@ -4,6 +4,7 @@ import Swal from 'sweetalert2';
 
 import { ReportsDataService } from '../reports-data.service';
 import { ReportCalcService } from '../report-calc.service';
+import { ReportFilterBarComponent } from '../report-filter-bar/report-filter-bar.component';
 import { LoadingService } from '../../../services/loading.service';
 import { exportRowsToExcel, exportRowsToPdf, printReportRows, type ExportMeta } from '../report-export.util';
 import { ReportStatusComponent } from '../report-status/report-status.component';
@@ -58,11 +59,13 @@ interface StyleAccumulatorEntry {
 @Component({
   selector: 'app-style-wise-report',
   standalone: true,
-  imports: [CommonModule, ReportStatusComponent, ReportPaginationComponent],
+  imports: [CommonModule, ReportFilterBarComponent, ReportStatusComponent, ReportPaginationComponent],
+  providers: [ReportsDataService, ReportCalcService],
   templateUrl: './style-wise-report.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class StyleWiseReportComponent {
+  protected readonly reportTitle = REPORT_TITLE;
   protected readonly data = inject(ReportsDataService);
   private readonly calc = inject(ReportCalcService);
   protected readonly loadingService = inject(LoadingService);

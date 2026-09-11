@@ -4,6 +4,7 @@ import Swal from 'sweetalert2';
 
 import { ReportsDataService } from '../reports-data.service';
 import { ReportCalcService, type AggregatedRow } from '../report-calc.service';
+import { ReportFilterBarComponent } from '../report-filter-bar/report-filter-bar.component';
 import { LoadingService } from '../../../services/loading.service';
 import { exportRowsToExcel, exportRowsToPdf, printReportRows, type ExportMeta } from '../report-export.util';
 import { ReportTableComponent } from '../report-table/report-table.component';
@@ -15,11 +16,13 @@ const REPORT_TITLE = 'Agent Wise Report';
 @Component({
   selector: 'app-agent-wise-report',
   standalone: true,
-  imports: [CommonModule, ReportTableComponent, ReportSummaryCardsComponent, ReportStatusComponent],
+  imports: [CommonModule, ReportFilterBarComponent, ReportTableComponent, ReportSummaryCardsComponent, ReportStatusComponent],
+  providers: [ReportsDataService, ReportCalcService],
   templateUrl: './agent-wise-report.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AgentWiseReportComponent {
+  protected readonly reportTitle = REPORT_TITLE;
   protected readonly data = inject(ReportsDataService);
   private readonly calc = inject(ReportCalcService);
   protected readonly loadingService = inject(LoadingService);

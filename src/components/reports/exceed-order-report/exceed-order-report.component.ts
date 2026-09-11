@@ -4,6 +4,7 @@ import Swal from 'sweetalert2';
 
 import { ReportsDataService } from '../reports-data.service';
 import { ReportCalcService, type SkuFulfillment } from '../report-calc.service';
+import { ReportFilterBarComponent } from '../report-filter-bar/report-filter-bar.component';
 import { LoadingService } from '../../../services/loading.service';
 import { exportRowsToExcel, exportRowsToPdf, printReportRows, type ExportMeta } from '../report-export.util';
 import { ReportSummaryCardsComponent } from '../report-summary-cards/report-summary-cards.component';
@@ -21,11 +22,13 @@ const REPORT_TITLE = 'Exceed Order Report';
 @Component({
   selector: 'app-exceed-order-report',
   standalone: true,
-  imports: [CommonModule, ReportSummaryCardsComponent, ReportStatusComponent, ReportPaginationComponent],
+  imports: [CommonModule, ReportFilterBarComponent, ReportSummaryCardsComponent, ReportStatusComponent, ReportPaginationComponent],
+  providers: [ReportsDataService, ReportCalcService],
   templateUrl: './exceed-order-report.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ExceedOrderReportComponent {
+  protected readonly reportTitle = REPORT_TITLE;
   protected readonly data = inject(ReportsDataService);
   private readonly calc = inject(ReportCalcService);
   protected readonly loadingService = inject(LoadingService);

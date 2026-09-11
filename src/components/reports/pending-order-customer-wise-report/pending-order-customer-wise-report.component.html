@@ -1,0 +1,101 @@
+<div class="animate-fade-in">
+  <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-4 border-b pb-4 mb-6">
+      <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">{{ reportTitle }}</h2>
+    </div>
+
+    <app-report-filter-bar />
+
+    <div class="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-2 mb-4">
+      <button (click)="exportExcel()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export Excel
+      </button>
+      <button (click)="exportPdf()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export PDF
+      </button>
+      <button (click)="printReport()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+        Print
+      </button>
+    </div>
+    <p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
+
+    <app-report-status [loading]="isLoading()" [error]="error()" label="Pending Order Report - Customer-wise" (retry)="retry()" />
+
+    @if (!isLoading() && !error()) {
+    @let pendingOrder = report();
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+      <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Pending Lines</p>
+        <p class="mt-1 text-2xl font-semibold text-gray-900">{{ pendingOrder.rows.length | number }}</p>
+      </div>
+      <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+        <p class="text-xs font-medium text-rose-600 uppercase tracking-wide">Total Pending Qty</p>
+        <p class="mt-1 text-2xl font-semibold text-rose-900">{{ pendingOrder.grandTotal | number }}</p>
+      </div>
+    </div>
+
+    <div>
+      @if (pendingOrder.rows.length > 0) {
+        <div class="overflow-x-auto border border-gray-200 rounded-lg">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-800 text-white">
+            <tr>
+              <th class="px-4 py-3 text-left font-medium whitespace-nowrap">Sales Order No</th>
+              <th class="px-3 py-3 text-center font-medium whitespace-nowrap">SO Date</th>
+              <th class="px-4 py-3 text-left font-medium">Customer</th>
+              <th class="px-4 py-3 text-left font-medium whitespace-nowrap">Group</th>
+              <th class="px-4 py-3 text-left font-medium whitespace-nowrap">Fabric Description</th>
+              <th class="px-4 py-3 text-left font-medium whitespace-nowrap">Styleno</th>
+              <th class="px-3 py-3 text-center font-medium">Color</th>
+              <th class="px-3 py-3 text-center font-medium whitespace-nowrap">SleeveType</th>
+              @for (size of pendingOrder.sizes; track size) {
+                <th class="px-3 py-3 text-center font-medium whitespace-nowrap">{{ size }}</th>
+              }
+              <th class="px-3 py-3 text-center font-medium">Total</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            @for (row of pagedRows(); track row.key) {
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{{ row.salesNo }}</td>
+                <td class="px-3 py-2 text-center text-gray-700 whitespace-nowrap">{{ formatDate(row.soDate) }}</td>
+                <td class="px-4 py-2 text-gray-700">{{ row.clientName }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.group }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.fabricDescription }}</td>
+                <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ row.styleNo }}</td>
+                <td class="px-3 py-2 text-center text-gray-700">{{ row.color }}</td>
+                <td class="px-3 py-2 text-center text-gray-700">{{ row.sleeveType }}</td>
+                @for (size of pendingOrder.sizes; track size) {
+                  <td class="px-3 py-2 text-center text-rose-700 font-medium">{{ (row.qtyBySize[size] ?? 0) || '-' }}</td>
+                }
+                <td class="px-3 py-2 text-center font-semibold text-gray-900">{{ row.total }}</td>
+              </tr>
+            }
+          </tbody>
+          <tfoot class="bg-gray-100 font-bold">
+            <tr>
+              <td colspan="8" class="px-4 py-3 text-gray-900">Grand Total</td>
+              @for (size of pendingOrder.sizes; track size) {
+                <td class="px-3 py-3 text-center text-gray-900">{{ pendingOrder.grandTotalBySize[size] ?? 0 }}</td>
+              }
+              <td class="px-3 py-3 text-center text-gray-900">{{ pendingOrder.grandTotal }}</td>
+            </tr>
+          </tfoot>
+        </table>
+        </div>
+        <app-report-pagination
+          [total]="pendingOrder.rows.length"
+          [page]="currentPage()"
+          [pageSize]="pageSize()"
+          (pageChange)="setPage($event)"
+          (pageSizeChange)="setPageSize($event)"
+        />
+      } @else {
+        <div class="text-center py-10">
+          <p class="text-sm text-gray-500">No pending order lines match the current filters.</p>
+        </div>
+      }
+    </div>
+    }
+  </div>
+</div>

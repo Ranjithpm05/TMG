@@ -167,15 +167,14 @@ const bucketKey = (partName: string, styleNo: string, color: string, sleeveType:
 const lineRecordKey = (pickListId: string, pickListLineId: string) => `${pickListId}||${pickListLineId}`;
 
 /**
- * Shared calculation layer for every Reports tab. Computes Order Qty /
+ * Shared calculation layer used by most report screens. Computes Order Qty /
  * Dispatched Qty / Extra Dispatched Qty / Pending Qty exactly once per
- * filter change and lets each of the 7 report components aggregate the same
+ * filter change and lets each report component aggregate the same
  * underlying `skuFulfillments()` differently (by customer, agent, style,
  * etc.) instead of re-deriving these numbers themselves.
  *
- * Scoped like ReportsDataService (provided per ReportsComponent instance,
- * not root) so every @defer'd tab shares one instance via DI and its signals
- * memoize across tab switches.
+ * Scoped like ReportsDataService (provided per report screen component, not
+ * root) so each standalone report screen gets its own independent instance.
  */
 @Injectable()
 export class ReportCalcService {

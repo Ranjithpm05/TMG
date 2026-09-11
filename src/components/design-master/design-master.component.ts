@@ -5,16 +5,16 @@ import { Design, SizePrice } from '../../models/design.model';
 import { DesignService } from '../../services/design.service';
 import Swal from 'sweetalert2';
 
-const EXCEL_HEADERS = ['StyleNo', 'Color', 'Group', 'SupplierName', 'SupplierCode', 'Size', 'MRP', 'WSP', 'Barcode', 'SleeveType', 'FabricDescription'];
+const EXCEL_HEADERS = ['StyleNo', 'Color', 'Group', 'SupplierName', 'SupplierCode', 'Size', 'MRP', 'WSP', 'CostPrice', 'Barcode', 'SleeveType', 'FabricDescription'];
 const REQUIRED_HEADERS = ['StyleNo', 'Size', 'MRP', 'WSP', 'Barcode'];
-const EXPORT_HEADERS = ['ID', 'StyleNo', 'Color', 'Group', 'SupplierName', 'SupplierCode', 'Size', 'MRP', 'WSP', 'Barcode', 'SleeveType', 'FabricDescription', 'CreatedAt', 'UpdatedAt'];
+const EXPORT_HEADERS = ['ID', 'StyleNo', 'Color', 'Group', 'SupplierName', 'SupplierCode', 'Size', 'MRP', 'WSP', 'CostPrice', 'Barcode', 'SleeveType', 'FabricDescription', 'CreatedAt', 'UpdatedAt'];
 
 type ViewMode = 'list' | 'form';
 
 const EMPTY_DESIGN: Omit<Design, 'id'> = {
   styleNo: '',
   color: '',
-  sizes: [{ size: 'M', price: 0, WSP: 0, BARCODE: '', sleeveType: null, fabricType: ''}],
+  sizes: [{ size: 'M', price: 0, WSP: 0, costPrice: 0, BARCODE: '', sleeveType: null, fabricType: ''}],
   group: '',
   supplierName: '',
   supplierCode: '',
@@ -265,7 +265,7 @@ export class DesignMasterComponent implements OnInit {
     addSize() {
         this.editableDesign.update(design => {
         const firstFabricType = design.sizes[0]?.fabricType || '';
-        const newSizes: SizePrice[] = [...design.sizes, { size: '', price: 0, WSP: 0, BARCODE: '', sleeveType: 'Full', fabricType: firstFabricType }];
+        const newSizes: SizePrice[] = [...design.sizes, { size: '', price: 0, WSP: 0, costPrice: 0, BARCODE: '', sleeveType: 'Full', fabricType: firstFabricType }];
         return { ...design, sizes: newSizes };
         });
     }
@@ -296,16 +296,16 @@ export class DesignMasterComponent implements OnInit {
             const XLSX = await import('xlsx');
             const rows = [
                 EXCEL_HEADERS,
-                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'ABC Textiles', 'SUP001', 'S', 500, 350, '1234567890128', 'Full', 'CASUALSHIRT CHECKS FS'],
-                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'ABC Textiles', 'SUP001', 'M', 500, 350, '1234567890135', 'Full', 'CASUALSHIRT CHECKS FS'],
-                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'ABC Textiles', 'SUP001', 'L', 500, 350, '1234567890142', 'Half', 'CASUALSHIRT CHECKS FS'],
-                ['STYLE002', 'Blue', 'Jeans', 'XYZ Denim Co', 'SUP002', '32', 1200, 900, '9876543210987', '', 'DENIM JEANS SLIM FIT'],
-                ['STYLE002', 'Blue', 'Jeans', 'XYZ Denim Co', 'SUP002', '34', 1200, 900, '9876543210994', '', 'DENIM JEANS SLIM FIT'],
+                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'ABC Textiles', 'SUP001', 'S', 500, 350, 250, '1234567890128', 'Full', 'CASUALSHIRT CHECKS FS'],
+                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'ABC Textiles', 'SUP001', 'M', 500, 350, 250, '1234567890135', 'Full', 'CASUALSHIRT CHECKS FS'],
+                ['STYLE001', 'Red', 'CASUAL SHIRTS', 'ABC Textiles', 'SUP001', 'L', 500, 350, 250, '1234567890142', 'Half', 'CASUALSHIRT CHECKS FS'],
+                ['STYLE002', 'Blue', 'Jeans', 'XYZ Denim Co', 'SUP002', '32', 1200, 900, 650, '9876543210987', '', 'DENIM JEANS SLIM FIT'],
+                ['STYLE002', 'Blue', 'Jeans', 'XYZ Denim Co', 'SUP002', '34', 1200, 900, 650, '9876543210994', '', 'DENIM JEANS SLIM FIT'],
             ];
             const ws = XLSX.utils.aoa_to_sheet(rows);
             ws['!cols'] = [
                 { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 8 },
-                { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 30 },
+                { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 30 },
             ];
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Designs');
@@ -339,6 +339,7 @@ export class DesignMasterComponent implements OnInit {
                         size.size ?? '',
                         size.price ?? '',
                         size.WSP ?? '',
+                        size.costPrice ?? '',
                         size.BARCODE ?? '',
                         size.sleeveType ?? '',
                         size.fabricType ?? '',
@@ -351,7 +352,7 @@ export class DesignMasterComponent implements OnInit {
             const ws = XLSX.utils.aoa_to_sheet(rows);
             ws['!cols'] = [
                 { wch: 22 }, { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 8 },
-                { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 30 },
+                { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 30 },
                 { wch: 20 }, { wch: 20 },
             ];
             const wb = XLSX.utils.book_new();
@@ -465,7 +466,7 @@ export class DesignMasterComponent implements OnInit {
 
         const iStyleNo = col('StyleNo'), iColor = col('Color'), iGroup = col('Group');
         const iSupplierName = col('SupplierName'), iSupplierCode = col('SupplierCode');
-        const iSize = col('Size'), iMRP = col('MRP'), iWSP = col('WSP');
+        const iSize = col('Size'), iMRP = col('MRP'), iWSP = col('WSP'), iCostPrice = col('CostPrice');
         const iBarcode = col('Barcode'), iSleeve = col('SleeveType'), iFabric = col('FabricDescription');
 
         for (let i = 1; i < rawData.length; i++) {
@@ -493,6 +494,18 @@ export class DesignMasterComponent implements OnInit {
             if (mrp < 0) { errors.push(`Row ${rowNum}: MRP cannot be negative.`); continue; }
             if (wsp < 0) { errors.push(`Row ${rowNum}: WSP cannot be negative.`); continue; }
 
+            // CostPrice is optional — older import files won't have this column
+            let costPrice = 0;
+            if (iCostPrice >= 0) {
+                const costPriceRaw = row[iCostPrice];
+                if (costPriceRaw !== '' && costPriceRaw != null) {
+                    const parsedCostPrice = parseFloat(String(costPriceRaw));
+                    if (isNaN(parsedCostPrice)) { errors.push(`Row ${rowNum}: CostPrice must be a valid number.`); continue; }
+                    if (parsedCostPrice < 0) { errors.push(`Row ${rowNum}: CostPrice cannot be negative.`); continue; }
+                    costPrice = parsedCostPrice;
+                }
+            }
+
             // Normalise SleeveType — accept any casing of Full / Half
             const sleeveRaw = iSleeve >= 0 ? String(row[iSleeve] ?? '').trim() : '';
             let sleeveType: string | null = null;
@@ -508,7 +521,7 @@ export class DesignMasterComponent implements OnInit {
             // null (not undefined) — Firestore rejects undefined field values
 
             const sizeObj: SizePrice = {
-                size, price: mrp, WSP: wsp, BARCODE: barcode,
+                size, price: mrp, WSP: wsp, costPrice, BARCODE: barcode,
                 sleeveType,
                 fabricType: iFabric >= 0 ? String(row[iFabric] ?? '').trim() : '',
             };
