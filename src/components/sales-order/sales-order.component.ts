@@ -121,6 +121,9 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     filterFromDate = signal<string>(this.currentMonthStart());
     filterToDate   = signal<string>(this.currentMonthEnd());
 
+    // --- Text search (applies on top of the date filter) ---
+    orderSearchTerm = signal<string>('');
+
     // --- State for form view ---
     editableOrder = signal<SalesOrder | null>(null);
     isEditMode = computed(() => !!this.editableOrder());
@@ -407,26 +410,44 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     return Array.from(groups.values());
   });
 
-  /** Orders filtered by the selected date range (based on createdAt), sorted oldest-first by createdAt */
+  /** Orders filtered by the selected date range (based on createdAt) and search term, sorted oldest-first by createdAt */
   filteredSalesOrders = computed(() => {
     const orders = this.salesOrders();
     const from = this.filterFromDate();
     const to   = this.filterToDate();
+    const term = this.orderSearchTerm().toLowerCase().trim();
 
     const fromMs = from ? new Date(from).setHours(0, 0, 0, 0)    : -Infinity;
     const toMs   = to   ? new Date(to).setHours(23, 59, 59, 999)  :  Infinity;
 
-    const filtered = (!from && !to)
+    let filtered = (!from && !to)
       ? orders
       : orders.filter(order => {
           const ms = this.getOrderCreatedAtDate(order).getTime();
           return ms >= fromMs && ms <= toMs;
         });
 
+    if (term) {
+      filtered = filtered.filter(order =>
+        this.safeLower(order.salesNo).includes(term) ||
+        this.safeLower(order.poNumber).includes(term) ||
+        this.safeLower(this.getClientName(order.clientId)).includes(term) ||
+        this.safeLower(order.status).includes(term)
+      );
+    }
+
     return [...filtered].sort(
       (a, b) => this.getOrderCreatedAtDate(a).getTime() - this.getOrderCreatedAtDate(b).getTime()
     );
   });
+
+  private safeLower(value: any): string {
+    return (value ?? '').toString().toLowerCase();
+  }
+
+  onOrderSearch(term: string) {
+    this.orderSearchTerm.set(term);
+  }
 
   /** Total quantity across the currently filtered/displayed orders (matches the on-screen list). */
   filteredOrdersTotalQuantity = computed(() =>

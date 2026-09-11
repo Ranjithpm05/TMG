@@ -114,8 +114,10 @@ export class EInvoiceService {
     // invoice generation). Falls back to the Sales Order number(s) for older
     // invoices that predate SalesOrder.poNumber. RefDtls/ContrDtls is only
     // sent when there's something to report — NIC rejects an empty ContrDtls
-    // entry.
-    const poNumber = (invoice.orderNo || invoice.salesNos.join(', ')).trim();
+    // entry. NIC's schema also caps Porefr at 16 characters — truncated here
+    // since the merged/fallback value (multiple order numbers joined) can
+    // otherwise exceed that and get the whole invoice rejected (code 5002).
+    const poNumber = (invoice.orderNo || invoice.salesNos.join(', ')).trim().slice(0, 16);
     const refDtls = poNumber ? { ContrDtls: [{ Porefr: poNumber }] } : undefined;
 
     const itemList: EInvoiceItem[] = invoice.items.map((item, index) => {

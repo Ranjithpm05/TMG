@@ -31,12 +31,33 @@ export class UserManagementComponent implements OnInit {
   userFormVisible = signal(false);
   editableUser = signal<User | Omit<User, 'id'>>(EMPTY_USER);
   isUserEditMode = computed(() => 'id' in this.editableUser());
+  userSearchTerm = signal('');
+  filteredUsers = computed(() => {
+    const term = this.userSearchTerm().toLowerCase().trim();
+    if (!term) return this.users();
+    return this.users().filter(user =>
+      this.safeLower(user.username).includes(term) ||
+      this.safeLower(user.email).includes(term) ||
+      this.safeLower(this.getGroupName(user.userGroupId)).includes(term) ||
+      this.safeLower(user.status).includes(term)
+    );
+  });
 
   // Groups State
   userGroups = signal<UserGroup[]>([]);
   groupFormVisible = signal(false);
   editableGroup = signal<UserGroup | Omit<UserGroup, 'id'>>(EMPTY_GROUP);
   isGroupEditMode = computed(() => 'id' in this.editableGroup());
+  groupSearchTerm = signal('');
+  filteredGroups = computed(() => {
+    const term = this.groupSearchTerm().toLowerCase().trim();
+    if (!term) return this.userGroups();
+    return this.userGroups().filter(group => this.safeLower(group.name).includes(term));
+  });
+
+  private safeLower(value: any): string {
+    return (value ?? '').toString().toLowerCase();
+  }
 
   // For template access
   readonly allScreens = ALL_SCREENS;
@@ -101,6 +122,14 @@ export class UserManagementComponent implements OnInit {
     this.groupFormVisible.set(false);
     this.editableUser.set(EMPTY_USER);
     this.editableGroup.set(EMPTY_GROUP);
+  }
+
+  onUserSearch(term: string) {
+    this.userSearchTerm.set(term);
+  }
+
+  onGroupSearch(term: string) {
+    this.groupSearchTerm.set(term);
   }
 
   // --- User Management Logic ---
