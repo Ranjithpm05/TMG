@@ -1285,15 +1285,24 @@ export class PickListComponent implements OnInit, OnDestroy {
       await this.pickListService.ensureLegacyPickListLines(pickList);
     }
 
-    const freshPickList = await this.pickListService.getPickListByIdOnce(pickList.id);
+    let freshPickList = await this.pickListService.getPickListByIdOnce(pickList.id);
     if (!freshPickList) {
       await Swal.fire({ icon: 'error', title: 'Not Found', text: 'The selected Pick List could not be loaded.' });
       return;
     }
     if ((freshPickList.totalRequiredQty ?? 0) <= 0) {
-      await Swal.fire({ icon: 'info', title: 'No Pickable Items', text: 'This Pick List has only pending or blocked lines right now.' });
-      await this.openView(freshPickList);
-      return;
+      // The Pick List doc's cached aggregate totals can drift from its real
+      // lines (e.g. a rare corrupted write leaving totalRequiredQty at 0
+      // while the lines subcollection still has real pickable quantity) —
+      // recompute from the actual lines and self-heal before concluding
+      // there's really nothing pickable, instead of trusting the stale cache.
+      await this.pickListService.recalculatePickListStatus(pickList.id);
+      freshPickList = await this.pickListService.getPickListByIdOnce(pickList.id);
+      if (!freshPickList || (freshPickList.totalRequiredQty ?? 0) <= 0) {
+        await Swal.fire({ icon: 'info', title: 'No Pickable Items', text: 'This Pick List has only pending or blocked lines right now.' });
+        await this.openView(freshPickList ?? pickList);
+        return;
+      }
     }
 
     this.mode.set('live-pick');
