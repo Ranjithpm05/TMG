@@ -2,8 +2,8 @@ import { bootstrapApplication } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
 import { provideZonelessChangeDetection } from '@angular/core';
 
-import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
-import { provideFirestore, getFirestore } from '@angular/fire/firestore';
+import { provideFirebaseApp, initializeApp, getApp } from '@angular/fire/app';
+import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
 import { provideStorage, getStorage } from '@angular/fire/storage';
 import { provideFunctions, getFunctions, connectFunctionsEmulator } from '@angular/fire/functions';
 
@@ -27,7 +27,17 @@ bootstrapApplication(AppComponent, {
     provideZonelessChangeDetection(),
     provideHttpClient(),
     provideFirebaseApp(() => initializeApp(firebaseConfig)),
-    provideFirestore(() => getFirestore()),
+    // Every read on this screen was taking ~48s regardless of collection size
+    // (190 vs 1262 vs 1218 vs 1001 docs all finished within ~1s of each
+    // other) — the hallmark of the SDK's transport auto-detection (already
+    // the default, and it can't be combined with forceLongPolling) stalling
+    // while probing for streaming support before falling back to
+    // long-polling, on a network/proxy/antivirus that silently swallows the
+    // streaming attempt instead of failing it fast. Forcing long-polling
+    // skips that probe-and-timeout entirely.
+    provideFirestore(() => initializeFirestore(getApp(), {
+      experimentalForceLongPolling: true,
+    })),
     provideStorage(() => getStorage()),
     provideFunctions(() => getFunctions()),
     // provideFunctions(() => {

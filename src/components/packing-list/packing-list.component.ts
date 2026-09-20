@@ -560,12 +560,16 @@ export class PackingListComponent implements OnInit, OnDestroy {
       }
     };
 
+    // TEMP DIAGNOSTIC — remove once the slow-load report is root-caused.
+    console.time('[diag] pickLists'); console.time('[diag] packingLists'); console.time('[diag] deliveryChallans'); console.time('[diag] invoices');
+
     this.subscriptions.push(
-      this.pickListService.getPickLists().subscribe({ next: (v) => { this.pickLists.set(v); done(); }, error: done })
+      this.pickListService.getPickLists().subscribe({ next: (v) => { console.timeEnd('[diag] pickLists'); console.log('[diag] pickLists count', v.length); this.pickLists.set(v); done(); }, error: (e) => { console.timeEnd('[diag] pickLists'); console.error('[diag] pickLists error', e); done(); } })
     );
     this.subscriptions.push(
       this.packingListService.getPackingLists().subscribe({
         next: (v) => {
+          console.timeEnd('[diag] packingLists'); console.log('[diag] packingLists count', v.length);
           this.packingLists.set(v);
 
           const currentView = this.viewPackingList();
@@ -580,14 +584,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
           }
           done();
         },
-        error: done,
+        error: (e) => { console.timeEnd('[diag] packingLists'); console.error('[diag] packingLists error', e); done(); },
       })
     );
     this.subscriptions.push(
-      this.dcService.getDeliveryChallans().subscribe({ next: (v) => { this.deliveryChallans.set(v); done(); }, error: done })
+      this.dcService.getDeliveryChallans().subscribe({ next: (v) => { console.timeEnd('[diag] deliveryChallans'); console.log('[diag] deliveryChallans count', v.length); this.deliveryChallans.set(v); done(); }, error: (e) => { console.timeEnd('[diag] deliveryChallans'); console.error('[diag] deliveryChallans error', e); done(); } })
     );
     this.subscriptions.push(
-      this.invoiceService.getInvoices().subscribe({ next: (v) => { this.invoices.set(v); done(); }, error: done })
+      this.invoiceService.getInvoices().subscribe({ next: (v) => { console.timeEnd('[diag] invoices'); console.log('[diag] invoices count', v.length); this.invoices.set(v); done(); }, error: (e) => { console.timeEnd('[diag] invoices'); console.error('[diag] invoices error', e); done(); } })
     );
     this.subscriptions.push(
       this.transportService.getTransports().subscribe({ next: (v) => this.transports.set(v) })
