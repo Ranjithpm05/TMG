@@ -10,6 +10,7 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  Timestamp,
   updateDoc,
   where,
 } from '@angular/fire/firestore';
@@ -29,12 +30,20 @@ export class DeliveryChallanService {
   // same pattern as ClientService/DesignService/InventoryService.
   private dcsCache$: Observable<DeliveryChallan[]> | null = null;
 
+  // getDeliveryChallansInRange() is keyed by exact (start, end) pair — same
+  // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
+  // called getDeliveryChallans() (the full, ever-growing history) just to
+  // filter it down to one date range client-side.
+  private dcsRangeCache = new Map<string, Observable<DeliveryChallan[]>>();
+  private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
+
   // Public: InvoiceService.createInvoice() stamps invoiceId/invoiceNo directly
   // onto a deliveryChallans/{id} doc in the same transaction as creating the
   // invoice, without going through this service — it must invalidate this
   // cache too or the DC would keep showing as not-yet-invoiced.
   invalidateCache(): void {
     this.dcsCache$ = null;
+    this.dcsRangeCache.clear();
   }
 
   // One-time read, paged through in full via fetchAllDocs() — a prior fixed
@@ -47,6 +56,31 @@ export class DeliveryChallanService {
       ).pipe(shareReplay(1));
     }
     return this.dcsCache$;
+  }
+
+  // Date-bounded one-time query — see getDeliveryChallans() above for why this
+  // exists. Cached per exact (start, end) pair; see dcsRangeCache above.
+  getDeliveryChallansInRange(start: Date, end: Date): Observable<DeliveryChallan[]> {
+    const key = `${start.getTime()}_${end.getTime()}`;
+    let cached = this.dcsRangeCache.get(key);
+    if (!cached) {
+      if (this.dcsRangeCache.size >= DeliveryChallanService.MAX_RANGE_CACHE_ENTRIES) {
+        this.dcsRangeCache.clear();
+      }
+      cached = from(
+        fetchAllDocs(
+          this.dcRef,
+          [
+            where('createdAt', '>=', Timestamp.fromDate(start)),
+            where('createdAt', '<=', Timestamp.fromDate(end)),
+            orderBy('createdAt', 'desc'),
+          ],
+          (d) => this.normalize({ id: d.id, ...d.data() })
+        )
+      ).pipe(shareReplay(1));
+      this.dcsRangeCache.set(key, cached);
+    }
+    return cached;
   }
 
   async getDCsByPackingListIdOnce(packingListId: string): Promise<DeliveryChallan[]> {

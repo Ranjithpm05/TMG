@@ -9,6 +9,7 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  Timestamp,
   updateDoc,
   where,
 } from '@angular/fire/firestore';
@@ -32,11 +33,22 @@ export class InvoiceService {
   // below, same pattern as ClientService/DesignService/InventoryService.
   private invoicesCache$: Observable<Invoice[]> | null = null;
 
+  // getInvoicesInRange() is keyed by exact (start, end) pair, same reasoning
+  // (and same generous-bound-then-clear cap) as
+  // SalesOrderService.salesOrdersRangeCache — Dashboard and three Reports
+  // tabs (Sales Report Product-wise 1/2, HSN/GST Wise) previously all called
+  // getInvoices() just to filter it down to one date range client-side,
+  // which meant every one of them paid for downloading the ENTIRE invoice
+  // history (unbounded, ever-growing) on first use each session.
+  private invoicesRangeCache = new Map<string, Observable<Invoice[]>>();
+  private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
+
   // Public: EInvoiceService.saveEInvoice()/cancelEInvoice() write eInvoiceStatus/
   // irn/etc. directly onto an invoices/{id} doc without going through this
   // service, and must invalidate this cache too.
   invalidateCache(): void {
     this.invoicesCache$ = null;
+    this.invoicesRangeCache.clear();
   }
 
   // One-time read, paged through in full via fetchAllDocs() — a prior fixed
@@ -50,6 +62,34 @@ export class InvoiceService {
       ).pipe(shareReplay(1));
     }
     return this.invoicesCache$;
+  }
+
+  // Date-bounded one-time query (invoiceDate/createdAt are stamped from the
+  // same serverTimestamp() call at creation — see createInvoice below — so
+  // querying on the indexed createdAt field returns the identical doc set as
+  // filtering by invoiceDate would). Cached per exact (start, end) pair; see
+  // invoicesRangeCache above.
+  getInvoicesInRange(start: Date, end: Date): Observable<Invoice[]> {
+    const key = `${start.getTime()}_${end.getTime()}`;
+    let cached = this.invoicesRangeCache.get(key);
+    if (!cached) {
+      if (this.invoicesRangeCache.size >= InvoiceService.MAX_RANGE_CACHE_ENTRIES) {
+        this.invoicesRangeCache.clear();
+      }
+      cached = from(
+        fetchAllDocs(
+          this.invoicesRef,
+          [
+            where('createdAt', '>=', Timestamp.fromDate(start)),
+            where('createdAt', '<=', Timestamp.fromDate(end)),
+            orderBy('createdAt', 'desc'),
+          ],
+          (d) => this.normalize({ id: d.id, ...d.data() })
+        )
+      ).pipe(shareReplay(1));
+      this.invoicesRangeCache.set(key, cached);
+    }
+    return cached;
   }
 
   async getInvoicesByPackingListIdOnce(packingListId: string): Promise<Invoice[]> {

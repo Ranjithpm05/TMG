@@ -10,7 +10,9 @@ import {
   deleteField,
   orderBy,
   runTransaction,
-  serverTimestamp
+  serverTimestamp,
+  Timestamp,
+  where
 } from '@angular/fire/firestore';
 import { from, Observable, shareReplay } from 'rxjs';
 import type { GoodsInward, GoodsInwardItem } from '../models/goods-inward.model';
@@ -33,8 +35,16 @@ export class GoodsInwardService {
   // write in this service below, same pattern as ClientService/DesignService.
   private grnsCache$: Observable<GoodsInward[]> | null = null;
 
+  // getGoodsInwardsInRange() is keyed by exact (start, end) pair — same
+  // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
+  // called getGoodsInwards() (the full, ever-growing history) just to filter
+  // it down to one date range client-side.
+  private grnsRangeCache = new Map<string, Observable<GoodsInward[]>>();
+  private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
+
   private invalidateGrnsCache(): void {
     this.grnsCache$ = null;
+    this.grnsRangeCache.clear();
   }
 
   /**
@@ -67,6 +77,32 @@ export class GoodsInwardService {
       ).pipe(shareReplay(1));
     }
     return this.grnsCache$;
+  }
+
+  // 🔹 Date-bounded one-time query — see getGoodsInwards() above for why this
+  // exists (Dashboard only needs GRNs within its selected date range, not the
+  // entire history). Cached per exact (start, end) pair; see grnsRangeCache above.
+  getGoodsInwardsInRange(start: Date, end: Date): Observable<GoodsInward[]> {
+    const key = `${start.getTime()}_${end.getTime()}`;
+    let cached = this.grnsRangeCache.get(key);
+    if (!cached) {
+      if (this.grnsRangeCache.size >= GoodsInwardService.MAX_RANGE_CACHE_ENTRIES) {
+        this.grnsRangeCache.clear();
+      }
+      cached = from(
+        fetchAllDocs(
+          this.grnRef,
+          [
+            where('createdAt', '>=', Timestamp.fromDate(start)),
+            where('createdAt', '<=', Timestamp.fromDate(end)),
+            orderBy('createdAt', 'desc'),
+          ],
+          (d) => ({ id: d.id, ...d.data() } as GoodsInward)
+        )
+      ).pipe(shareReplay(1));
+      this.grnsRangeCache.set(key, cached);
+    }
+    return cached;
   }
 
   // 🔹 Create GRN

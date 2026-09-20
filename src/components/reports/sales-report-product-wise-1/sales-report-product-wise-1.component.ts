@@ -47,12 +47,20 @@ export class SalesReportProductWise1Component {
   protected readonly invoicesError = signal<string | null>(null);
   private readonly retryTrigger = signal(0);
 
+  // Scoped to the report's selected date range instead of pulling the entire
+  // (ever-growing) invoice history on every load — invoiceDate/createdAt are
+  // stamped from the same instant at invoice creation, so range-querying the
+  // indexed createdAt field returns exactly the invoices this report would
+  // have filtered down to anyway. Refetches whenever the range or retry
+  // trigger changes.
+  private readonly invoicesTrigger = computed(() => ({ ...this.data.dateRange(), retry: this.retryTrigger() }));
+
   private readonly invoices = toSignal(
-    toObservable(this.retryTrigger).pipe(
-      switchMap(() => {
+    toObservable(this.invoicesTrigger).pipe(
+      switchMap(({ start, end }) => {
         this.invoicesError.set(null);
         this.isLoadingInvoices.set(true);
-        return this.invoiceService.getInvoices().pipe(
+        return this.invoiceService.getInvoicesInRange(start, end).pipe(
           catchError((err) => {
             console.error('Sales Report Product-wise Format 1: failed to load invoices', err);
             this.invoicesError.set('Unable to load report data. Please try again.');

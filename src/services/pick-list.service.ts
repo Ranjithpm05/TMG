@@ -15,12 +15,13 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  Timestamp,
   updateDoc,
   where,
   writeBatch,
   WriteBatch,
 } from '@angular/fire/firestore';
-import { firstValueFrom, Observable, map } from 'rxjs';
+import { firstValueFrom, from, Observable, map, shareReplay } from 'rxjs';
 import type { SalesOrder } from '../models/sales-order.model';
 import type {
   PickList,
@@ -78,6 +79,40 @@ export class PickListService {
 
   private invalidatePickListsCache(): void {
     this.pickListsCache.invalidate();
+    this.pickListsRangeCache.clear();
+  }
+
+  // getPickListsInRange() is keyed by exact (start, end) pair — same
+  // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
+  // called getPickLists() (the full, ever-growing history) just to filter it
+  // down to one date range client-side.
+  private pickListsRangeCache = new Map<string, Observable<PickList[]>>();
+  private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
+
+  // Date-bounded one-time query — see pickListsCache above for why the full
+  // list is expensive to re-fetch; this lets Dashboard avoid it entirely.
+  // Cached per exact (start, end) pair; see pickListsRangeCache above.
+  getPickListsInRange(start: Date, end: Date): Observable<PickList[]> {
+    const key = `${start.getTime()}_${end.getTime()}`;
+    let cached = this.pickListsRangeCache.get(key);
+    if (!cached) {
+      if (this.pickListsRangeCache.size >= PickListService.MAX_RANGE_CACHE_ENTRIES) {
+        this.pickListsRangeCache.clear();
+      }
+      cached = from(
+        fetchAllDocs(
+          this.plRef,
+          [
+            where('createdAt', '>=', Timestamp.fromDate(start)),
+            where('createdAt', '<=', Timestamp.fromDate(end)),
+            orderBy('createdAt', 'desc'),
+          ],
+          (d) => this.normalizePickList({ id: d.id, ...d.data() })
+        )
+      ).pipe(shareReplay(1));
+      this.pickListsRangeCache.set(key, cached);
+    }
+    return cached;
   }
 
   /** Updates one pick list's cached top-level fields (aggregates, status) already known from a just-committed transaction, without a Firestore round-trip. No-op if the cache hasn't loaded yet. */

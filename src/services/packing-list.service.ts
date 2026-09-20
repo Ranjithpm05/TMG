@@ -14,12 +14,13 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  Timestamp,
   updateDoc,
   where,
   writeBatch,
   WriteBatch,
 } from '@angular/fire/firestore';
-import { map, Observable } from 'rxjs';
+import { from, map, Observable, shareReplay } from 'rxjs';
 import { PickListLine } from '../models/pick-list.model';
 import {
   PackingCarton,
@@ -68,6 +69,40 @@ export class PackingListService {
 
   invalidateCache(): void {
     this.packingListsCache.invalidate();
+    this.packingListsRangeCache.clear();
+  }
+
+  // getPackingListsInRange() is keyed by exact (start, end) pair — same
+  // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
+  // called getPackingLists() (the full, ever-growing history) just to filter
+  // it down to one date range client-side.
+  private packingListsRangeCache = new Map<string, Observable<PackingList[]>>();
+  private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
+
+  // Date-bounded one-time query — see packingListsCache above for why the
+  // full list is expensive to re-fetch; this lets Dashboard avoid it entirely.
+  // Cached per exact (start, end) pair; see packingListsRangeCache above.
+  getPackingListsInRange(start: Date, end: Date): Observable<PackingList[]> {
+    const key = `${start.getTime()}_${end.getTime()}`;
+    let cached = this.packingListsRangeCache.get(key);
+    if (!cached) {
+      if (this.packingListsRangeCache.size >= PackingListService.MAX_RANGE_CACHE_ENTRIES) {
+        this.packingListsRangeCache.clear();
+      }
+      cached = from(
+        fetchAllDocs(
+          this.packingRef,
+          [
+            where('createdAt', '>=', Timestamp.fromDate(start)),
+            where('createdAt', '<=', Timestamp.fromDate(end)),
+            orderBy('createdAt', 'desc'),
+          ],
+          (d) => this.normalizePackingList({ id: d.id, ...d.data() })
+        )
+      ).pipe(shareReplay(1));
+      this.packingListsRangeCache.set(key, cached);
+    }
+    return cached;
   }
 
   /** Updates one packing list's cached top-level fields (aggregates, status) already known from a just-committed transaction, without a Firestore round-trip. No-op if the cache hasn't loaded yet. */

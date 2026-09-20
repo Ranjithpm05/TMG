@@ -13,6 +13,10 @@ import { InvoiceService } from '../../services/invoice.service';
 import { AuthService } from '../../services/auth.service';
 import type { SalesOrder } from '../../models/sales-order.model';
 import type { GoodsInward } from '../../models/goods-inward.model';
+import type { PickList } from '../../models/pick-list.model';
+import type { PackingList } from '../../models/packing-list.model';
+import type { DeliveryChallan } from '../../models/delivery-challan.model';
+import type { Invoice } from '../../models/invoice.model';
 
 interface SummaryCard {
   id: 'inventory' | 'lowStock' | 'pendingSales' | 'pickPack';
@@ -89,12 +93,7 @@ export class DashboardComponent {
   private readonly invoiceService = inject(InvoiceService);
 
   private readonly clients = toSignal(this.clientService.getClients(), { initialValue: [] });
-  private readonly goodsInwards = toSignal(this.goodsInwardService.getGoodsInwards(), { initialValue: [] });
   private readonly inventory = toSignal(this.inventoryService.getInventory(), { initialValue: [] });
-  private readonly pickLists = toSignal(this.pickListService.getPickLists(), { initialValue: [] });
-  private readonly packingLists = toSignal(this.packingListService.getPackingLists(), { initialValue: [] });
-  private readonly deliveryChallans = toSignal(this.deliveryChallanService.getDeliveryChallans(), { initialValue: [] });
-  private readonly invoices = toSignal(this.invoiceService.getInvoices(), { initialValue: [] });
 
   readonly currentUser = computed(() => this.authService.currentUser());
   readonly currentUserName = computed(() => this.currentUser()?.username || 'Warehouse User');
@@ -132,6 +131,63 @@ export class DashboardComponent {
       switchMap(({ start, end }) => this.salesOrderService.getSalesOrdersInRange(start, end))
     ),
     { initialValue: [] as SalesOrder[] }
+  );
+
+  // GRNs only ever need the selected date range here (no "always today" stat
+  // card reads goodsInwards) — scoped the same way as salesOrders above,
+  // instead of pulling the entire (ever-growing) GRN history on every load.
+  private readonly goodsInwards = toSignal(
+    toObservable(this.dateRange).pipe(
+      switchMap(({ start, end }) => this.goodsInwardService.getGoodsInwardsInRange(start, end))
+    ),
+    { initialValue: [] as GoodsInward[] }
+  );
+
+  // pickLists/packingLists/deliveryChallans/invoices below are read for two
+  // purposes: the selected date-range filter (filteredPickLists etc.) AND the
+  // "today" stat cards (pickedQtyToday etc.), which must stay accurate
+  // regardless of the selected range — see their own comments. Querying the
+  // union of [selectedRange] and [today] covers both without ever pulling
+  // the full, ever-growing history the way getPickLists()/getPackingLists()/
+  // getDeliveryChallans()/getInvoices() do (those stay as-is for their own
+  // full-list screens).
+  private readonly todayAndRangeWindow = computed(() => {
+    const { start, end } = this.dateRange();
+    const now = new Date();
+    const todayStart = this.startOfDay(now);
+    const todayEnd = this.endOfDay(now);
+    return {
+      start: start < todayStart ? start : todayStart,
+      end: end > todayEnd ? end : todayEnd,
+    };
+  });
+
+  private readonly pickLists = toSignal(
+    toObservable(this.todayAndRangeWindow).pipe(
+      switchMap(({ start, end }) => this.pickListService.getPickListsInRange(start, end))
+    ),
+    { initialValue: [] as PickList[] }
+  );
+
+  private readonly packingLists = toSignal(
+    toObservable(this.todayAndRangeWindow).pipe(
+      switchMap(({ start, end }) => this.packingListService.getPackingListsInRange(start, end))
+    ),
+    { initialValue: [] as PackingList[] }
+  );
+
+  private readonly deliveryChallans = toSignal(
+    toObservable(this.todayAndRangeWindow).pipe(
+      switchMap(({ start, end }) => this.deliveryChallanService.getDeliveryChallansInRange(start, end))
+    ),
+    { initialValue: [] as DeliveryChallan[] }
+  );
+
+  private readonly invoices = toSignal(
+    toObservable(this.todayAndRangeWindow).pipe(
+      switchMap(({ start, end }) => this.invoiceService.getInvoicesInRange(start, end))
+    ),
+    { initialValue: [] as Invoice[] }
   );
 
   readonly isCurrentMonthFilter = computed(() =>
