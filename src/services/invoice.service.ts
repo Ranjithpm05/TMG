@@ -92,9 +92,24 @@ export class InvoiceService {
     return cached;
   }
 
+  // Also matches a consolidated (multiple-DC) invoice that only carries this
+  // Packing List inside its `packingListIds` array — the legacy single-DC
+  // flow's "Invoice Already Generated" dialog otherwise wouldn't find it
+  // when this Packing List was a secondary, not primary, member. Same
+  // dual-query-then-dedupe idiom as getInvoicesByDCIdsOnce below.
   async getInvoicesByPackingListIdOnce(packingListId: string): Promise<Invoice[]> {
-    const snap = await getDocs(query(this.invoicesRef, where('packingListId', '==', packingListId)));
-    return snap.docs.map((d) => this.normalize({ id: d.id, ...d.data() }));
+    const [exactSnap, arraySnap] = await Promise.all([
+      getDocs(query(this.invoicesRef, where('packingListId', '==', packingListId))),
+      getDocs(query(this.invoicesRef, where('packingListIds', 'array-contains', packingListId))),
+    ]);
+    const byId = new Map<string, Invoice>();
+    for (const snap of [exactSnap, arraySnap]) {
+      for (const d of snap.docs) {
+        const inv = this.normalize({ id: d.id, ...d.data() });
+        byId.set(inv.id!, inv);
+      }
+    }
+    return [...byId.values()];
   }
 
   // Chunked (Firestore 'in'/'array-contains-any' cap at 30 values) lookup of
@@ -137,7 +152,7 @@ export class InvoiceService {
   // being consolidated into this single Invoice; each gets invoiceId/invoiceNo
   // stamped back so DC-keyed lookups (reports, e-Invoice) still resolve it.
   async createInvoice(
-    input: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceSeq' | 'invoiceDate' | 'createdAt' | 'updatedAt'> & { dcIds: string[] },
+    input: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceSeq' | 'invoiceDate' | 'createdAt' | 'updatedAt' | 'packingListIds'> & { dcIds: string[] },
     options?: { allowDuplicate?: boolean },
   ): Promise<Invoice> {
     if (!input.dcIds.length) throw new Error('dc_not_found');
@@ -163,6 +178,7 @@ export class InvoiceService {
       const invoiceData = {
         ...input,
         dcId: input.dcId ?? input.dcIds[0],
+        packingListIds: [input.packingListId],
         invoiceNo,
         invoiceSeq: nextSeq,
         invoiceDate: serverTimestamp(),
@@ -189,6 +205,80 @@ export class InvoiceService {
     // doc(s) and the Packing List doc — invalidate both caches too so a
     // subsequent Packing List/e-Invoice screen visit doesn't show them as
     // still not-yet-invoiced.
+    this.deliveryChallanService.invalidateCache();
+    this.packingListService.invalidateCache();
+    return { id: invoiceDocRef.id, ...data };
+  }
+
+  // Sibling to createInvoice() above for the "multiple DC → single Invoice"
+  // feature (PackingListComponent.confirmMultiDCInvoice) — deliberately a
+  // separate method rather than a generalization of createInvoice() so the
+  // existing single-DC-per-Packing-List flow is not touched at all.
+  //
+  // Unlike createInvoice(), the DCs here can belong to several different
+  // Packing Lists (one each, since DC:PackingList is 1:1 — see
+  // DeliveryChallanService.createDC), so the "at most one Invoice" gate
+  // checks every one of those DCs AND every one of their Packing Lists
+  // inside the same transaction, and stamps invoiceId back onto all of
+  // them. There is no `allowDuplicate` override here (unlike createInvoice) —
+  // this flow's whole premise is that an already-invoiced DC must never be
+  // picked again, with no "generate a second invoice anyway" escape hatch.
+  async createInvoiceFromDCs(
+    input: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceSeq' | 'invoiceDate' | 'createdAt' | 'updatedAt' | 'packingListId' | 'packingListIds'> & {
+      dcIds: string[];
+      packingListIds: string[];
+    },
+  ): Promise<Invoice> {
+    if (!input.dcIds.length) throw new Error('dc_not_found');
+    const dcRefs = input.dcIds.map((id) => doc(this.firestore, `deliveryChallans/${id}`));
+    const packingListIds = [...new Set(input.packingListIds.filter(Boolean))];
+    const packingListRefs = packingListIds.map((id) => doc(this.firestore, `packingLists/${id}`));
+    const counterRef = doc(this.firestore, 'counters/invoiceCounter');
+    const invoiceDocRef = doc(this.invoicesRef);
+    const fyCode = this.getFyCode();
+
+    const data = await runTransaction(this.firestore, async (transaction) => {
+      const dcSnaps = await Promise.all(dcRefs.map((ref) => transaction.get(ref)));
+      if (dcSnaps.some((snap) => !snap.exists())) throw new Error('dc_not_found');
+      if (dcSnaps.some((snap) => snap.data()?.['invoiceId'])) throw new Error('already_has_invoice');
+
+      const packingListSnaps = await Promise.all(packingListRefs.map((ref) => transaction.get(ref)));
+      if (packingListSnaps.some((snap) => snap.exists() && snap.data()?.['invoiceId'])) throw new Error('already_has_invoice');
+
+      const counterSnap = await transaction.get(counterRef);
+      const currentSeq = counterSnap.exists() ? (Number(counterSnap.data()?.['seq']) || 0) : 0;
+      const nextSeq = currentSeq + 1;
+
+      const invoiceNo = 'TMGC' + fyCode + '-' + String(nextSeq).padStart(4, '0');
+      const invoiceData = {
+        ...input,
+        dcId: input.dcIds[0],
+        packingListId: packingListIds[0] ?? '',
+        packingListIds,
+        invoiceNo,
+        invoiceSeq: nextSeq,
+        invoiceDate: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      transaction.set(invoiceDocRef, this.stripUndefined(invoiceData));
+      for (const dcRef of dcRefs) {
+        transaction.update(dcRef, { invoiceId: invoiceDocRef.id, invoiceNo, updatedAt: serverTimestamp() });
+      }
+      for (const packingListRef of packingListRefs) {
+        transaction.update(packingListRef, { invoiceId: invoiceDocRef.id, updatedAt: serverTimestamp() });
+      }
+      if (counterSnap.exists()) {
+        transaction.update(counterRef, { seq: nextSeq, updatedAt: serverTimestamp() });
+      } else {
+        transaction.set(counterRef, { seq: nextSeq, fy: fyCode, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      }
+
+      return invoiceData;
+    });
+
+    this.invalidateCache();
     this.deliveryChallanService.invalidateCache();
     this.packingListService.invalidateCache();
     return { id: invoiceDocRef.id, ...data };
@@ -318,6 +408,9 @@ export class InvoiceService {
         : (raw?.dcId ? [String(raw.dcId)] : []),
       packingListId: String(raw?.packingListId ?? ''),
       packingListNo: String(raw?.packingListNo ?? ''),
+      packingListIds: Array.isArray(raw?.packingListIds) && raw.packingListIds.length
+        ? raw.packingListIds.map((s: any) => String(s))
+        : (raw?.packingListId ? [String(raw.packingListId)] : []),
       salesOrderIds: Array.isArray(raw?.salesOrderIds) ? raw.salesOrderIds.map(String) : [],
       salesNos: Array.isArray(raw?.salesNos) ? raw.salesNos.map(String) : [],
       orderNo: String(raw?.orderNo ?? ''),

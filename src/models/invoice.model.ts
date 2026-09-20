@@ -38,6 +38,11 @@ export interface Invoice {
   dcIds: string[];
   packingListId: string;
   packingListNo: string;
+  // Every Packing List represented by dcIds — normally just [packingListId],
+  // but a "multiple DC → single Invoice" consolidation (see
+  // PackingListComponent.confirmMultiDCInvoice) can span several Packing
+  // Lists, since DC:PackingList is 1:1. Always includes packingListId.
+  packingListIds: string[];
   salesOrderIds: string[];
   salesNos: string[];
   // Customer PO Number(s) — merged from the invoiced DC(s)' own orderNo (see

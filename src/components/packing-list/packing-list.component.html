@@ -52,6 +52,12 @@
             Combine Pick Lists
           </button>
         }
+        @if (listTab() === 'dc-history') {
+          <button (click)="openMultiInvoiceFlow()"
+            class="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap">
+            Create Single Invoice
+          </button>
+        }
       </div>
 
       @if (isLoading()) {
@@ -469,6 +475,128 @@
           <button (click)="confirmCombinePackingList()" [disabled]="isGenerating() || combineSelectionTotals().count === 0"
             class="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors">
             {{isGenerating() ? 'Combining...' : 'Combine ' + combineSelectionTotals().count + ' Picking List' + (combineSelectionTotals().count !== 1 ? 's' : '')}}
+          </button>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       MULTI-INVOICE VIEW — multiple Delivery Challans → one Invoice
+  ═══════════════════════════════════════════════════════════════════ -->
+  @else if (mode() === 'multi-invoice') {
+    <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4 mb-5">
+        <div>
+          <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Create Single Invoice</h2>
+          <p class="text-sm text-gray-500 mt-1">Select a customer, then choose the not-yet-invoiced Delivery Challans to consolidate into one Invoice.</p>
+        </div>
+        <button (click)="cancelMultiInvoice()" class="px-4 py-2 border border-gray-300 text-gray-600 text-sm font-semibold rounded-lg hover:bg-gray-50 transition-colors">
+          Cancel
+        </button>
+      </div>
+
+      @if (!multiInvoiceClientId()) {
+        <!-- Step 1: choose a customer -->
+        @if (invoiceEligibleCustomers().length === 0) {
+          <div class="text-center text-sm text-gray-500 py-10">
+            No un-invoiced Delivery Challans are currently available.
+          </div>
+        } @else {
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            @for (customer of invoiceEligibleCustomers(); track customer.clientId) {
+              <button (click)="selectMultiInvoiceCustomer(customer.clientId)"
+                class="text-left px-4 py-3 border border-gray-200 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition-colors">
+                <div class="font-semibold text-gray-800">{{customer.clientName}}</div>
+              </button>
+            }
+          </div>
+        }
+      } @else {
+        <!-- Step 2: choose Delivery Challans for the selected customer -->
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <button (click)="multiInvoiceClientId.set(null)" class="text-sm text-purple-600 hover:text-purple-800 font-medium">
+            &larr; Change Customer
+          </button>
+        </div>
+
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-10"></th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">DC No.</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Order No.</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Packing List</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Qty</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Boxes</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white">
+              @for (dc of dcsForSelectedInvoiceCustomer(); track dc.id) {
+                <tr class="hover:bg-gray-50 cursor-pointer" (click)="toggleDCForInvoice(dc.id ?? '')">
+                  <td class="px-4 py-3 text-center" (click)="$event.stopPropagation()">
+                    <input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                      [checked]="isDCSelectedForInvoice(dc.id ?? '')"
+                      (change)="toggleDCForInvoice(dc.id ?? '')">
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="font-semibold text-gray-800">{{dc.dcNo}}</div>
+                    <div class="text-xs text-gray-400 mt-0.5">{{formatDateTime(dc.createdAt)}}</div>
+                  </td>
+                  <td class="px-4 py-3 text-xs text-gray-600">{{dc.orderNo || dc.salesNos.join(', ') || '-'}}</td>
+                  <td class="px-4 py-3 text-xs text-gray-600">{{dc.packingListNo}}</td>
+                  <td class="px-4 py-3 text-center font-bold text-green-700">{{dc.totalQty}}</td>
+                  <td class="px-4 py-3 text-center font-semibold text-teal-700">{{dc.boxCount}}</td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="6" class="px-4 py-10 text-center text-sm text-gray-500">
+                    No eligible Delivery Challans for this customer.
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (multiInvoiceSelectionTotals().count > 0) {
+          <div class="mt-5 rounded-lg border border-gray-200 overflow-hidden">
+            <div class="bg-purple-50 px-4 py-2 text-xs font-semibold text-purple-700 uppercase">Item Preview (merged across selected DCs)</div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-sm">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Product</th>
+                    <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Style</th>
+                    <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Color</th>
+                    <th class="px-4 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Qty</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 bg-white">
+                  @for (item of multiInvoiceItemPreview(); track item.partName + item.styleNo + item.color) {
+                    <tr>
+                      <td class="px-4 py-2 text-gray-800">{{item.partName}}</td>
+                      <td class="px-4 py-2 text-gray-600">{{item.styleNo || '-'}}</td>
+                      <td class="px-4 py-2 text-gray-600">{{item.color || '-'}}</td>
+                      <td class="px-4 py-2 text-center font-semibold text-green-700">{{item.qty}}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+
+        <div class="mt-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+          <div class="text-sm text-gray-700">
+            <strong>{{multiInvoiceSelectionTotals().count}}</strong> DC{{multiInvoiceSelectionTotals().count !== 1 ? 's' : ''}} selected
+            &middot; <strong>{{multiInvoiceSelectionTotals().totalQty}}</strong> pcs
+            &middot; <strong>{{multiInvoiceSelectionTotals().totalBoxes}}</strong> boxes
+          </div>
+          <button (click)="confirmMultiDCInvoice()" [disabled]="isGeneratingInvoice() || multiInvoiceSelectionTotals().count === 0"
+            class="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors">
+            {{isGeneratingInvoice() ? 'Generating...' : 'Create Invoice from ' + multiInvoiceSelectionTotals().count + ' DC' + (multiInvoiceSelectionTotals().count !== 1 ? 's' : '')}}
           </button>
         </div>
       }

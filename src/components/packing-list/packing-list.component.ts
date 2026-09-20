@@ -52,7 +52,7 @@ import {
   saveMrpLabelSettings,
 } from '../../services/mrp-label-zpl.util';
 
-type ViewMode = 'list' | 'view' | 'live-pack' | 'combine' | 'box-label-print' | 'mrp-label-print';
+type ViewMode = 'list' | 'view' | 'live-pack' | 'combine' | 'multi-invoice' | 'box-label-print' | 'mrp-label-print';
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', '6XL', 'Free Size'];
 
@@ -148,6 +148,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
   // ─── Combine (multiple Pick Lists → one Packing List) ─────────────────────
   combineClientId = signal<string | null>(null);
   selectedPickListIdsForCombine = signal<Set<string>>(new Set());
+
+  // ─── Multi-invoice (multiple DCs → one Invoice) ────────────────────────────
+  multiInvoiceClientId = signal<string | null>(null);
+  selectedDcIdsForInvoice = signal<Set<string>>(new Set());
 
   // ─── Box Label print (QZ Tray + ZPL thermal printing) ──────────────────────
   boxLabelPackingList = signal<PackingList | null>(null);
@@ -313,9 +317,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
     return map;
   });
 
+  // Indexed by every Packing List the invoice covers (not just the primary
+  // packingListId) so a consolidated multi-DC invoice shows "Invoiced" for
+  // all of its Packing Lists here, not just the first one.
   private invoiceByPackingListId = computed(() => {
     const map = new Map<string, Invoice>();
-    for (const inv of this.invoices()) map.set(inv.packingListId, inv);
+    for (const inv of this.invoices()) {
+      for (const id of inv.packingListIds.length ? inv.packingListIds : [inv.packingListId]) map.set(id, inv);
+    }
     return map;
   });
 
@@ -336,6 +345,59 @@ export class PackingListComponent implements OnInit, OnDestroy {
         || dc.salesNos.some((s) => s.toLowerCase().includes(term))
         || dc.packingListNo.toLowerCase().includes(term);
     });
+  });
+
+  // ─── Multi-invoice (multiple DCs → one Invoice) picker ─────────────────────
+
+  // A DC has no `status` field in this system — !invoiceNo is the only real
+  // eligibility signal (there is also no "cancelled DC" concept to exclude).
+  invoiceEligibleDCs = computed(() => this.deliveryChallans().filter((dc) => !dc.invoiceNo));
+
+  invoiceEligibleCustomers = computed((): { clientId: string; clientName: string }[] => {
+    const map = new Map<string, string>();
+    for (const dc of this.invoiceEligibleDCs()) {
+      if (!dc.clientId) continue;
+      if (!map.has(dc.clientId)) map.set(dc.clientId, dc.clientName);
+    }
+    return [...map.entries()]
+      .map(([clientId, clientName]) => ({ clientId, clientName }))
+      .sort((a, b) => a.clientName.localeCompare(b.clientName, undefined, { numeric: true }));
+  });
+
+  dcsForSelectedInvoiceCustomer = computed(() => {
+    const clientId = this.multiInvoiceClientId();
+    if (!clientId) return [];
+    return this.invoiceEligibleDCs().filter((dc) => dc.clientId === clientId);
+  });
+
+  selectedDCsForInvoice = computed(() =>
+    this.dcsForSelectedInvoiceCustomer().filter((dc) => this.selectedDcIdsForInvoice().has(dc.id ?? ''))
+  );
+
+  multiInvoiceSelectionTotals = computed(() => {
+    const selected = this.selectedDCsForInvoice();
+    return {
+      count: selected.length,
+      totalQty: selected.reduce((sum, dc) => sum + (dc.totalQty || 0), 0),
+      totalBoxes: selected.reduce((sum, dc) => sum + (dc.boxCount || 0), 0),
+    };
+  });
+
+  // Price-free preview (no client/margin fetch needed to render the picker
+  // screen) — groups items across every selected DC by product/style/color
+  // and sums quantity, satisfying "show item details before creating the
+  // invoice" without waiting on an async call.
+  multiInvoiceItemPreview = computed((): { partName: string; styleNo: string; color: string; qty: number }[] => {
+    const map = new Map<string, { partName: string; styleNo: string; color: string; qty: number }>();
+    for (const dc of this.selectedDCsForInvoice()) {
+      for (const item of dc.items) {
+        const key = [item.partName, item.styleNo, item.color].join('|');
+        const existing = map.get(key);
+        if (existing) existing.qty += item.total;
+        else map.set(key, { partName: item.partName, styleNo: item.styleNo, color: item.color, qty: item.total });
+      }
+    }
+    return [...map.values()].sort((a, b) => a.partName.localeCompare(b.partName, undefined, { numeric: true }));
   });
 
   activeCarton = computed(() => {
@@ -745,6 +807,261 @@ export class PackingListComponent implements OnInit, OnDestroy {
       await Swal.fire({ icon: 'error', title: 'Generation Failed', text: msg });
     } finally {
       this.isGenerating.set(false);
+    }
+  }
+
+  // ─── Multi-invoice (multiple DCs → one Invoice) ────────────────────────────
+
+  openMultiInvoiceFlow() {
+    this.multiInvoiceClientId.set(null);
+    this.selectedDcIdsForInvoice.set(new Set());
+    this.mode.set('multi-invoice');
+  }
+
+  cancelMultiInvoice() {
+    this.multiInvoiceClientId.set(null);
+    this.selectedDcIdsForInvoice.set(new Set());
+    this.mode.set('list');
+  }
+
+  selectMultiInvoiceCustomer(clientId: string) {
+    this.multiInvoiceClientId.set(clientId);
+    this.selectedDcIdsForInvoice.set(new Set());
+  }
+
+  toggleDCForInvoice(dcId: string) {
+    this.selectedDcIdsForInvoice.update((selected) => {
+      const next = new Set(selected);
+      if (next.has(dcId)) next.delete(dcId); else next.add(dcId);
+      return next;
+    });
+  }
+
+  isDCSelectedForInvoice(dcId: string): boolean {
+    return this.selectedDcIdsForInvoice().has(dcId);
+  }
+
+  async confirmMultiDCInvoice(): Promise<void> {
+    const clientId = this.multiInvoiceClientId();
+    const selected = this.selectedDCsForInvoice();
+    if (!clientId || selected.length === 0 || this.isGeneratingInvoice()) return;
+
+    // Defense-in-depth — the picker already only shows one customer's
+    // not-yet-invoiced DCs, but signals can be stale (another tab/user
+    // invoiced one in the meantime).
+    if (selected.some((dc) => dc.clientId !== clientId)) {
+      await Swal.fire({ icon: 'error', title: 'Error', text: 'All selected Delivery Challans must belong to the same customer.' });
+      return;
+    }
+    if (selected.some((dc) => !!dc.invoiceNo)) {
+      await Swal.fire({ icon: 'error', title: 'Already Invoiced', text: 'One or more selected Delivery Challans have already been invoiced. Refresh and try again.' });
+      await this.refreshDeliveryChallans();
+      return;
+    }
+
+    const primaryDc = selected[0];
+    const invoiceClient = await this.clientService.getClientForDC(clientId, primaryDc.clientName);
+    const marginPct = invoiceClient?.marginPct ?? 0;
+    const clientDiscountPct = invoiceClient?.discountPct ?? 0;
+
+    const { value: formValues } = await Swal.fire({
+      title: 'Invoice Settings',
+      html: '<div style="text-align:left;font-size:13px">'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Default HSN/SAC Code (used only if a product isn\'t in the standard list)</label>'
+        + '<input id="minv-hsn" class="swal2-input" style="margin:0;width:100%" value="62059090"></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Discount % (from Client Master)</label>'
+        + '<input class="swal2-input" style="margin:0;width:100%;background:#f3f4f6" value="' + clientDiscountPct + '" disabled></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Tax Rate % (total GST)</label>'
+        + '<input id="minv-tax" type="number" class="swal2-input" style="margin:0;width:100%" value="5"></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Vehicle No.</label>'
+        + '<input id="minv-vehicle" class="swal2-input" style="margin:0;width:100%" value=""></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Document No.</label>'
+        + '<input id="minv-docno" class="swal2-input" style="margin:0;width:100%" value=""></div>'
+        + '<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Destination</label>'
+        + '<input id="minv-dest" class="swal2-input" style="margin:0;width:100%" value="' + (primaryDc?.place || primaryDc.clientName || '') + '"></div>'
+        + '</div>',
+      showCancelButton: true,
+      confirmButtonText: 'Generate Invoice',
+      confirmButtonColor: '#4f46e5',
+      preConfirm: () => ({
+        hsnSac: (document.getElementById('minv-hsn') as HTMLInputElement).value.trim() || '62059090',
+        taxRate: Number((document.getElementById('minv-tax') as HTMLInputElement).value) || 5,
+        vehicleNo: (document.getElementById('minv-vehicle') as HTMLInputElement).value.trim(),
+        docNo: (document.getElementById('minv-docno') as HTMLInputElement).value.trim(),
+        destination: (document.getElementById('minv-dest') as HTMLInputElement).value.trim(),
+      }),
+    });
+    if (!formValues) return;
+
+    this.isGeneratingInvoice.set(true);
+    try {
+      // Re-fetch fresh copies right before writing — guards against one of
+      // the selected DCs having been invoiced elsewhere between selection
+      // and this click.
+      const dcs = await this.dcService.getDCsByIdsOnce(selected.map((dc) => dc.id!));
+      if (dcs.length !== selected.length) throw new Error('dc_not_found');
+      if (dcs.some((dc) => !!dc.invoiceNo)) throw new Error('already_has_invoice');
+
+      const { taxRate, hsnSac: defaultHsnSac } = formValues;
+      const discountPct = clientDiscountPct;
+      const halfTax = taxRate / 2;
+
+      // Same per-DC-item, per-size-MRP split as the single-DC flow
+      // (generateInvoice) — see the comment there for why.
+      const rawItems = dcs.flatMap((dc) => dc.items.flatMap((dcItem) => {
+        const qtyByMrp = new Map<number, number>();
+        for (const [size, qty] of Object.entries(dcItem.sizeQty)) {
+          const mrp = dcItem.mrpBySize?.[size] ?? dcItem.mrp;
+          qtyByMrp.set(mrp, (qtyByMrp.get(mrp) ?? 0) + qty);
+        }
+        if (qtyByMrp.size === 0) qtyByMrp.set(dcItem.mrp, dcItem.total);
+        const hsnSac = resolveHsnCode(dcItem.partName, defaultHsnSac);
+        return [...qtyByMrp.entries()].map(([mrp, quantity]) => {
+          const price = priceAfterMargin(mrp, marginPct);
+          const amount = Math.round(quantity * price * 100) / 100;
+          return {
+            description: dcItem.partName,
+            styleNo: dcItem.styleNo || undefined,
+            sleeveType: dcItem.sleeveType || undefined,
+            hsnSac, discountPct, taxRate, mrp, uom: 'NOS', quantity, price, amount,
+          };
+        });
+      }));
+
+      // Merge identical lines across DCs (same product/style/HSN/MRP/tax)
+      // into one summed row instead of duplicating them — the same item can
+      // legitimately appear on several DCs being consolidated here.
+      const mergedByKey = new Map<string, typeof rawItems[number]>();
+      for (const item of rawItems) {
+        const key = [item.description, item.styleNo ?? '', item.sleeveType ?? '', item.hsnSac, item.mrp, item.taxRate, item.discountPct].join('|');
+        const existing = mergedByKey.get(key);
+        if (existing) {
+          existing.quantity += item.quantity;
+          existing.amount = Math.round((existing.amount + item.amount) * 100) / 100;
+        } else {
+          mergedByKey.set(key, { ...item });
+        }
+      }
+      const invoiceItems = [...mergedByKey.values()];
+
+      const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+      const discountAmount = Math.round(grossAmount * discountPct / 100 * 100) / 100;
+      const taxableValue = Math.round((grossAmount - discountAmount) * 100) / 100;
+
+      const company = await this.companySettingsService.getCompanySettingsOnce();
+      const shipToDiffers = !!invoiceClient?.shipToAddress && !invoiceClient.shipToSameAsBilling &&
+        invoiceClient.shipToAddress.trim() !== (invoiceClient?.billingAddress ?? '').trim();
+      const { isInterState } = resolveGstPlaceOfSupply(
+        company?.stateCode ?? '',
+        invoiceClient?.gstNo,
+        invoiceClient?.state,
+        shipToDiffers,
+        invoiceClient?.shipToState
+      );
+
+      const cgstAmount = isInterState ? 0 : Math.round(taxableValue * halfTax / 100 * 100) / 100;
+      const sgstAmount = cgstAmount;
+      const igstAmount = isInterState ? Math.round(taxableValue * taxRate / 100 * 100) / 100 : 0;
+      const totalTaxAmount = Math.round((cgstAmount + sgstAmount + igstAmount) * 100) / 100;
+      const rawTotal = taxableValue + totalTaxAmount;
+      const totalAmount = Math.round(rawTotal);
+      const roundOff = Math.round((totalAmount - rawTotal) * 100) / 100;
+
+      const grossByHsn = new Map<string, number>();
+      for (const item of invoiceItems) grossByHsn.set(item.hsnSac, (grossByHsn.get(item.hsnSac) ?? 0) + item.amount);
+      const taxSummary = [...grossByHsn.entries()].map(([hsn, groupGross]) => {
+        const groupTaxable = Math.round((groupGross - groupGross * discountPct / 100) * 100) / 100;
+        const groupCgst = isInterState ? 0 : Math.round(groupTaxable * halfTax / 100 * 100) / 100;
+        const groupIgst = isInterState ? Math.round(groupTaxable * taxRate / 100 * 100) / 100 : 0;
+        return {
+          hsnSac: hsn,
+          taxableValue: groupTaxable,
+          cgstRate: isInterState ? 0 : halfTax, cgstAmount: groupCgst,
+          sgstRate: isInterState ? 0 : halfTax, sgstAmount: groupCgst,
+          igstRate: isInterState ? taxRate : 0, igstAmount: groupIgst,
+        };
+      });
+
+      const mergedSalesOrderIds = [...new Set(dcs.flatMap((dc) => dc.salesOrderIds))];
+      const mergedSalesNos = [...new Set(dcs.flatMap((dc) => dc.salesNos))];
+      const mergedOrderNos = [...new Set(
+        dcs.flatMap((dc) => (dc.orderNo || '').split(',').map((s) => s.trim()).filter(Boolean))
+      )];
+      const packingListIds = [...new Set(dcs.map((dc) => dc.packingListId).filter(Boolean))];
+      const packingListNo = [...new Set(dcs.map((dc) => dc.packingListNo).filter(Boolean))].join(', ');
+
+      const invoice = await this.invoiceService.createInvoiceFromDCs({
+        dcIds: dcs.map((dc) => dc.id!),
+        dcId: dcs[0].id!,
+        dcNo: dcs.map((dc) => dc.dcNo).join(', '),
+        packingListNo,
+        salesOrderIds: mergedSalesOrderIds,
+        salesNos: mergedSalesNos,
+        orderNo: mergedOrderNos.join(', '),
+        clientId,
+        clientName: primaryDc.clientName,
+        clientAddress: invoiceClient?.billingAddress ?? '',
+        clientPlace: invoiceClient?.place ?? '',
+        clientState: invoiceClient?.state ?? '',
+        clientZipCode: invoiceClient?.zipCode ?? '',
+        clientPhone: invoiceClient?.mobile ?? '',
+        clientGstin: invoiceClient?.gstNo ?? '',
+        clientShipToAddress: invoiceClient?.shipToAddress || invoiceClient?.billingAddress || '',
+        clientShipToPlace: invoiceClient?.shipToPlace || invoiceClient?.place || '',
+        clientShipToState: invoiceClient?.shipToState || invoiceClient?.state || '',
+        clientShipToZipCode: invoiceClient?.shipToZipCode || invoiceClient?.zipCode || '',
+        destination: formValues.destination,
+        transport: primaryDc.transport ?? '',
+        transportId: primaryDc.transportId ?? undefined,
+        transportAddress: primaryDc.transportAddress ?? undefined,
+        transportGstNo: primaryDc.transportGstNo ?? undefined,
+        vehicleNo: formValues.vehicleNo,
+        docNo: formValues.docNo,
+        shipmentDate: primaryDc.createdAt ?? null,
+        totalPkgs: dcs.reduce((s, dc) => s + dc.boxCount, 0),
+        agentName: primaryDc.agentName ?? '',
+        items: invoiceItems,
+        grossAmount, discountPct, discountAmount, taxableValue,
+        cgstRate: isInterState ? 0 : halfTax, cgstAmount,
+        sgstRate: isInterState ? 0 : halfTax, sgstAmount,
+        igstRate: isInterState ? taxRate : 0, igstAmount, totalTaxAmount, roundOff, totalAmount,
+        amountInWords: this.amountToWords(totalAmount),
+        taxSummary,
+        packingListIds,
+      });
+
+      await Promise.all([this.refreshDeliveryChallans(), this.refreshInvoices(), this.refreshPickListsAndPackingLists()]);
+      this.multiInvoiceClientId.set(null);
+      this.selectedDcIdsForInvoice.set(new Set());
+      this.listTab.set('invoices');
+      this.mode.set('list');
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Invoice ' + invoice.invoiceNo + ' Generated!',
+        html: '<p style="font-size:13px">' + invoice.invoiceNo + ': <strong>&#x20B9;' + invoice.totalAmount.toLocaleString('en-IN') + '</strong> from ' + dcs.length + ' Delivery Challans</p>',
+        showConfirmButton: true,
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: 'Print Invoice',
+        denyButtonText: 'Download Excel',
+        cancelButtonText: 'Close',
+        confirmButtonColor: '#4f46e5',
+        denyButtonColor: '#059669',
+      }).then(async (res) => {
+        if (res.isConfirmed) await this.reprintInvoice(invoice);
+        if (res.isDenied) await this.downloadInvoiceExcel(invoice);
+      });
+    } catch (err: any) {
+      const text = err?.message === 'already_has_invoice'
+        ? 'One or more selected Delivery Challans have already been invoiced.'
+        : err?.message === 'dc_not_found'
+          ? 'One or more selected Delivery Challans could not be found. Refresh and try again.'
+          : err?.message ?? 'Unable to generate invoice.';
+      await Swal.fire({ icon: 'error', title: 'Invoice Generation Failed', text });
+      await this.refreshDeliveryChallans();
+    } finally {
+      this.isGeneratingInvoice.set(false);
     }
   }
 
