@@ -18,7 +18,8 @@ import { Observable } from 'rxjs';
 import type { GoodsInward, GoodsInwardItem } from '../models/goods-inward.model';
 import { fetchAllDocs } from './firestore-pagination.util';
 import { InventoryService } from './inventory.service';
-import { cachedOnce, cachedRangeQuery } from './range-cache.util';
+import { cachedRangeQuery } from './range-cache.util';
+import { PersistentCollectionCache } from './persistent-cache.util';
 
 export type ApproveGrnOutcome = 'approved' | 'already-approved' | 'in-progress';
 
@@ -34,7 +35,16 @@ export class GoodsInwardService {
   // Read repeatedly (Dashboard on every visit, this screen's own ngOnInit +
   // refresh-after-every-write) — cached one-time read, invalidated by every
   // write in this service below, same pattern as ClientService/DesignService.
-  private grnsCache$: Observable<GoodsInward[]> | null = null;
+  //
+  // Also persisted to localStorage (PersistentCollectionCache, 5 min TTL) — see
+  // SalesOrderService.salesOrdersCache for why (read-quota cost-reduction pass).
+  // invalidate() still clears the persisted snapshot, so a write-triggered
+  // refresh gets genuinely fresh data regardless of the TTL.
+  private readonly grnsCache = new PersistentCollectionCache<GoodsInward>(
+    'tmg:cache:goodsInwards:v1',
+    () => fetchAllDocs(this.grnRef, [orderBy('createdAt', 'desc')], (d) => ({ id: d.id, ...d.data() } as GoodsInward)),
+    5 * 60 * 1000
+  );
 
   // getGoodsInwardsInRange() is keyed by exact (start, end) pair — same
   // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
@@ -44,7 +54,7 @@ export class GoodsInwardService {
   private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
 
   private invalidateGrnsCache(): void {
-    this.grnsCache$ = null;
+    this.grnsCache.invalidate();
     this.grnsRangeCache.clear();
   }
 
@@ -72,11 +82,7 @@ export class GoodsInwardService {
   // passed that count; Dashboard/Reports need the complete set for correct
   // totals, not just the most recent page).
   getGoodsInwards(): Observable<GoodsInward[]> {
-    return cachedOnce(
-      () => this.grnsCache$,
-      (obs) => { this.grnsCache$ = obs; },
-      () => fetchAllDocs(this.grnRef, [orderBy('createdAt', 'desc')], (d) => ({ id: d.id, ...d.data() } as GoodsInward))
-    );
+    return this.grnsCache.get$();
   }
 
   // 🔹 Date-bounded one-time query — see getGoodsInwards() above for why this

@@ -18,7 +18,8 @@ import { Observable } from 'rxjs';
 import { DCItem, DeliveryChallan } from '../models/delivery-challan.model';
 import { fetchAllDocs } from './firestore-pagination.util';
 import { PackingListService } from './packing-list.service';
-import { cachedOnce, cachedRangeQuery } from './range-cache.util';
+import { cachedRangeQuery } from './range-cache.util';
+import { PersistentCollectionCache } from './persistent-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class DeliveryChallanService {
@@ -29,7 +30,16 @@ export class DeliveryChallanService {
   // Read repeatedly (Packing List and e-Invoice screens, every DC-generation
   // refresh) — cached one-time read, invalidated by createDC/updateDCItems below,
   // same pattern as ClientService/DesignService/InventoryService.
-  private dcsCache$: Observable<DeliveryChallan[]> | null = null;
+  //
+  // Also persisted to localStorage (PersistentCollectionCache, 5 min TTL) — see
+  // SalesOrderService.salesOrdersCache for why (read-quota cost-reduction pass).
+  // invalidate() still clears the persisted snapshot, so a write-triggered
+  // refresh gets genuinely fresh data regardless of the TTL.
+  private readonly dcsCache = new PersistentCollectionCache<DeliveryChallan>(
+    'tmg:cache:deliveryChallans:v1',
+    () => fetchAllDocs(this.dcRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() })),
+    5 * 60 * 1000
+  );
 
   // getDeliveryChallansInRange() is keyed by exact (start, end) pair — same
   // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
@@ -43,7 +53,7 @@ export class DeliveryChallanService {
   // invoice, without going through this service — it must invalidate this
   // cache too or the DC would keep showing as not-yet-invoiced.
   invalidateCache(): void {
-    this.dcsCache$ = null;
+    this.dcsCache.invalidate();
     this.dcsRangeCache.clear();
   }
 
@@ -51,11 +61,7 @@ export class DeliveryChallanService {
   // limit(100) here silently truncated the list once delivery challans passed
   // that count. The Packing List screen snapshots this into a local list.
   getDeliveryChallans(): Observable<DeliveryChallan[]> {
-    return cachedOnce(
-      () => this.dcsCache$,
-      (obs) => { this.dcsCache$ = obs; },
-      () => fetchAllDocs(this.dcRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
-    );
+    return this.dcsCache.get$();
   }
 
   // Date-bounded one-time query — see getDeliveryChallans() above for why this

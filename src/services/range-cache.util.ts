@@ -39,29 +39,3 @@ export function cachedRangeQuery<T>(
   }
   return cached;
 }
-
-/**
- * Same failure-resilience fix as cachedRangeQuery(), for the single-field
- * "read the whole unbounded collection once, cache in a nullable Observable
- * field" pattern used by getInvoices()/getGoodsInwards()/getDeliveryChallans()/
- * getSalesOrders() etc. (as opposed to the Map-keyed date-range variant).
- */
-export function cachedOnce<T>(
-  getCurrent: () => Observable<T[]> | null,
-  setCurrent: (obs: Observable<T[]> | null) => void,
-  fetch: () => Promise<T[]>
-): Observable<T[]> {
-  let current = getCurrent();
-  if (!current) {
-    current = from(fetch()).pipe(
-      catchError((err) => {
-        console.error('cachedOnce load failed, serving empty result', err);
-        setCurrent(null);
-        return of([] as T[]);
-      }),
-      shareReplay(1)
-    );
-    setCurrent(current);
-  }
-  return current;
-}

@@ -19,7 +19,8 @@ import { fetchAllDocs } from './firestore-pagination.util';
 import { DeliveryChallanService } from './delivery-challan.service';
 import { PackingListService } from './packing-list.service';
 import { ClientService } from './client.service';
-import { cachedOnce, cachedRangeQuery } from './range-cache.util';
+import { cachedRangeQuery } from './range-cache.util';
+import { PersistentCollectionCache } from './persistent-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class InvoiceService {
@@ -32,7 +33,16 @@ export class InvoiceService {
   // Read repeatedly (e-Invoice and Packing List screens, every generation
   // refresh) — cached one-time read, invalidated by createInvoice/updateInvoice
   // below, same pattern as ClientService/DesignService/InventoryService.
-  private invoicesCache$: Observable<Invoice[]> | null = null;
+  //
+  // Also persisted to localStorage (PersistentCollectionCache, 5 min TTL) — see
+  // SalesOrderService.salesOrdersCache for why (read-quota cost-reduction pass).
+  // invalidate() still clears the persisted snapshot, so a write-triggered
+  // refresh gets genuinely fresh data regardless of the TTL.
+  private readonly invoicesCache = new PersistentCollectionCache<Invoice>(
+    'tmg:cache:invoices:v1',
+    () => fetchAllDocs(this.invoicesRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() })),
+    5 * 60 * 1000
+  );
 
   // getInvoicesInRange() is keyed by exact (start, end) pair, same reasoning
   // (and same generous-bound-then-clear cap) as
@@ -48,7 +58,7 @@ export class InvoiceService {
   // irn/etc. directly onto an invoices/{id} doc without going through this
   // service, and must invalidate this cache too.
   invalidateCache(): void {
-    this.invoicesCache$ = null;
+    this.invoicesCache.invalidate();
     this.invoicesRangeCache.clear();
   }
 
@@ -57,11 +67,7 @@ export class InvoiceService {
   // count. The e-Invoice and Packing List screens snapshot this into a local
   // list and reload manually after their own writes.
   getInvoices(): Observable<Invoice[]> {
-    return cachedOnce(
-      () => this.invoicesCache$,
-      (obs) => { this.invoicesCache$ = obs; },
-      () => fetchAllDocs(this.invoicesRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
-    );
+    return this.invoicesCache.get$();
   }
 
   // Date-bounded one-time query (invoiceDate/createdAt are stamped from the

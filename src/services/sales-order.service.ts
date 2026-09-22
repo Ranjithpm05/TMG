@@ -16,7 +16,8 @@ import {
 import type { SalesOrder } from '../models/sales-order.model';
 import { from, Observable } from 'rxjs';
 import { fetchAllDocs } from './firestore-pagination.util';
-import { cachedOnce, cachedRangeQuery } from './range-cache.util';
+import { cachedRangeQuery } from './range-cache.util';
+import { PersistentCollectionCache } from './persistent-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class SalesOrderService {
@@ -28,7 +29,26 @@ export class SalesOrderService {
     // own "All" view, every write-triggered refresh) — cached one-time read,
     // invalidated by this service's own create/update/delete below, same pattern
     // as ClientService/DesignService/InventoryService.
-    private salesOrdersCache$: Observable<SalesOrder[]> | null = null;
+    //
+    // Also persisted to localStorage (PersistentCollectionCache, 5 min TTL) —
+    // this collection is read in full by several screens and only grows, so a
+    // fresh tab/reload was paying a full re-fetch every time even though the
+    // in-memory cache already avoided re-fetching within one open tab (part of
+    // the read-quota cost-reduction pass — see project memory). invalidate()
+    // still clears the persisted snapshot too, so any write-triggered refresh
+    // gets genuinely fresh data regardless of the TTL.
+    private readonly salesOrdersCache = new PersistentCollectionCache<SalesOrder>(
+        'tmg:cache:salesOrders:v1',
+        async () => {
+            // Spread doc data first, then override with the real Firestore doc id last —
+            // some legacy documents have a stale/blank "id" field stored in their body
+            // (see createSalesOrder), which must never win over the actual doc reference id.
+            const orders = await fetchAllDocs(this.salesOrderRef, [], (d) => ({ ...d.data(), id: d.id } as SalesOrder));
+            await this.healMissingCreatedAt(orders);
+            return orders.sort((a, b) => this.toMillis(b.createdAt) - this.toMillis(a.createdAt));
+        },
+        5 * 60 * 1000
+    );
 
     // getSalesOrdersInRange() is keyed by exact (start, end) pair rather than
     // a single cached value, since different callers legitimately want
@@ -46,7 +66,7 @@ export class SalesOrderService {
     // this service, and must invalidate this cache too or the Pick List screen would
     // keep showing the pre-shipment status until an unrelated cache refresh.
     invalidateCache(): void {
-        this.salesOrdersCache$ = null;
+        this.salesOrdersCache.invalidate();
         this.salesOrdersRangeCache.clear();
     }
 
@@ -74,18 +94,7 @@ export class SalesOrderService {
     // reads this method (same bug class as the Design Master export issue).
     // Sorted client-side instead, which has no such requirement.
     getSalesOrders(): Observable<SalesOrder[]> {
-        return cachedOnce(
-            () => this.salesOrdersCache$,
-            (obs) => { this.salesOrdersCache$ = obs; },
-            async () => {
-                // Spread doc data first, then override with the real Firestore doc id last —
-                // some legacy documents have a stale/blank "id" field stored in their body
-                // (see createSalesOrder), which must never win over the actual doc reference id.
-                const orders = await fetchAllDocs(this.salesOrderRef, [], (d) => ({ ...d.data(), id: d.id } as SalesOrder));
-                await this.healMissingCreatedAt(orders);
-                return orders.sort((a, b) => this.toMillis(b.createdAt) - this.toMillis(a.createdAt));
-            }
-        );
+        return this.salesOrdersCache.get$();
     }
 
     /**

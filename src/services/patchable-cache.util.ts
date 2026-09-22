@@ -22,6 +22,7 @@ export class PatchableCollectionCache<T extends { id?: string }> {
   private subject: ReplaySubject<T[]> | null = null;
   private current: T[] | null = null;
   private loadedAt: number | null = null;
+  private storageWriteTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly loader: () => Promise<T[]>,
@@ -74,6 +75,10 @@ export class PatchableCollectionCache<T extends { id?: string }> {
     this.subject = null;
     this.current = null;
     this.loadedAt = null;
+    if (this.storageWriteTimer !== null) {
+      clearTimeout(this.storageWriteTimer);
+      this.storageWriteTimer = null;
+    }
     this.clearStorage();
   }
 
@@ -90,7 +95,26 @@ export class PatchableCollectionCache<T extends { id?: string }> {
       ? [...this.current, item]
       : this.current.map((x, i) => (i === idx ? item : x));
     this.subject.next(this.current);
-    if (this.loadedAt !== null) this.writeToStorage(this.current, this.loadedAt);
+    this.scheduleStorageWrite();
+  }
+
+  /**
+   * Debounced write-through: a scanning session can call patchOne() dozens of
+   * times a minute (one per unit), and this cache's storageKey collection can
+   * be large (e.g. ~11k-doc inventory) — writing it to localStorage on every
+   * single patch re-serializes the whole array each time, which was blocking
+   * the main thread badly enough to make the app feel frozen during a
+   * scanning burst. Coalesce bursts into one write ~2s after the last patch
+   * instead. Fine to lose the very last write on tab close: it only feeds the
+   * cold-start cache, which is TTL-bounded anyway (see class doc).
+   */
+  private scheduleStorageWrite(): void {
+    if (this.loadedAt === null || !this.storageKey) return;
+    if (this.storageWriteTimer !== null) return;
+    this.storageWriteTimer = setTimeout(() => {
+      this.storageWriteTimer = null;
+      if (this.current && this.loadedAt !== null) this.writeToStorage(this.current, this.loadedAt);
+    }, 2000);
   }
 
   private readFromStorage(ignoreTtl = false): { items: T[]; savedAt: number } | null {

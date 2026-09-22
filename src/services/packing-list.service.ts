@@ -64,8 +64,17 @@ export class PackingListService {
   // quota) traced to per-scan invalidation here and in PickListService.
   // patchPackingListInCache() lets the hot per-unit scan paths update the
   // live cache in place instead.
-  private readonly packingListsCache = new PatchableCollectionCache<PackingList>(() =>
-    fetchAllDocs(this.packingRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePackingList({ id: d.id, ...d.data() }))
+  // Persisted with a 5 min TTL (localStorage) — see InventoryService.inventoryCache
+  // for why: a fresh tab/reload otherwise pays a full re-download of this
+  // ever-growing collection even though the in-memory cache already avoids
+  // re-fetching within one open tab. Safe to persist despite the frequent
+  // patchOne() scan updates below — those writes are debounced (see
+  // PatchableCollectionCache.scheduleStorageWrite()), not one localStorage
+  // write per scan.
+  private readonly packingListsCache = new PatchableCollectionCache<PackingList>(
+    () => fetchAllDocs(this.packingRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePackingList({ id: d.id, ...d.data() })),
+    'tmg:cache:packingLists:v1',
+    5 * 60 * 1000
   );
 
   invalidateCache(): void {
