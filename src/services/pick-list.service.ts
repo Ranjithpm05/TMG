@@ -21,7 +21,7 @@ import {
   writeBatch,
   WriteBatch,
 } from '@angular/fire/firestore';
-import { firstValueFrom, from, Observable, map, shareReplay } from 'rxjs';
+import { firstValueFrom, Observable, map } from 'rxjs';
 import type { SalesOrder } from '../models/sales-order.model';
 import type {
   PickList,
@@ -38,6 +38,7 @@ import { DesignService } from './design.service';
 import { SalesOrderService } from './sales-order.service';
 import { fetchAllDocs } from './firestore-pagination.util';
 import { PatchableCollectionCache } from './patchable-cache.util';
+import { cachedRangeQuery } from './range-cache.util';
 
 type StoredPickList = PickList & {
   orderSummaries?: PickListOrderSummary[];
@@ -94,25 +95,17 @@ export class PickListService {
   // Cached per exact (start, end) pair; see pickListsRangeCache above.
   getPickListsInRange(start: Date, end: Date): Observable<PickList[]> {
     const key = `${start.getTime()}_${end.getTime()}`;
-    let cached = this.pickListsRangeCache.get(key);
-    if (!cached) {
-      if (this.pickListsRangeCache.size >= PickListService.MAX_RANGE_CACHE_ENTRIES) {
-        this.pickListsRangeCache.clear();
-      }
-      cached = from(
-        fetchAllDocs(
-          this.plRef,
-          [
-            where('createdAt', '>=', Timestamp.fromDate(start)),
-            where('createdAt', '<=', Timestamp.fromDate(end)),
-            orderBy('createdAt', 'desc'),
-          ],
-          (d) => this.normalizePickList({ id: d.id, ...d.data() })
-        )
-      ).pipe(shareReplay(1));
-      this.pickListsRangeCache.set(key, cached);
-    }
-    return cached;
+    return cachedRangeQuery(this.pickListsRangeCache, key, PickListService.MAX_RANGE_CACHE_ENTRIES, () =>
+      fetchAllDocs(
+        this.plRef,
+        [
+          where('createdAt', '>=', Timestamp.fromDate(start)),
+          where('createdAt', '<=', Timestamp.fromDate(end)),
+          orderBy('createdAt', 'desc'),
+        ],
+        (d) => this.normalizePickList({ id: d.id, ...d.data() })
+      )
+    );
   }
 
   /** Updates one pick list's cached top-level fields (aggregates, status) already known from a just-committed transaction, without a Firestore round-trip. No-op if the cache hasn't loaded yet. */

@@ -14,10 +14,11 @@ import {
   updateDoc,
   where,
 } from '@angular/fire/firestore';
-import { from, Observable, shareReplay } from 'rxjs';
+import { Observable } from 'rxjs';
 import { DCItem, DeliveryChallan } from '../models/delivery-challan.model';
 import { fetchAllDocs } from './firestore-pagination.util';
 import { PackingListService } from './packing-list.service';
+import { cachedOnce, cachedRangeQuery } from './range-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class DeliveryChallanService {
@@ -50,37 +51,28 @@ export class DeliveryChallanService {
   // limit(100) here silently truncated the list once delivery challans passed
   // that count. The Packing List screen snapshots this into a local list.
   getDeliveryChallans(): Observable<DeliveryChallan[]> {
-    if (!this.dcsCache$) {
-      this.dcsCache$ = from(
-        fetchAllDocs(this.dcRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
-      ).pipe(shareReplay(1));
-    }
-    return this.dcsCache$;
+    return cachedOnce(
+      () => this.dcsCache$,
+      (obs) => { this.dcsCache$ = obs; },
+      () => fetchAllDocs(this.dcRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
+    );
   }
 
   // Date-bounded one-time query — see getDeliveryChallans() above for why this
   // exists. Cached per exact (start, end) pair; see dcsRangeCache above.
   getDeliveryChallansInRange(start: Date, end: Date): Observable<DeliveryChallan[]> {
     const key = `${start.getTime()}_${end.getTime()}`;
-    let cached = this.dcsRangeCache.get(key);
-    if (!cached) {
-      if (this.dcsRangeCache.size >= DeliveryChallanService.MAX_RANGE_CACHE_ENTRIES) {
-        this.dcsRangeCache.clear();
-      }
-      cached = from(
-        fetchAllDocs(
-          this.dcRef,
-          [
-            where('createdAt', '>=', Timestamp.fromDate(start)),
-            where('createdAt', '<=', Timestamp.fromDate(end)),
-            orderBy('createdAt', 'desc'),
-          ],
-          (d) => this.normalize({ id: d.id, ...d.data() })
-        )
-      ).pipe(shareReplay(1));
-      this.dcsRangeCache.set(key, cached);
-    }
-    return cached;
+    return cachedRangeQuery(this.dcsRangeCache, key, DeliveryChallanService.MAX_RANGE_CACHE_ENTRIES, () =>
+      fetchAllDocs(
+        this.dcRef,
+        [
+          where('createdAt', '>=', Timestamp.fromDate(start)),
+          where('createdAt', '<=', Timestamp.fromDate(end)),
+          orderBy('createdAt', 'desc'),
+        ],
+        (d) => this.normalize({ id: d.id, ...d.data() })
+      )
+    );
   }
 
   async getDCsByPackingListIdOnce(packingListId: string): Promise<DeliveryChallan[]> {

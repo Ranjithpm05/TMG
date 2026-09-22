@@ -13,12 +13,13 @@ import {
   updateDoc,
   where,
 } from '@angular/fire/firestore';
-import { from, Observable, shareReplay } from 'rxjs';
+import { Observable } from 'rxjs';
 import { Invoice, InvoiceItem, InvoiceTaxSummary } from '../models/invoice.model';
 import { fetchAllDocs } from './firestore-pagination.util';
 import { DeliveryChallanService } from './delivery-challan.service';
 import { PackingListService } from './packing-list.service';
 import { ClientService } from './client.service';
+import { cachedOnce, cachedRangeQuery } from './range-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class InvoiceService {
@@ -56,12 +57,11 @@ export class InvoiceService {
   // count. The e-Invoice and Packing List screens snapshot this into a local
   // list and reload manually after their own writes.
   getInvoices(): Observable<Invoice[]> {
-    if (!this.invoicesCache$) {
-      this.invoicesCache$ = from(
-        fetchAllDocs(this.invoicesRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
-      ).pipe(shareReplay(1));
-    }
-    return this.invoicesCache$;
+    return cachedOnce(
+      () => this.invoicesCache$,
+      (obs) => { this.invoicesCache$ = obs; },
+      () => fetchAllDocs(this.invoicesRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
+    );
   }
 
   // Date-bounded one-time query (invoiceDate/createdAt are stamped from the
@@ -71,25 +71,17 @@ export class InvoiceService {
   // invoicesRangeCache above.
   getInvoicesInRange(start: Date, end: Date): Observable<Invoice[]> {
     const key = `${start.getTime()}_${end.getTime()}`;
-    let cached = this.invoicesRangeCache.get(key);
-    if (!cached) {
-      if (this.invoicesRangeCache.size >= InvoiceService.MAX_RANGE_CACHE_ENTRIES) {
-        this.invoicesRangeCache.clear();
-      }
-      cached = from(
-        fetchAllDocs(
-          this.invoicesRef,
-          [
-            where('createdAt', '>=', Timestamp.fromDate(start)),
-            where('createdAt', '<=', Timestamp.fromDate(end)),
-            orderBy('createdAt', 'desc'),
-          ],
-          (d) => this.normalize({ id: d.id, ...d.data() })
-        )
-      ).pipe(shareReplay(1));
-      this.invoicesRangeCache.set(key, cached);
-    }
-    return cached;
+    return cachedRangeQuery(this.invoicesRangeCache, key, InvoiceService.MAX_RANGE_CACHE_ENTRIES, () =>
+      fetchAllDocs(
+        this.invoicesRef,
+        [
+          where('createdAt', '>=', Timestamp.fromDate(start)),
+          where('createdAt', '<=', Timestamp.fromDate(end)),
+          orderBy('createdAt', 'desc'),
+        ],
+        (d) => this.normalize({ id: d.id, ...d.data() })
+      )
+    );
   }
 
   // Also matches a consolidated (multiple-DC) invoice that only carries this

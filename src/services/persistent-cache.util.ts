@@ -19,6 +19,7 @@ import { Observable, ReplaySubject } from 'rxjs';
  */
 export class PersistentCollectionCache<T> {
   private subject: ReplaySubject<T[]> | null = null;
+  private current: T[] | null = null;
 
   constructor(
     private readonly storageKey: string,
@@ -33,16 +34,31 @@ export class PersistentCollectionCache<T> {
 
       const cached = this.readFromStorage();
       if (cached) {
+        this.current = cached;
         subject.next(cached);
       } else {
         this.loader()
           .then((items) => {
+            this.current = items;
             this.writeToStorage(items);
             subject.next(items);
           })
           .catch((err) => {
+            // A hard subject.error() here used to kill this Observable for
+            // good — Angular's toSignal() re-throws that on the next signal
+            // read, breaking rendering for every already-open screen (e.g.
+            // Dashboard) until a full page reload, even after the underlying
+            // Firestore issue (e.g. a transient resource-exhausted) clears.
+            // Degrade to last-known data instead — a stale/expired storage
+            // snapshot beats a permanently broken screen — while still
+            // nulling `subject` so the *next* get$() call (new component
+            // instance, or a manual retry) attempts a fresh load rather than
+            // being stuck serving this fallback forever.
+            console.error('PersistentCollectionCache load failed, serving fallback', err);
+            const fallback = this.current ?? this.readFromStorage(true) ?? [];
+            this.current = fallback;
+            subject.next(fallback);
             this.subject = null;
-            subject.error(err);
           });
       }
     }
@@ -52,16 +68,20 @@ export class PersistentCollectionCache<T> {
   /** Drops both the in-memory value and the persisted snapshot — the next get$() does a full Firestore reload. */
   invalidate(): void {
     this.subject = null;
+    this.current = null;
     this.clearStorage();
   }
 
-  private readFromStorage(): T[] | null {
+  private readFromStorage(ignoreTtl = false): T[] | null {
     try {
       const raw = localStorage.getItem(this.storageKey);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as { savedAt?: number; items?: T[] };
       if (typeof parsed?.savedAt !== 'number' || !Array.isArray(parsed.items)) return null;
-      if (Date.now() - parsed.savedAt > this.ttlMs) return null;
+      // ignoreTtl: a load-failure fallback prefers stale data over none —
+      // the normal (non-fallback) path above never passes this, so a fresh
+      // load still only ever serves storage within the configured TTL.
+      if (!ignoreTtl && Date.now() - parsed.savedAt > this.ttlMs) return null;
       return parsed.items;
     } catch {
       // Corrupt entry, storage unavailable (private browsing), or quota

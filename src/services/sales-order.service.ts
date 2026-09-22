@@ -14,8 +14,9 @@ import {
 } from '@angular/fire/firestore';
 
 import type { SalesOrder } from '../models/sales-order.model';
-import { from, Observable, shareReplay } from 'rxjs';
+import { from, Observable } from 'rxjs';
 import { fetchAllDocs } from './firestore-pagination.util';
+import { cachedOnce, cachedRangeQuery } from './range-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class SalesOrderService {
@@ -73,20 +74,18 @@ export class SalesOrderService {
     // reads this method (same bug class as the Design Master export issue).
     // Sorted client-side instead, which has no such requirement.
     getSalesOrders(): Observable<SalesOrder[]> {
-        if (!this.salesOrdersCache$) {
-            this.salesOrdersCache$ = from(
-                fetchAllDocs(this.salesOrderRef, [], (d) =>
-                    // Spread doc data first, then override with the real Firestore doc id last —
-                    // some legacy documents have a stale/blank "id" field stored in their body
-                    // (see createSalesOrder), which must never win over the actual doc reference id.
-                    ({ ...d.data(), id: d.id } as SalesOrder)
-                ).then(async orders => {
-                    await this.healMissingCreatedAt(orders);
-                    return orders.sort((a, b) => this.toMillis(b.createdAt) - this.toMillis(a.createdAt));
-                })
-            ).pipe(shareReplay(1));
-        }
-        return this.salesOrdersCache$;
+        return cachedOnce(
+            () => this.salesOrdersCache$,
+            (obs) => { this.salesOrdersCache$ = obs; },
+            async () => {
+                // Spread doc data first, then override with the real Firestore doc id last —
+                // some legacy documents have a stale/blank "id" field stored in their body
+                // (see createSalesOrder), which must never win over the actual doc reference id.
+                const orders = await fetchAllDocs(this.salesOrderRef, [], (d) => ({ ...d.data(), id: d.id } as SalesOrder));
+                await this.healMissingCreatedAt(orders);
+                return orders.sort((a, b) => this.toMillis(b.createdAt) - this.toMillis(a.createdAt));
+            }
+        );
     }
 
     /**
@@ -168,27 +167,19 @@ export class SalesOrderService {
     // date range and filtering client-side.
     getSalesOrdersInRange(start: Date, end: Date, clientId?: string): Observable<SalesOrder[]> {
         const key = `${start.getTime()}_${end.getTime()}_${clientId ?? ''}`;
-        let cached = this.salesOrdersRangeCache.get(key);
-        if (!cached) {
-            if (this.salesOrdersRangeCache.size >= SalesOrderService.MAX_RANGE_CACHE_ENTRIES) {
-                this.salesOrdersRangeCache.clear();
-            }
+        return cachedRangeQuery(this.salesOrdersRangeCache, key, SalesOrderService.MAX_RANGE_CACHE_ENTRIES, () => {
             const constraints = [
                 where('createdAt', '>=', Timestamp.fromDate(start)),
                 where('createdAt', '<=', Timestamp.fromDate(end)),
                 ...(clientId ? [where('clientId', '==', clientId)] : []),
                 orderBy('createdAt', 'desc'),
             ];
-            cached = from(
-                fetchAllDocs(
-                    this.salesOrderRef,
-                    constraints,
-                    (d) => ({ ...d.data(), id: d.id } as SalesOrder)
-                )
-            ).pipe(shareReplay(1));
-            this.salesOrdersRangeCache.set(key, cached);
-        }
-        return cached;
+            return fetchAllDocs(
+                this.salesOrderRef,
+                constraints,
+                (d) => ({ ...d.data(), id: d.id } as SalesOrder)
+            );
+        });
     }
 
     // 🔹 Create sales order

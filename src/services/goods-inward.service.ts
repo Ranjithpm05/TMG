@@ -14,10 +14,11 @@ import {
   Timestamp,
   where
 } from '@angular/fire/firestore';
-import { from, Observable, shareReplay } from 'rxjs';
+import { Observable } from 'rxjs';
 import type { GoodsInward, GoodsInwardItem } from '../models/goods-inward.model';
 import { fetchAllDocs } from './firestore-pagination.util';
 import { InventoryService } from './inventory.service';
+import { cachedOnce, cachedRangeQuery } from './range-cache.util';
 
 export type ApproveGrnOutcome = 'approved' | 'already-approved' | 'in-progress';
 
@@ -71,12 +72,11 @@ export class GoodsInwardService {
   // passed that count; Dashboard/Reports need the complete set for correct
   // totals, not just the most recent page).
   getGoodsInwards(): Observable<GoodsInward[]> {
-    if (!this.grnsCache$) {
-      this.grnsCache$ = from(
-        fetchAllDocs(this.grnRef, [orderBy('createdAt', 'desc')], (d) => ({ id: d.id, ...d.data() } as GoodsInward))
-      ).pipe(shareReplay(1));
-    }
-    return this.grnsCache$;
+    return cachedOnce(
+      () => this.grnsCache$,
+      (obs) => { this.grnsCache$ = obs; },
+      () => fetchAllDocs(this.grnRef, [orderBy('createdAt', 'desc')], (d) => ({ id: d.id, ...d.data() } as GoodsInward))
+    );
   }
 
   // 🔹 Date-bounded one-time query — see getGoodsInwards() above for why this
@@ -84,25 +84,17 @@ export class GoodsInwardService {
   // entire history). Cached per exact (start, end) pair; see grnsRangeCache above.
   getGoodsInwardsInRange(start: Date, end: Date): Observable<GoodsInward[]> {
     const key = `${start.getTime()}_${end.getTime()}`;
-    let cached = this.grnsRangeCache.get(key);
-    if (!cached) {
-      if (this.grnsRangeCache.size >= GoodsInwardService.MAX_RANGE_CACHE_ENTRIES) {
-        this.grnsRangeCache.clear();
-      }
-      cached = from(
-        fetchAllDocs(
-          this.grnRef,
-          [
-            where('createdAt', '>=', Timestamp.fromDate(start)),
-            where('createdAt', '<=', Timestamp.fromDate(end)),
-            orderBy('createdAt', 'desc'),
-          ],
-          (d) => ({ id: d.id, ...d.data() } as GoodsInward)
-        )
-      ).pipe(shareReplay(1));
-      this.grnsRangeCache.set(key, cached);
-    }
-    return cached;
+    return cachedRangeQuery(this.grnsRangeCache, key, GoodsInwardService.MAX_RANGE_CACHE_ENTRIES, () =>
+      fetchAllDocs(
+        this.grnRef,
+        [
+          where('createdAt', '>=', Timestamp.fromDate(start)),
+          where('createdAt', '<=', Timestamp.fromDate(end)),
+          orderBy('createdAt', 'desc'),
+        ],
+        (d) => ({ id: d.id, ...d.data() } as GoodsInward)
+      )
+    );
   }
 
   // 🔹 Create GRN

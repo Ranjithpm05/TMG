@@ -48,10 +48,21 @@ export class PatchableCollectionCache<T extends { id?: string }> {
             subject.next(items);
           })
           .catch((err) => {
+            // A hard subject.error() here used to kill this Observable for
+            // good — Angular's toSignal() re-throws that on the next signal
+            // read, breaking rendering for every already-open screen (e.g.
+            // Dashboard) until a full page reload, even after the underlying
+            // Firestore issue (e.g. a transient resource-exhausted) clears.
+            // Degrade to last-known data instead — a stale/expired storage
+            // snapshot beats a permanently broken screen — while still
+            // nulling `subject` so the *next* get$() call (new component
+            // instance, or a manual retry) attempts a fresh load rather than
+            // being stuck serving this fallback forever.
+            console.error('PatchableCollectionCache load failed, serving fallback', err);
+            const fallback = this.current ?? this.readFromStorage(true)?.items ?? [];
+            this.current = fallback;
+            subject.next(fallback);
             this.subject = null;
-            this.current = null;
-            this.loadedAt = null;
-            subject.error(err);
           });
       }
     }
@@ -82,14 +93,17 @@ export class PatchableCollectionCache<T extends { id?: string }> {
     if (this.loadedAt !== null) this.writeToStorage(this.current, this.loadedAt);
   }
 
-  private readFromStorage(): { items: T[]; savedAt: number } | null {
+  private readFromStorage(ignoreTtl = false): { items: T[]; savedAt: number } | null {
     if (!this.storageKey) return null;
     try {
       const raw = localStorage.getItem(this.storageKey);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as { savedAt?: number; items?: T[] };
       if (typeof parsed?.savedAt !== 'number' || !Array.isArray(parsed.items)) return null;
-      if (Date.now() - parsed.savedAt > this.ttlMs) return null;
+      // ignoreTtl: a load-failure fallback prefers stale data over none —
+      // the normal (non-fallback) path below never passes this, so a fresh
+      // load still only ever serves storage within the configured TTL.
+      if (!ignoreTtl && Date.now() - parsed.savedAt > this.ttlMs) return null;
       return { items: parsed.items, savedAt: parsed.savedAt };
     } catch {
       // Corrupt entry, storage unavailable (private browsing), or quota
