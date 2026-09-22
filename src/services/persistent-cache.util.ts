@@ -8,13 +8,14 @@ import { Observable, ReplaySubject } from 'rxjs';
  * login/refresh (part of the same read-quota fix as PatchableCollectionCache
  * — see project memory).
  *
- * Only meant for slow-changing master data (clients, designs, transports —
- * things that rarely change intra-day and aren't sensitive). Deliberately
- * NOT used for fast-changing warehouse-floor data (inventory, pick lists,
- * packing lists) — a stale localStorage snapshot there would show wrong
- * stock/pick-status to other staff until the TTL expires, and NOT used for
- * anything carrying credentials (e.g. users' passwordHash), since
- * localStorage is plaintext and readable by any script on the page.
+ * Meant for slow-changing master data (clients, designs, transports — things
+ * that rarely change intra-day and aren't sensitive), using a long (20 min)
+ * TTL. Fast-changing warehouse-floor data (inventory, pick lists, packing
+ * lists) uses PatchableCollectionCache's own much shorter opt-in TTL instead
+ * (see InventoryService) so a stale snapshot can't linger anywhere near this
+ * long. NOT used for anything carrying credentials (e.g. users'
+ * passwordHash), since localStorage is plaintext and readable by any script
+ * on the page.
  */
 export class PersistentCollectionCache<T> {
   private subject: ReplaySubject<T[]> | null = null;

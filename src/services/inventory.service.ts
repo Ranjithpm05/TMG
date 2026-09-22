@@ -39,8 +39,20 @@ export class InventoryService {
   // Firestore read-quota blowout (803K reads/day vs 50K quota) traced to
   // per-scan invalidation in Pick/Packing List services. patchInventoryItem()
   // lets those hot per-unit paths update the live cache in place instead.
-  private readonly inventoryCache = new PatchableCollectionCache<InventoryItem>(() =>
-    fetchAllDocs(this.invRef, [orderBy('styleNo', 'asc')], (d) => ({ id: d.id, ...d.data() } as InventoryItem))
+  //
+  // Persisted with a short (3 min) TTL: the in-memory cache above only saves
+  // re-fetches within one open tab — Dashboard alone calls getInventory() on
+  // every load, and this collection is large (~11k docs per
+  // firestore-pagination.util's own sizing comment), so every fresh
+  // page load/reload/new tab was still paying a full ~11k-read fetch. A short
+  // TTL keeps this bounded (unlike ClientService's 20 min, appropriate for
+  // slow-changing master data) since stock levels move fast — but scan
+  // correctness is unaffected: processScan() reads live inventory inside its
+  // own Firestore transaction and never gates on this cache.
+  private readonly inventoryCache = new PatchableCollectionCache<InventoryItem>(
+    () => fetchAllDocs(this.invRef, [orderBy('styleNo', 'asc')], (d) => ({ id: d.id, ...d.data() } as InventoryItem)),
+    'tmg:cache:inventory:v1',
+    3 * 60 * 1000
   );
 
   getInventory(): Observable<InventoryItem[]> {
