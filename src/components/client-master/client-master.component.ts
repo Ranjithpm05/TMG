@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Client } from '../../models/client.model';
 import { ClientService } from '../../services/client.service';
+import { INDIA_STATE_CODES } from '../../models/einvoice.model';
 import Swal from 'sweetalert2';
 
 const EXCEL_HEADERS = ['ClientName', 'ClientShortName', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'ShipToAddress', 'ShipToZipCode', 'ShipToPlace', 'ShipToState', 'ShipToCountry', 'GSTNo', 'Mobile', 'ContactPerson', 'MarginPct', 'DiscountPct', 'Status'];
@@ -43,6 +44,12 @@ const EMPTY_CLIENT: Omit<Client, 'id' | 'clientCode'> = {
 })
 export class ClientMasterComponent implements OnInit {
   private clientService = inject(ClientService);
+
+  // Constrains the State/Ship To State dropdowns to names GST tax-type
+  // resolution (gst-state.util.ts) actually recognizes — a free-text field
+  // here previously let a blank/mistyped state (e.g. a city name) silently
+  // default to same-state-as-seller and charge CGST+SGST instead of IGST.
+  indiaStateNames = INDIA_STATE_CODES.map((s) => s.name);
 
   clients = signal<Client[]>([]);
   mode = signal<ViewMode>('list');

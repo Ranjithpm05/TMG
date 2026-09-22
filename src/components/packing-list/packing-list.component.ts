@@ -951,13 +951,26 @@ export class PackingListComponent implements OnInit, OnDestroy {
       const company = await this.companySettingsService.getCompanySettingsOnce();
       const shipToDiffers = !!invoiceClient?.shipToAddress && !invoiceClient.shipToSameAsBilling &&
         invoiceClient.shipToAddress.trim() !== (invoiceClient?.billingAddress ?? '').trim();
-      const { isInterState } = resolveGstPlaceOfSupply(
+      const { isInterState, buyerStateUnresolved, shipToStateUnresolved } = resolveGstPlaceOfSupply(
         company?.stateCode ?? '',
         invoiceClient?.gstNo,
         invoiceClient?.state,
         shipToDiffers,
         invoiceClient?.shipToState
       );
+
+      // Never guess CGST+SGST vs IGST when the buyer's state can't be
+      // resolved — a blank/unrecognized State on the client silently fell
+      // back to "same as seller" here in the past, wrongly charging
+      // CGST+SGST on an inter-state sale. Block and make the operator fix
+      // Client Master instead.
+      if (buyerStateUnresolved || shipToStateUnresolved) {
+        throw new Error(
+          buyerStateUnresolved
+            ? `Client's State ("${invoiceClient?.state}") doesn't match a recognized Indian state name, so IGST vs CGST+SGST can't be determined reliably — fix the State field in Client Master (or set a valid client GSTIN) before generating this invoice.`
+            : `Client's Ship To State ("${invoiceClient?.shipToState}") doesn't match a recognized Indian state name, so the Place of Supply can't be determined reliably — fix the Ship To State field in Client Master before generating this invoice.`
+        );
+      }
 
       const cgstAmount = isInterState ? 0 : Math.round(taxableValue * halfTax / 100 * 100) / 100;
       const sgstAmount = cgstAmount;
@@ -1599,13 +1612,26 @@ export class PackingListComponent implements OnInit, OnDestroy {
       const company = await this.companySettingsService.getCompanySettingsOnce();
       const shipToDiffers = !!invoiceClient?.shipToAddress && !invoiceClient.shipToSameAsBilling &&
         invoiceClient.shipToAddress.trim() !== (invoiceClient?.billingAddress ?? '').trim();
-      const { isInterState } = resolveGstPlaceOfSupply(
+      const { isInterState, buyerStateUnresolved, shipToStateUnresolved } = resolveGstPlaceOfSupply(
         company?.stateCode ?? '',
         invoiceClient?.gstNo,
         invoiceClient?.state,
         shipToDiffers,
         invoiceClient?.shipToState
       );
+
+      // Never guess CGST+SGST vs IGST when the buyer's state can't be
+      // resolved — a blank/unrecognized State on the client silently fell
+      // back to "same as seller" here in the past, wrongly charging
+      // CGST+SGST on an inter-state sale. Block and make the operator fix
+      // Client Master instead.
+      if (buyerStateUnresolved || shipToStateUnresolved) {
+        throw new Error(
+          buyerStateUnresolved
+            ? `Client's State ("${invoiceClient?.state}") doesn't match a recognized Indian state name, so IGST vs CGST+SGST can't be determined reliably — fix the State field in Client Master (or set a valid client GSTIN) before generating this invoice.`
+            : `Client's Ship To State ("${invoiceClient?.shipToState}") doesn't match a recognized Indian state name, so the Place of Supply can't be determined reliably — fix the Ship To State field in Client Master before generating this invoice.`
+        );
+      }
 
       const cgstAmount = isInterState ? 0 : Math.round(taxableValue * halfTax / 100 * 100) / 100;
       const sgstAmount = cgstAmount;
