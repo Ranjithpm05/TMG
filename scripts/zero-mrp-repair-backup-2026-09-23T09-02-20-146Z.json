@@ -1,0 +1,4435 @@
+{
+  "dcs": [
+    {
+      "id": "505qe80SrmSPoFm2Dopk",
+      "transport": "",
+      "packedOn": "2026-09-22T12:26:57.220Z",
+      "dcNo": "DCC2627-1299",
+      "orderNo": "",
+      "totalQty": 146,
+      "clientId": "qJfXBXnHkPl68I3siysW",
+      "createdAt": "2026-09-22T12:26:57.220Z",
+      "salesOrderIds": [
+        "tR99KwLlEqcn8e5NOpgN"
+      ],
+      "place": "CHENNAI",
+      "totalAmount": 0,
+      "packingListNo": "PK-1789395514234",
+      "zipCode": "600110",
+      "salesNos": [
+        "SO-1785481078776"
+      ],
+      "agentName": "DIRECT",
+      "packingListId": "Xdu1QvzDvf9CUnQ0Lf0u",
+      "clientName": "SARAVANA STORES - SHOP1",
+      "items": [
+        {
+          "sizeQty": {
+            "34": 2,
+            "36": 2
+          },
+          "total": 4,
+          "mrp": 0,
+          "styleNo": "RTRS038",
+          "price": 0,
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER",
+          "amount": 0,
+          "color": "03-BLACK"
+        },
+        {
+          "color": "05-BLACK",
+          "mrp": 0,
+          "total": 8,
+          "price": 0,
+          "styleNo": "RTRS040",
+          "sizeQty": {
+            "30": 1,
+            "34": 3,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "mrpBySize": {},
+          "amount": 0,
+          "partName": "FORMAL TROUSER"
+        },
+        {
+          "mrpBySize": {},
+          "color": "07-BLACK",
+          "styleNo": "RTRS041",
+          "sizeQty": {
+            "30": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "partName": "FORMAL TROUSER",
+          "total": 7,
+          "price": 0,
+          "mrp": 0,
+          "amount": 0
+        },
+        {
+          "color": "03-DGREY",
+          "styleNo": "RTRS042",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "price": 0,
+          "total": 9,
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER",
+          "mrp": 0,
+          "amount": 0
+        },
+        {
+          "mrp": 0,
+          "mrpBySize": {},
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "styleNo": "RTRS042",
+          "amount": 0,
+          "price": 0,
+          "total": 9,
+          "partName": "FORMAL TROUSER",
+          "color": "04-GREEN"
+        },
+        {
+          "styleNo": "RTRS043",
+          "sizeQty": {
+            "30": 1,
+            "34": 2,
+            "36": 1,
+            "38": 1
+          },
+          "mrpBySize": {},
+          "color": "01-BROWN",
+          "partName": "FORMAL TROUSER",
+          "price": 0,
+          "total": 5,
+          "amount": 0,
+          "mrp": 0
+        },
+        {
+          "total": 4,
+          "price": 0,
+          "mrp": 0,
+          "amount": 0,
+          "color": "02-NAVY",
+          "mrpBySize": {},
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "styleNo": "RTRS043",
+          "partName": "FORMAL TROUSER"
+        },
+        {
+          "price": 0,
+          "total": 7,
+          "sizeQty": {
+            "30": 1,
+            "34": 1,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "mrpBySize": {},
+          "styleNo": "RTRS044",
+          "color": "02-BLUE",
+          "partName": "FORMAL TROUSER",
+          "amount": 0,
+          "mrp": 0
+        },
+        {
+          "color": "02-ASH",
+          "price": 0,
+          "mrp": 0,
+          "total": 9,
+          "partName": "FORMAL TROUSER",
+          "styleNo": "RTRS045",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "amount": 0,
+          "mrpBySize": {}
+        },
+        {
+          "amount": 0,
+          "mrp": 0,
+          "mrpBySize": {},
+          "total": 9,
+          "price": 0,
+          "partName": "FORMAL TROUSER",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "styleNo": "RTRS045",
+          "color": "04-GREEN"
+        },
+        {
+          "amount": 0,
+          "mrpBySize": {},
+          "mrp": 0,
+          "total": 6,
+          "partName": "FORMAL TROUSER",
+          "sizeQty": {
+            "30": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "price": 0,
+          "styleNo": "RTRS045",
+          "color": "05-NAVY"
+        },
+        {
+          "color": "02-LBROWN",
+          "price": 0,
+          "total": 5,
+          "mrp": 0,
+          "amount": 0,
+          "styleNo": "RTRS046",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER"
+        },
+        {
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "styleNo": "RTRS046",
+          "price": 0,
+          "total": 5,
+          "amount": 0,
+          "color": "03-LBLUE",
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER",
+          "mrp": 0
+        },
+        {
+          "color": "04-DGREY",
+          "price": 0,
+          "mrp": 0,
+          "total": 4,
+          "mrpBySize": {},
+          "amount": 0,
+          "styleNo": "RTRS046",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "partName": "FORMAL TROUSER"
+        },
+        {
+          "styleNo": "RTRS046",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "partName": "FORMAL TROUSER",
+          "color": "05-COFFEE",
+          "mrpBySize": {},
+          "amount": 0,
+          "mrp": 0,
+          "price": 0,
+          "total": 9
+        },
+        {
+          "partName": "FORMAL TROUSER",
+          "color": "04-COFFEE",
+          "price": 0,
+          "total": 6,
+          "amount": 0,
+          "mrp": 0,
+          "styleNo": "RTRS047",
+          "sizeQty": {
+            "30": 1,
+            "34": 2,
+            "36": 1,
+            "40": 1,
+            "42": 1
+          },
+          "mrpBySize": {}
+        },
+        {
+          "styleNo": "RTRS047",
+          "sizeQty": {
+            "32": 1,
+            "38": 1
+          },
+          "color": "06-BLACK",
+          "total": 2,
+          "mrpBySize": {},
+          "price": 0,
+          "amount": 0,
+          "mrp": 0,
+          "partName": "FORMAL TROUSER"
+        },
+        {
+          "amount": 0,
+          "mrp": 0,
+          "partName": "FORMAL TROUSER",
+          "styleNo": "RTRS048",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "color": "02-BLUE",
+          "total": 9,
+          "mrpBySize": {},
+          "price": 0
+        },
+        {
+          "color": "03-BROWN",
+          "styleNo": "RTRS048",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 1,
+            "36": 2,
+            "38": 1,
+            "42": 1
+          },
+          "mrpBySize": {},
+          "price": 0,
+          "mrp": 0,
+          "total": 7,
+          "amount": 0,
+          "partName": "FORMAL TROUSER"
+        },
+        {
+          "price": 0,
+          "total": 8,
+          "color": "04-NAVY",
+          "mrp": 0,
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER",
+          "sizeQty": {
+            "30": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "amount": 0,
+          "styleNo": "RTRS048"
+        },
+        {
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "styleNo": "RTRS048",
+          "price": 0,
+          "total": 9,
+          "partName": "FORMAL TROUSER",
+          "amount": 0,
+          "color": "05-BLACK",
+          "mrpBySize": {},
+          "mrp": 0
+        },
+        {
+          "color": "03-STONE",
+          "mrpBySize": {},
+          "mrp": 0,
+          "price": 0,
+          "total": 5,
+          "amount": 0,
+          "partName": "FORMAL TROUSER",
+          "styleNo": "RTRS052",
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          }
+        }
+      ],
+      "sizes": [
+        "30",
+        "32",
+        "34",
+        "36",
+        "38",
+        "40",
+        "42"
+      ],
+      "clientPhone": "9962504233",
+      "dcSeq": 1299,
+      "boxCount": 3,
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "billingAddress": "GNT ROAD,\nNO.89 SSM ESTATE LIMITED,\nMADHAVARAM,",
+      "updatedAt": "2026-09-22T12:26:57.220Z",
+      "state": "TAMILNADU"
+    },
+    {
+      "id": "7aekuhC1ktvXNJLgEV4e",
+      "agentName": "DIRECT",
+      "state": "TAMILNADU",
+      "boxCount": 1,
+      "dcNo": "DCC2627-1289",
+      "clientPhone": "9962504233",
+      "dcSeq": 1289,
+      "sizes": [
+        "32",
+        "34",
+        "36",
+        "38",
+        "40"
+      ],
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "clientName": "SARAVANA STORES - SHOP4",
+      "packingListId": "lmkCHvT2MwjtuVBkPyCL",
+      "items": [
+        {
+          "styleNo": "RTRS049",
+          "amount": 0,
+          "sizeQty": {
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "mrp": 0,
+          "color": "02-NAVY",
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER",
+          "total": 7,
+          "price": 0
+        },
+        {
+          "mrpBySize": {},
+          "color": "01-COFFEE",
+          "price": 0,
+          "total": 5,
+          "amount": 0,
+          "styleNo": "RTRS051",
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "mrp": 0,
+          "partName": "FORMAL TROUSER"
+        },
+        {
+          "amount": 0,
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER",
+          "price": 0,
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "styleNo": "RTRS051",
+          "total": 5,
+          "color": "02-BLUE",
+          "mrp": 0
+        },
+        {
+          "color": "03-NAVY",
+          "price": 0,
+          "total": 5,
+          "amount": 0,
+          "mrp": 0,
+          "styleNo": "RTRS051",
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER"
+        },
+        {
+          "color": "04-BLACK",
+          "total": 5,
+          "partName": "FORMAL TROUSER",
+          "price": 0,
+          "mrp": 0,
+          "mrpBySize": {},
+          "styleNo": "RTRS051",
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "amount": 0
+        },
+        {
+          "color": "01-PISTA",
+          "mrp": 0,
+          "total": 5,
+          "price": 0,
+          "amount": 0,
+          "styleNo": "RTRS053",
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER"
+        },
+        {
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "styleNo": "RTRS053",
+          "price": 0,
+          "total": 5,
+          "amount": 0,
+          "color": "02-ASH",
+          "partName": "FORMAL TROUSER",
+          "mrpBySize": {},
+          "mrp": 0
+        },
+        {
+          "mrpBySize": {},
+          "total": 5,
+          "price": 0,
+          "mrp": 0,
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "color": "03-GREEN",
+          "styleNo": "RTRS053",
+          "amount": 0,
+          "partName": "FORMAL TROUSER"
+        },
+        {
+          "mrpBySize": {},
+          "mrp": 0,
+          "amount": 0,
+          "price": 0,
+          "total": 5,
+          "color": "04-L.BROWN",
+          "partName": "FORMAL TROUSER",
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "styleNo": "RTRS053"
+        },
+        {
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER",
+          "styleNo": "RTRS053",
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "mrp": 0,
+          "color": "06-DK.GREY",
+          "amount": 0,
+          "total": 5,
+          "price": 0
+        },
+        {
+          "price": 0,
+          "total": 5,
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "color": "08-NAVY",
+          "styleNo": "RTRS053",
+          "mrp": 0,
+          "partName": "FORMAL TROUSER",
+          "amount": 0,
+          "mrpBySize": {}
+        },
+        {
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "styleNo": "RTRS053",
+          "partName": "FORMAL TROUSER",
+          "total": 5,
+          "price": 0,
+          "amount": 0,
+          "color": "09-BLACK",
+          "mrp": 0,
+          "mrpBySize": {}
+        }
+      ],
+      "updatedAt": "2026-09-22T08:01:29.003Z",
+      "transport": "",
+      "totalAmount": 0,
+      "salesOrderIds": [
+        "71g2dckndd28zXgjp5ua"
+      ],
+      "salesNos": [
+        "SO-1785481660325"
+      ],
+      "place": "COIMBATORE",
+      "createdAt": "2026-09-22T08:01:29.003Z",
+      "billingAddress": "GNT ROAD,\nNO.89 SSM ESTATE LIMITED,\nMADHAVARAM,",
+      "packingListNo": "PK-1790060384731",
+      "orderNo": "",
+      "packedOn": "2026-09-22T08:01:29.003Z",
+      "totalQty": 62,
+      "zipCode": "600110",
+      "clientId": "clQsOfMANvlKehqFHU21"
+    },
+    {
+      "id": "AFXri4JpQtPCBGeSEeto",
+      "packedOn": "2026-09-22T12:11:51.350Z",
+      "agentName": "DIRECT",
+      "packingListNo": "PK-1789396872016",
+      "dcNo": "DCC2627-1298",
+      "totalQty": 104,
+      "salesOrderIds": [
+        "jZfX7Gv8D7eaKMroTqIu",
+        "tR99KwLlEqcn8e5NOpgN"
+      ],
+      "clientId": "qJfXBXnHkPl68I3siysW",
+      "place": "CHENNAI",
+      "updatedAt": "2026-09-22T12:11:51.350Z",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "clientPhone": "9962504233",
+      "salesNos": [
+        "SO-1785478117090",
+        "SO-1785481078776"
+      ],
+      "transport": "",
+      "billingAddress": "GNT ROAD,\nNO.89 SSM ESTATE LIMITED,\nMADHAVARAM,",
+      "clientName": "SARAVANA STORES - SHOP1",
+      "items": [
+        {
+          "partName": "CASUAL TROUSER",
+          "mrpBySize": {},
+          "amount": 0,
+          "price": 0,
+          "total": 4,
+          "mrp": 0,
+          "color": "01-BEIGE",
+          "sizeQty": {
+            "32": 1,
+            "36": 2,
+            "38": 1
+          },
+          "styleNo": "RTA178"
+        },
+        {
+          "mrpBySize": {},
+          "mrp": 0,
+          "amount": 0,
+          "price": 0,
+          "total": 2,
+          "color": "04-BLACK",
+          "partName": "CASUAL TROUSER",
+          "sizeQty": {
+            "32": 1,
+            "34": 1
+          },
+          "styleNo": "RTA178"
+        },
+        {
+          "color": "01-CREAM",
+          "mrp": 0,
+          "total": 6,
+          "price": 0,
+          "amount": 0,
+          "styleNo": "RTA195",
+          "sizeQty": {
+            "32": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "mrpBySize": {},
+          "partName": "CASUAL TROUSER"
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "mrp": 0,
+          "styleNo": "RTA195",
+          "sizeQty": {
+            "32": 2,
+            "34": 1,
+            "36": 1,
+            "40": 1
+          },
+          "color": "03-NAVY",
+          "mrpBySize": {},
+          "amount": 0,
+          "price": 0,
+          "total": 5
+        },
+        {
+          "mrp": 0,
+          "color": "04-BLACK",
+          "total": 7,
+          "price": 0,
+          "mrpBySize": {},
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA195",
+          "sizeQty": {
+            "32": 2,
+            "34": 1,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "amount": 0
+        },
+        {
+          "total": 6,
+          "price": 0,
+          "mrp": 0,
+          "mrpBySize": {},
+          "amount": 0,
+          "color": "02-ASH",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 2,
+            "40": 1
+          },
+          "styleNo": "RTS153",
+          "partName": "CASUAL TROUSER"
+        },
+        {
+          "amount": 0,
+          "mrpBySize": {},
+          "mrp": 0,
+          "styleNo": "RTS153",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 2,
+            "38": 2,
+            "40": 1
+          },
+          "color": "04-NAVY",
+          "partName": "CASUAL TROUSER",
+          "total": 7,
+          "price": 0
+        },
+        {
+          "price": 0,
+          "total": 7,
+          "amount": 0,
+          "color": "05-GREY",
+          "mrp": 0,
+          "partName": "CASUAL TROUSER",
+          "sizeQty": {
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "styleNo": "RTS205",
+          "mrpBySize": {}
+        },
+        {
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "styleNo": "RTS209",
+          "mrpBySize": {},
+          "amount": 0,
+          "price": 0,
+          "total": 3,
+          "mrp": 0,
+          "color": "01-COFFEE",
+          "partName": "CASUAL TROUSER"
+        },
+        {
+          "total": 7,
+          "price": 0,
+          "color": "02-NAVY",
+          "mrp": 0,
+          "sizeQty": {
+            "32": 1,
+            "34": 3,
+            "36": 2,
+            "38": 1
+          },
+          "amount": 0,
+          "mrpBySize": {},
+          "styleNo": "RTS209",
+          "partName": "CASUAL TROUSER"
+        },
+        {
+          "color": "03-BLACK",
+          "price": 0,
+          "styleNo": "RTS209",
+          "sizeQty": {
+            "32": 3,
+            "34": 3,
+            "36": 3,
+            "38": 1,
+            "40": 1
+          },
+          "partName": "CASUAL TROUSER",
+          "total": 11,
+          "mrp": 0,
+          "mrpBySize": {},
+          "amount": 0
+        },
+        {
+          "price": 0,
+          "total": 5,
+          "amount": 0,
+          "mrpBySize": {},
+          "color": "05-BLACK",
+          "partName": "CASUAL TROUSER",
+          "sizeQty": {
+            "32": 2,
+            "34": 2,
+            "38": 1
+          },
+          "styleNo": "RTA171",
+          "mrp": 0
+        },
+        {
+          "total": 5,
+          "price": 0,
+          "mrpBySize": {},
+          "mrp": 0,
+          "color": "03-OLIVE",
+          "sizeQty": {
+            "32": 3,
+            "36": 1,
+            "38": 1
+          },
+          "amount": 0,
+          "styleNo": "RTA175",
+          "partName": "CASUAL TROUSER"
+        },
+        {
+          "color": "02-OLIVE",
+          "styleNo": "RTA178",
+          "sizeQty": {
+            "32": 1,
+            "34": 1
+          },
+          "partName": "CASUAL TROUSER",
+          "price": 0,
+          "total": 2,
+          "mrpBySize": {},
+          "mrp": 0,
+          "amount": 0
+        },
+        {
+          "mrpBySize": {},
+          "color": "04-BLACK",
+          "styleNo": "RTS123",
+          "sizeQty": {
+            "34": 1,
+            "38": 1
+          },
+          "total": 2,
+          "price": 0,
+          "mrp": 0,
+          "partName": "CASUAL TROUSER",
+          "amount": 0
+        },
+        {
+          "mrp": 0,
+          "sizeQty": {
+            "30": 1,
+            "32": 2,
+            "34": 1,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "styleNo": "RTS139",
+          "total": 8,
+          "amount": 0,
+          "price": 0,
+          "partName": "CASUAL TROUSER",
+          "color": "01-KHAKI",
+          "mrpBySize": {}
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "mrp": 0,
+          "mrpBySize": {},
+          "sizeQty": {
+            "32": 2,
+            "34": 1,
+            "36": 2,
+            "38": 1
+          },
+          "styleNo": "RTS140",
+          "amount": 0,
+          "total": 6,
+          "price": 0,
+          "color": "02-KHAKI"
+        },
+        {
+          "amount": 0,
+          "sizeQty": {
+            "30": 1,
+            "32": 2,
+            "34": 1,
+            "36": 1,
+            "38": 2,
+            "40": 1
+          },
+          "styleNo": "RTS153",
+          "mrpBySize": {},
+          "partName": "CASUAL TROUSER",
+          "price": 0,
+          "total": 8,
+          "color": "03-GREY",
+          "mrp": 0
+        },
+        {
+          "sizeQty": {
+            "34": 1,
+            "36": 2
+          },
+          "price": 0,
+          "styleNo": "RTS156",
+          "total": 3,
+          "mrpBySize": {},
+          "partName": "CASUAL TROUSER",
+          "color": "03-NAVY",
+          "amount": 0,
+          "mrp": 0
+        }
+      ],
+      "zipCode": "600110",
+      "createdAt": "2026-09-22T12:11:51.350Z",
+      "sizes": [
+        "30",
+        "32",
+        "34",
+        "36",
+        "38",
+        "40"
+      ],
+      "boxCount": 2,
+      "dcSeq": 1298,
+      "totalAmount": 0,
+      "orderNo": "",
+      "state": "TAMILNADU",
+      "packingListId": "XgWkfon7SdvCydbvI4Up"
+    },
+    {
+      "id": "BV8lZzxQRDlALFzbTNSC",
+      "createdAt": "2026-09-22T06:16:35.547Z",
+      "transport": "",
+      "packingListId": "5TLuOghNBWKk11JmfJKe",
+      "clientName": "SARAVANA STORES - SHOP3",
+      "dcNo": "DCC2627-1280",
+      "place": "MADURAI",
+      "boxCount": 1,
+      "totalAmount": 0,
+      "billingAddress": "",
+      "items": [
+        {
+          "partName": "FORMAL SHIRTS",
+          "mrp": 0,
+          "styleNo": "ROYAL DUO 3672",
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 2,
+            "44": 1
+          },
+          "color": "11",
+          "amount": 0,
+          "mrpBySize": {},
+          "price": 0,
+          "total": 6,
+          "sleeveType": "Full"
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "amount": 0,
+          "total": 4,
+          "price": 0,
+          "mrp": 0,
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 2,
+            "40": 1,
+            "42": 1
+          },
+          "mrpBySize": {},
+          "color": "12",
+          "styleNo": "ROYAL DUO 3672"
+        },
+        {
+          "mrpBySize": {},
+          "partName": "FORMAL SHIRTS",
+          "amount": 0,
+          "mrp": 0,
+          "total": 10,
+          "sleeveType": "Full",
+          "price": 0,
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 3,
+            "42": 3,
+            "44": 1
+          },
+          "styleNo": "LINO LUX 5472",
+          "color": "1053"
+        },
+        {
+          "amount": 0,
+          "sleeveType": "Full",
+          "mrp": 0,
+          "mrpBySize": {},
+          "price": 0,
+          "total": 6,
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 1
+          },
+          "styleNo": "RFJ1607 A",
+          "color": "-",
+          "partName": "FORMAL SHIRTS"
+        },
+        {
+          "mrp": 0,
+          "mrpBySize": {},
+          "total": 6,
+          "amount": 0,
+          "price": 0,
+          "sleeveType": "Full",
+          "partName": "FORMAL SHIRTS",
+          "color": "-",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 1
+          },
+          "styleNo": "RFJ1607 C"
+        },
+        {
+          "price": 0,
+          "total": 6,
+          "color": "-",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 1
+          },
+          "styleNo": "RFJ1607 D",
+          "mrp": 0,
+          "mrpBySize": {},
+          "partName": "FORMAL SHIRTS",
+          "amount": 0,
+          "sleeveType": "Full"
+        },
+        {
+          "mrp": 0,
+          "color": "-",
+          "total": 6,
+          "price": 0,
+          "amount": 0,
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "RFJ1607 H",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 1
+          },
+          "sleeveType": "Full",
+          "mrpBySize": {}
+        }
+      ],
+      "salesOrderIds": [
+        "FSkUpCFLJGM0lZBtLJTR"
+      ],
+      "clientId": "O1CfTfEasSamtclE4t1p",
+      "totalQty": 44,
+      "orderNo": "",
+      "packingListNo": "PK-1789812656996",
+      "packedOn": "2026-09-22T06:16:35.547Z",
+      "agentName": "DIRECT",
+      "salesNos": [
+        "SO-1785481547350"
+      ],
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "zipCode": "600110",
+      "state": "TAMILNADU",
+      "clientPhone": "9962504233",
+      "updatedAt": "2026-09-22T06:16:35.547Z",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44"
+      ],
+      "dcSeq": 1280
+    },
+    {
+      "id": "FKUxIVO7ZgloUPuFXjlX",
+      "salesNos": [
+        "SO-1785481547350"
+      ],
+      "totalQty": 41,
+      "totalAmount": 0,
+      "packedOn": "2026-09-22T06:43:14.529Z",
+      "items": [
+        {
+          "partName": "FORMAL SHIRTS",
+          "mrpBySize": {},
+          "price": 0,
+          "styleNo": "LINO LUX 5472",
+          "sleeveType": "Full",
+          "mrp": 0,
+          "amount": 0,
+          "total": 8,
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 3
+          },
+          "color": "1039"
+        },
+        {
+          "total": 9,
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 3,
+            "44": 1
+          },
+          "color": "1043",
+          "partName": "FORMAL SHIRTS",
+          "mrpBySize": {},
+          "amount": 0,
+          "styleNo": "LINO LUX 5472",
+          "mrp": 0,
+          "sleeveType": "Full",
+          "price": 0
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "color": "1050",
+          "mrp": 0,
+          "styleNo": "LINO LUX 5472",
+          "total": 9,
+          "price": 0,
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 3,
+            "42": 3
+          },
+          "sleeveType": "Full",
+          "mrpBySize": {},
+          "amount": 0
+        },
+        {
+          "sleeveType": "Full",
+          "styleNo": "LINO LUX 5472",
+          "color": "1051",
+          "partName": "FORMAL SHIRTS",
+          "total": 9,
+          "amount": 0,
+          "mrpBySize": {},
+          "price": 0,
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 3,
+            "44": 1
+          },
+          "mrp": 0
+        },
+        {
+          "amount": 0,
+          "mrpBySize": {},
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 1
+          },
+          "price": 0,
+          "sleeveType": "Full",
+          "total": 6,
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "RFJ1607 E",
+          "color": "-",
+          "mrp": 0
+        }
+      ],
+      "place": "MADURAI",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44"
+      ],
+      "salesOrderIds": [
+        "FSkUpCFLJGM0lZBtLJTR"
+      ],
+      "dcSeq": 1284,
+      "createdAt": "2026-09-22T06:43:14.529Z",
+      "clientId": "O1CfTfEasSamtclE4t1p",
+      "billingAddress": "",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "packingListId": "OJ596Niit19Lolwoj9V0",
+      "clientName": "SARAVANA STORES - SHOP3",
+      "clientPhone": "9962504233",
+      "zipCode": "600110",
+      "updatedAt": "2026-09-22T06:43:14.529Z",
+      "agentName": "DIRECT",
+      "orderNo": "",
+      "state": "TAMILNADU",
+      "boxCount": 1,
+      "transport": "",
+      "packingListNo": "PK-1789812343867",
+      "dcNo": "DCC2627-1284"
+    },
+    {
+      "id": "GfXW4CHeVtueKDR0M6am",
+      "state": "TAMILNADU",
+      "packingListId": "Il0P0LJgOXNlGsgnoHmM",
+      "clientId": "qJfXBXnHkPl68I3siysW",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "billingAddress": "GNT ROAD,\nNO.89 SSM ESTATE LIMITED,\nMADHAVARAM,",
+      "packingListNo": "PK-1789737618206",
+      "salesNos": [
+        "SO-1785481078776"
+      ],
+      "totalQty": 41,
+      "packedOn": "2026-09-22T06:17:58.590Z",
+      "createdAt": "2026-09-22T06:17:58.590Z",
+      "totalAmount": 0,
+      "dcSeq": 1281,
+      "orderNo": "",
+      "dcNo": "DCC2627-1281",
+      "agentName": "DIRECT",
+      "boxCount": 1,
+      "updatedAt": "2026-09-22T06:17:58.590Z",
+      "transport": "",
+      "zipCode": "600110",
+      "clientPhone": "9962504233",
+      "salesOrderIds": [
+        "tR99KwLlEqcn8e5NOpgN"
+      ],
+      "place": "CHENNAI",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44"
+      ],
+      "clientName": "SARAVANA STORES - SHOP1",
+      "items": [
+        {
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "price": 0,
+          "sleeveType": "Full",
+          "color": "-",
+          "partName": "FORMAL SHIRTS",
+          "amount": 0,
+          "mrpBySize": {},
+          "total": 3,
+          "mrp": 0,
+          "styleNo": "RFJ1130 L"
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "mrp": 0,
+          "price": 0,
+          "styleNo": "LINO LUX 5472",
+          "amount": 0,
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 2,
+            "40": 1,
+            "44": 1
+          },
+          "total": 4,
+          "color": "1047",
+          "mrpBySize": {}
+        },
+        {
+          "price": 0,
+          "amount": 0,
+          "mrpBySize": {},
+          "partName": "FORMAL SHIRTS",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "color": "-",
+          "mrp": 0,
+          "styleNo": "RFJ1130 E",
+          "sleeveType": "Full",
+          "total": 3
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "sleeveType": "Full",
+          "total": 6,
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 1,
+            "42": 2
+          },
+          "mrpBySize": {},
+          "color": "-",
+          "amount": 0,
+          "styleNo": "RFJ1130 J",
+          "price": 0,
+          "mrp": 0
+        },
+        {
+          "price": 0,
+          "mrpBySize": {},
+          "styleNo": "RFJ1450 A",
+          "total": 4,
+          "partName": "FORMAL SHIRTS",
+          "amount": 0,
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 1
+          },
+          "mrp": 0,
+          "color": "-"
+        },
+        {
+          "total": 7,
+          "partName": "FORMAL SHIRTS",
+          "color": "1003",
+          "mrpBySize": {},
+          "styleNo": "SLUB DOBBY 1827",
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 3,
+            "44": 1
+          },
+          "sleeveType": "Full",
+          "amount": 0,
+          "mrp": 0,
+          "price": 0
+        },
+        {
+          "sizeQty": {
+            "38": 2,
+            "40": 3,
+            "42": 2
+          },
+          "mrp": 0,
+          "mrpBySize": {},
+          "color": "990",
+          "total": 7,
+          "price": 0,
+          "sleeveType": "Full",
+          "styleNo": "SLUB DOBBY 7263",
+          "partName": "FORMAL SHIRTS",
+          "amount": 0
+        },
+        {
+          "price": 0,
+          "mrp": 0,
+          "styleNo": "SLUB DOBBY 7263",
+          "sizeQty": {
+            "38": 2,
+            "40": 2,
+            "42": 2,
+            "44": 1
+          },
+          "amount": 0,
+          "color": "991",
+          "mrpBySize": {},
+          "partName": "FORMAL SHIRTS",
+          "total": 7,
+          "sleeveType": "Full"
+        }
+      ]
+    },
+    {
+      "id": "GsjhTp9khx8D7sQFCkBd",
+      "packedOn": "2026-09-22T07:22:44.137Z",
+      "zipCode": "600110",
+      "dcNo": "DCC2627-1287",
+      "place": "MADURAI",
+      "sizes": [
+        "38",
+        "40",
+        "42",
+        "44"
+      ],
+      "salesOrderIds": [
+        "FSkUpCFLJGM0lZBtLJTR"
+      ],
+      "salesNos": [
+        "SO-1785481547350"
+      ],
+      "totalQty": 43,
+      "items": [
+        {
+          "amount": 0,
+          "mrpBySize": {},
+          "price": 0,
+          "sizeQty": {
+            "38": 1,
+            "40": 4,
+            "42": 3
+          },
+          "sleeveType": "Full",
+          "color": "6",
+          "styleNo": "LINO LUX 2718",
+          "partName": "FORMAL SHIRTS",
+          "total": 8,
+          "mrp": 0
+        },
+        {
+          "amount": 0,
+          "mrp": 0,
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "LINO LUX 2718",
+          "price": 0,
+          "mrpBySize": {},
+          "sleeveType": "Full",
+          "total": 6,
+          "color": "11",
+          "sizeQty": {
+            "38": 1,
+            "40": 3,
+            "42": 2
+          }
+        },
+        {
+          "styleNo": "LINO LUX 2718",
+          "sleeveType": "Full",
+          "color": "5",
+          "mrpBySize": {},
+          "total": 5,
+          "amount": 0,
+          "partName": "FORMAL SHIRTS",
+          "price": 0,
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 2
+          },
+          "mrp": 0
+        },
+        {
+          "sleeveType": "Full",
+          "price": 0,
+          "styleNo": "LINO LUX 2718",
+          "amount": 0,
+          "total": 8,
+          "partName": "FORMAL SHIRTS",
+          "sizeQty": {
+            "38": 2,
+            "40": 3,
+            "42": 3
+          },
+          "color": "9",
+          "mrpBySize": {},
+          "mrp": 0
+        },
+        {
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 2,
+            "40": 2,
+            "42": 2,
+            "44": 1
+          },
+          "total": 7,
+          "color": "-",
+          "partName": "FORMAL SHIRTS",
+          "mrp": 0,
+          "mrpBySize": {},
+          "amount": 0,
+          "styleNo": "RFJ0413",
+          "price": 0
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "sleeveType": "Full",
+          "color": "3",
+          "mrp": 0,
+          "styleNo": "ROYAL DUO 3672",
+          "total": 3,
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "price": 0,
+          "mrpBySize": {},
+          "amount": 0
+        },
+        {
+          "styleNo": "ROYAL DUO 3672",
+          "color": "6",
+          "mrpBySize": {},
+          "sleeveType": "Full",
+          "total": 4,
+          "partName": "FORMAL SHIRTS",
+          "amount": 0,
+          "price": 0,
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 1
+          },
+          "mrp": 0
+        },
+        {
+          "mrp": 0,
+          "color": "5",
+          "styleNo": "XYNO MILANGE 1836",
+          "total": 2,
+          "mrpBySize": {},
+          "price": 0,
+          "sizeQty": {
+            "38": 1,
+            "40": 1
+          },
+          "partName": "FORMAL SHIRTS",
+          "sleeveType": "Full",
+          "amount": 0
+        }
+      ],
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "dcSeq": 1287,
+      "createdAt": "2026-09-22T07:22:44.137Z",
+      "orderNo": "",
+      "clientId": "O1CfTfEasSamtclE4t1p",
+      "billingAddress": "",
+      "totalAmount": 0,
+      "updatedAt": "2026-09-22T07:22:44.137Z",
+      "packingListNo": "PK-1789815759269",
+      "agentName": "DIRECT",
+      "clientPhone": "9962504233",
+      "state": "TAMILNADU",
+      "clientName": "SARAVANA STORES - SHOP3",
+      "transport": "",
+      "packingListId": "q2V64gFbXJmlNVp6L3Is",
+      "boxCount": 1
+    },
+    {
+      "id": "PDbwjiElWTgZeWmKuzM4",
+      "invoiceNo": "TMGC2627-2027",
+      "dcNo": "DCC2627-1288",
+      "zipCode": "606213",
+      "state": "TAMILNADU",
+      "orderNo": "",
+      "salesOrderIds": [
+        "N9qxv9v1dqnBafVGZMLx"
+      ],
+      "createdAt": "2026-09-22T07:24:09.310Z",
+      "billingAddress": "942,DURUGAM ROAD,\nPH: 04151 222777",
+      "boxCount": 2,
+      "clientPhone": "04151222777",
+      "agentName": "D Hari Babu",
+      "packedOn": "2026-09-22T07:24:09.310Z",
+      "invoiceId": "oLJPm2kcSWNxDhL8L3Ob",
+      "clientGstin": "33ABTFA5290J1Z1",
+      "packingListId": "ehgsYNfmMAKWbQsBou0P",
+      "dcSeq": 1288,
+      "clientName": "AKT TEXTILES - KALLAKURICHI",
+      "updatedAt": "2026-09-23T07:59:57.563Z",
+      "totalQty": 48,
+      "salesNos": [
+        "SO-1789473095338"
+      ],
+      "place": "KALLAKURICHI",
+      "packingListNo": "PK-1790056775028",
+      "clientId": "ThsXWV2JUmCjar15np4i",
+      "sizes": [
+        "38",
+        "40",
+        "42",
+        "44"
+      ],
+      "transport": "",
+      "totalAmount": 0,
+      "items": [
+        {
+          "amount": 0,
+          "price": 0,
+          "mrpBySize": {},
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 1
+          },
+          "color": "-",
+          "styleNo": "RFJ1494 B",
+          "sleeveType": "Full",
+          "partName": "FORMAL SHIRTS",
+          "total": 4,
+          "mrp": 0
+        },
+        {
+          "total": 2,
+          "mrpBySize": {},
+          "sizeQty": {
+            "40": 1,
+            "42": 1
+          },
+          "amount": 0,
+          "mrp": 0,
+          "partName": "FORMAL SHIRTS",
+          "color": "-",
+          "styleNo": "RFJ1494 B",
+          "price": 0,
+          "sleeveType": "Half"
+        },
+        {
+          "color": "-",
+          "styleNo": "RFJ1494 C",
+          "partName": "FORMAL SHIRTS",
+          "total": 4,
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 1
+          },
+          "mrpBySize": {},
+          "sleeveType": "Full",
+          "price": 0,
+          "mrp": 0,
+          "amount": 0
+        },
+        {
+          "styleNo": "RFJ1494 C",
+          "color": "-",
+          "mrp": 0,
+          "sleeveType": "Half",
+          "amount": 0,
+          "total": 2,
+          "price": 0,
+          "mrpBySize": {},
+          "partName": "FORMAL SHIRTS",
+          "sizeQty": {
+            "40": 1,
+            "42": 1
+          }
+        },
+        {
+          "mrpBySize": {},
+          "styleNo": "RFJ1546 A",
+          "sleeveType": "Full",
+          "mrp": 0,
+          "color": "-",
+          "total": 4,
+          "amount": 0,
+          "price": 0,
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "partName": "FORMAL SHIRTS"
+        },
+        {
+          "total": 4,
+          "sleeveType": "Half",
+          "amount": 0,
+          "mrpBySize": {},
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "color": "-",
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "RFJ1546 A",
+          "mrp": 0,
+          "price": 0
+        },
+        {
+          "total": 4,
+          "amount": 0,
+          "color": "-",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "styleNo": "RFJ1546 B",
+          "mrp": 0,
+          "mrpBySize": {},
+          "price": 0,
+          "partName": "FORMAL SHIRTS",
+          "sleeveType": "Full"
+        },
+        {
+          "price": 0,
+          "mrpBySize": {},
+          "mrp": 0,
+          "amount": 0,
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "styleNo": "RFJ1546 B",
+          "color": "-",
+          "sleeveType": "Half",
+          "partName": "FORMAL SHIRTS",
+          "total": 4
+        },
+        {
+          "price": 0,
+          "mrp": 0,
+          "amount": 0,
+          "partName": "FORMAL SHIRTS",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "styleNo": "RFJ1491 F",
+          "color": "-",
+          "mrpBySize": {},
+          "sleeveType": "Full",
+          "total": 3
+        },
+        {
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 1
+          },
+          "price": 0,
+          "sleeveType": "Full",
+          "mrpBySize": {},
+          "color": "-",
+          "amount": 0,
+          "partName": "FORMAL SHIRTS",
+          "total": 4,
+          "styleNo": "RFJ1492 E",
+          "mrp": 0
+        },
+        {
+          "styleNo": "RFJ1492 E",
+          "total": 2,
+          "mrpBySize": {},
+          "color": "-",
+          "amount": 0,
+          "partName": "FORMAL SHIRTS",
+          "mrp": 0,
+          "sleeveType": "Half",
+          "sizeQty": {
+            "40": 1,
+            "42": 1
+          },
+          "price": 0
+        },
+        {
+          "color": "-",
+          "mrpBySize": {},
+          "total": 2,
+          "sizeQty": {
+            "40": 1,
+            "42": 1
+          },
+          "amount": 0,
+          "sleeveType": "Half",
+          "styleNo": "RFJ1590 A",
+          "partName": "FORMAL SHIRTS",
+          "price": 0,
+          "mrp": 0
+        },
+        {
+          "color": "-",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "sleeveType": "Full",
+          "partName": "FORMAL SHIRTS",
+          "mrp": 0,
+          "mrpBySize": {},
+          "price": 0,
+          "styleNo": "RFJ1590 C",
+          "amount": 0
+        },
+        {
+          "sleeveType": "Half",
+          "price": 0,
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "RFJ1590 C",
+          "color": "-",
+          "amount": 0,
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "total": 3,
+          "mrpBySize": {},
+          "mrp": 0
+        },
+        {
+          "sleeveType": "Half",
+          "sizeQty": {
+            "40": 2,
+            "42": 1
+          },
+          "mrp": 0,
+          "price": 0,
+          "amount": 0,
+          "mrpBySize": {},
+          "total": 3,
+          "partName": "FORMAL SHIRTS",
+          "color": "-",
+          "styleNo": "RFJ1590 D"
+        }
+      ]
+    },
+    {
+      "id": "RAdkVrKHyWLldlg7fdYS",
+      "totalAmount": 0,
+      "updatedAt": "2026-09-22T08:59:00.758Z",
+      "dcNo": "DCC2627-1291",
+      "orderNo": "",
+      "clientName": "SARAVANA STORES - SHOP4",
+      "salesNos": [
+        "SO-1785481660325"
+      ],
+      "totalQty": 68,
+      "packedOn": "2026-09-22T08:59:00.758Z",
+      "packingListNo": "PK-1790061161140",
+      "agentName": "DIRECT",
+      "zipCode": "600110",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "packingListId": "HERgojVeaGKj5zux2aaH",
+      "state": "TAMILNADU",
+      "clientId": "clQsOfMANvlKehqFHU21",
+      "transport": "",
+      "salesOrderIds": [
+        "71g2dckndd28zXgjp5ua"
+      ],
+      "place": "COIMBATORE",
+      "clientPhone": "9962504233",
+      "billingAddress": "GNT ROAD,\nNO.89 SSM ESTATE LIMITED,\nMADHAVARAM,",
+      "sizes": [
+        "30",
+        "32",
+        "34",
+        "36",
+        "38",
+        "40",
+        "42"
+      ],
+      "items": [
+        {
+          "styleNo": "RTRS041",
+          "mrp": 0,
+          "color": "07-BLACK",
+          "total": 8,
+          "amount": 0,
+          "price": 0,
+          "sizeQty": {
+            "30": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "partName": "FORMAL TROUSER",
+          "mrpBySize": {}
+        },
+        {
+          "color": "03-DGREY",
+          "styleNo": "RTRS042",
+          "total": 3,
+          "partName": "FORMAL TROUSER",
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "mrpBySize": {},
+          "price": 0,
+          "amount": 0,
+          "mrp": 0
+        },
+        {
+          "color": "04-GREEN",
+          "partName": "FORMAL TROUSER",
+          "total": 9,
+          "styleNo": "RTRS042",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "price": 0,
+          "mrp": 0,
+          "mrpBySize": {},
+          "amount": 0
+        },
+        {
+          "mrp": 0,
+          "sizeQty": {
+            "30": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "total": 6,
+          "color": "01-BROWN",
+          "mrpBySize": {},
+          "price": 0,
+          "partName": "FORMAL TROUSER",
+          "amount": 0,
+          "styleNo": "RTRS043"
+        },
+        {
+          "mrpBySize": {},
+          "color": "02-NAVY",
+          "styleNo": "RTRS043",
+          "mrp": 0,
+          "partName": "FORMAL TROUSER",
+          "total": 4,
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "price": 0,
+          "amount": 0
+        },
+        {
+          "price": 0,
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "mrp": 0,
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER",
+          "color": "02-ASH",
+          "amount": 0,
+          "styleNo": "RTRS045",
+          "total": 3
+        },
+        {
+          "partName": "FORMAL TROUSER",
+          "price": 0,
+          "mrpBySize": {},
+          "styleNo": "RTRS045",
+          "total": 4,
+          "amount": 0,
+          "sizeQty": {
+            "34": 2,
+            "36": 1,
+            "38": 1
+          },
+          "color": "04-GREEN",
+          "mrp": 0
+        },
+        {
+          "styleNo": "RTRS045",
+          "price": 0,
+          "amount": 0,
+          "total": 3,
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "mrpBySize": {},
+          "mrp": 0,
+          "partName": "FORMAL TROUSER",
+          "color": "05-NAVY"
+        },
+        {
+          "amount": 0,
+          "styleNo": "RTRS046",
+          "mrp": 0,
+          "price": 0,
+          "partName": "FORMAL TROUSER",
+          "total": 9,
+          "color": "03-LBLUE",
+          "mrpBySize": {},
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          }
+        },
+        {
+          "price": 0,
+          "styleNo": "RTRS047",
+          "amount": 0,
+          "mrpBySize": {},
+          "total": 3,
+          "mrp": 0,
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "color": "04-COFFEE",
+          "partName": "FORMAL TROUSER"
+        },
+        {
+          "price": 0,
+          "sizeQty": {
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "mrp": 0,
+          "partName": "FORMAL TROUSER",
+          "color": "02-BLUE",
+          "amount": 0,
+          "mrpBySize": {},
+          "total": 7,
+          "styleNo": "RTRS048"
+        },
+        {
+          "mrpBySize": {},
+          "color": "04-NAVY",
+          "mrp": 0,
+          "partName": "FORMAL TROUSER",
+          "styleNo": "RTRS048",
+          "total": 3,
+          "sizeQty": {
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "price": 0,
+          "amount": 0
+        },
+        {
+          "amount": 0,
+          "price": 0,
+          "mrpBySize": {},
+          "sizeQty": {
+            "34": 1,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "color": "05-BLACK",
+          "mrp": 0,
+          "styleNo": "RTRS048",
+          "partName": "FORMAL TROUSER",
+          "total": 6
+        }
+      ],
+      "dcSeq": 1291,
+      "boxCount": 2,
+      "createdAt": "2026-09-22T08:59:00.758Z"
+    },
+    {
+      "id": "SeFH8c57lt8ishZhRuOA",
+      "state": "TAMILNADU",
+      "salesOrderIds": [
+        "71g2dckndd28zXgjp5ua"
+      ],
+      "boxCount": 2,
+      "createdAt": "2026-09-22T08:56:55.716Z",
+      "clientPhone": "9962504233",
+      "orderNo": "",
+      "billingAddress": "GNT ROAD,\nNO.89 SSM ESTATE LIMITED,\nMADHAVARAM,",
+      "zipCode": "600110",
+      "dcNo": "DCC2627-1290",
+      "totalAmount": 0,
+      "clientId": "clQsOfMANvlKehqFHU21",
+      "dcSeq": 1290,
+      "transport": "",
+      "packingListNo": "PK-1790059033883",
+      "clientName": "SARAVANA STORES - SHOP4",
+      "agentName": "DIRECT",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "packedOn": "2026-09-22T08:56:55.716Z",
+      "packingListId": "mdSvk54dOsNwsIXcPvZf",
+      "items": [
+        {
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "40": 1,
+            "42": 1
+          },
+          "total": 6,
+          "partName": "FORMAL TROUSER",
+          "color": "01-GREY",
+          "mrpBySize": {},
+          "mrp": 0,
+          "amount": 0,
+          "styleNo": "RTRS038",
+          "price": 0
+        },
+        {
+          "partName": "FORMAL TROUSER",
+          "styleNo": "RTRS040",
+          "price": 0,
+          "amount": 0,
+          "total": 6,
+          "mrpBySize": {},
+          "sizeQty": {
+            "30": 1,
+            "34": 2,
+            "38": 2,
+            "40": 1
+          },
+          "mrp": 0,
+          "color": "01-DGREY"
+        },
+        {
+          "total": 5,
+          "amount": 0,
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "mrp": 0,
+          "color": "05-BLACK",
+          "styleNo": "RTRS040",
+          "partName": "FORMAL TROUSER",
+          "price": 0,
+          "mrpBySize": {}
+        },
+        {
+          "mrp": 0,
+          "amount": 0,
+          "styleNo": "RTRS044",
+          "price": 0,
+          "mrpBySize": {},
+          "total": 7,
+          "color": "02-BLUE",
+          "partName": "FORMAL TROUSER",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          }
+        },
+        {
+          "amount": 0,
+          "price": 0,
+          "sizeQty": {
+            "30": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "partName": "FORMAL TROUSER",
+          "color": "03-GREY",
+          "styleNo": "RTRS045",
+          "mrpBySize": {},
+          "total": 7,
+          "mrp": 0
+        },
+        {
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER",
+          "price": 0,
+          "mrp": 0,
+          "styleNo": "RTRS046",
+          "amount": 0,
+          "total": 6,
+          "sizeQty": {
+            "34": 2,
+            "36": 2,
+            "38": 2
+          },
+          "color": "01-GREY"
+        },
+        {
+          "amount": 0,
+          "styleNo": "RTRS046",
+          "mrpBySize": {},
+          "price": 0,
+          "mrp": 0,
+          "total": 4,
+          "color": "02-LBROWN",
+          "partName": "FORMAL TROUSER",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1
+          }
+        },
+        {
+          "amount": 0,
+          "styleNo": "RTRS046",
+          "price": 0,
+          "mrpBySize": {},
+          "total": 8,
+          "mrp": 0,
+          "color": "04-DGREY",
+          "partName": "FORMAL TROUSER",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 1,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          }
+        },
+        {
+          "price": 0,
+          "amount": 0,
+          "mrp": 0,
+          "sizeQty": {
+            "34": 1,
+            "36": 2,
+            "38": 1
+          },
+          "partName": "FORMAL TROUSER",
+          "styleNo": "RTRS046",
+          "color": "05-COFFEE",
+          "mrpBySize": {},
+          "total": 4
+        },
+        {
+          "price": 0,
+          "mrp": 0,
+          "amount": 0,
+          "mrpBySize": {},
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "styleNo": "RTRS048",
+          "color": "01-KHAKI",
+          "partName": "FORMAL TROUSER",
+          "total": 9
+        },
+        {
+          "styleNo": "RTRS052",
+          "color": "02-BEIGE",
+          "mrp": 0,
+          "partName": "FORMAL TROUSER",
+          "total": 4,
+          "amount": 0,
+          "price": 0,
+          "mrpBySize": {},
+          "sizeQty": {
+            "34": 1,
+            "36": 2,
+            "38": 1
+          }
+        },
+        {
+          "total": 4,
+          "amount": 0,
+          "color": "03-STONE",
+          "sizeQty": {
+            "34": 1,
+            "36": 2,
+            "38": 1
+          },
+          "mrp": 0,
+          "mrpBySize": {},
+          "styleNo": "RTRS052",
+          "partName": "FORMAL TROUSER",
+          "price": 0
+        }
+      ],
+      "salesNos": [
+        "SO-1785481660325"
+      ],
+      "updatedAt": "2026-09-22T08:56:55.716Z",
+      "totalQty": 70,
+      "place": "COIMBATORE",
+      "sizes": [
+        "30",
+        "32",
+        "34",
+        "36",
+        "38",
+        "40",
+        "42"
+      ]
+    },
+    {
+      "id": "T0FreT2qCT01dVCbIjw5",
+      "zipCode": "600110",
+      "createdAt": "2026-09-22T11:58:18.825Z",
+      "clientName": "SARAVANA STORES - SHOP1",
+      "state": "TAMILNADU",
+      "clientPhone": "9962504233",
+      "packingListId": "FeRZkB959DO7EMdGnPZg",
+      "orderNo": "",
+      "boxCount": 2,
+      "packingListNo": "PK-1789397532712",
+      "packedOn": "2026-09-22T11:58:18.825Z",
+      "dcNo": "DCC2627-1297",
+      "dcSeq": 1297,
+      "transport": "",
+      "totalAmount": 0,
+      "salesNos": [
+        "SO-1785478117090",
+        "SO-1785481078776"
+      ],
+      "totalQty": 97,
+      "clientId": "qJfXBXnHkPl68I3siysW",
+      "updatedAt": "2026-09-22T11:58:18.825Z",
+      "salesOrderIds": [
+        "jZfX7Gv8D7eaKMroTqIu",
+        "tR99KwLlEqcn8e5NOpgN"
+      ],
+      "sizes": [
+        "30",
+        "32",
+        "34",
+        "36",
+        "38",
+        "40"
+      ],
+      "place": "CHENNAI",
+      "agentName": "DIRECT",
+      "items": [
+        {
+          "amount": 0,
+          "partName": "CASUAL TROUSER",
+          "styleNo": "RTA173",
+          "price": 0,
+          "total": 2,
+          "mrp": 0,
+          "mrpBySize": {},
+          "color": "01-CREAM",
+          "sizeQty": {
+            "36": 1,
+            "38": 1
+          }
+        },
+        {
+          "total": 3,
+          "mrpBySize": {},
+          "amount": 0,
+          "color": "01-BEIGE",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1
+          },
+          "styleNo": "RTA178",
+          "partName": "CASUAL TROUSER",
+          "mrp": 0,
+          "price": 0
+        },
+        {
+          "styleNo": "RTA178",
+          "mrp": 0,
+          "color": "04-BLACK",
+          "partName": "CASUAL TROUSER",
+          "mrpBySize": {},
+          "amount": 0,
+          "total": 4,
+          "price": 0,
+          "sizeQty": {
+            "34": 1,
+            "36": 2,
+            "38": 1
+          }
+        },
+        {
+          "styleNo": "RTA180",
+          "color": "01-CREAM",
+          "mrp": 0,
+          "amount": 0,
+          "total": 4,
+          "price": 0,
+          "mrpBySize": {},
+          "sizeQty": {
+            "32": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "partName": "CASUAL TROUSER"
+        },
+        {
+          "color": "05-BLACK",
+          "styleNo": "RTA180",
+          "total": 3,
+          "partName": "CASUAL TROUSER",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1
+          },
+          "price": 0,
+          "mrp": 0,
+          "amount": 0,
+          "mrpBySize": {}
+        },
+        {
+          "total": 8,
+          "mrpBySize": {},
+          "sizeQty": {
+            "30": 1,
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "amount": 0,
+          "mrp": 0,
+          "color": "01-CREAM",
+          "styleNo": "RTA199",
+          "partName": "CASUAL TROUSER",
+          "price": 0
+        },
+        {
+          "styleNo": "RTA199",
+          "color": "02-GREY",
+          "partName": "CASUAL TROUSER",
+          "total": 7,
+          "mrpBySize": {},
+          "amount": 0,
+          "price": 0,
+          "mrp": 0,
+          "sizeQty": {
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          }
+        },
+        {
+          "mrp": 0,
+          "price": 0,
+          "sizeQty": {
+            "30": 1,
+            "32": 2,
+            "34": 2,
+            "36": 2
+          },
+          "partName": "CASUAL TROUSER",
+          "color": "05-BLACK",
+          "amount": 0,
+          "mrpBySize": {},
+          "styleNo": "RTA199",
+          "total": 7
+        },
+        {
+          "price": 0,
+          "mrpBySize": {},
+          "styleNo": "RTS153",
+          "amount": 0,
+          "mrp": 0,
+          "total": 6,
+          "sizeQty": {
+            "32": 2,
+            "36": 1,
+            "38": 2,
+            "40": 1
+          },
+          "color": "01-CREAM",
+          "partName": "CASUAL TROUSER"
+        },
+        {
+          "mrpBySize": {},
+          "price": 0,
+          "styleNo": "RTS203",
+          "amount": 0,
+          "total": 7,
+          "mrp": 0,
+          "sizeQty": {
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "color": "03-DGREY",
+          "partName": "CASUAL TROUSER"
+        },
+        {
+          "price": 0,
+          "sizeQty": {
+            "32": 1,
+            "34": 3,
+            "36": 2,
+            "38": 1
+          },
+          "mrpBySize": {},
+          "partName": "CASUAL TROUSER",
+          "mrp": 0,
+          "amount": 0,
+          "color": "03-PISTA",
+          "total": 7,
+          "styleNo": "RTS204"
+        },
+        {
+          "mrp": 0,
+          "color": "01-KHAKI",
+          "styleNo": "RTS207",
+          "partName": "CASUAL TROUSER",
+          "total": 5,
+          "price": 0,
+          "sizeQty": {
+            "30": 1,
+            "32": 2,
+            "36": 1,
+            "38": 1
+          },
+          "mrpBySize": {},
+          "amount": 0
+        },
+        {
+          "mrp": 0,
+          "styleNo": "RTS207",
+          "total": 5,
+          "amount": 0,
+          "color": "02-OLIVE",
+          "partName": "CASUAL TROUSER",
+          "price": 0,
+          "mrpBySize": {},
+          "sizeQty": {
+            "32": 2,
+            "34": 1,
+            "36": 1,
+            "38": 1
+          }
+        },
+        {
+          "price": 0,
+          "styleNo": "RTS207",
+          "amount": 0,
+          "partName": "CASUAL TROUSER",
+          "mrpBySize": {},
+          "color": "03-COFFEE",
+          "mrp": 0,
+          "total": 5,
+          "sizeQty": {
+            "32": 2,
+            "34": 1,
+            "36": 1,
+            "38": 1
+          }
+        },
+        {
+          "price": 0,
+          "styleNo": "RTA180",
+          "amount": 0,
+          "color": "03-BROWN",
+          "mrp": 0,
+          "mrpBySize": {},
+          "total": 3,
+          "sizeQty": {
+            "32": 1,
+            "38": 1,
+            "40": 1
+          },
+          "partName": "CASUAL TROUSER"
+        },
+        {
+          "price": 0,
+          "styleNo": "RTS123",
+          "mrp": 0,
+          "partName": "CASUAL TROUSER",
+          "sizeQty": {
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "amount": 0,
+          "color": "02-KHAKI",
+          "mrpBySize": {},
+          "total": 8
+        },
+        {
+          "styleNo": "RTS189",
+          "amount": 0,
+          "price": 0,
+          "mrpBySize": {},
+          "color": "03-OLIVE",
+          "mrp": 0,
+          "total": 8,
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 3,
+            "38": 2,
+            "40": 1
+          },
+          "partName": "CASUAL TROUSER"
+        },
+        {
+          "mrp": 0,
+          "amount": 0,
+          "price": 0,
+          "partName": "CASUAL TROUSER",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "styleNo": "RTS205",
+          "total": 5,
+          "mrpBySize": {},
+          "color": "04-PISTA"
+        }
+      ],
+      "billingAddress": "GNT ROAD,\nNO.89 SSM ESTATE LIMITED,\nMADHAVARAM,",
+      "clientGstin": "33AAWFS6761Q2Z1"
+    },
+    {
+      "id": "ZO34N8YlfRs7zySugWVG",
+      "state": "TAMILNADU",
+      "updatedAt": "2026-09-22T06:02:56.035Z",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "place": "MADURAI",
+      "billingAddress": "",
+      "zipCode": "600110",
+      "transport": "",
+      "agentName": "DIRECT",
+      "boxCount": 1,
+      "clientId": "O1CfTfEasSamtclE4t1p",
+      "createdAt": "2026-09-22T06:02:56.035Z",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44"
+      ],
+      "totalAmount": 0,
+      "salesNos": [
+        "SO-1785481547350"
+      ],
+      "clientPhone": "9962504233",
+      "salesOrderIds": [
+        "FSkUpCFLJGM0lZBtLJTR"
+      ],
+      "dcNo": "DCC2627-1279",
+      "packingListId": "RzftzBH7u3ZkWpKF45Rw",
+      "packingListNo": "PK-1789810971659",
+      "totalQty": 38,
+      "clientName": "SARAVANA STORES - SHOP3",
+      "items": [
+        {
+          "partName": "FORMAL SHIRTS",
+          "sleeveType": "Full",
+          "mrpBySize": {},
+          "color": "-",
+          "total": 4,
+          "amount": 0,
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 1
+          },
+          "mrp": 0,
+          "styleNo": "RFJ1425 C",
+          "price": 0
+        },
+        {
+          "color": "-",
+          "partName": "FORMAL SHIRTS",
+          "sleeveType": "Full",
+          "total": 3,
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "styleNo": "RFJ1450 A",
+          "price": 0,
+          "mrp": 0,
+          "mrpBySize": {},
+          "amount": 0
+        },
+        {
+          "styleNo": "RFJ1450 A",
+          "sizeQty": {
+            "40": 1,
+            "42": 1
+          },
+          "sleeveType": "Half",
+          "partName": "FORMAL SHIRTS",
+          "mrp": 0,
+          "price": 0,
+          "amount": 0,
+          "color": "-",
+          "total": 2,
+          "mrpBySize": {}
+        },
+        {
+          "price": 0,
+          "color": "-",
+          "partName": "FORMAL SHIRTS",
+          "total": 4,
+          "amount": 0,
+          "mrpBySize": {},
+          "styleNo": "RFJ1450 B",
+          "mrp": 0,
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 1
+          },
+          "sleeveType": "Full"
+        },
+        {
+          "total": 2,
+          "mrp": 0,
+          "color": "-",
+          "sizeQty": {
+            "40": 1,
+            "42": 1
+          },
+          "price": 0,
+          "styleNo": "RFJ1450 B",
+          "mrpBySize": {},
+          "amount": 0,
+          "sleeveType": "Half",
+          "partName": "FORMAL SHIRTS"
+        },
+        {
+          "total": 6,
+          "partName": "FORMAL SHIRTS",
+          "mrp": 0,
+          "color": "-",
+          "sizeQty": {
+            "38": 2,
+            "40": 3,
+            "42": 1
+          },
+          "price": 0,
+          "mrpBySize": {},
+          "styleNo": "RFJ1596 A",
+          "sleeveType": "Full",
+          "amount": 0
+        },
+        {
+          "mrpBySize": {},
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 1,
+            "42": 1
+          },
+          "sleeveType": "Full",
+          "color": "-",
+          "styleNo": "RFJ1596 B",
+          "amount": 0,
+          "total": 5,
+          "price": 0,
+          "partName": "FORMAL SHIRTS",
+          "mrp": 0
+        },
+        {
+          "total": 6,
+          "color": "-",
+          "partName": "FORMAL SHIRTS",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 3,
+            "44": 1
+          },
+          "styleNo": "RFJ1596 C",
+          "price": 0,
+          "mrpBySize": {},
+          "mrp": 0,
+          "amount": 0,
+          "sleeveType": "Full"
+        },
+        {
+          "price": 0,
+          "mrpBySize": {},
+          "color": "-",
+          "total": 6,
+          "amount": 0,
+          "partName": "FORMAL SHIRTS",
+          "mrp": 0,
+          "styleNo": "RFJ1596 D",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 1
+          },
+          "sleeveType": "Full"
+        }
+      ],
+      "orderNo": "",
+      "dcSeq": 1279,
+      "packedOn": "2026-09-22T06:02:56.035Z"
+    },
+    {
+      "id": "bXuoCkkdqdVmJDsNFUEm",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "orderNo": "",
+      "packedOn": "2026-09-22T06:31:07.686Z",
+      "dcSeq": 1283,
+      "totalAmount": 0,
+      "packingListNo": "PK-1789815288517",
+      "packingListId": "MEh1cBAzWYo7VNN777Oa",
+      "items": [
+        {
+          "sizeQty": {
+            "38": 2,
+            "40": 2,
+            "42": 2
+          },
+          "styleNo": "HONOR DOBBY 4554",
+          "sleeveType": "Full",
+          "mrpBySize": {},
+          "color": "2",
+          "total": 6,
+          "mrp": 0,
+          "amount": 0,
+          "partName": "FORMAL SHIRTS",
+          "price": 0
+        },
+        {
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 1,
+            "42": 2,
+            "44": 1
+          },
+          "styleNo": "ROYAL PICK LITE",
+          "mrpBySize": {},
+          "mrp": 0,
+          "amount": 0,
+          "partName": "FORMAL SHIRTS",
+          "total": 7,
+          "color": "7",
+          "price": 0
+        },
+        {
+          "mrpBySize": {},
+          "partName": "FORMAL SHIRTS",
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 2
+          },
+          "styleNo": "LINO LUX 2718",
+          "mrp": 0,
+          "color": "1",
+          "total": 5,
+          "sleeveType": "Full",
+          "amount": 0,
+          "price": 0
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "sleeveType": "Full",
+          "mrpBySize": {},
+          "sizeQty": {
+            "36": 1,
+            "38": 3,
+            "40": 3,
+            "42": 3
+          },
+          "styleNo": "ROYAL PICK LITE",
+          "color": "13",
+          "total": 10,
+          "mrp": 0,
+          "price": 0,
+          "amount": 0
+        },
+        {
+          "mrpBySize": {},
+          "sleeveType": "Full",
+          "mrp": 0,
+          "price": 0,
+          "partName": "FORMAL SHIRTS",
+          "total": 8,
+          "amount": 0,
+          "styleNo": "ROYAL PICK LITE",
+          "color": "14",
+          "sizeQty": {
+            "38": 3,
+            "40": 3,
+            "42": 2
+          }
+        },
+        {
+          "mrp": 0,
+          "price": 0,
+          "sleeveType": "Full",
+          "styleNo": "ROYAL PICK LITE",
+          "total": 7,
+          "sizeQty": {
+            "38": 2,
+            "40": 2,
+            "42": 3
+          },
+          "color": "16",
+          "amount": 0,
+          "partName": "FORMAL SHIRTS",
+          "mrpBySize": {}
+        }
+      ],
+      "salesOrderIds": [
+        "FSkUpCFLJGM0lZBtLJTR"
+      ],
+      "dcNo": "DCC2627-1283",
+      "clientPhone": "9962504233",
+      "clientName": "SARAVANA STORES - SHOP3",
+      "zipCode": "600110",
+      "salesNos": [
+        "SO-1785481547350"
+      ],
+      "updatedAt": "2026-09-22T06:31:07.686Z",
+      "totalQty": 43,
+      "transport": "",
+      "agentName": "DIRECT",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44"
+      ],
+      "place": "MADURAI",
+      "createdAt": "2026-09-22T06:31:07.686Z",
+      "billingAddress": "",
+      "boxCount": 1,
+      "clientId": "O1CfTfEasSamtclE4t1p",
+      "state": "TAMILNADU"
+    },
+    {
+      "id": "lXhxJjlw9X2zkLjf3Xep",
+      "place": "COIMBATORE",
+      "agentName": "DIRECT",
+      "salesNos": [
+        "SO-1785479484112",
+        "SO-1785481660325"
+      ],
+      "clientPhone": "9962504233",
+      "transport": "",
+      "state": "TAMILNADU",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "dcNo": "DCC2627-1292",
+      "sizes": [
+        "30",
+        "32",
+        "34",
+        "36",
+        "38",
+        "40"
+      ],
+      "orderNo": "",
+      "zipCode": "600110",
+      "dcSeq": 1292,
+      "billingAddress": "GNT ROAD,\nNO.89 SSM ESTATE LIMITED,\nMADHAVARAM,",
+      "clientName": "SARAVANA STORES - SHOP4",
+      "clientId": "clQsOfMANvlKehqFHU21",
+      "updatedAt": "2026-09-22T09:23:02.169Z",
+      "createdAt": "2026-09-22T09:23:02.169Z",
+      "packingListId": "ZyVz5ieE5BNCiEGvcW5b",
+      "packingListNo": "PK-1790061670828",
+      "salesOrderIds": [
+        "JGDj8BJg8MZ0tBZ8eVzw",
+        "71g2dckndd28zXgjp5ua"
+      ],
+      "packedOn": "2026-09-22T09:23:02.169Z",
+      "totalQty": 59,
+      "items": [
+        {
+          "total": 6,
+          "styleNo": "RTA119",
+          "mrpBySize": {},
+          "amount": 0,
+          "sizeQty": {
+            "32": 3,
+            "34": 1,
+            "38": 1,
+            "40": 1
+          },
+          "partName": "CASUAL TROUSER",
+          "mrp": 0,
+          "color": "03-PISTA",
+          "price": 0
+        },
+        {
+          "styleNo": "RTA175",
+          "amount": 0,
+          "color": "01-CREAM",
+          "price": 0,
+          "sizeQty": {
+            "32": 2,
+            "34": 1,
+            "36": 1,
+            "38": 2,
+            "40": 1
+          },
+          "mrp": 0,
+          "partName": "CASUAL TROUSER",
+          "total": 7,
+          "mrpBySize": {}
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "price": 0,
+          "styleNo": "RTA195",
+          "color": "03-NAVY",
+          "mrp": 0,
+          "total": 6,
+          "mrpBySize": {},
+          "amount": 0,
+          "sizeQty": {
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          }
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "price": 0,
+          "mrp": 0,
+          "styleNo": "RTS153",
+          "color": "02-ASH",
+          "total": 6,
+          "mrpBySize": {},
+          "amount": 0,
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          }
+        },
+        {
+          "color": "04-NAVY",
+          "price": 0,
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "partName": "CASUAL TROUSER",
+          "amount": 0,
+          "mrp": 0,
+          "mrpBySize": {},
+          "styleNo": "RTS153",
+          "total": 4
+        },
+        {
+          "mrpBySize": {},
+          "total": 8,
+          "styleNo": "RTS203",
+          "color": "03-DGREY",
+          "partName": "CASUAL TROUSER",
+          "price": 0,
+          "amount": 0,
+          "sizeQty": {
+            "30": 1,
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "mrp": 0
+        },
+        {
+          "total": 8,
+          "styleNo": "RTS205",
+          "partName": "CASUAL TROUSER",
+          "color": "01-STONE",
+          "mrp": 0,
+          "price": 0,
+          "mrpBySize": {},
+          "amount": 0,
+          "sizeQty": {
+            "30": 1,
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          }
+        },
+        {
+          "total": 7,
+          "partName": "CASUAL TROUSER",
+          "sizeQty": {
+            "30": 1,
+            "32": 2,
+            "34": 1,
+            "36": 2,
+            "38": 1
+          },
+          "mrp": 0,
+          "mrpBySize": {},
+          "price": 0,
+          "styleNo": "RTS205",
+          "amount": 0,
+          "color": "02-BEIGE"
+        },
+        {
+          "total": 7,
+          "mrpBySize": {},
+          "mrp": 0,
+          "sizeQty": {
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "price": 0,
+          "partName": "CASUAL TROUSER",
+          "amount": 0,
+          "styleNo": "RTS205",
+          "color": "06-NAVY"
+        }
+      ],
+      "totalAmount": 0,
+      "boxCount": 2
+    },
+    {
+      "id": "pkEstO5mCno43VqEdfPQ",
+      "boxCount": 1,
+      "place": "CHENNAI",
+      "packingListId": "U48tRg82VbPQXJI7S6ft",
+      "packingListNo": "PK-1790067441524",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "salesOrderIds": [
+        "71g2dckndd28zXgjp5ua"
+      ],
+      "billingAddress": "GNT ROAD,\nNO.89 SSM ESTATE LIMITED,\nMADHAVARAM,",
+      "totalQty": 79,
+      "packedOn": "2026-09-22T09:53:38.347Z",
+      "clientName": "SARAVANA STORES - SHOP4",
+      "zipCode": "600110",
+      "createdAt": "2026-09-22T09:53:38.347Z",
+      "sizes": [
+        "30",
+        "32",
+        "34",
+        "36",
+        "38",
+        "40",
+        "42"
+      ],
+      "updatedAt": "2026-09-22T09:53:38.347Z",
+      "clientId": "clQsOfMANvlKehqFHU21",
+      "state": "TAMILNADU",
+      "orderNo": "",
+      "dcSeq": 1295,
+      "clientPhone": "9962504233",
+      "totalAmount": 0,
+      "dcNo": "DCC2627-1295",
+      "transport": "",
+      "salesNos": [
+        "SO-1785481660325"
+      ],
+      "items": [
+        {
+          "total": 8,
+          "partName": "FORMAL TROUSER",
+          "mrp": 0,
+          "sizeQty": {
+            "30": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "mrpBySize": {},
+          "price": 0,
+          "amount": 0,
+          "styleNo": "RTRS038",
+          "color": "02-NAVY"
+        },
+        {
+          "partName": "FORMAL TROUSER",
+          "mrp": 0,
+          "styleNo": "RTRS038",
+          "mrpBySize": {},
+          "price": 0,
+          "color": "03-BLACK",
+          "total": 10,
+          "amount": 0,
+          "sizeQty": {
+            "30": 2,
+            "34": 2,
+            "36": 2,
+            "38": 2,
+            "40": 1,
+            "42": 1
+          }
+        },
+        {
+          "styleNo": "RTRS042",
+          "color": "06-BLACK",
+          "price": 0,
+          "total": 9,
+          "amount": 0,
+          "partName": "FORMAL TROUSER",
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "mrpBySize": {},
+          "mrp": 0
+        },
+        {
+          "styleNo": "RTRS043",
+          "amount": 0,
+          "color": "02-NAVY",
+          "mrpBySize": {},
+          "price": 0,
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "partName": "FORMAL TROUSER",
+          "total": 8,
+          "mrp": 0
+        },
+        {
+          "amount": 0,
+          "mrp": 0,
+          "sizeQty": {
+            "30": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1
+          },
+          "price": 0,
+          "mrpBySize": {},
+          "partName": "FORMAL TROUSER",
+          "color": "03-BLUE",
+          "styleNo": "RTRS043",
+          "total": 4
+        },
+        {
+          "partName": "FORMAL TROUSER",
+          "styleNo": "RTRS046",
+          "color": "02-LBROWN",
+          "price": 0,
+          "mrp": 0,
+          "amount": 0,
+          "total": 9,
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "mrpBySize": {}
+        },
+        {
+          "styleNo": "RTRS047",
+          "amount": 0,
+          "price": 0,
+          "mrp": 0,
+          "color": "01-STONE",
+          "sizeQty": {
+            "34": 2,
+            "36": 1,
+            "38": 2,
+            "40": 1
+          },
+          "total": 6,
+          "partName": "FORMAL TROUSER",
+          "mrpBySize": {}
+        },
+        {
+          "amount": 0,
+          "mrpBySize": {},
+          "color": "05-NAVY",
+          "sizeQty": {
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "partName": "FORMAL TROUSER",
+          "price": 0,
+          "styleNo": "RTRS047",
+          "mrp": 0,
+          "total": 7
+        },
+        {
+          "styleNo": "RTRS047",
+          "partName": "FORMAL TROUSER",
+          "amount": 0,
+          "total": 9,
+          "color": "06-BLACK",
+          "price": 0,
+          "sizeQty": {
+            "30": 1,
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "mrp": 0,
+          "mrpBySize": {}
+        },
+        {
+          "color": "01-KHAKI",
+          "amount": 0,
+          "sizeQty": {
+            "30": 1,
+            "32": 1,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1,
+            "42": 1
+          },
+          "price": 0,
+          "mrpBySize": {},
+          "styleNo": "RTRS048",
+          "partName": "FORMAL TROUSER",
+          "total": 9,
+          "mrp": 0
+        }
+      ],
+      "agentName": "DIRECT"
+    },
+    {
+      "id": "sYJZWcZxlIeAMjxfkcSW",
+      "salesNos": [
+        "SO-1785481547350"
+      ],
+      "orderNo": "",
+      "items": [
+        {
+          "styleNo": "FILANO",
+          "total": 9,
+          "sleeveType": "Full",
+          "amount": 0,
+          "sizeQty": {
+            "36": 1,
+            "38": 3,
+            "40": 1,
+            "42": 3,
+            "44": 1
+          },
+          "mrp": 0,
+          "color": "17",
+          "price": 0,
+          "mrpBySize": {},
+          "partName": "FORMAL SHIRTS"
+        },
+        {
+          "sleeveType": "Full",
+          "styleNo": "FILANO",
+          "total": 7,
+          "mrpBySize": {},
+          "partName": "FORMAL SHIRTS",
+          "amount": 0,
+          "mrp": 0,
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 2
+          },
+          "color": "6",
+          "price": 0
+        },
+        {
+          "total": 10,
+          "styleNo": "ROYAL PICK LITE",
+          "mrp": 0,
+          "mrpBySize": {},
+          "sleeveType": "Full",
+          "partName": "FORMAL SHIRTS",
+          "price": 0,
+          "color": "5",
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 3,
+            "42": 3,
+            "44": 1
+          },
+          "amount": 0
+        },
+        {
+          "mrpBySize": {},
+          "styleNo": "FILANO",
+          "total": 8,
+          "partName": "FORMAL SHIRTS",
+          "sleeveType": "Full",
+          "amount": 0,
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 2,
+            "44": 1
+          },
+          "color": "18",
+          "mrp": 0,
+          "price": 0
+        },
+        {
+          "mrp": 0,
+          "sizeQty": {
+            "38": 2,
+            "40": 1,
+            "42": 3
+          },
+          "amount": 0,
+          "total": 6,
+          "mrpBySize": {},
+          "sleeveType": "Full",
+          "price": 0,
+          "color": "4",
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "FILANO"
+        }
+      ],
+      "zipCode": "600110",
+      "clientPhone": "9962504233",
+      "transport": "",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "agentName": "DIRECT",
+      "dcNo": "DCC2627-1286",
+      "clientId": "O1CfTfEasSamtclE4t1p",
+      "dcSeq": 1286,
+      "state": "TAMILNADU",
+      "clientName": "SARAVANA STORES - SHOP3",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44"
+      ],
+      "packingListId": "tc6CShCcgCqtU2c3yeUW",
+      "updatedAt": "2026-09-22T06:55:22.598Z",
+      "createdAt": "2026-09-22T06:55:22.598Z",
+      "packingListNo": "PK-1789816385965",
+      "totalQty": 40,
+      "salesOrderIds": [
+        "FSkUpCFLJGM0lZBtLJTR"
+      ],
+      "boxCount": 1,
+      "packedOn": "2026-09-22T06:55:22.598Z",
+      "place": "MADURAI",
+      "billingAddress": "",
+      "totalAmount": 0
+    },
+    {
+      "id": "uHhQl4FhLWSyIMdZvOsS",
+      "createdAt": "2026-09-22T10:03:54.188Z",
+      "updatedAt": "2026-09-22T10:03:54.188Z",
+      "dcNo": "DCC2627-1296",
+      "totalAmount": 0,
+      "items": [
+        {
+          "amount": 0,
+          "price": 0,
+          "styleNo": "RTA195",
+          "mrpBySize": {},
+          "color": "04-BLACK",
+          "mrp": 0,
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "partName": "CASUAL TROUSER",
+          "total": 6
+        },
+        {
+          "partName": "CASUAL TROUSER",
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 2,
+            "38": 1
+          },
+          "total": 5,
+          "amount": 0,
+          "mrpBySize": {},
+          "mrp": 0,
+          "price": 0,
+          "color": "01-NAVY",
+          "styleNo": "RTA182"
+        },
+        {
+          "amount": 0,
+          "mrp": 0,
+          "price": 0,
+          "styleNo": "RTA183",
+          "color": "02-BLACK",
+          "sizeQty": {
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1,
+            "40": 1
+          },
+          "partName": "CASUAL TROUSER",
+          "mrpBySize": {},
+          "total": 8
+        },
+        {
+          "sizeQty": {
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "partName": "CASUAL TROUSER",
+          "amount": 0,
+          "color": "03-S.GREY",
+          "price": 0,
+          "styleNo": "RTS140",
+          "mrpBySize": {},
+          "total": 7,
+          "mrp": 0
+        },
+        {
+          "sizeQty": {
+            "32": 1,
+            "34": 1,
+            "36": 1,
+            "38": 1,
+            "40": 1
+          },
+          "amount": 0,
+          "color": "04-BLACK",
+          "mrpBySize": {},
+          "price": 0,
+          "styleNo": "RTS156",
+          "total": 5,
+          "partName": "CASUAL TROUSER",
+          "mrp": 0
+        },
+        {
+          "mrp": 0,
+          "mrpBySize": {},
+          "sizeQty": {
+            "32": 2,
+            "36": 1,
+            "38": 1
+          },
+          "price": 0,
+          "partName": "CASUAL TROUSER",
+          "color": "01-PISTA",
+          "total": 4,
+          "amount": 0,
+          "styleNo": "RTS206"
+        },
+        {
+          "amount": 0,
+          "styleNo": "RTS206",
+          "color": "03-OLIVE",
+          "price": 0,
+          "sizeQty": {
+            "32": 2,
+            "34": 2,
+            "36": 2,
+            "38": 1
+          },
+          "partName": "CASUAL TROUSER",
+          "mrp": 0,
+          "mrpBySize": {},
+          "total": 7
+        }
+      ],
+      "salesNos": [
+        "SO-1785479484112",
+        "SO-1785481660325"
+      ],
+      "packedOn": "2026-09-22T10:03:54.188Z",
+      "billingAddress": "GNT ROAD,\nNO.89 SSM ESTATE LIMITED,\nMADHAVARAM,",
+      "place": "CHENNAI",
+      "transport": "",
+      "clientPhone": "9962504233",
+      "clientName": "SARAVANA STORES - SHOP4",
+      "boxCount": 1,
+      "totalQty": 42,
+      "agentName": "DIRECT",
+      "packingListNo": "PK-1790064364660",
+      "state": "TAMILNADU",
+      "packingListId": "lGIiWiTCbM1F7T6Zr0K0",
+      "zipCode": "600110",
+      "salesOrderIds": [
+        "JGDj8BJg8MZ0tBZ8eVzw",
+        "71g2dckndd28zXgjp5ua"
+      ],
+      "sizes": [
+        "32",
+        "34",
+        "36",
+        "38",
+        "40"
+      ],
+      "clientId": "clQsOfMANvlKehqFHU21",
+      "orderNo": "",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "dcSeq": 1296
+    },
+    {
+      "id": "vB38aGfNSdUpMnbPCSUG",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44"
+      ],
+      "totalAmount": 0,
+      "totalQty": 37,
+      "orderNo": "",
+      "boxCount": 1,
+      "items": [
+        {
+          "partName": "FORMAL SHIRTS",
+          "sizeQty": {
+            "38": 3,
+            "40": 3,
+            "42": 2,
+            "44": 1
+          },
+          "color": "-",
+          "amount": 0,
+          "mrpBySize": {},
+          "total": 9,
+          "price": 0,
+          "mrp": 0,
+          "styleNo": "RFJ1502 A",
+          "sleeveType": "Full"
+        },
+        {
+          "mrpBySize": {},
+          "sleeveType": "Full",
+          "total": 10,
+          "color": "-",
+          "mrp": 0,
+          "sizeQty": {
+            "36": 1,
+            "38": 3,
+            "40": 3,
+            "42": 2,
+            "44": 1
+          },
+          "amount": 0,
+          "partName": "FORMAL SHIRTS",
+          "price": 0,
+          "styleNo": "RFJ1502 D"
+        },
+        {
+          "mrpBySize": {},
+          "total": 4,
+          "color": "-",
+          "mrp": 0,
+          "sizeQty": {
+            "38": 2,
+            "40": 1,
+            "42": 1
+          },
+          "partName": "FORMAL SHIRTS",
+          "sleeveType": "Full",
+          "amount": 0,
+          "price": 0,
+          "styleNo": "RFJ1526 A"
+        },
+        {
+          "color": "-",
+          "partName": "FORMAL SHIRTS",
+          "mrpBySize": {},
+          "styleNo": "RFJ1526 B",
+          "total": 6,
+          "price": 0,
+          "mrp": 0,
+          "sizeQty": {
+            "38": 2,
+            "40": 2,
+            "42": 1,
+            "44": 1
+          },
+          "amount": 0,
+          "sleeveType": "Full"
+        },
+        {
+          "sleeveType": "Half",
+          "color": "-",
+          "styleNo": "RFJ1526 A",
+          "total": 5,
+          "price": 0,
+          "mrp": 0,
+          "partName": "FORMAL SHIRTS",
+          "mrpBySize": {},
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 2
+          },
+          "amount": 0
+        },
+        {
+          "amount": 0,
+          "styleNo": "RFJ1526 B",
+          "price": 0,
+          "color": "-",
+          "partName": "FORMAL SHIRTS",
+          "sizeQty": {
+            "40": 1,
+            "42": 1,
+            "44": 1
+          },
+          "mrpBySize": {},
+          "total": 3,
+          "mrp": 0,
+          "sleeveType": "Half"
+        }
+      ],
+      "clientName": "SARAVANA STORES - SHOP1",
+      "place": "CHENNAI",
+      "dcSeq": 1278,
+      "salesNos": [
+        "SO-1785481078776"
+      ],
+      "state": "TAMILNADU",
+      "packingListNo": "PK-1789737844014",
+      "updatedAt": "2026-09-22T05:58:18.763Z",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "clientPhone": "9962504233",
+      "packingListId": "hqYkW26FbiIy1pIznIKH",
+      "clientId": "qJfXBXnHkPl68I3siysW",
+      "dcNo": "DCC2627-1278",
+      "zipCode": "600110",
+      "billingAddress": "GNT ROAD,\nNO.89 SSM ESTATE LIMITED,\nMADHAVARAM,",
+      "createdAt": "2026-09-22T05:58:18.763Z",
+      "agentName": "DIRECT",
+      "salesOrderIds": [
+        "tR99KwLlEqcn8e5NOpgN"
+      ],
+      "transport": "",
+      "packedOn": "2026-09-22T05:58:18.763Z"
+    },
+    {
+      "id": "xZmwxrwr7k6ABanPMyyN",
+      "boxCount": 1,
+      "totalQty": 37,
+      "updatedAt": "2026-09-22T06:21:58.298Z",
+      "dcNo": "DCC2627-1282",
+      "orderNo": "",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44"
+      ],
+      "dcSeq": 1282,
+      "place": "MADURAI",
+      "state": "TAMILNADU",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "packingListNo": "PK-1789811968571",
+      "salesNos": [
+        "SO-1785481547350"
+      ],
+      "clientPhone": "9962504233",
+      "items": [
+        {
+          "color": "1",
+          "sizeQty": {
+            "38": 2,
+            "40": 1,
+            "42": 2
+          },
+          "total": 5,
+          "amount": 0,
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "LINO LUX 1836",
+          "price": 0,
+          "mrpBySize": {},
+          "mrp": 0,
+          "sleeveType": "Full"
+        },
+        {
+          "sleeveType": "Full",
+          "styleNo": "LINO LUX 1836",
+          "mrp": 0,
+          "price": 0,
+          "total": 5,
+          "amount": 0,
+          "color": "2",
+          "partName": "FORMAL SHIRTS",
+          "mrpBySize": {},
+          "sizeQty": {
+            "38": 2,
+            "40": 1,
+            "42": 2
+          }
+        },
+        {
+          "sleeveType": "Full",
+          "color": "6",
+          "styleNo": "LINO LUX 1836",
+          "total": 5,
+          "price": 0,
+          "mrp": 0,
+          "mrpBySize": {},
+          "partName": "FORMAL SHIRTS",
+          "sizeQty": {
+            "38": 1,
+            "40": 1,
+            "42": 3
+          },
+          "amount": 0
+        },
+        {
+          "sleeveType": "Full",
+          "partName": "FORMAL SHIRTS",
+          "mrp": 0,
+          "styleNo": "ROYAL DUO 3672",
+          "price": 0,
+          "total": 6,
+          "amount": 0,
+          "color": "14",
+          "sizeQty": {
+            "38": 2,
+            "40": 2,
+            "42": 2
+          },
+          "mrpBySize": {}
+        },
+        {
+          "styleNo": "ROYAL PICK LITE",
+          "color": "6",
+          "amount": 0,
+          "total": 4,
+          "mrpBySize": {},
+          "price": 0,
+          "sizeQty": {
+            "36": 1,
+            "40": 1,
+            "42": 2
+          },
+          "mrp": 0,
+          "sleeveType": "Full",
+          "partName": "FORMAL SHIRTS"
+        },
+        {
+          "mrpBySize": {},
+          "partName": "FORMAL SHIRTS",
+          "sleeveType": "Full",
+          "styleNo": "RFJ1056",
+          "color": "-",
+          "total": 8,
+          "amount": 0,
+          "mrp": 0,
+          "price": 0,
+          "sizeQty": {
+            "38": 2,
+            "40": 2,
+            "42": 3,
+            "44": 1
+          }
+        },
+        {
+          "total": 4,
+          "mrpBySize": {},
+          "color": "-",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 2
+          },
+          "amount": 0,
+          "mrp": 0,
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "RFJ1596 E",
+          "sleeveType": "Full",
+          "price": 0
+        }
+      ],
+      "billingAddress": "",
+      "agentName": "DIRECT",
+      "clientName": "SARAVANA STORES - SHOP3",
+      "transport": "",
+      "packingListId": "BraoTNjB6oZtLX7CIaYC",
+      "clientId": "O1CfTfEasSamtclE4t1p",
+      "createdAt": "2026-09-22T06:21:58.298Z",
+      "packedOn": "2026-09-22T06:21:58.298Z",
+      "salesOrderIds": [
+        "FSkUpCFLJGM0lZBtLJTR"
+      ],
+      "totalAmount": 0,
+      "zipCode": "600110"
+    },
+    {
+      "id": "yVIFcpfJv6rdDyghUa1q",
+      "updatedAt": "2026-09-22T06:49:56.796Z",
+      "sizes": [
+        "36",
+        "38",
+        "40",
+        "42",
+        "44",
+        "46"
+      ],
+      "packingListNo": "PK-1789814772117",
+      "packedOn": "2026-09-22T06:49:56.796Z",
+      "dcNo": "DCC2627-1285",
+      "clientGstin": "33AAWFS6761Q2Z1",
+      "clientPhone": "9962504233",
+      "billingAddress": "",
+      "items": [
+        {
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 2
+          },
+          "amount": 0,
+          "price": 0,
+          "mrpBySize": {},
+          "mrp": 0,
+          "styleNo": "ROYAL PICK LITE",
+          "total": 7,
+          "color": "15",
+          "sleeveType": "Full",
+          "partName": "FORMAL SHIRTS"
+        },
+        {
+          "price": 0,
+          "sleeveType": "Full",
+          "sizeQty": {
+            "38": 1,
+            "40": 2,
+            "42": 2
+          },
+          "partName": "FORMAL SHIRTS",
+          "mrpBySize": {},
+          "mrp": 0,
+          "amount": 0,
+          "styleNo": "ROYAL PICK LITE",
+          "color": "18",
+          "total": 5
+        },
+        {
+          "mrpBySize": {},
+          "sleeveType": "Full",
+          "styleNo": "ROYAL PICK LITE",
+          "mrp": 0,
+          "price": 0,
+          "amount": 0,
+          "total": 6,
+          "color": "8",
+          "sizeQty": {
+            "36": 1,
+            "38": 3,
+            "40": 2
+          },
+          "partName": "FORMAL SHIRTS"
+        },
+        {
+          "color": "7",
+          "styleNo": "HONOR DOBBY 4554",
+          "total": 6,
+          "sleeveType": "Full",
+          "mrpBySize": {},
+          "partName": "FORMAL SHIRTS",
+          "price": 0,
+          "mrp": 0,
+          "sizeQty": {
+            "40": 3,
+            "42": 3
+          },
+          "amount": 0
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "mrpBySize": {},
+          "price": 0,
+          "styleNo": "ROYAL PICK LITE",
+          "color": "10",
+          "amount": 0,
+          "total": 6,
+          "mrp": 0,
+          "sleeveType": "Full",
+          "sizeQty": {
+            "36": 1,
+            "38": 1,
+            "40": 1,
+            "42": 1,
+            "44": 1,
+            "46": 1
+          }
+        },
+        {
+          "color": "17",
+          "mrpBySize": {},
+          "total": 8,
+          "sizeQty": {
+            "36": 1,
+            "38": 2,
+            "40": 2,
+            "42": 2,
+            "44": 1
+          },
+          "sleeveType": "Full",
+          "partName": "FORMAL SHIRTS",
+          "amount": 0,
+          "mrp": 0,
+          "price": 0,
+          "styleNo": "ROYAL PICK LITE"
+        },
+        {
+          "partName": "FORMAL SHIRTS",
+          "styleNo": "ROYAL PICK LITE",
+          "color": "18",
+          "amount": 0,
+          "total": 1,
+          "price": 0,
+          "sizeQty": {
+            "36": 1
+          },
+          "mrp": 0,
+          "mrpBySize": {}
+        }
+      ],
+      "state": "TAMILNADU",
+      "orderNo": "",
+      "clientId": "O1CfTfEasSamtclE4t1p",
+      "dcSeq": 1285,
+      "place": "MADURAI",
+      "agentName": "DIRECT",
+      "transport": "",
+      "salesOrderIds": [
+        "FSkUpCFLJGM0lZBtLJTR"
+      ],
+      "salesNos": [
+        "SO-1785481547350"
+      ],
+      "zipCode": "600110",
+      "createdAt": "2026-09-22T06:49:56.796Z",
+      "boxCount": 1,
+      "packingListId": "MUqAdMUWHlm0w3zy9ztZ",
+      "totalAmount": 0,
+      "totalQty": 39,
+      "clientName": "SARAVANA STORES - SHOP3"
+    }
+  ],
+  "invoices": [
+    {
+      "id": "oLJPm2kcSWNxDhL8L3Ob",
+      "discountPct": 10,
+      "sgstRate": 2.5,
+      "agentName": "D Hari Babu",
+      "vehicleNo": "",
+      "clientPhone": "04151222777",
+      "cgstAmount": 0,
+      "transport": "",
+      "clientState": "TAMILNADU",
+      "salesNos": [
+        "SO-1789473095338"
+      ],
+      "updatedAt": "2026-09-23T07:59:57.563Z",
+      "invoiceDate": "2026-09-23T07:59:57.563Z",
+      "clientShipToZipCode": "606213",
+      "packingListIds": [
+        "ehgsYNfmMAKWbQsBou0P"
+      ],
+      "totalPkgs": 2,
+      "docNo": "",
+      "packingListNo": "PK-1790056775028",
+      "createdAt": "2026-09-23T07:59:57.563Z",
+      "amountInWords": "ZERO RUPEES ONLY",
+      "invoiceNo": "TMGC2627-2027",
+      "totalTaxAmount": 0,
+      "destination": "KALLAKURICHI",
+      "dcId": "PDbwjiElWTgZeWmKuzM4",
+      "invoiceSeq": 2027,
+      "dcIds": [
+        "PDbwjiElWTgZeWmKuzM4"
+      ],
+      "clientGstin": "33ABTFA5290J1Z1",
+      "igstRate": 0,
+      "orderNo": "",
+      "clientShipToState": "TAMILNADU",
+      "sgstAmount": 0,
+      "grossAmount": 0,
+      "clientPlace": "KALLAKURICHI",
+      "taxSummary": [
+        {
+          "igstAmount": 0,
+          "igstRate": 0,
+          "cgstRate": 2.5,
+          "cgstAmount": 0,
+          "sgstAmount": 0,
+          "taxableValue": 0,
+          "hsnSac": "62059090",
+          "sgstRate": 2.5
+        }
+      ],
+      "discountAmount": 0,
+      "totalAmount": 0,
+      "clientAddress": "942,DURUGAM ROAD,\nPH: 04151 222777",
+      "clientId": "ThsXWV2JUmCjar15np4i",
+      "packingListId": "ehgsYNfmMAKWbQsBou0P",
+      "clientShipToAddress": "942,DURUGAM ROAD,\nPH: 04151 222777",
+      "taxableValue": 0,
+      "shipmentDate": "2026-09-22T07:24:09.310Z",
+      "clientZipCode": "606213",
+      "cgstRate": 2.5,
+      "clientShipToPlace": "KALLAKURICHI",
+      "igstAmount": 0,
+      "dcNo": "DCC2627-1288",
+      "salesOrderIds": [
+        "N9qxv9v1dqnBafVGZMLx"
+      ],
+      "clientName": "AKT TEXTILES - KALLAKURICHI",
+      "items": [
+        {
+          "discountPct": 10,
+          "quantity": 4,
+          "uom": "NOS",
+          "taxRate": 5,
+          "amount": 0,
+          "hsnSac": "62059090",
+          "styleNo": "RFJ1494 B",
+          "price": 0,
+          "mrp": 0,
+          "description": "FORMAL SHIRTS",
+          "sleeveType": "Full"
+        },
+        {
+          "mrp": 0,
+          "discountPct": 10,
+          "styleNo": "RFJ1494 B",
+          "quantity": 2,
+          "amount": 0,
+          "hsnSac": "62059090",
+          "price": 0,
+          "sleeveType": "Half",
+          "taxRate": 5,
+          "description": "FORMAL SHIRTS",
+          "uom": "NOS"
+        },
+        {
+          "taxRate": 5,
+          "mrp": 0,
+          "sleeveType": "Full",
+          "discountPct": 10,
+          "price": 0,
+          "quantity": 4,
+          "description": "FORMAL SHIRTS",
+          "amount": 0,
+          "uom": "NOS",
+          "hsnSac": "62059090",
+          "styleNo": "RFJ1494 C"
+        },
+        {
+          "description": "FORMAL SHIRTS",
+          "quantity": 2,
+          "taxRate": 5,
+          "mrp": 0,
+          "price": 0,
+          "sleeveType": "Half",
+          "hsnSac": "62059090",
+          "amount": 0,
+          "uom": "NOS",
+          "styleNo": "RFJ1494 C",
+          "discountPct": 10
+        },
+        {
+          "description": "FORMAL SHIRTS",
+          "price": 0,
+          "styleNo": "RFJ1546 A",
+          "sleeveType": "Full",
+          "uom": "NOS",
+          "mrp": 0,
+          "amount": 0,
+          "quantity": 4,
+          "hsnSac": "62059090",
+          "taxRate": 5,
+          "discountPct": 10
+        },
+        {
+          "amount": 0,
+          "price": 0,
+          "styleNo": "RFJ1546 A",
+          "hsnSac": "62059090",
+          "mrp": 0,
+          "description": "FORMAL SHIRTS",
+          "discountPct": 10,
+          "sleeveType": "Half",
+          "uom": "NOS",
+          "quantity": 4,
+          "taxRate": 5
+        },
+        {
+          "taxRate": 5,
+          "discountPct": 10,
+          "mrp": 0,
+          "quantity": 4,
+          "price": 0,
+          "sleeveType": "Full",
+          "amount": 0,
+          "uom": "NOS",
+          "description": "FORMAL SHIRTS",
+          "hsnSac": "62059090",
+          "styleNo": "RFJ1546 B"
+        },
+        {
+          "price": 0,
+          "discountPct": 10,
+          "quantity": 4,
+          "styleNo": "RFJ1546 B",
+          "mrp": 0,
+          "amount": 0,
+          "uom": "NOS",
+          "sleeveType": "Half",
+          "taxRate": 5,
+          "hsnSac": "62059090",
+          "description": "FORMAL SHIRTS"
+        },
+        {
+          "sleeveType": "Full",
+          "uom": "NOS",
+          "taxRate": 5,
+          "amount": 0,
+          "discountPct": 10,
+          "hsnSac": "62059090",
+          "description": "FORMAL SHIRTS",
+          "styleNo": "RFJ1491 F",
+          "price": 0,
+          "mrp": 0,
+          "quantity": 3
+        },
+        {
+          "hsnSac": "62059090",
+          "amount": 0,
+          "sleeveType": "Full",
+          "discountPct": 10,
+          "price": 0,
+          "mrp": 0,
+          "taxRate": 5,
+          "quantity": 4,
+          "styleNo": "RFJ1492 E",
+          "uom": "NOS",
+          "description": "FORMAL SHIRTS"
+        },
+        {
+          "hsnSac": "62059090",
+          "discountPct": 10,
+          "amount": 0,
+          "mrp": 0,
+          "price": 0,
+          "taxRate": 5,
+          "styleNo": "RFJ1492 E",
+          "sleeveType": "Half",
+          "quantity": 2,
+          "uom": "NOS",
+          "description": "FORMAL SHIRTS"
+        },
+        {
+          "mrp": 0,
+          "hsnSac": "62059090",
+          "amount": 0,
+          "price": 0,
+          "description": "FORMAL SHIRTS",
+          "taxRate": 5,
+          "sleeveType": "Half",
+          "styleNo": "RFJ1590 A",
+          "discountPct": 10,
+          "quantity": 2,
+          "uom": "NOS"
+        },
+        {
+          "quantity": 3,
+          "sleeveType": "Full",
+          "taxRate": 5,
+          "description": "FORMAL SHIRTS",
+          "amount": 0,
+          "uom": "NOS",
+          "hsnSac": "62059090",
+          "price": 0,
+          "mrp": 0,
+          "discountPct": 10,
+          "styleNo": "RFJ1590 C"
+        },
+        {
+          "mrp": 0,
+          "quantity": 3,
+          "amount": 0,
+          "taxRate": 5,
+          "hsnSac": "62059090",
+          "discountPct": 10,
+          "price": 0,
+          "description": "FORMAL SHIRTS",
+          "styleNo": "RFJ1590 C",
+          "sleeveType": "Half",
+          "uom": "NOS"
+        },
+        {
+          "uom": "NOS",
+          "taxRate": 5,
+          "sleeveType": "Half",
+          "description": "FORMAL SHIRTS",
+          "discountPct": 10,
+          "quantity": 3,
+          "price": 0,
+          "amount": 0,
+          "mrp": 0,
+          "hsnSac": "62059090",
+          "styleNo": "RFJ1590 D"
+        }
+      ],
+      "roundOff": 0
+    }
+  ]
+}

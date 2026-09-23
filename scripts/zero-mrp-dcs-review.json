@@ -1,0 +1,209 @@
+[
+  {
+    "dcId": "505qe80SrmSPoFm2Dopk",
+    "dcNo": "DCC2627-1299",
+    "clientName": "SARAVANA STORES - SHOP1",
+    "createdAt": "2026-09-22T12:26:57.220Z",
+    "zeroItems": 22,
+    "totalItems": 22,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "AFXri4JpQtPCBGeSEeto",
+    "dcNo": "DCC2627-1298",
+    "clientName": "SARAVANA STORES - SHOP1",
+    "createdAt": "2026-09-22T12:11:51.350Z",
+    "zeroItems": 19,
+    "totalItems": 19,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "T0FreT2qCT01dVCbIjw5",
+    "dcNo": "DCC2627-1297",
+    "clientName": "SARAVANA STORES - SHOP1",
+    "createdAt": "2026-09-22T11:58:18.825Z",
+    "zeroItems": 18,
+    "totalItems": 18,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "uHhQl4FhLWSyIMdZvOsS",
+    "dcNo": "DCC2627-1296",
+    "clientName": "SARAVANA STORES - SHOP4",
+    "createdAt": "2026-09-22T10:03:54.188Z",
+    "zeroItems": 7,
+    "totalItems": 7,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "pkEstO5mCno43VqEdfPQ",
+    "dcNo": "DCC2627-1295",
+    "clientName": "SARAVANA STORES - SHOP4",
+    "createdAt": "2026-09-22T09:53:38.347Z",
+    "zeroItems": 10,
+    "totalItems": 10,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "lXhxJjlw9X2zkLjf3Xep",
+    "dcNo": "DCC2627-1292",
+    "clientName": "SARAVANA STORES - SHOP4",
+    "createdAt": "2026-09-22T09:23:02.169Z",
+    "zeroItems": 9,
+    "totalItems": 9,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "RAdkVrKHyWLldlg7fdYS",
+    "dcNo": "DCC2627-1291",
+    "clientName": "SARAVANA STORES - SHOP4",
+    "createdAt": "2026-09-22T08:59:00.758Z",
+    "zeroItems": 13,
+    "totalItems": 13,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "SeFH8c57lt8ishZhRuOA",
+    "dcNo": "DCC2627-1290",
+    "clientName": "SARAVANA STORES - SHOP4",
+    "createdAt": "2026-09-22T08:56:55.716Z",
+    "zeroItems": 12,
+    "totalItems": 12,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "7aekuhC1ktvXNJLgEV4e",
+    "dcNo": "DCC2627-1289",
+    "clientName": "SARAVANA STORES - SHOP4",
+    "createdAt": "2026-09-22T08:01:29.003Z",
+    "zeroItems": 12,
+    "totalItems": 12,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "PDbwjiElWTgZeWmKuzM4",
+    "dcNo": "DCC2627-1288",
+    "clientName": "AKT TEXTILES - KALLAKURICHI",
+    "createdAt": "2026-09-22T07:24:09.310Z",
+    "zeroItems": 15,
+    "totalItems": 15,
+    "dcTotalAmount": 0,
+    "invoices": [
+      {
+        "id": "oLJPm2kcSWNxDhL8L3Ob",
+        "invoiceNo": "TMGC2627-2027",
+        "totalAmount": 0,
+        "irn": null
+      }
+    ]
+  },
+  {
+    "dcId": "GsjhTp9khx8D7sQFCkBd",
+    "dcNo": "DCC2627-1287",
+    "clientName": "SARAVANA STORES - SHOP3",
+    "createdAt": "2026-09-22T07:22:44.137Z",
+    "zeroItems": 8,
+    "totalItems": 8,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "sYJZWcZxlIeAMjxfkcSW",
+    "dcNo": "DCC2627-1286",
+    "clientName": "SARAVANA STORES - SHOP3",
+    "createdAt": "2026-09-22T06:55:22.598Z",
+    "zeroItems": 5,
+    "totalItems": 5,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "yVIFcpfJv6rdDyghUa1q",
+    "dcNo": "DCC2627-1285",
+    "clientName": "SARAVANA STORES - SHOP3",
+    "createdAt": "2026-09-22T06:49:56.796Z",
+    "zeroItems": 7,
+    "totalItems": 7,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "FKUxIVO7ZgloUPuFXjlX",
+    "dcNo": "DCC2627-1284",
+    "clientName": "SARAVANA STORES - SHOP3",
+    "createdAt": "2026-09-22T06:43:14.529Z",
+    "zeroItems": 5,
+    "totalItems": 5,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "bXuoCkkdqdVmJDsNFUEm",
+    "dcNo": "DCC2627-1283",
+    "clientName": "SARAVANA STORES - SHOP3",
+    "createdAt": "2026-09-22T06:31:07.686Z",
+    "zeroItems": 6,
+    "totalItems": 6,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "xZmwxrwr7k6ABanPMyyN",
+    "dcNo": "DCC2627-1282",
+    "clientName": "SARAVANA STORES - SHOP3",
+    "createdAt": "2026-09-22T06:21:58.298Z",
+    "zeroItems": 7,
+    "totalItems": 7,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "GfXW4CHeVtueKDR0M6am",
+    "dcNo": "DCC2627-1281",
+    "clientName": "SARAVANA STORES - SHOP1",
+    "createdAt": "2026-09-22T06:17:58.590Z",
+    "zeroItems": 8,
+    "totalItems": 8,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "BV8lZzxQRDlALFzbTNSC",
+    "dcNo": "DCC2627-1280",
+    "clientName": "SARAVANA STORES - SHOP3",
+    "createdAt": "2026-09-22T06:16:35.547Z",
+    "zeroItems": 7,
+    "totalItems": 7,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "ZO34N8YlfRs7zySugWVG",
+    "dcNo": "DCC2627-1279",
+    "clientName": "SARAVANA STORES - SHOP3",
+    "createdAt": "2026-09-22T06:02:56.035Z",
+    "zeroItems": 9,
+    "totalItems": 9,
+    "dcTotalAmount": 0,
+    "invoices": []
+  },
+  {
+    "dcId": "vB38aGfNSdUpMnbPCSUG",
+    "dcNo": "DCC2627-1278",
+    "clientName": "SARAVANA STORES - SHOP1",
+    "createdAt": "2026-09-22T05:58:18.763Z",
+    "zeroItems": 6,
+    "totalItems": 6,
+    "dcTotalAmount": 0,
+    "invoices": []
+  }
+]

@@ -40,7 +40,12 @@ export class PersistentCollectionCache<T> {
         this.loader()
           .then((items) => {
             this.current = items;
-            this.writeToStorage(items);
+            // Never persist an empty result (same rule as
+            // PatchableCollectionCache) — it's far more likely a transient
+            // bad read than truth, and caching it would serve an empty list
+            // (e.g. no designs → every MRP resolving to ₹0) for the whole TTL.
+            if (items.length > 0) this.writeToStorage(items);
+            else this.clearStorage();
             subject.next(items);
           })
           .catch((err) => {

@@ -944,6 +944,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
       }
       const invoiceItems = [...mergedByKey.values()];
 
+      // A ₹0 line means its DC was built without MRP (e.g. Design Master
+      // failed to load at DC time) — never bill that; the DC must be fixed first.
+      const zeroPriced = invoiceItems.filter((i) => !(i.mrp > 0) || !(i.price > 0));
+      if (zeroPriced.length > 0) {
+        const names = [...new Set(zeroPriced.map((i) => [i.styleNo, i.sleeveType].filter(Boolean).join(' ') || i.description))];
+        throw new Error(`${zeroPriced.length} line(s) on the Delivery Challan have MRP/Price ₹0 (${names.slice(0, 10).join(', ')}${names.length > 10 ? ', …' : ''}). Correct the MRP in Design Master and regenerate the Delivery Challan before creating the Invoice.`);
+      }
+
       const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
       const discountAmount = Math.round(grossAmount * discountPct / 100 * 100) / 100;
       const taxableValue = Math.round((grossAmount - discountAmount) * 100) / 100;
@@ -1597,6 +1605,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
           };
         });
       }));
+
+      // A ₹0 line means its DC was built without MRP (e.g. Design Master
+      // failed to load at DC time) — never bill that; the DC must be fixed first.
+      const zeroPriced = invoiceItems.filter((i) => !(i.mrp > 0) || !(i.price > 0));
+      if (zeroPriced.length > 0) {
+        const names = [...new Set(zeroPriced.map((i) => [i.styleNo, i.sleeveType].filter(Boolean).join(' ') || i.description))];
+        throw new Error(`${zeroPriced.length} line(s) on the Delivery Challan have MRP/Price ₹0 (${names.slice(0, 10).join(', ')}${names.length > 10 ? ', …' : ''}). Correct the MRP in Design Master and regenerate the Delivery Challan before creating the Invoice.`);
+      }
 
       const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
       const discountAmount = Math.round(grossAmount * discountPct / 100 * 100) / 100;
@@ -3280,6 +3296,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const packedLines = lines.filter((l) => l.packedQty > 0);
 
     const mrpByBarcode = await this.designService.getMrpByBarcodeMap();
+
+    // A DC line with no MRP bills at ₹0 and carries that ₹0 into the Invoice
+    // generated from it — block instead, naming the lines to fix in Design Master.
+    const missingMrp = packedLines.filter((l) => !((mrpByBarcode.get(l.barcode ?? '') ?? 0) > 0));
+    if (missingMrp.length > 0) {
+      const names = [...new Set(missingMrp.map((l) => `${l.styleNo} ${l.sleeveType ?? ''} size ${l.size} (${l.barcode || 'no barcode'})`.replace(/\s+/g, ' ')))];
+      throw new Error(`MRP not found in Design Master for ${names.length} item(s): ${names.slice(0, 10).join(', ')}${names.length > 10 ? ', …' : ''}. Set the MRP in Design Master before generating the Delivery Challan.`);
+    }
 
     const rowMap = new Map<string, { partName: string; styleNo: string; color: string; sleeveType?: string; sizeQty: Record<string, number>; mrpBySize: Record<string, number>; total: number; mrp: number }>();
     const sizeSet = new Set<string>();

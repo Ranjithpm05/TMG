@@ -260,8 +260,21 @@ export class DesignService {
     // Master's MRP is edited afterward without a new GRN, so callers that
     // need "the current MRP" (Packing List print/DC, not GRN receiving)
     // must resolve it from here instead of from an inventory doc.
+    //
+    // Billing-critical: the shared cache degrades to an empty/stale list when
+    // a Firestore load fails (see PersistentCollectionCache), which here
+    // silently produced an all-₹0 DC/Invoice. An empty catalog is never
+    // valid for pricing, so re-fetch directly (throws on failure) instead of
+    // returning an empty map.
     async getMrpByBarcodeMap(): Promise<Map<string, number>> {
-        const designs = await firstValueFrom(this.getDesigns());
+        let designs = await firstValueFrom(this.getDesigns());
+        if (designs.length === 0) {
+            this.invalidateCache();
+            designs = await this.fetchAllDesigns();
+            if (designs.length === 0) {
+                throw new Error('Design Master could not be loaded (0 designs returned), so MRP cannot be resolved. Please check your connection and try again.');
+            }
+        }
         const map = new Map<string, number>();
         for (const design of designs) {
             for (const sizeEntry of design.sizes ?? []) {
