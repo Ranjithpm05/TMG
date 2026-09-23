@@ -45,7 +45,13 @@ export class PatchableCollectionCache<T extends { id?: string }> {
           .then((items) => {
             this.current = items;
             this.loadedAt = Date.now();
-            this.writeToStorage(items, this.loadedAt);
+            // Never persist an empty result: an empty snapshot is far more
+            // likely to be a transient/wrong read (or simply "nothing has
+            // been created yet") than steady-state truth, and caching it
+            // would hide real data that appears within the TTL window on
+            // every reload until it expires.
+            if (items.length > 0) this.writeToStorage(items, this.loadedAt);
+            else this.clearStorage();
             subject.next(items);
           })
           .catch((err) => {

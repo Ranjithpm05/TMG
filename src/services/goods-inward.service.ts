@@ -42,7 +42,11 @@ export class GoodsInwardService {
   // refresh gets genuinely fresh data regardless of the TTL.
   private readonly grnsCache = new PersistentCollectionCache<GoodsInward>(
     'tmg:cache:goodsInwards:v1',
-    () => fetchAllDocs(this.grnRef, [orderBy('createdAt', 'desc')], (d) => ({ id: d.id, ...d.data() } as GoodsInward)),
+    async () => {
+      const grns = await fetchAllDocs(this.grnRef, [orderBy('createdAt', 'desc')], (d) => ({ id: d.id, ...d.data() } as GoodsInward));
+      await this.healCorruptedCreatedAt(grns);
+      return grns;
+    },
     5 * 60 * 1000
   );
 
@@ -56,6 +60,72 @@ export class GoodsInwardService {
   private invalidateGrnsCache(): void {
     this.grnsCache.invalidate();
     this.grnsRangeCache.clear();
+  }
+
+  /** True only for a real Firestore Timestamp or JS Date — false for a missing value or a corrupted plain map/string/number, which Firestore can't range-query the same way. */
+  private isValidTimestampType(value: unknown): boolean {
+    const raw: any = value;
+    return !!raw && (typeof raw.toDate === 'function' || raw instanceof Date);
+  }
+
+  /**
+   * Treats a missing/unparseable createdAt as 0 (oldest) instead of throwing or
+   * excluding the doc. Also recovers the exact original instant from a corrupted
+   * {seconds, nanoseconds, ...} map (see updateGoodsInward) rather than treating
+   * it as unparseable — that map still holds the true original value, it's just
+   * no longer a real Timestamp type as far as Firestore is concerned.
+   */
+  private toMillis(value: unknown): number {
+    const raw: any = value;
+    if (raw && typeof raw.toDate === 'function') return raw.toDate().getTime();
+    if (raw instanceof Date) return raw.getTime();
+    if (raw && typeof raw.seconds === 'number') {
+      return raw.seconds * 1000 + Math.round((raw.nanoseconds ?? 0) / 1e6);
+    }
+    if (raw) {
+      const parsed = new Date(raw).getTime();
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    return 0;
+  }
+
+  /** Falls back to the GRN's own receivedDate/invoiceDate before resorting to "now". */
+  private bestEffortCreatedAt(grn: GoodsInward): Date {
+    const parsedReceivedDate = grn.receivedDate ? new Date(grn.receivedDate) : null;
+    if (parsedReceivedDate && !Number.isNaN(parsedReceivedDate.getTime())) return parsedReceivedDate;
+
+    const parsedInvoiceDate = grn.invoiceDate ? new Date(grn.invoiceDate) : null;
+    if (parsedInvoiceDate && !Number.isNaN(parsedInvoiceDate.getTime())) return parsedInvoiceDate;
+
+    return new Date();
+  }
+
+  // Self-heal: any GRN whose createdAt has been corrupted into a plain
+  // {seconds, nanoseconds} map (see updateGoodsInward doc comment) is invisible
+  // to getGoodsInwardsInRange() — the where('createdAt', ...) queries used by
+  // Dashboard/Reports require a real Timestamp to match against, and silently
+  // exclude any doc where the field is the wrong type. This only ever runs from
+  // this unbounded "All" read, which already fetches every doc regardless — so
+  // it costs no extra reads, only repairs the (hopefully rare) broken ones, and
+  // patches the in-memory result too so this same read reflects the fix immediately.
+  private async healCorruptedCreatedAt(grns: GoodsInward[]): Promise<void> {
+    const broken = grns.filter(g => !this.isValidTimestampType(g.createdAt));
+    if (broken.length === 0) return;
+
+    await Promise.all(broken.map(async grn => {
+      // A corrupted map still carries the true original value — recover it
+      // exactly rather than falling back to an approximation.
+      const recoveredMillis = this.toMillis(grn.createdAt);
+      const repairedDate = recoveredMillis > 0 ? new Date(recoveredMillis) : this.bestEffortCreatedAt(grn);
+      const timestamp = Timestamp.fromDate(repairedDate);
+      try {
+        await updateDoc(doc(this.firestore, `goodsInward/${grn.id}`), { createdAt: timestamp });
+        (grn as unknown as { createdAt: unknown }).createdAt = timestamp;
+      } catch {
+        // Best-effort only — if the write fails (e.g. permissions), leave the
+        // doc as-is; it'll simply be retried the next time this method runs.
+      }
+    }));
   }
 
   /**
@@ -115,9 +185,21 @@ export class GoodsInwardService {
   }
 
   // 🔹 Update GRN
+  //
+  // createdAt must never be part of an update payload. The caller's `grn` is
+  // typically a JSON.parse(JSON.stringify(...)) deep copy of a previously-fetched
+  // doc (see GoodsInwardComponent.showEditForm), and Firestore's Timestamp defines
+  // toJSON() (for SSR/serialization support) — so that round-trip silently turns a
+  // real createdAt Timestamp into a plain {seconds, nanoseconds, ...} map. Writing
+  // that back stores createdAt as an ordinary Firestore map instead of a Timestamp,
+  // which then fails to match every where('createdAt', ...) range query used by
+  // getGoodsInwardsInRange() (Dashboard/Reports) — silently vanishing this GRN from
+  // every date-filtered screen even though it still shows in the unbounded list.
+  // createdAt is immutable after creation, so it's simply never touched here — see
+  // SalesOrderService.updateSalesOrder for the identical fix.
   async updateGoodsInward(grn: GoodsInward): Promise<void> {
     if (!grn.id) return;
-    const { id, ...rest } = grn;
+    const { id, createdAt, ...rest } = grn;
     const clean = this.stripUndefined(rest);
     const grnDoc = doc(this.firestore, `goodsInward/${id}`);
     await updateDoc(grnDoc, {

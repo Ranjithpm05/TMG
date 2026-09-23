@@ -20,6 +20,9 @@
             "tsConfig": "tsconfig.json",
             "assets": [
               "src/assets"
+            ],
+            "styles": [
+              "src/style.css"
             ]
           },
           "configurations": {
@@ -65,5 +68,8 @@
         }
       }
     }
+  },
+  "cli": {
+    "analytics": false
   }
 }
