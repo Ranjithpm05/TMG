@@ -19,7 +19,7 @@ import type { GoodsInward, GoodsInwardItem } from '../models/goods-inward.model'
 import { fetchAllDocs } from './firestore-pagination.util';
 import { InventoryService } from './inventory.service';
 import { cachedRangeQuery } from './range-cache.util';
-import { PersistentCollectionCache } from './persistent-cache.util';
+import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 
 export type ApproveGrnOutcome = 'approved' | 'already-approved' | 'in-progress';
 
@@ -35,20 +35,16 @@ export class GoodsInwardService {
   // Read repeatedly (Dashboard on every visit, this screen's own ngOnInit +
   // refresh-after-every-write) — cached one-time read, invalidated by every
   // write in this service below, same pattern as ClientService/DesignService.
-  //
-  // Also persisted to localStorage (PersistentCollectionCache, 5 min TTL) — see
-  // SalesOrderService.salesOrdersCache for why (read-quota cost-reduction pass).
-  // invalidate() still clears the persisted snapshot, so a write-triggered
-  // refresh gets genuinely fresh data regardless of the TTL.
-  private readonly grnsCache = new PersistentCollectionCache<GoodsInward>(
-    'tmg:cache:goodsInwards:v1',
-    async () => {
-      const grns = await fetchAllDocs(this.grnRef, [orderBy('createdAt', 'desc')], (d) => ({ id: d.id, ...d.data() } as GoodsInward));
-      await this.healCorruptedCreatedAt(grns);
-      return grns;
-    },
-    5 * 60 * 1000
-  );
+  // Synced via updatedAt delta queries (SyncedCollectionCache) — see there.
+  private readonly grnsCache = new SyncedCollectionCache<GoodsInward>({
+    storageKey: 'goodsInwards',
+    collectionRef: this.grnRef,
+    constraints: [orderBy('createdAt', 'desc')],
+    requiredField: 'createdAt',
+    mapDoc: (d) => ({ id: d.id, ...d.data() } as GoodsInward),
+    compare: byCreatedAtDesc,
+    afterFetch: (grns) => this.healCorruptedCreatedAt(grns),
+  });
 
   // getGoodsInwardsInRange() is keyed by exact (start, end) pair — same
   // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
@@ -234,6 +230,8 @@ export class GoodsInwardService {
       const lockId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const itemChunks = this.chunkItems(liveGrn.items);
       tx.update(grnDocRef, {
+        // updatedAt: other devices' delta sync must see the lock too.
+        updatedAt: serverTimestamp(),
         status: 'Approving',
         approvalLock: { lockId, chunksDone: 0, totalChunks: itemChunks.length, lastProgressAt: serverTimestamp() }
       });

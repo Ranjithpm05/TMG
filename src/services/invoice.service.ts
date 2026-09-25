@@ -20,7 +20,7 @@ import { DeliveryChallanService } from './delivery-challan.service';
 import { PackingListService } from './packing-list.service';
 import { ClientService } from './client.service';
 import { cachedRangeQuery } from './range-cache.util';
-import { PersistentCollectionCache } from './persistent-cache.util';
+import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class InvoiceService {
@@ -33,16 +33,15 @@ export class InvoiceService {
   // Read repeatedly (e-Invoice and Packing List screens, every generation
   // refresh) — cached one-time read, invalidated by createInvoice/updateInvoice
   // below, same pattern as ClientService/DesignService/InventoryService.
-  //
-  // Also persisted to localStorage (PersistentCollectionCache, 5 min TTL) — see
-  // SalesOrderService.salesOrdersCache for why (read-quota cost-reduction pass).
-  // invalidate() still clears the persisted snapshot, so a write-triggered
-  // refresh gets genuinely fresh data regardless of the TTL.
-  private readonly invoicesCache = new PersistentCollectionCache<Invoice>(
-    'tmg:cache:invoices:v1',
-    () => fetchAllDocs(this.invoicesRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() })),
-    5 * 60 * 1000
-  );
+  // Synced via updatedAt delta queries (SyncedCollectionCache) — see there.
+  private readonly invoicesCache = new SyncedCollectionCache<Invoice>({
+    storageKey: 'invoices',
+    collectionRef: this.invoicesRef,
+    constraints: [orderBy('createdAt', 'desc')],
+    requiredField: 'createdAt',
+    mapDoc: (d) => this.normalize({ id: d.id, ...d.data() }),
+    compare: byCreatedAtDesc,
+  });
 
   // getInvoicesInRange() is keyed by exact (start, end) pair, same reasoning
   // (and same generous-bound-then-clear cap) as

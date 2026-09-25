@@ -99,7 +99,7 @@ import {
 import { Storage, ref, uploadBytes, getDownloadURL, deleteObject } from '@angular/fire/storage';
 import { firstValueFrom, Observable } from 'rxjs';
 import type { Design, SizePrice } from '../models/design.model';
-import { PersistentCollectionCache } from './persistent-cache.util';
+import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class DesignService {
@@ -108,13 +108,17 @@ export class DesignService {
     private storage = inject(Storage);
     private designRef = collection(this.firestore, 'designs');
 
-    // Master data — cached one-time read, invalidated on write (see
-    // ClientService for rationale), also persisted to localStorage with a
-    // TTL (PersistentCollectionCache) so a fresh tab/reload skips a full
-    // Firestore re-fetch — see ClientService's clientsCache comment.
-    private readonly designsCache = new PersistentCollectionCache<Design>('tmg:cache:designs:v1', () =>
-        this.fetchAllDesigns()
-    );
+    // Master data, invalidated on write.
+    // Synced via updatedAt delta queries (SyncedCollectionCache) — the
+    // catalog is downloaded once per device, then only edited designs are
+    // re-read. No orderBy (see getDesigns) — sorted client-side instead.
+    private readonly designsCache = new SyncedCollectionCache<Design>({
+        storageKey: 'designs',
+        collectionRef: this.designRef,
+        constraints: [],
+        mapDoc: (d) => ({ ...d.data(), id: d.id } as Design),
+        compare: byCreatedAtDesc,
+    });
 
     // Page size for each individual Firestore request, NOT a cap on total
     // records returned — getDesigns() pages through with startAfter() until a
@@ -214,6 +218,7 @@ export class DesignService {
     async deleteDesign(designId: string): Promise<void> {
         const designDoc = doc(this.firestore, `designs/${designId}`);
         await deleteDoc(designDoc);
+        this.designsCache.removeOne(designId);
         this.invalidateCache();
     }
 

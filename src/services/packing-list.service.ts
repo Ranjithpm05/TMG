@@ -36,7 +36,7 @@ import {
 import { InventoryService } from './inventory.service';
 import { PickListService } from './pick-list.service';
 import { fetchAllDocs } from './firestore-pagination.util';
-import { PatchableCollectionCache } from './patchable-cache.util';
+import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 import { cachedRangeQuery } from './range-cache.util';
 
 @Injectable({ providedIn: 'root' })
@@ -45,37 +45,22 @@ export class PackingListService {
   private inventoryService = inject(InventoryService);
   private pickListService = inject(PickListService);
   private packingRef = collection(this.firestore, 'packingLists');
-  private inventoryRef = collection(this.firestore, 'inventory');
 
-  // One-time read for the list screen, paged through in full via
-  // fetchAllDocs() — a prior fixed limit(100) here silently truncated the
-  // list once packing lists passed that count. The active packing session for
-  // a single packing list uses getPackingListById()/getPackingListLines()
-  // below, which stay live. Cached; invalidated by every bulk write in this
-  // service below, and (via the public invalidateCache()) by
-  // DeliveryChallanService.createDC, which stamps dcGeneratedKeys directly
-  // onto this same top-level doc from outside this service.
-  //
-  // PatchableCollectionCache (not a plain shareReplay'd Observable): a single
-  // box/line scan only changes ONE packing list's aggregate totals, but a
-  // full invalidateCache() forces every open screen's next read to
-  // re-download the entire all-time packing-list history — this was a
-  // primary cause of a Firestore read-quota blowout (803K reads/day vs 50K
-  // quota) traced to per-scan invalidation here and in PickListService.
-  // patchPackingListInCache() lets the hot per-unit scan paths update the
-  // live cache in place instead.
-  // Persisted with a 5 min TTL (localStorage) — see InventoryService.inventoryCache
-  // for why: a fresh tab/reload otherwise pays a full re-download of this
-  // ever-growing collection even though the in-memory cache already avoids
-  // re-fetching within one open tab. Safe to persist despite the frequent
-  // patchOne() scan updates below — those writes are debounced (see
-  // PatchableCollectionCache.scheduleStorageWrite()), not one localStorage
-  // write per scan.
-  private readonly packingListsCache = new PatchableCollectionCache<PackingList>(
-    () => fetchAllDocs(this.packingRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePackingList({ id: d.id, ...d.data() })),
-    'tmg:cache:packingLists:v1',
-    5 * 60 * 1000
-  );
+  // Full list for the list screen. The active packing session for a single
+  // packing list uses getPackingListById()/getPackingListLines() below,
+  // which stay live. Hot per-unit scan paths patch this list in place
+  // (patchPackingListInCache); bulk writes — dispatch info, QC, carton seal,
+  // and DeliveryChallanService.createDC/InvoiceService via the public
+  // invalidateCache() — invalidate it, which now triggers an updatedAt delta
+  // sync rather than a full re-download (see SyncedCollectionCache).
+  private readonly packingListsCache = new SyncedCollectionCache<PackingList>({
+    storageKey: 'packingLists',
+    collectionRef: this.packingRef,
+    constraints: [orderBy('createdAt', 'desc')],
+    requiredField: 'createdAt',
+    mapDoc: (d) => this.normalizePackingList({ id: d.id, ...d.data() }),
+    compare: byCreatedAtDesc,
+  });
 
   invalidateCache(): void {
     this.packingListsCache.invalidate();
@@ -1170,36 +1155,31 @@ export class PackingListService {
     const items = await this.getPackingListLinesOnce(packingListId);
     type Deduction = { ref: ReturnType<typeof doc>; qty: number };
     const deductions = new Map<string, Deduction>();
+    const addDeduction = (inventoryId: string, qty: number) => {
+      const existing = deductions.get(inventoryId);
+      if (existing) {
+        existing.qty += qty;
+      } else {
+        deductions.set(inventoryId, { ref: doc(this.firestore, `inventory/${inventoryId}`), qty });
+      }
+    };
+
+    // Lines without an inventoryId are resolved by barcode in one batched
+    // lookup (30 barcodes per query) rather than one sequential query per
+    // line — first match wins, same as the old per-line limit(1) query.
+    const unresolvedBarcodes = [...new Set(
+      items.filter((item) => item.packedQty > 0 && !item.inventoryId && item.barcode).map((item) => item.barcode!)
+    )];
+    const inventoryIdByBarcode = new Map<string, string>();
+    for (const inv of await this.inventoryService.getInventoryByBarcodes(unresolvedBarcodes)) {
+      if (inv.id && !inventoryIdByBarcode.has(inv.barcode)) inventoryIdByBarcode.set(inv.barcode, inv.id);
+    }
 
     for (const item of items) {
       const qty = item.packedQty;
       if (qty <= 0) continue;
-
-      if (item.inventoryId) {
-        const existing = deductions.get(item.inventoryId);
-        if (existing) {
-          existing.qty += qty;
-        } else {
-          deductions.set(item.inventoryId, {
-            ref: doc(this.firestore, `inventory/${item.inventoryId}`),
-            qty,
-          });
-        }
-      } else if (item.barcode) {
-        const snap = await getDocs(query(this.inventoryRef, where('barcode', '==', item.barcode), limit(1)));
-        if (!snap.empty) {
-          const invId = snap.docs[0].id;
-          const existing = deductions.get(invId);
-          if (existing) {
-            existing.qty += qty;
-          } else {
-            deductions.set(invId, {
-              ref: doc(this.firestore, `inventory/${invId}`),
-              qty,
-            });
-          }
-        }
-      }
+      const inventoryId = item.inventoryId || (item.barcode ? inventoryIdByBarcode.get(item.barcode) : undefined);
+      if (inventoryId) addDeduction(inventoryId, qty);
     }
 
     if (deductions.size === 0) return false;

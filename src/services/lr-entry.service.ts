@@ -8,9 +8,9 @@ import {
   serverTimestamp,
   setDoc,
 } from '@angular/fire/firestore';
-import { from, Observable, shareReplay } from 'rxjs';
+import { Observable } from 'rxjs';
 import { LrEntry } from '../models/lr-entry.model';
-import { fetchAllDocs } from './firestore-pagination.util';
+import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 import { InvoiceService } from './invoice.service';
 
 @Injectable({ providedIn: 'root' })
@@ -22,19 +22,22 @@ export class LrEntryService {
   private invoiceService = inject(InvoiceService);
   private lrRef = collection(this.firestore, 'lrEntries');
 
-  private lrEntriesCache$: Observable<LrEntry[]> | null = null;
+  // Synced via updatedAt delta queries (SyncedCollectionCache) — see there.
+  private readonly lrEntriesCache = new SyncedCollectionCache<LrEntry>({
+    storageKey: 'lrEntries',
+    collectionRef: this.lrRef,
+    constraints: [orderBy('createdAt', 'desc')],
+    requiredField: 'createdAt',
+    mapDoc: (d) => this.normalize({ id: d.id, ...d.data() }),
+    compare: byCreatedAtDesc,
+  });
 
   invalidateCache(): void {
-    this.lrEntriesCache$ = null;
+    this.lrEntriesCache.invalidate();
   }
 
   getLrEntries(): Observable<LrEntry[]> {
-    if (!this.lrEntriesCache$) {
-      this.lrEntriesCache$ = from(
-        fetchAllDocs(this.lrRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() }))
-      ).pipe(shareReplay(1));
-    }
-    return this.lrEntriesCache$;
+    return this.lrEntriesCache.get$();
   }
 
   // Called once per dispatch, from PackingListComponent.generateAndPrintDC —

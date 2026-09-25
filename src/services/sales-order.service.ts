@@ -17,7 +17,7 @@ import type { SalesOrder } from '../models/sales-order.model';
 import { from, Observable } from 'rxjs';
 import { fetchAllDocs } from './firestore-pagination.util';
 import { cachedRangeQuery } from './range-cache.util';
-import { PersistentCollectionCache } from './persistent-cache.util';
+import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class SalesOrderService {
@@ -29,26 +29,20 @@ export class SalesOrderService {
     // own "All" view, every write-triggered refresh) — cached one-time read,
     // invalidated by this service's own create/update/delete below, same pattern
     // as ClientService/DesignService/InventoryService.
-    //
-    // Also persisted to localStorage (PersistentCollectionCache, 5 min TTL) —
-    // this collection is read in full by several screens and only grows, so a
-    // fresh tab/reload was paying a full re-fetch every time even though the
-    // in-memory cache already avoided re-fetching within one open tab (part of
-    // the read-quota cost-reduction pass — see project memory). invalidate()
-    // still clears the persisted snapshot too, so any write-triggered refresh
-    // gets genuinely fresh data regardless of the TTL.
-    private readonly salesOrdersCache = new PersistentCollectionCache<SalesOrder>(
-        'tmg:cache:salesOrders:v1',
-        async () => {
-            // Spread doc data first, then override with the real Firestore doc id last —
-            // some legacy documents have a stale/blank "id" field stored in their body
-            // (see createSalesOrder), which must never win over the actual doc reference id.
-            const orders = await fetchAllDocs(this.salesOrderRef, [], (d) => ({ ...d.data(), id: d.id } as SalesOrder));
-            await this.healMissingCreatedAt(orders);
-            return orders.sort((a, b) => this.toMillis(b.createdAt) - this.toMillis(a.createdAt));
-        },
-        5 * 60 * 1000
-    );
+    // Synced via updatedAt delta queries (SyncedCollectionCache) — Pick List's
+    // syncSalesOrderShipment() invalidates this after scans, which used to
+    // re-download every sales order ever created on the next screen visit.
+    private readonly salesOrdersCache = new SyncedCollectionCache<SalesOrder>({
+        storageKey: 'salesOrders',
+        collectionRef: this.salesOrderRef,
+        constraints: [],
+        // Spread doc data first, then override with the real Firestore doc id last —
+        // some legacy documents have a stale/blank "id" field stored in their body
+        // (see createSalesOrder), which must never win over the actual doc reference id.
+        mapDoc: (d) => ({ ...d.data(), id: d.id } as SalesOrder),
+        compare: byCreatedAtDesc,
+        afterFetch: (orders) => this.healMissingCreatedAt(orders),
+    });
 
     // getSalesOrdersInRange() is keyed by exact (start, end) pair rather than
     // a single cached value, since different callers legitimately want
@@ -258,6 +252,7 @@ export class SalesOrderService {
     async deleteSalesOrder(orderId: string): Promise<void> {
         const orderDoc = doc(this.firestore, `salesOrders/${orderId}`);
         await deleteDoc(orderDoc);
+        this.salesOrdersCache.removeOne(orderId);
         this.invalidateCache();
     }
 }

@@ -37,7 +37,7 @@ import { InventoryService } from './inventory.service';
 import { DesignService } from './design.service';
 import { SalesOrderService } from './sales-order.service';
 import { fetchAllDocs } from './firestore-pagination.util';
-import { PatchableCollectionCache } from './patchable-cache.util';
+import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 import { cachedRangeQuery } from './range-cache.util';
 
 type StoredPickList = PickList & {
@@ -60,32 +60,20 @@ export class PickListService {
   private plRef = collection(this.firestore, 'pickLists');
   private inventoryRef = collection(this.firestore, 'inventory');
 
-  // One-time read for the list screen, paged through in full via
-  // fetchAllDocs() — a prior fixed limit(100) here silently truncated the
-  // list once pick lists passed that count. The active picking session for a
-  // single pick list uses getPickListById()/getPickListLines() below, which
-  // stay live. Cached, invalidated by every bulk write in this service below.
-  //
-  // PatchableCollectionCache (not a plain shareReplay'd Observable): a single
-  // barcode scan only changes ONE pick list's aggregate totals, but a full
-  // invalidatePickListsCache() forces every open screen's next read to
-  // re-download the entire all-time pick-list history — this was the
-  // primary cause of a Firestore read-quota blowout (803K reads/day vs 50K
-  // quota) traced to per-scan invalidation here and in PackingListService.
-  // patchPickListInCache() lets the hot per-unit scan paths update the live
-  // cache in place instead.
-  // Persisted with a 5 min TTL (localStorage) — see InventoryService.inventoryCache
-  // for why: a fresh tab/reload otherwise pays a full re-download of this
-  // ever-growing collection even though the in-memory cache already avoids
-  // re-fetching within one open tab. Safe to persist despite the frequent
-  // patchOne() scan updates below — those writes are debounced (see
-  // PatchableCollectionCache.scheduleStorageWrite()), not one localStorage
-  // write per scan.
-  private readonly pickListsCache = new PatchableCollectionCache<PickList>(
-    () => fetchAllDocs(this.plRef, [orderBy('createdAt', 'desc')], (d) => this.normalizePickList({ id: d.id, ...d.data() })),
-    'tmg:cache:pickLists:v1',
-    5 * 60 * 1000
-  );
+  // Full list for the list screen. The active picking session for a single
+  // pick list uses getPickListById()/getPickListLines() below, which stay
+  // live. Hot per-unit scan paths patch this list in place
+  // (patchPickListInCache) instead of invalidating it; bulk writes invalidate,
+  // which now triggers an updatedAt delta sync rather than a full
+  // re-download (see SyncedCollectionCache).
+  private readonly pickListsCache = new SyncedCollectionCache<PickList>({
+    storageKey: 'pickLists',
+    collectionRef: this.plRef,
+    constraints: [orderBy('createdAt', 'desc')],
+    requiredField: 'createdAt',
+    mapDoc: (d) => this.normalizePickList({ id: d.id, ...d.data() }),
+    compare: byCreatedAtDesc,
+  });
 
   private invalidatePickListsCache(): void {
     this.pickListsCache.invalidate();
@@ -287,6 +275,7 @@ export class PickListService {
     ];
 
     await this.commitInChunks(operations);
+    this.pickListsCache.removeOne(pickListId);
     this.invalidatePickListsCache();
     if (restoreByInventoryId.size > 0) this.inventoryService.invalidateCache();
   }

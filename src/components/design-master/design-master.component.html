@@ -54,7 +54,7 @@
                 <tr class="hover:bg-gray-50">
                   <td class="px-6 py-4 whitespace-nowrap">
                     @if (design.imageUrl) {
-                      <img [src]="design.imageUrl" [alt]="design.styleNo" class="h-10 w-10 rounded-md object-cover border border-gray-200">
+                      <img [src]="design.imageUrl" [alt]="design.styleNo" loading="lazy" decoding="async" width="40" height="40" class="h-10 w-10 rounded-md object-cover border border-gray-200">
                     } @else {
                       <div class="h-10 w-10 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" /></svg>

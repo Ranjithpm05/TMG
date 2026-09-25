@@ -7,7 +7,7 @@ import { Observable } from 'rxjs';
 import type { InventoryItem } from '../models/inventory.model';
 import type { GoodsInwardItem } from '../models/goods-inward.model';
 import { fetchAllDocs } from './firestore-pagination.util';
-import { PatchableCollectionCache } from './patchable-cache.util';
+import { SyncedCollectionCache } from './synced-collection-cache.util';
 
 export type InventoryBatchOp = (batch: WriteBatch) => void;
 
@@ -24,36 +24,21 @@ export class InventoryService {
   private invRef = collection(this.firestore, 'inventory');
 
   // Inventory is read as a bulk list from several screens (Dashboard, Reports,
-  // Pick List, Packing List, Inventory). Cache the one-time read and let any
-  // stock-mutating write path (here or in Pick/Packing List services) call
-  // invalidateCache() instead of every screen holding its own live listener.
-  //
-  // Paged through in full via fetchAllDocs() — a prior fixed limit(5000) here
-  // silently truncated the list once inventory passed that many rows (same
-  // bug class as Design Master's export; see project memory).
-  //
-  // PatchableCollectionCache (not a plain shareReplay'd Observable): a single
-  // barcode scan only changes ONE inventory row, but a full invalidateCache()
-  // forces every open screen's next read to re-download the entire
-  // collection (thousands of rows) — this was the primary cause of a
-  // Firestore read-quota blowout (803K reads/day vs 50K quota) traced to
-  // per-scan invalidation in Pick/Packing List services. patchInventoryItem()
-  // lets those hot per-unit paths update the live cache in place instead.
-  //
-  // Persisted with a short (3 min) TTL: the in-memory cache above only saves
-  // re-fetches within one open tab — Dashboard alone calls getInventory() on
-  // every load, and this collection is large (~11k docs per
-  // firestore-pagination.util's own sizing comment), so every fresh
-  // page load/reload/new tab was still paying a full ~11k-read fetch. A short
-  // TTL keeps this bounded (unlike ClientService's 20 min, appropriate for
-  // slow-changing master data) since stock levels move fast — but scan
-  // correctness is unaffected: processScan() reads live inventory inside its
-  // own Firestore transaction and never gates on this cache.
-  private readonly inventoryCache = new PatchableCollectionCache<InventoryItem>(
-    () => fetchAllDocs(this.invRef, [orderBy('styleNo', 'asc')], (d) => ({ id: d.id, ...d.data() } as InventoryItem)),
-    'tmg:cache:inventory:v1',
-    3 * 60 * 1000
-  );
+  // Pick List, Packing List, Inventory) — ~11k docs in production. Downloaded
+  // in full once per device, then kept current with updatedAt delta queries
+  // (see SyncedCollectionCache for why the previous full-collection
+  // re-downloads were the main source of the 1.7M reads/day). Hot per-unit
+  // scan paths still patch the live list in place via patchInventoryItem();
+  // scan correctness never depends on this cache — processScan() reads live
+  // inventory inside its own Firestore transaction.
+  private readonly inventoryCache = new SyncedCollectionCache<InventoryItem>({
+    storageKey: 'inventory',
+    collectionRef: this.invRef,
+    constraints: [orderBy('styleNo', 'asc')],
+    requiredField: 'styleNo',
+    mapDoc: (d) => ({ id: d.id, ...d.data() } as InventoryItem),
+    compare: (a, b) => compareStrings(a.styleNo, b.styleNo),
+  });
 
   getInventory(): Observable<InventoryItem[]> {
     return this.inventoryCache.get$();
@@ -160,4 +145,11 @@ export class InventoryService {
     }
     return results;
   }
+}
+
+// Code-unit order, matching Firestore's own string ordering for orderBy('styleNo').
+function compareStrings(a: unknown, b: unknown): number {
+  const left = String(a ?? '');
+  const right = String(b ?? '');
+  return left < right ? -1 : left > right ? 1 : 0;
 }

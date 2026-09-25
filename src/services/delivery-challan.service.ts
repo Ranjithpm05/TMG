@@ -19,7 +19,7 @@ import { DCItem, DeliveryChallan } from '../models/delivery-challan.model';
 import { fetchAllDocs } from './firestore-pagination.util';
 import { PackingListService } from './packing-list.service';
 import { cachedRangeQuery } from './range-cache.util';
-import { PersistentCollectionCache } from './persistent-cache.util';
+import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class DeliveryChallanService {
@@ -30,16 +30,15 @@ export class DeliveryChallanService {
   // Read repeatedly (Packing List and e-Invoice screens, every DC-generation
   // refresh) — cached one-time read, invalidated by createDC/updateDCItems below,
   // same pattern as ClientService/DesignService/InventoryService.
-  //
-  // Also persisted to localStorage (PersistentCollectionCache, 5 min TTL) — see
-  // SalesOrderService.salesOrdersCache for why (read-quota cost-reduction pass).
-  // invalidate() still clears the persisted snapshot, so a write-triggered
-  // refresh gets genuinely fresh data regardless of the TTL.
-  private readonly dcsCache = new PersistentCollectionCache<DeliveryChallan>(
-    'tmg:cache:deliveryChallans:v1',
-    () => fetchAllDocs(this.dcRef, [orderBy('createdAt', 'desc')], (d) => this.normalize({ id: d.id, ...d.data() })),
-    5 * 60 * 1000
-  );
+  // Synced via updatedAt delta queries (SyncedCollectionCache) — see there.
+  private readonly dcsCache = new SyncedCollectionCache<DeliveryChallan>({
+    storageKey: 'deliveryChallans',
+    collectionRef: this.dcRef,
+    constraints: [orderBy('createdAt', 'desc')],
+    requiredField: 'createdAt',
+    mapDoc: (d) => this.normalize({ id: d.id, ...d.data() }),
+    compare: byCreatedAtDesc,
+  });
 
   // getDeliveryChallansInRange() is keyed by exact (start, end) pair — same
   // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
