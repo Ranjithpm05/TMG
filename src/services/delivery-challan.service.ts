@@ -4,21 +4,19 @@ import {
   collection,
   doc,
   documentId,
-  getDocs,
   limit,
   orderBy,
   query,
-  runTransaction,
   serverTimestamp,
   Timestamp,
   updateDoc,
   where,
 } from '@angular/fire/firestore';
+import { getDocs, runTransaction } from './firestore-reads';
 import { Observable } from 'rxjs';
 import { DCItem, DeliveryChallan } from '../models/delivery-challan.model';
-import { fetchAllDocs } from './firestore-pagination.util';
 import { PackingListService } from './packing-list.service';
-import { cachedRangeQuery } from './range-cache.util';
+import { invalidateRangeCaches, syncedRangeQuery } from './range-cache.util';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 
 @Injectable({ providedIn: 'root' })
@@ -44,7 +42,7 @@ export class DeliveryChallanService {
   // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
   // called getDeliveryChallans() (the full, ever-growing history) just to
   // filter it down to one date range client-side.
-  private dcsRangeCache = new Map<string, Observable<DeliveryChallan[]>>();
+  private dcsRangeCache = new Map<string, SyncedCollectionCache<DeliveryChallan>>();
   private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
 
   // Public: InvoiceService.createInvoice() stamps invoiceId/invoiceNo directly
@@ -53,7 +51,7 @@ export class DeliveryChallanService {
   // cache too or the DC would keep showing as not-yet-invoiced.
   invalidateCache(): void {
     this.dcsCache.invalidate();
-    this.dcsRangeCache.clear();
+    invalidateRangeCaches(this.dcsRangeCache);
   }
 
   // One-time read, paged through in full via fetchAllDocs() — a prior fixed
@@ -65,19 +63,17 @@ export class DeliveryChallanService {
 
   // Date-bounded one-time query — see getDeliveryChallans() above for why this
   // exists. Cached per exact (start, end) pair; see dcsRangeCache above.
-  getDeliveryChallansInRange(start: Date, end: Date): Observable<DeliveryChallan[]> {
-    const key = `${start.getTime()}_${end.getTime()}`;
-    return cachedRangeQuery(this.dcsRangeCache, key, DeliveryChallanService.MAX_RANGE_CACHE_ENTRIES, () =>
-      fetchAllDocs(
-        this.dcRef,
-        [
-          where('createdAt', '>=', Timestamp.fromDate(start)),
-          where('createdAt', '<=', Timestamp.fromDate(end)),
-          orderBy('createdAt', 'desc'),
-        ],
-        (d) => this.normalize({ id: d.id, ...d.data() })
-      )
-    );
+  getDeliveryChallansInRange(start: Date, end: Date, options?: { cachedFirst?: boolean }): Observable<DeliveryChallan[]> {
+    return syncedRangeQuery({
+      cache: this.dcsRangeCache,
+      collectionName: 'deliveryChallans',
+      collectionRef: this.dcRef,
+      start,
+      end,
+      mapDoc: (d) => this.normalize({ id: d.id, ...d.data() }),
+      maxEntries: DeliveryChallanService.MAX_RANGE_CACHE_ENTRIES,
+      cachedFirst: options?.cachedFirst,
+    });
   }
 
   async getDCsByPackingListIdOnce(packingListId: string): Promise<DeliveryChallan[]> {

@@ -3,7 +3,7 @@
 
     <!-- Hero Banner -->
     <div class="relative overflow-hidden">
-      <img src="/src/assets/tailor_workshop.jpg" alt="Textile header" class="h-24 w-full object-cover sm:h-28">
+      <img src="/src/assets/tailor_workshop.jpg" alt="Textile header" width="2070" height="1380" decoding="async" fetchpriority="low" class="h-24 w-full object-cover sm:h-28">
       <div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.88),rgba(30,64,175,0.62),rgba(15,23,42,0.3))]"></div>
 
       <div class="absolute inset-0 flex items-center justify-between gap-3 px-4 sm:px-6">
@@ -36,6 +36,12 @@
         </span>
         <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Today's Snapshot</p>
         <span class="text-xs text-slate-400">{{ formatToday() }}</span>
+        @if (isSyncing()) {
+          <span class="ml-auto inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500" aria-live="polite">
+            <svg class="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            Updating…
+          </span>
+        }
       </div>
 
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -69,7 +75,7 @@
               </div>
               <div class="min-w-0">
                 <p class="text-xs font-semibold uppercase tracking-[0.12em] text-white/80">{{ card.label }}</p>
-                <p class="mt-1 text-2xl font-black leading-none">{{ card.value }}</p>
+                @if (showSkeleton()) { <p class="mt-1 h-6 w-16 animate-pulse rounded bg-white/30"></p> } @else { <p class="mt-1 text-2xl font-black leading-none">{{ card.value }}</p> }
                 <p class="mt-1.5 text-[11px] font-medium text-white/75">{{ card.detail }}</p>
               </div>
             </div>
@@ -147,7 +153,7 @@
             <div class="min-w-0">
               <p class="text-sm font-semibold text-slate-600">{{ card.label }}</p>
               <div class="mt-1 flex items-baseline gap-2">
-                <p class="text-4xl font-black text-slate-950">{{ card.value }}</p>
+                @if (showSkeleton()) { <p class="h-10 w-20 animate-pulse rounded-lg bg-slate-200"></p> } @else { <p class="text-4xl font-black text-slate-950">{{ card.value }}</p> }
               </div>
               <p class="mt-2 text-sm text-slate-500">{{ card.detail }}</p>
             </div>
@@ -171,7 +177,7 @@
         @for (tile of inventorySummaryTiles(); track tile.label) {
           <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
             <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{{ tile.label }}</p>
-            <p class="mt-2 text-lg font-black" [class]="tile.tone">{{ tile.value }}</p>
+            @if (showSkeleton()) { <p class="mt-2 h-6 w-14 animate-pulse rounded bg-slate-200"></p> } @else { <p class="mt-2 text-lg font-black" [class]="tile.tone">{{ tile.value }}</p> }
           </div>
         }
       </div>
@@ -303,7 +309,7 @@
         @for (card of miniStatCards(); track card.label) {
           <div class="rounded-[1.35rem] border border-slate-200 bg-slate-50 px-4 py-4">
             <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{{ card.label }}</p>
-            <p class="mt-2 text-3xl font-black text-slate-950">{{ card.value }}</p>
+            @if (showSkeleton()) { <p class="mt-2 h-8 w-16 animate-pulse rounded-lg bg-slate-200"></p> } @else { <p class="mt-2 text-3xl font-black text-slate-950">{{ card.value }}</p> }
             <p class="mt-1 text-sm text-slate-500">{{ card.detail }}</p>
           </div>
         }

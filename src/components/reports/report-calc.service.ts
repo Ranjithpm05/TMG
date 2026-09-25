@@ -487,7 +487,7 @@ export class ReportCalcService {
     const [perPickList, allPackingLists] = await Promise.all([
       mapWithConcurrency(pickLists, 20, async (pickList) => ({
         pickList,
-        lines: await this.pickListService.getPickListLinesOnce(pickList.id!),
+        lines: await this.pickListService.getPickListLinesForReport(pickList),
       })),
       this.packingListService.getPackingListsForPickListIdsOnce(pickLists.map((pl) => pl.id!)),
     ]);
@@ -543,7 +543,7 @@ export class ReportCalcService {
     const invoiceByDcId = new Map(allInvoices.flatMap((inv) => inv.dcIds.map((id) => [id, inv] as const)));
 
     await mapWithConcurrency([...packingListById.values()], 20, async (packingList) => {
-      const packingLines = await this.packingListService.getPackingListLinesOnce(packingList.id!);
+      const packingLines = await this.packingListService.getPackingListLinesForReport(packingList);
       const dcs = dcsByPackingListId.get(packingList.id!) ?? [];
 
       // Union of PickListLines across every Pick List contributing to this

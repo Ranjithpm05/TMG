@@ -28,6 +28,7 @@ import { StyleWiseReportComponent } from './components/reports/style-wise-report
 import { StyleCustomerWiseReportComponent } from './components/reports/style-customer-wise-report/style-customer-wise-report.component';
 import { PickListWiseReportComponent } from './components/reports/pick-list-wise-report/pick-list-wise-report.component';
 import { HsnGstWiseReportComponent } from './components/reports/hsn-gst-wise-report/hsn-gst-wise-report.component';
+import { setMeterPage } from './services/firestore-read-meter';
 
 type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'transportMaster' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'einvoice' | 'ewayBill'
   | 'salesReportProductWise1' | 'salesReportProductWise2' | 'salesOrderSupplyPendingReport' | 'pendingOrderCustomerWiseReport'
@@ -222,6 +223,9 @@ export class AppComponent {
         this.applyView(fallbackView, 'replace');
       }
     });
+
+    // TEMPORARY (Firestore read diagnostics): attributes every read to the screen it happened on — see firestore-read-meter.ts.
+    effect(() => setMeterPage(this.isAuthenticated() ? this.currentView() : 'login'));
 
     // Keep the section containing the active screen expanded so users always see where they are.
     effect(() => {

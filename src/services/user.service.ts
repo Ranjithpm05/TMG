@@ -6,17 +6,17 @@ import {
   updateDoc,
   deleteDoc,
   doc,
-  getDoc,
-  getDocs,
   query,
   orderBy,
   where,
   limit,
-  serverTimestamp
+  serverTimestamp,
 } from '@angular/fire/firestore';
+import { getDoc, getDocs } from './firestore-reads';
 
 import type { User } from '../models/user.model';
-import { from, map, Observable, shareReplay } from 'rxjs';
+import { defer, map, Observable, retry, shareReplay, throwError, timer } from 'rxjs';
+import { backgroundRetryDelayMs, isTransientFirestoreError } from './firestore-health';
 
 @Injectable({ providedIn: 'root' })
 export class UserService {
@@ -30,8 +30,10 @@ export class UserService {
     // 🔹 GET ALL USERS (cached one-time read — used only by the User Management screen)
     getUsers(): Observable<User[]> {
         if (!this.usersCache$) {
-            this.usersCache$ = from(getDocs(this.userRef)).pipe(
+            this.usersCache$ = defer(() => getDocs(this.userRef)).pipe(
                 map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as User))),
+                // Quota exceeded / unreachable: retry in the background instead of replaying the error forever.
+                retry({ delay: (err, count) => (isTransientFirestoreError(err) ? timer(backgroundRetryDelayMs(count - 1)) : throwError(() => err)) }),
                 shareReplay(1)
             );
         }

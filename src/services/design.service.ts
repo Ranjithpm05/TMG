@@ -86,7 +86,6 @@ import {
   collection,
   doc,
   addDoc,
-  getDocs,
   updateDoc,
   deleteDoc,
   query,
@@ -94,8 +93,9 @@ import {
   limit,
   startAfter,
   QueryDocumentSnapshot,
-  serverTimestamp
+  serverTimestamp,
 } from '@angular/fire/firestore';
+import { getDocs } from './firestore-reads';
 import { Storage, ref, uploadBytes, getDownloadURL, deleteObject } from '@angular/fire/storage';
 import { firstValueFrom, Observable } from 'rxjs';
 import type { Design, SizePrice } from '../models/design.model';

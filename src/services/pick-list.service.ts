@@ -3,17 +3,12 @@ import {
   Firestore,
   addDoc,
   collection,
-  collectionData,
   deleteField,
   doc,
-  docData,
-  getDoc,
-  getDocs,
   increment,
   limit,
   orderBy,
   query,
-  runTransaction,
   serverTimestamp,
   Timestamp,
   updateDoc,
@@ -21,6 +16,7 @@ import {
   writeBatch,
   WriteBatch,
 } from '@angular/fire/firestore';
+import { collectionData, docData, getDoc, getDocs, runTransaction } from './firestore-reads';
 import { firstValueFrom, Observable, map } from 'rxjs';
 import type { SalesOrder } from '../models/sales-order.model';
 import type {
@@ -36,9 +32,9 @@ import type { InventoryItem } from '../models/inventory.model';
 import { InventoryService } from './inventory.service';
 import { DesignService } from './design.service';
 import { SalesOrderService } from './sales-order.service';
-import { fetchAllDocs } from './firestore-pagination.util';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
-import { cachedRangeQuery } from './range-cache.util';
+import { VersionedLinesCache } from './versioned-lines-cache.util';
+import { invalidateRangeCaches, removeFromRangeCaches, syncedRangeQuery } from './range-cache.util';
 
 type StoredPickList = PickList & {
   orderSummaries?: PickListOrderSummary[];
@@ -77,32 +73,30 @@ export class PickListService {
 
   private invalidatePickListsCache(): void {
     this.pickListsCache.invalidate();
-    this.pickListsRangeCache.clear();
+    invalidateRangeCaches(this.pickListsRangeCache);
   }
 
   // getPickListsInRange() is keyed by exact (start, end) pair — same
   // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
   // called getPickLists() (the full, ever-growing history) just to filter it
   // down to one date range client-side.
-  private pickListsRangeCache = new Map<string, Observable<PickList[]>>();
+  private pickListsRangeCache = new Map<string, SyncedCollectionCache<PickList>>();
   private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
 
   // Date-bounded one-time query — see pickListsCache above for why the full
   // list is expensive to re-fetch; this lets Dashboard avoid it entirely.
   // Cached per exact (start, end) pair; see pickListsRangeCache above.
-  getPickListsInRange(start: Date, end: Date): Observable<PickList[]> {
-    const key = `${start.getTime()}_${end.getTime()}`;
-    return cachedRangeQuery(this.pickListsRangeCache, key, PickListService.MAX_RANGE_CACHE_ENTRIES, () =>
-      fetchAllDocs(
-        this.plRef,
-        [
-          where('createdAt', '>=', Timestamp.fromDate(start)),
-          where('createdAt', '<=', Timestamp.fromDate(end)),
-          orderBy('createdAt', 'desc'),
-        ],
-        (d) => this.normalizePickList({ id: d.id, ...d.data() })
-      )
-    );
+  getPickListsInRange(start: Date, end: Date, options?: { cachedFirst?: boolean }): Observable<PickList[]> {
+    return syncedRangeQuery({
+      cache: this.pickListsRangeCache,
+      collectionName: 'pickLists',
+      collectionRef: this.plRef,
+      start,
+      end,
+      mapDoc: (d) => this.normalizePickList({ id: d.id, ...d.data() }),
+      maxEntries: PickListService.MAX_RANGE_CACHE_ENTRIES,
+      cachedFirst: options?.cachedFirst,
+    });
   }
 
   /** Updates one pick list's cached top-level fields (aggregates, status) already known from a just-committed transaction, without a Firestore round-trip. No-op if the cache hasn't loaded yet. */
@@ -136,6 +130,18 @@ export class PickListService {
     if (!id) return [];
     const snap = await getDocs(query(this.linesCollection(id), orderBy('sortOrder', 'asc')));
     return snap.docs.map((docSnap) => this.normalizeLine({ lineId: docSnap.id, ...docSnap.data() }));
+  }
+
+  private readonly reportLinesCache = new VersionedLinesCache<PickListLine>('pickLists');
+
+  /**
+   * Reports only: lines served from a per-device cache while the (freshly
+   * read) parent's updatedAt is unchanged — see VersionedLinesCache. Claim
+   * fields may be stale; everything Reports aggregates is not.
+   */
+  getPickListLinesForReport(pickList: PickList): Promise<PickListLine[]> {
+    if (!pickList.id) return Promise.resolve([]);
+    return this.reportLinesCache.get(pickList.id, pickList.updatedAt, () => this.getPickListLinesOnce(pickList.id!));
   }
 
   async getPickListsForOrder(salesOrderId: string): Promise<PickList[]> {
@@ -276,6 +282,7 @@ export class PickListService {
 
     await this.commitInChunks(operations);
     this.pickListsCache.removeOne(pickListId);
+    removeFromRangeCaches(this.pickListsRangeCache, pickListId);
     this.invalidatePickListsCache();
     if (restoreByInventoryId.size > 0) this.inventoryService.invalidateCache();
   }

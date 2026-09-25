@@ -1,4 +1,5 @@
 import { Observable, ReplaySubject } from 'rxjs';
+import { backgroundRetryDelayMs, isTransientFirestoreError } from './firestore-health';
 
 /**
  * Full-collection cache like PatchableCollectionCache, but also persists the
@@ -37,37 +38,55 @@ export class PersistentCollectionCache<T> {
         this.current = cached;
         subject.next(cached);
       } else {
-        this.loader()
-          .then((items) => {
-            this.current = items;
-            // Never persist an empty result (same rule as
-            // PatchableCollectionCache) — it's far more likely a transient
-            // bad read than truth, and caching it would serve an empty list
-            // (e.g. no designs → every MRP resolving to ₹0) for the whole TTL.
-            if (items.length > 0) this.writeToStorage(items);
-            else this.clearStorage();
-            subject.next(items);
-          })
-          .catch((err) => {
-            // A hard subject.error() here used to kill this Observable for
-            // good — Angular's toSignal() re-throws that on the next signal
-            // read, breaking rendering for every already-open screen (e.g.
-            // Dashboard) until a full page reload, even after the underlying
-            // Firestore issue (e.g. a transient resource-exhausted) clears.
-            // Degrade to last-known data instead — a stale/expired storage
-            // snapshot beats a permanently broken screen — while still
-            // nulling `subject` so the *next* get$() call (new component
-            // instance, or a manual retry) attempts a fresh load rather than
-            // being stuck serving this fallback forever.
-            console.error('PersistentCollectionCache load failed, serving fallback', err);
-            const fallback = this.current ?? this.readFromStorage(true) ?? [];
-            this.current = fallback;
-            subject.next(fallback);
-            this.subject = null;
-          });
+        this.load(subject, 0, false);
       }
     }
     return this.subject.asObservable();
+  }
+
+  // Never errors the subject (toSignal() would re-throw on the next signal
+  // read and break every open screen, e.g. Dashboard). While Firestore is
+  // refusing requests (quota exceeded / unreachable) subscribers get the
+  // last-known copy — even past its TTL — if there is one, never a made-up
+  // empty list, and the load retries in the background until it succeeds;
+  // the same subject then emits the fresh list.
+  private load(subject: ReplaySubject<T[]>, attempt: number, servedFallback: boolean): void {
+    this.loader()
+      .then((items) => {
+        this.current = items;
+        // Never persist an empty result — it's far more likely a transient
+        // bad read than truth, and caching it would serve an empty list
+        // (e.g. no designs → every MRP resolving to ₹0) for the whole TTL.
+        if (items.length > 0) this.writeToStorage(items);
+        else this.clearStorage();
+        subject.next(items);
+      })
+      .catch((err) => {
+        const saved = this.current?.length ? this.current : this.readFromStorage(true);
+        if (saved?.length && !servedFallback) {
+          this.current = saved;
+          subject.next(saved);
+          servedFallback = true;
+        }
+
+        if (!isTransientFirestoreError(err)) {
+          console.error('PersistentCollectionCache load failed, serving fallback', err);
+          if (!servedFallback) subject.next([]);
+          if (this.subject === subject) this.subject = null;
+          return;
+        }
+
+        const delayMs = backgroundRetryDelayMs(attempt);
+        console.warn(`[sync] ${this.storageKey}: Firestore ${(err as { code?: string })?.code} — retrying automatically in ${delayMs / 1000}s`);
+        setTimeout(() => {
+          if (this.subject === subject) {
+            this.load(subject, attempt + 1, servedFallback);
+          } else if (!servedFallback) {
+            // Superseded by invalidate() while waiting — forward the newer load.
+            this.get$().subscribe((items) => subject.next(items));
+          }
+        }, delayMs);
+      });
   }
 
   /** Drops both the in-memory value and the persisted snapshot — the next get$() does a full Firestore reload. */

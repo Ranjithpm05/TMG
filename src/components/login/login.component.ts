@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
 import { LoadingService } from '../../services/loading.service';
+import { firestoreHealth } from '../../services/firestore-health';
 
 @Component({
   selector: 'app-login',
@@ -38,7 +39,13 @@ export class LoginComponent {
     await this.loadingService.run(async () => {
       const loggedIn = await this.authService.login(username, password);
       if (!loggedIn) {
-        this.loginError.set('Invalid username or password.');
+        // A refused/unreachable user lookup also returns false — don't blame the password for it.
+        const db = firestoreHealth();
+        this.loginError.set(
+          db === 'quota-exceeded' ? 'Cannot sign in right now: the database limit has been reached. Please try again later.'
+          : db === 'offline' ? 'Cannot reach the database. Check the connection and try again.'
+          : 'Invalid username or password.'
+        );
       }
     });
   }

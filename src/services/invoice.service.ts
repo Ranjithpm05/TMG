@@ -3,23 +3,20 @@ import {
   Firestore,
   collection,
   doc,
-  getDoc,
-  getDocs,
   orderBy,
   query,
-  runTransaction,
   serverTimestamp,
   Timestamp,
   updateDoc,
   where,
 } from '@angular/fire/firestore';
+import { getDoc, getDocs, runTransaction } from './firestore-reads';
 import { Observable } from 'rxjs';
 import { Invoice, InvoiceItem, InvoiceTaxSummary } from '../models/invoice.model';
-import { fetchAllDocs } from './firestore-pagination.util';
 import { DeliveryChallanService } from './delivery-challan.service';
 import { PackingListService } from './packing-list.service';
 import { ClientService } from './client.service';
-import { cachedRangeQuery } from './range-cache.util';
+import { invalidateRangeCaches, syncedRangeQuery } from './range-cache.util';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 
 @Injectable({ providedIn: 'root' })
@@ -50,7 +47,7 @@ export class InvoiceService {
   // getInvoices() just to filter it down to one date range client-side,
   // which meant every one of them paid for downloading the ENTIRE invoice
   // history (unbounded, ever-growing) on first use each session.
-  private invoicesRangeCache = new Map<string, Observable<Invoice[]>>();
+  private invoicesRangeCache = new Map<string, SyncedCollectionCache<Invoice>>();
   private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
 
   // Public: EInvoiceService.saveEInvoice()/cancelEInvoice() write eInvoiceStatus/
@@ -58,7 +55,7 @@ export class InvoiceService {
   // service, and must invalidate this cache too.
   invalidateCache(): void {
     this.invoicesCache.invalidate();
-    this.invoicesRangeCache.clear();
+    invalidateRangeCaches(this.invoicesRangeCache);
   }
 
   // One-time read, paged through in full via fetchAllDocs() — a prior fixed
@@ -74,19 +71,17 @@ export class InvoiceService {
   // querying on the indexed createdAt field returns the identical doc set as
   // filtering by invoiceDate would). Cached per exact (start, end) pair; see
   // invoicesRangeCache above.
-  getInvoicesInRange(start: Date, end: Date): Observable<Invoice[]> {
-    const key = `${start.getTime()}_${end.getTime()}`;
-    return cachedRangeQuery(this.invoicesRangeCache, key, InvoiceService.MAX_RANGE_CACHE_ENTRIES, () =>
-      fetchAllDocs(
-        this.invoicesRef,
-        [
-          where('createdAt', '>=', Timestamp.fromDate(start)),
-          where('createdAt', '<=', Timestamp.fromDate(end)),
-          orderBy('createdAt', 'desc'),
-        ],
-        (d) => this.normalize({ id: d.id, ...d.data() })
-      )
-    );
+  getInvoicesInRange(start: Date, end: Date, options?: { cachedFirst?: boolean }): Observable<Invoice[]> {
+    return syncedRangeQuery({
+      cache: this.invoicesRangeCache,
+      collectionName: 'invoices',
+      collectionRef: this.invoicesRef,
+      start,
+      end,
+      mapDoc: (d) => this.normalize({ id: d.id, ...d.data() }),
+      maxEntries: InvoiceService.MAX_RANGE_CACHE_ENTRIES,
+      cachedFirst: options?.cachedFirst,
+    });
   }
 
   // Also matches a consolidated (multiple-DC) invoice that only carries this

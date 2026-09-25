@@ -28,6 +28,7 @@ import { DesignService } from '../../services/design.service';
 import { exportInvoicesToTally } from './tally-export.util';
 import { exportInvoicesToPtFile, PtFileSizeMaps } from './pt-file-export.util';
 import { fetchLogoDataUri } from '../../services/company-logo.util';
+import { IncrementalList } from '../../services/incremental-list.util';
 
 interface TransportDetailsForm {
   transportId: string;
@@ -183,6 +184,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
 
     return list;
   });
+  readonly invoiceRows = new IncrementalList(this.filteredInvoices);
 
   clearFilters(): void {
     this.filterFromDate.set('');

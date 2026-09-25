@@ -6,12 +6,11 @@ import {
   updateDoc,
   deleteDoc,
   doc,
-  getDoc,
-  getDocs,
   query,
   orderBy,
-  serverTimestamp
+  serverTimestamp,
 } from '@angular/fire/firestore';
+import { getDoc, getDocs } from './firestore-reads';
 
 import type { UserGroup } from '../models/user-group.model';
 import { Observable } from 'rxjs';

@@ -5,8 +5,6 @@ import {
   collection,
   doc,
   addDoc,
-  getDoc,
-  getDocs,
   updateDoc,
   deleteDoc,
   serverTimestamp,
@@ -15,6 +13,7 @@ import {
   where,
   limit,
 } from '@angular/fire/firestore';
+import { getDoc, getDocs } from './firestore-reads';
 
 import type { Client } from '../models/client.model';
 import { Observable } from 'rxjs';

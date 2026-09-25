@@ -4,10 +4,10 @@ import {
   collection,
   doc,
   orderBy,
-  runTransaction,
   serverTimestamp,
   setDoc,
 } from '@angular/fire/firestore';
+import { runTransaction } from './firestore-reads';
 import { Observable } from 'rxjs';
 import { LrEntry } from '../models/lr-entry.model';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';

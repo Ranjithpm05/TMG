@@ -1,4 +1,5 @@
-import { getDocs, limit, query, startAfter, CollectionReference, QueryConstraint, QueryDocumentSnapshot } from '@angular/fire/firestore';
+import { limit, query, startAfter, CollectionReference, QueryConstraint, QueryDocumentSnapshot } from '@angular/fire/firestore';
+import { getDocs } from './firestore-reads';
 
 // A fixed `limit()` with no follow-up page silently truncates a collection's
 // results once it grows past that number — several services here originally

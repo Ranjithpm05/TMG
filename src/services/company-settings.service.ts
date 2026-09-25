@@ -2,11 +2,10 @@ import { Injectable, inject } from '@angular/core';
 import {
   Firestore,
   doc,
-  docData,
-  getDoc,
   setDoc,
   serverTimestamp,
 } from '@angular/fire/firestore';
+import { docData, getDoc } from './firestore-reads';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { CompanySettings } from '../models/einvoice.model';

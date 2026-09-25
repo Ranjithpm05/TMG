@@ -4,21 +4,19 @@ import {
   collection,
   doc,
   addDoc,
-  getDocs,
   updateDoc,
   deleteDoc,
   deleteField,
   orderBy,
-  runTransaction,
   serverTimestamp,
   Timestamp,
-  where
+  where,
 } from '@angular/fire/firestore';
+import { getDocs, runTransaction } from './firestore-reads';
 import { Observable } from 'rxjs';
 import type { GoodsInward, GoodsInwardItem } from '../models/goods-inward.model';
-import { fetchAllDocs } from './firestore-pagination.util';
 import { InventoryService } from './inventory.service';
-import { cachedRangeQuery } from './range-cache.util';
+import { invalidateRangeCaches, removeFromRangeCaches, syncedRangeQuery } from './range-cache.util';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 
 export type ApproveGrnOutcome = 'approved' | 'already-approved' | 'in-progress';
@@ -50,12 +48,12 @@ export class GoodsInwardService {
   // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
   // called getGoodsInwards() (the full, ever-growing history) just to filter
   // it down to one date range client-side.
-  private grnsRangeCache = new Map<string, Observable<GoodsInward[]>>();
+  private grnsRangeCache = new Map<string, SyncedCollectionCache<GoodsInward>>();
   private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
 
   private invalidateGrnsCache(): void {
     this.grnsCache.invalidate();
-    this.grnsRangeCache.clear();
+    invalidateRangeCaches(this.grnsRangeCache);
   }
 
   /** True only for a real Firestore Timestamp or JS Date — false for a missing value or a corrupted plain map/string/number, which Firestore can't range-query the same way. */
@@ -154,19 +152,17 @@ export class GoodsInwardService {
   // 🔹 Date-bounded one-time query — see getGoodsInwards() above for why this
   // exists (Dashboard only needs GRNs within its selected date range, not the
   // entire history). Cached per exact (start, end) pair; see grnsRangeCache above.
-  getGoodsInwardsInRange(start: Date, end: Date): Observable<GoodsInward[]> {
-    const key = `${start.getTime()}_${end.getTime()}`;
-    return cachedRangeQuery(this.grnsRangeCache, key, GoodsInwardService.MAX_RANGE_CACHE_ENTRIES, () =>
-      fetchAllDocs(
-        this.grnRef,
-        [
-          where('createdAt', '>=', Timestamp.fromDate(start)),
-          where('createdAt', '<=', Timestamp.fromDate(end)),
-          orderBy('createdAt', 'desc'),
-        ],
-        (d) => ({ id: d.id, ...d.data() } as GoodsInward)
-      )
-    );
+  getGoodsInwardsInRange(start: Date, end: Date, options?: { cachedFirst?: boolean }): Observable<GoodsInward[]> {
+    return syncedRangeQuery({
+      cache: this.grnsRangeCache,
+      collectionName: 'goodsInward',
+      collectionRef: this.grnRef,
+      start,
+      end,
+      mapDoc: (d) => ({ id: d.id, ...d.data() } as GoodsInward),
+      maxEntries: GoodsInwardService.MAX_RANGE_CACHE_ENTRIES,
+      cachedFirst: options?.cachedFirst,
+    });
   }
 
   // 🔹 Create GRN
@@ -209,6 +205,10 @@ export class GoodsInwardService {
   async deleteGoodsInward(id: string): Promise<void> {
     const grnDoc = doc(this.firestore, `goodsInward/${id}`);
     await deleteDoc(grnDoc);
+    // A delta query can't see deletions — without this the next sync's
+    // count() check fails and re-downloads the entire GRN collection.
+    this.grnsCache.removeOne(id);
+    removeFromRangeCaches(this.grnsRangeCache, id);
     this.invalidateGrnsCache();
   }
 

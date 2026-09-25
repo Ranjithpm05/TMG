@@ -15,8 +15,7 @@ import {
 
 import type { SalesOrder } from '../models/sales-order.model';
 import { from, Observable } from 'rxjs';
-import { fetchAllDocs } from './firestore-pagination.util';
-import { cachedRangeQuery } from './range-cache.util';
+import { invalidateRangeCaches, removeFromRangeCaches, syncedRangeQuery } from './range-cache.util';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 
 @Injectable({ providedIn: 'root' })
@@ -52,7 +51,7 @@ export class SalesOrderService {
     // paginated Firestore read on every single visit. Capped to avoid
     // unbounded growth in a long-lived SPA session — cleared wholesale if it
     // ever grows past a generous bound rather than tracking per-entry LRU.
-    private salesOrdersRangeCache = new Map<string, Observable<SalesOrder[]>>();
+    private salesOrdersRangeCache = new Map<string, SyncedCollectionCache<SalesOrder>>();
     private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
 
     // Public: PickListService.syncSalesOrderShipment() writes salesOrders/{id}.status
@@ -61,7 +60,7 @@ export class SalesOrderService {
     // keep showing the pre-shipment status until an unrelated cache refresh.
     invalidateCache(): void {
         this.salesOrdersCache.invalidate();
-        this.salesOrdersRangeCache.clear();
+        invalidateRangeCaches(this.salesOrdersRangeCache);
     }
 
     private buildSalesOrder(
@@ -159,29 +158,24 @@ export class SalesOrderService {
         return new Date();
     }
 
-    // 🔹 Date-bounded one-time query for reports, paged through in full via
-    // fetchAllDocs() — a prior fixed limit(5000) here would have silently
-    // dropped orders from a report's totals once a date range held more rows
-    // than that. Avoids leaving a listener open while a report is viewed.
-    // Cached per exact (start, end) pair — see salesOrdersRangeCache above.
+    // 🔹 Date-bounded query for Dashboard/Reports/Sales Order, delta-synced
+    // and persisted per (start, end[, clientId]) — see syncedRangeQuery().
+    // Avoids leaving a listener open while a report is viewed.
     // clientId narrows the query at the Firestore level (requires the
     // composite index on clientId+createdAt in firestore.indexes.json) when a
     // single customer is selected in Reports, instead of pulling the whole
     // date range and filtering client-side.
-    getSalesOrdersInRange(start: Date, end: Date, clientId?: string): Observable<SalesOrder[]> {
-        const key = `${start.getTime()}_${end.getTime()}_${clientId ?? ''}`;
-        return cachedRangeQuery(this.salesOrdersRangeCache, key, SalesOrderService.MAX_RANGE_CACHE_ENTRIES, () => {
-            const constraints = [
-                where('createdAt', '>=', Timestamp.fromDate(start)),
-                where('createdAt', '<=', Timestamp.fromDate(end)),
-                ...(clientId ? [where('clientId', '==', clientId)] : []),
-                orderBy('createdAt', 'desc'),
-            ];
-            return fetchAllDocs(
-                this.salesOrderRef,
-                constraints,
-                (d) => ({ ...d.data(), id: d.id } as SalesOrder)
-            );
+    getSalesOrdersInRange(start: Date, end: Date, clientId?: string, options?: { cachedFirst?: boolean }): Observable<SalesOrder[]> {
+        return syncedRangeQuery({
+            cache: this.salesOrdersRangeCache,
+            collectionName: 'salesOrders',
+            collectionRef: this.salesOrderRef,
+            start,
+            end,
+            equals: clientId ? { field: 'clientId', value: clientId } : undefined,
+            mapDoc: (d) => ({ ...d.data(), id: d.id } as SalesOrder),
+            maxEntries: SalesOrderService.MAX_RANGE_CACHE_ENTRIES,
+            cachedFirst: options?.cachedFirst,
         });
     }
 
@@ -253,6 +247,7 @@ export class SalesOrderService {
         const orderDoc = doc(this.firestore, `salesOrders/${orderId}`);
         await deleteDoc(orderDoc);
         this.salesOrdersCache.removeOne(orderId);
+        removeFromRangeCaches(this.salesOrdersRangeCache, orderId);
         this.invalidateCache();
     }
 }

@@ -35,6 +35,7 @@ import { priceAfterMargin } from '../../services/pricing.util';
 import { QzTrayService } from '../../services/qz-tray.service';
 import { getStageBadgeClass, getStageStatusLabel } from '../../services/document-stage.util';
 import { fetchLogoDataUri } from '../../services/company-logo.util';
+import { IncrementalList } from '../../services/incremental-list.util';
 import {
   BoxLabelPrinterSettings,
   buildBoxLabelZplBatch,
@@ -293,6 +294,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         || pl.clientName.toLowerCase().includes(term);
     });
   });
+  readonly readyPickListRows = new IncrementalList(this.filteredReadyPickLists);
 
   filteredPackingLists = computed(() => {
     const term = this.searchTerm().trim().toLowerCase();
@@ -304,6 +306,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         || pl.clientName.toLowerCase().includes(term);
     });
   });
+  readonly packingListRows = new IncrementalList(this.filteredPackingLists);
 
   // O(1) per-row lookup for the Packing Lists tab's DC/Invoice status column
   // — built once per deliveryChallans()/invoices() change instead of
@@ -346,6 +349,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         || dc.packingListNo.toLowerCase().includes(term);
     });
   });
+  readonly dcRows = new IncrementalList(this.filteredDCList);
 
   // ─── Multi-invoice (multiple DCs → one Invoice) picker ─────────────────────
 
@@ -545,19 +549,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
   ngOnInit() {
+    // Page chrome renders immediately; the list area shows skeleton rows
+    // (isLoading) until the initial fetch lands — no full-screen overlay,
+    // which blocked the whole app and never cleared if Firestore stalled.
     this.isLoading.set(true);
-    // Same global "Processing…" overlay the Pick List screen uses — this
-    // screen's initial fetch (pickLists/packingLists/deliveryChallans/invoices)
-    // can take a visible moment, so make that unmistakable rather than looking stuck.
-    this.loadingService.start();
     let doneCount = 0;
     const done = () => {
-      if (++doneCount >= 4) {
-        this.isLoading.set(false);
-        // Hold the overlay through the paint that follows this data arriving —
-        // signals flipping doesn't mean the table has actually rendered yet.
-        requestAnimationFrame(() => requestAnimationFrame(() => this.loadingService.stop()));
-      }
+      if (++doneCount >= 4) this.isLoading.set(false);
     };
 
     this.subscriptions.push(

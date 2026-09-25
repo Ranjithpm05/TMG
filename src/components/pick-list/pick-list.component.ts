@@ -31,6 +31,7 @@ import { PickListService } from '../../services/pick-list.service';
 import { ClientService } from '../../services/client.service';
 import { AuthService } from '../../services/auth.service';
 import { LoadingService } from '../../services/loading.service';
+import { IncrementalList } from '../../services/incremental-list.util';
 
 declare const jsQR: any;
 
@@ -167,6 +168,7 @@ export class PickListComponent implements OnInit, OnDestroy {
       return matchesStatus && matchesTerm;
     });
   });
+  readonly orderRows = new IncrementalList(this.filteredOrders);
 
   filteredOrdersForSelection = computed(() => {
     const term = this.orderSearchTerm().toLowerCase();
@@ -206,6 +208,7 @@ export class PickListComponent implements OnInit, OnDestroy {
       return matchesType && matchesTerm;
     });
   });
+  readonly pickListRows = new IncrementalList(this.filteredPickLists);
 
   selectedOrders = computed(() => this.salesOrders().filter((order) => this.selectedOrderIds().has(order.id)));
   selectedItemCount = computed(() => this.draftLines().filter((line) => line.selected).length);
@@ -454,22 +457,15 @@ export class PickListComponent implements OnInit, OnDestroy {
   });
 
   ngOnInit() {
+    // Page chrome renders immediately; the list area shows skeleton rows
+    // (isLoading) until the initial fetch lands. This used to also raise the
+    // full-screen "Processing…" overlay, which blocked the whole app — and
+    // never cleared if Firestore stalled (quota exceeded).
     this.isLoading.set(true);
-    // Same global "Processing…" overlay Reports uses for exports — this screen's
-    // initial fetch (salesOrders/inventory/clients/pickLists, 11k+ inventory rows
-    // in production) plus rendering the Sales Orders table can take a visible
-    // moment, and this makes that unmistakable rather than looking stuck.
-    this.loadingService.start();
     let doneCount = 0;
     const done = () => {
       doneCount += 1;
-      if (doneCount === 5) {
-        this.isLoading.set(false);
-        // Hold the overlay through the paint that follows this data arriving —
-        // signals flipping doesn't mean the (potentially large) table has
-        // actually rendered/painted yet.
-        requestAnimationFrame(() => requestAnimationFrame(() => this.loadingService.stop()));
-      }
+      if (doneCount === 5) this.isLoading.set(false);
     };
 
     this.salesOrderService.getSalesOrders().subscribe({ next: (orders) => { this.salesOrders.set(orders); done(); }, error: done });

@@ -3,16 +3,11 @@ import {
   DocumentSnapshot,
   Firestore,
   collection,
-  collectionData,
   doc,
-  docData,
-  getDoc,
-  getDocs,
   increment,
   limit,
   orderBy,
   query,
-  runTransaction,
   serverTimestamp,
   Timestamp,
   updateDoc,
@@ -20,6 +15,7 @@ import {
   writeBatch,
   WriteBatch,
 } from '@angular/fire/firestore';
+import { collectionData, docData, getDoc, getDocs, runTransaction } from './firestore-reads';
 import { map, Observable } from 'rxjs';
 import { PickListLine } from '../models/pick-list.model';
 import {
@@ -35,9 +31,9 @@ import {
 } from '../models/packing-list.model';
 import { InventoryService } from './inventory.service';
 import { PickListService } from './pick-list.service';
-import { fetchAllDocs } from './firestore-pagination.util';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
-import { cachedRangeQuery } from './range-cache.util';
+import { VersionedLinesCache } from './versioned-lines-cache.util';
+import { invalidateRangeCaches, syncedRangeQuery } from './range-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class PackingListService {
@@ -64,32 +60,30 @@ export class PackingListService {
 
   invalidateCache(): void {
     this.packingListsCache.invalidate();
-    this.packingListsRangeCache.clear();
+    invalidateRangeCaches(this.packingListsRangeCache);
   }
 
   // getPackingListsInRange() is keyed by exact (start, end) pair — same
   // reasoning as SalesOrderService.salesOrdersRangeCache. Dashboard previously
   // called getPackingLists() (the full, ever-growing history) just to filter
   // it down to one date range client-side.
-  private packingListsRangeCache = new Map<string, Observable<PackingList[]>>();
+  private packingListsRangeCache = new Map<string, SyncedCollectionCache<PackingList>>();
   private static readonly MAX_RANGE_CACHE_ENTRIES = 30;
 
   // Date-bounded one-time query — see packingListsCache above for why the
   // full list is expensive to re-fetch; this lets Dashboard avoid it entirely.
   // Cached per exact (start, end) pair; see packingListsRangeCache above.
-  getPackingListsInRange(start: Date, end: Date): Observable<PackingList[]> {
-    const key = `${start.getTime()}_${end.getTime()}`;
-    return cachedRangeQuery(this.packingListsRangeCache, key, PackingListService.MAX_RANGE_CACHE_ENTRIES, () =>
-      fetchAllDocs(
-        this.packingRef,
-        [
-          where('createdAt', '>=', Timestamp.fromDate(start)),
-          where('createdAt', '<=', Timestamp.fromDate(end)),
-          orderBy('createdAt', 'desc'),
-        ],
-        (d) => this.normalizePackingList({ id: d.id, ...d.data() })
-      )
-    );
+  getPackingListsInRange(start: Date, end: Date, options?: { cachedFirst?: boolean }): Observable<PackingList[]> {
+    return syncedRangeQuery({
+      cache: this.packingListsRangeCache,
+      collectionName: 'packingLists',
+      collectionRef: this.packingRef,
+      start,
+      end,
+      mapDoc: (d) => this.normalizePackingList({ id: d.id, ...d.data() }),
+      maxEntries: PackingListService.MAX_RANGE_CACHE_ENTRIES,
+      cachedFirst: options?.cachedFirst,
+    });
   }
 
   /** Updates one packing list's cached top-level fields (aggregates, status) already known from a just-committed transaction, without a Firestore round-trip. No-op if the cache hasn't loaded yet. */
@@ -122,6 +116,14 @@ export class PackingListService {
   async getPackingListLinesOnce(id: string): Promise<PackingListLine[]> {
     const snap = await getDocs(query(this.linesCollection(id), orderBy('sortOrder', 'asc')));
     return snap.docs.map((docSnap) => this.normalizeLine({ lineId: docSnap.id, ...docSnap.data() }));
+  }
+
+  private readonly reportLinesCache = new VersionedLinesCache<PackingListLine>('packingLists');
+
+  /** Reports only: lines served from a per-device cache while the (freshly read) parent's updatedAt is unchanged — see VersionedLinesCache. */
+  getPackingListLinesForReport(packingList: PackingList): Promise<PackingListLine[]> {
+    if (!packingList.id) return Promise.resolve([]);
+    return this.reportLinesCache.get(packingList.id, packingList.updatedAt, () => this.getPackingListLinesOnce(packingList.id!));
   }
 
   async getPackingListByPickListIdOnce(pickListId: string): Promise<PackingList | null> {

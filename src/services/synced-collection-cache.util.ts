@@ -3,13 +3,15 @@ import {
   QueryConstraint,
   QueryDocumentSnapshot,
   Timestamp,
-  getCountFromServer,
   orderBy,
   query,
   where,
 } from '@angular/fire/firestore';
+import { getCountFromServer } from './firestore-reads';
 import { Observable, ReplaySubject } from 'rxjs';
 import { fetchAllDocs } from './firestore-pagination.util';
+import { recordCacheSync } from './firestore-read-meter';
+import { backgroundRetryDelayMs, isTransientFirestoreError } from './firestore-health';
 
 /**
  * Full-collection cache that downloads a collection ONCE per device and from
@@ -51,7 +53,7 @@ import { fetchAllDocs } from './firestore-pagination.util';
  * SYNC_CACHE_VERSION after running one to force a single full resync.
  */
 
-const SYNC_CACHE_VERSION = 1;
+export const SYNC_CACHE_VERSION = 1;
 const DB_NAME = 'tmg-sync-cache';
 const STORE_NAME = 'snapshots';
 const TIMESTAMP_JSON_TYPE = 'firestore/timestamp/1.0';
@@ -67,6 +69,14 @@ export interface SyncedCollectionOptions<T> {
   compare?: (a: T, b: T) => number;
   /** Set to the orderBy field of `constraints`: Firestore omits docs missing it from the full query, so delta docs missing it are dropped too, keeping local and server counts comparable. */
   requiredField?: string;
+  /**
+   * For caches of a SUBSET of the collection (a date range, one client…):
+   * the client-side twin of the `where` filters in `constraints`. The delta
+   * query sees every changed doc in the collection, so this decides which of
+   * them belong in (or must leave) the cached list — it must match exactly
+   * what the server query returns, or the count() check forces full reloads.
+   */
+  matches?: (doc: QueryDocumentSnapshot) => boolean;
   /** Runs on docs fresh from Firestore (full load or delta) — e.g. self-heal writes. */
   afterFetch?: (items: T[]) => Promise<void>;
   /** A persisted snapshot older than this is discarded and fully reloaded — a safety net for writes that bypassed updatedAt. */
@@ -75,6 +85,8 @@ export interface SyncedCollectionOptions<T> {
 
 interface StoredSnapshot {
   version: number;
+  /** When this entry was last written — lets pruneStoredEntries() drop entries nobody uses any more. */
+  savedAt?: number;
   fullLoadedAt: number;
   cursor: { seconds: number; nanoseconds: number } | null;
   itemsJson: string;
@@ -86,7 +98,9 @@ export class SyncedCollectionCache<T extends { id?: string }> {
   private cursor: Timestamp | null = null;
   private fullLoadedAt = 0;
   private resolved = false;
-  private triedStorage = false;
+  /** Subjects that have emitted a real (synced) list, as opposed to only a saved fallback copy. */
+  private readonly freshSubjects = new WeakSet<ReplaySubject<T[]>>();
+  private storageLoad: Promise<void> | null = null;
   private pendingPatches = new Map<string, T>();
   private storageWriteTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -97,24 +111,104 @@ export class SyncedCollectionCache<T extends { id?: string }> {
       const subject = new ReplaySubject<T[]>(1);
       this.subject = subject;
       this.resolved = false;
-
-      this.resolve()
-        .then((items) => {
-          if (this.subject !== subject) return;
-          this.resolved = true;
-          subject.next(items);
-        })
-        .catch((err) => {
-          // Degrade to last-known data rather than subject.error() — see the
-          // toSignal() note in the old PatchableCollectionCache — and null the
-          // subject so the next get$() retries.
-          console.error(`SyncedCollectionCache(${this.opts.storageKey}) load failed, serving fallback`, err);
-          if (this.subject !== subject) return;
-          subject.next(this.current ?? []);
-          this.subject = null;
-        });
+      this.load(subject, 0, false);
     }
     return this.subject.asObservable();
+  }
+
+  /**
+   * Loads into `subject`, never erroring it (toSignal() would re-throw on the
+   * next read and break the screen). When Firestore refuses the request
+   * (quota exceeded / unreachable) the subject gets the copy saved on this
+   * device if there is one — never a made-up empty list, which screens would
+   * show as "no data" and actions would treat as truth (₹0 MRPs, duplicate
+   * inventory docs) — and the load is retried in the background until it
+   * succeeds, at which point the same subject emits the fresh list. Screens
+   * without a saved copy simply keep their loading state until then.
+   */
+  private load(subject: ReplaySubject<T[]>, attempt: number, servedFallback: boolean): void {
+    this.resolve()
+      .then((items) => {
+        // Delivered even if invalidate() replaced this subject mid-load —
+        // its subscribers are still waiting on it.
+        if (this.subject === subject) this.resolved = true;
+        this.freshSubjects.add(subject);
+        subject.next(items);
+      })
+      .catch((err) => {
+        const saved = this.current?.length ? this.current : null;
+        if (saved && !servedFallback) {
+          subject.next(saved);
+          servedFallback = true;
+        }
+
+        if (!isTransientFirestoreError(err)) {
+          // Not something waiting fixes (e.g. a missing index) — surface it,
+          // settle subscribers, and let the next get$() try again.
+          console.error(`SyncedCollectionCache(${this.opts.storageKey}) load failed`, err);
+          this.freshSubjects.add(subject);
+          subject.next(saved ?? []);
+          if (this.subject === subject) this.subject = null;
+          return;
+        }
+
+        const delayMs = backgroundRetryDelayMs(attempt);
+        const code = (err as { code?: string })?.code ?? 'error';
+        console.warn(`[sync] ${this.opts.storageKey}: Firestore ${code} — ${saved ? `showing the ${saved.length} records saved on this device` : 'nothing saved on this device yet, screen stays loading'}; retrying automatically in ${delayMs / 1000}s`);
+        setTimeout(() => {
+          if (this.subject === subject) {
+            this.load(subject, attempt + 1, servedFallback);
+          } else if (!servedFallback) {
+            // Superseded by invalidate() while waiting — forward the newer
+            // load's results to this subject's subscribers instead of leaving
+            // them stuck.
+            this.get$();
+            const successor = this.subject!;
+            successor.subscribe((items) => {
+              if (this.freshSubjects.has(successor)) this.freshSubjects.add(subject);
+              subject.next(items);
+            });
+          }
+        }, delayMs);
+      });
+  }
+
+  /** Emits what get$() emits (a saved copy while Firestore is refusing requests, then the fresh list) and completes once the list is fresh. */
+  getUntilSynced$(): Observable<T[]> {
+    return new Observable<T[]>((subscriber) => {
+      this.get$();
+      const subject = this.subject!;
+      return subject.subscribe((items) => {
+        subscriber.next(items);
+        if (this.freshSubjects.has(subject)) subscriber.complete();
+      });
+    });
+  }
+
+  /**
+   * For read-only displays (Dashboard): emits the last-known list from
+   * IndexedDB straight away when this device has one, then the synced list
+   * once the delta sync finishes, then completes. The page renders instantly
+   * from the local copy instead of waiting on the network round trips — and
+   * keeps showing it (while retrying) if Firestore is unreachable or over quota.
+   */
+  getCachedFirst$(): Observable<T[]> {
+    return new Observable<T[]>((subscriber) => {
+      let emitted = false;
+      const sub = this.getUntilSynced$().subscribe({
+        next: (items) => {
+          emitted = true;
+          subscriber.next(items);
+        },
+        complete: () => subscriber.complete(),
+      });
+      if (!emitted) {
+        void this.loadFromStorageOnce().then(() => {
+          if (!emitted && !subscriber.closed && this.current?.length) subscriber.next(this.current);
+        });
+      }
+      return sub;
+    });
   }
 
   /**
@@ -155,33 +249,43 @@ export class SyncedCollectionCache<T extends { id?: string }> {
     this.scheduleStorageWrite();
   }
 
-  private async resolve(): Promise<T[]> {
-    if (this.current === null && !this.triedStorage) {
-      this.triedStorage = true;
+  /** Shared by resolve() and getCachedFirst$() so the (large) IndexedDB snapshot is parsed at most once. */
+  private loadFromStorageOnce(): Promise<void> {
+    this.storageLoad ??= (async () => {
+      if (this.current !== null) return;
       const snapshot = await readSnapshot<T>(this.opts.storageKey);
-      if (snapshot) {
+      if (snapshot && this.current === null) {
         this.current = snapshot.items;
         this.cursor = snapshot.cursor;
         this.fullLoadedAt = snapshot.fullLoadedAt;
       }
-    }
+    })();
+    return this.storageLoad;
+  }
+
+  private async resolve(): Promise<T[]> {
+    await this.loadFromStorageOnce();
 
     const maxAge = this.opts.maxSnapshotAgeMs ?? 7 * 24 * 60 * 60 * 1000;
-    const canDelta = this.current !== null && this.current.length > 0 && this.cursor !== null
-      && Date.now() - this.fullLoadedAt < maxAge;
+    const fullReason = this.current === null ? 'no local copy on this device yet'
+      : this.current.length === 0 ? 'local copy is empty'
+      : this.cursor === null ? 'no cached doc has an updatedAt field, so delta sync is impossible — EVERY sync of this cache is a full reload'
+      : Date.now() - this.fullLoadedAt >= maxAge ? 'local copy older than the weekly safety resync'
+      : null;
 
-    const items = canDelta ? await this.deltaSync() : await this.fullLoad();
+    const items = fullReason === null ? await this.deltaSync() : await this.fullLoad(fullReason);
     this.current = items;
     this.scheduleStorageWrite(0);
     return items;
   }
 
-  private async fullLoad(): Promise<T[]> {
+  private async fullLoad(reason: string): Promise<T[]> {
     let maxUpdatedAt: Timestamp | null = null;
     const items = await fetchAllDocs(this.opts.collectionRef, this.opts.constraints, (d) => {
       maxUpdatedAt = maxTimestamp(maxUpdatedAt, d.get('updatedAt'));
       return this.opts.mapDoc(d);
     });
+    recordCacheSync(this.opts.storageKey, 'full', `${items.length} docs (${reason})`);
     await this.opts.afterFetch?.(items);
 
     this.cursor = maxUpdatedAt;
@@ -192,13 +296,17 @@ export class SyncedCollectionCache<T extends { id?: string }> {
   private async deltaSync(): Promise<T[]> {
     let maxUpdatedAt: Timestamp | null = this.cursor;
     const required = this.opts.requiredField;
+    const matches = this.opts.matches;
     const [changed, serverCount] = await Promise.all([
       fetchAllDocs(
         this.opts.collectionRef,
         [where('updatedAt', '>=', this.cursor), orderBy('updatedAt', 'asc')],
         (d) => {
           maxUpdatedAt = maxTimestamp(maxUpdatedAt, d.get('updatedAt'));
-          return { item: this.opts.mapDoc(d), included: !required || d.get(required) !== undefined };
+          return {
+            item: this.opts.mapDoc(d),
+            included: (!required || d.get(required) !== undefined) && (!matches || matches(d)),
+          };
         }
       ),
       getCountFromServer(query(this.opts.collectionRef, ...this.opts.constraints)).then((s) => s.data().count),
@@ -216,8 +324,9 @@ export class SyncedCollectionCache<T extends { id?: string }> {
     if (byId.size !== serverCount) {
       // Something was deleted (or created without updatedAt) outside this
       // tab — the only case that still needs the whole collection.
-      return this.fullLoad();
+      return this.fullLoad(`count check failed: ${byId.size} cached vs ${serverCount} on server — a doc was deleted elsewhere, or written without updatedAt`);
     }
+    recordCacheSync(this.opts.storageKey, 'delta', `${changed.length} changed docs`);
 
     this.cursor = maxUpdatedAt;
     const fetchedIds = new Set(changed.map((c) => c.item.id!));
@@ -254,6 +363,7 @@ export class SyncedCollectionCache<T extends { id?: string }> {
       if (!this.current?.length) return;
       void writeSnapshot(this.opts.storageKey, {
         version: SYNC_CACHE_VERSION,
+        savedAt: Date.now(),
         fullLoadedAt: this.fullLoadedAt,
         cursor: this.cursor ? { seconds: this.cursor.seconds, nanoseconds: this.cursor.nanoseconds } : null,
         itemsJson: JSON.stringify(this.current),
@@ -348,6 +458,62 @@ async function writeSnapshot(key: string, snapshot: StoredSnapshot): Promise<voi
     db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).put(snapshot, key);
   } catch {
     // Storage full/unavailable — purely a cold-start optimization.
+  }
+}
+
+interface StoredEntry {
+  version: number;
+  savedAt: number;
+  /** Caller-defined freshness tag (e.g. the parent doc's updatedAt) — a mismatch means "stale, refetch". */
+  tag: string;
+  itemsJson: string;
+}
+
+/** Keyed get for small per-device caches sharing this IndexedDB store (see VersionedLinesCache). Timestamps are revived. */
+export async function readStoredEntry<T>(key: string): Promise<{ tag: string; items: T } | null> {
+  const db = await openDb();
+  if (!db) return null;
+  try {
+    const stored = await new Promise<StoredEntry | undefined>((resolve, reject) => {
+      const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(key);
+      request.onsuccess = () => resolve(request.result as StoredEntry | undefined);
+      request.onerror = () => reject(request.error);
+    });
+    if (!stored || stored.version !== SYNC_CACHE_VERSION || typeof stored.itemsJson !== 'string') return null;
+    return { tag: stored.tag, items: JSON.parse(stored.itemsJson, reviveTimestamps) as T };
+  } catch {
+    return null;
+  }
+}
+
+export async function writeStoredEntry(key: string, tag: string, items: unknown): Promise<void> {
+  const db = await openDb();
+  if (!db) return;
+  try {
+    const entry: StoredEntry = { version: SYNC_CACHE_VERSION, savedAt: Date.now(), tag, itemsJson: JSON.stringify(items) };
+    db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).put(entry, key);
+  } catch {
+    // Storage full/unavailable — purely a read-saving optimization.
+  }
+}
+
+/** Deletes entries under `prefix` not written for `maxAgeMs` (date-range and per-parent caches otherwise accumulate forever). */
+export async function pruneStoredEntries(prefix: string, maxAgeMs: number): Promise<void> {
+  const db = await openDb();
+  if (!db) return;
+  try {
+    const cutoff = Date.now() - maxAgeMs;
+    const range = IDBKeyRange.bound(prefix, `${prefix}￿`);
+    const request = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).openCursor(range);
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const savedAt = Number((cursor.value as { savedAt?: number })?.savedAt) || 0;
+      if (savedAt < cutoff) cursor.delete();
+      cursor.continue();
+    };
+  } catch {
+    // Best-effort housekeeping.
   }
 }
 

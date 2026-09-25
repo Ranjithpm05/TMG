@@ -1,8 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import {
   Firestore, collection, doc,
-  updateDoc, query, orderBy, where, getDocs, serverTimestamp, writeBatch, WriteBatch, increment
+  updateDoc, query, orderBy, where, serverTimestamp, writeBatch, WriteBatch, increment
 } from '@angular/fire/firestore';
+import { getDocs } from './firestore-reads';
 import { Observable } from 'rxjs';
 import type { InventoryItem } from '../models/inventory.model';
 import type { GoodsInwardItem } from '../models/goods-inward.model';
@@ -42,6 +43,11 @@ export class InventoryService {
 
   getInventory(): Observable<InventoryItem[]> {
     return this.inventoryCache.get$();
+  }
+
+  /** Read-only displays (Dashboard): this device's last-known inventory at once, then the synced list — see SyncedCollectionCache.getCachedFirst$(). */
+  getInventoryCachedFirst(): Observable<InventoryItem[]> {
+    return this.inventoryCache.getCachedFirst$();
   }
 
   invalidateCache(): void {

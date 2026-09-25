@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { switchMap } from 'rxjs';
+import { Observable, defer, finalize, switchMap } from 'rxjs';
 import { ClientService } from '../../services/client.service';
 import { SalesOrderService } from '../../services/sales-order.service';
 import { GoodsInwardService } from '../../services/goods-inward.service';
@@ -93,7 +93,21 @@ export class DashboardComponent {
   private readonly invoiceService = inject(InvoiceService);
 
   private readonly clients = toSignal(this.clientService.getClients(), { initialValue: [] });
-  private readonly inventory = toSignal(this.inventoryService.getInventory(), { initialValue: [] });
+  // Every Firestore-backed source below is "cached first": it renders this
+  // device's last-known copy (IndexedDB) immediately, then the delta-synced
+  // result. pendingLoads counts sources still waiting on that sync — driving
+  // the "Updating…" pill, and skeleton values on a device with no local copy.
+  private readonly pendingLoads = signal(0);
+  readonly isSyncing = computed(() => this.pendingLoads() > 0);
+
+  private trackLoad<T>(source: Observable<T>): Observable<T> {
+    return defer(() => {
+      this.pendingLoads.update((n) => n + 1);
+      return source.pipe(finalize(() => this.pendingLoads.update((n) => Math.max(0, n - 1))));
+    });
+  }
+
+  private readonly inventory = toSignal(this.trackLoad(this.inventoryService.getInventoryCachedFirst()), { initialValue: [] });
 
   readonly currentUser = computed(() => this.authService.currentUser());
   readonly currentUserName = computed(() => this.currentUser()?.username || 'Warehouse User');
@@ -128,7 +142,7 @@ export class DashboardComponent {
   // range changes.
   private readonly salesOrders = toSignal(
     toObservable(this.dateRange).pipe(
-      switchMap(({ start, end }) => this.salesOrderService.getSalesOrdersInRange(start, end))
+      switchMap(({ start, end }) => this.trackLoad(this.salesOrderService.getSalesOrdersInRange(start, end, undefined, { cachedFirst: true })))
     ),
     { initialValue: [] as SalesOrder[] }
   );
@@ -138,7 +152,7 @@ export class DashboardComponent {
   // instead of pulling the entire (ever-growing) GRN history on every load.
   private readonly goodsInwards = toSignal(
     toObservable(this.dateRange).pipe(
-      switchMap(({ start, end }) => this.goodsInwardService.getGoodsInwardsInRange(start, end))
+      switchMap(({ start, end }) => this.trackLoad(this.goodsInwardService.getGoodsInwardsInRange(start, end, { cachedFirst: true })))
     ),
     { initialValue: [] as GoodsInward[] }
   );
@@ -164,30 +178,38 @@ export class DashboardComponent {
 
   private readonly pickLists = toSignal(
     toObservable(this.todayAndRangeWindow).pipe(
-      switchMap(({ start, end }) => this.pickListService.getPickListsInRange(start, end))
+      switchMap(({ start, end }) => this.trackLoad(this.pickListService.getPickListsInRange(start, end, { cachedFirst: true })))
     ),
     { initialValue: [] as PickList[] }
   );
 
   private readonly packingLists = toSignal(
     toObservable(this.todayAndRangeWindow).pipe(
-      switchMap(({ start, end }) => this.packingListService.getPackingListsInRange(start, end))
+      switchMap(({ start, end }) => this.trackLoad(this.packingListService.getPackingListsInRange(start, end, { cachedFirst: true })))
     ),
     { initialValue: [] as PackingList[] }
   );
 
   private readonly deliveryChallans = toSignal(
     toObservable(this.todayAndRangeWindow).pipe(
-      switchMap(({ start, end }) => this.deliveryChallanService.getDeliveryChallansInRange(start, end))
+      switchMap(({ start, end }) => this.trackLoad(this.deliveryChallanService.getDeliveryChallansInRange(start, end, { cachedFirst: true })))
     ),
     { initialValue: [] as DeliveryChallan[] }
   );
 
   private readonly invoices = toSignal(
     toObservable(this.todayAndRangeWindow).pipe(
-      switchMap(({ start, end }) => this.invoiceService.getInvoicesInRange(start, end))
+      switchMap(({ start, end }) => this.trackLoad(this.invoiceService.getInvoicesInRange(start, end, { cachedFirst: true })))
     ),
     { initialValue: [] as Invoice[] }
+  );
+
+  /** Nothing to show yet (no local copy on this device, sync still running) — render skeletons instead of misleading zeros. */
+  readonly showSkeleton = computed(() =>
+    this.isSyncing()
+    && !this.inventory().length && !this.salesOrders().length && !this.goodsInwards().length
+    && !this.pickLists().length && !this.packingLists().length
+    && !this.deliveryChallans().length && !this.invoices().length
   );
 
   readonly isCurrentMonthFilter = computed(() =>

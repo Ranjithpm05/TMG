@@ -1,41 +1,101 @@
-import { Observable, from, of } from 'rxjs';
-import { catchError, shareReplay } from 'rxjs/operators';
+import { CollectionReference, QueryDocumentSnapshot, Timestamp, orderBy, where } from '@angular/fire/firestore';
+import { Observable } from 'rxjs';
+import { SyncedCollectionCache, byCreatedAtDesc, pruneStoredEntries } from './synced-collection-cache.util';
 
 /**
- * Shared helper for the Map<key, Observable>-backed date-range caches used by
- * SalesOrderService/GoodsInwardService/PickListService/PackingListService/
- * DeliveryChallanService/InvoiceService's getXInRange() methods (Dashboard's
- * date-filtered reads).
+ * Shared helper behind SalesOrderService/GoodsInwardService/PickListService/
+ * PackingListService/DeliveryChallanService/InvoiceService's getXInRange()
+ * methods (Dashboard's and Reports' date-filtered reads).
  *
- * A bare `from(fetch()).pipe(shareReplay(1))` caches a REJECTED fetch (e.g. a
- * transient Firestore resource-exhausted) just as permanently as a
- * successful one — every later call for the exact same (start, end) key
- * replays that same error forever rather than retrying, and Angular's
- * toSignal() re-throws it on the next signal read, breaking rendering for
- * whatever screen is subscribed (Dashboard) until a full page reload even
- * after the underlying Firestore issue clears. This evicts the failed key so
- * the next call for it gets a fresh attempt, and resolves to an empty array
- * instead of propagating the error so the current subscriber degrades to
- * "no data for this range" rather than a broken screen.
+ * Each (collection, range[, equality filter]) gets its own
+ * SyncedCollectionCache — persisted in IndexedDB and refreshed with
+ * updatedAt delta queries — instead of the previous in-memory
+ * `from(fetch()).pipe(shareReplay(1))` map. That map was empty on every page
+ * load/new tab and cleared after every write, so the Dashboard (everyone's
+ * landing page) re-read the entire month of sales orders, GRNs, pick lists,
+ * packing lists, DCs and invoices on every visit. Now a revisit costs one
+ * delta query + one count() per collection.
+ *
+ * Contract: never errors, and completes once the list is fresh. While
+ * Firestore refuses requests it first emits the copy saved on this device (if
+ * any) and keeps retrying in the background; the fresh list follows.
  */
-export function cachedRangeQuery<T>(
-  cache: Map<string, Observable<T[]>>,
-  key: string,
-  maxEntries: number,
-  fetch: () => Promise<T[]>
-): Observable<T[]> {
-  let cached = cache.get(key);
-  if (!cached) {
-    if (cache.size >= maxEntries) cache.clear();
-    cached = from(fetch()).pipe(
-      catchError((err) => {
-        console.error('cachedRangeQuery load failed, serving empty result', err);
-        cache.delete(key);
-        return of([] as T[]);
-      }),
-      shareReplay(1)
-    );
-    cache.set(key, cached);
+
+export interface RangeQueryOptions<T> {
+  cache: Map<string, SyncedCollectionCache<T>>;
+  /** Collection name, used in the IndexedDB key. */
+  collectionName: string;
+  collectionRef: CollectionReference;
+  start: Date;
+  end: Date;
+  /** Optional equality filter on top of the createdAt range (needs a composite index with createdAt). */
+  equals?: { field: string; value: string };
+  mapDoc: (doc: QueryDocumentSnapshot) => T;
+  maxEntries: number;
+  /** Emit this device's last-known copy first, then the synced one — for read-only displays. */
+  cachedFirst?: boolean;
+}
+
+const RANGE_KEY_PREFIX = 'range:';
+const RANGE_ENTRY_MAX_AGE_MS = 21 * 24 * 60 * 60 * 1000;
+let pruneScheduled = false;
+
+export function syncedRangeQuery<T extends { id?: string; createdAt?: unknown }>(opts: RangeQueryOptions<T>): Observable<T[]> {
+  const equalsKey = opts.equals ? `_${opts.equals.field}=${opts.equals.value}` : '';
+  const key = `${opts.start.getTime()}_${opts.end.getTime()}${equalsKey}`;
+
+  let cache = opts.cache.get(key);
+  if (!cache) {
+    if (opts.cache.size >= opts.maxEntries) opts.cache.clear();
+    schedulePrune();
+
+    const startTs = Timestamp.fromDate(opts.start);
+    const endTs = Timestamp.fromDate(opts.end);
+    const equals = opts.equals;
+    cache = new SyncedCollectionCache<T>({
+      storageKey: `${RANGE_KEY_PREFIX}${opts.collectionName}:${key}`,
+      collectionRef: opts.collectionRef,
+      constraints: [
+        where('createdAt', '>=', startTs),
+        where('createdAt', '<=', endTs),
+        ...(equals ? [where(equals.field, '==', equals.value)] : []),
+        orderBy('createdAt', 'desc'),
+      ],
+      // Exact client-side twin of the constraints above: only a real
+      // Timestamp createdAt can match a Timestamp range server-side.
+      matches: (d) => {
+        const createdAt = d.get('createdAt');
+        return createdAt instanceof Timestamp
+          && compareTimestamps(createdAt, startTs) >= 0
+          && compareTimestamps(createdAt, endTs) <= 0
+          && (!equals || d.get(equals.field) === equals.value);
+      },
+      mapDoc: opts.mapDoc,
+      compare: byCreatedAtDesc,
+    });
+    opts.cache.set(key, cache);
   }
-  return cached;
+
+  return opts.cachedFirst ? cache.getCachedFirst$() : cache.getUntilSynced$();
+}
+
+/** After a write: the next getXInRange() call delta-syncs instead of serving the pre-write list. */
+export function invalidateRangeCaches(cache: Map<string, SyncedCollectionCache<any>>): void {
+  for (const entry of cache.values()) entry.invalidate();
+}
+
+/** After this app deleted a doc: drops it from every cached range, so their count() checks don't force a full range reload. */
+export function removeFromRangeCaches(cache: Map<string, SyncedCollectionCache<any>>, id: string): void {
+  for (const entry of cache.values()) entry.removeOne(id);
+}
+
+function compareTimestamps(a: Timestamp, b: Timestamp): number {
+  return a.seconds !== b.seconds ? a.seconds - b.seconds : a.nanoseconds - b.nanoseconds;
+}
+
+function schedulePrune(): void {
+  if (pruneScheduled) return;
+  pruneScheduled = true;
+  // Off the startup path — housekeeping for ranges nobody has opened in weeks.
+  setTimeout(() => void pruneStoredEntries(RANGE_KEY_PREFIX, RANGE_ENTRY_MAX_AGE_MS), 15000);
 }
