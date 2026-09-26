@@ -87,10 +87,20 @@ function buildInvoiceRows(invoice: Invoice, packingListLines: PackingListLine[] 
   });
 }
 
+/**
+ * Every Packing List billed on the invoice — a multi-DC (combined) invoice
+ * spans several Packing Lists (DC:PackingList is 1:1), listed in
+ * packingListIds; packingListId alone is only the first of them.
+ */
+export function invoicePackingListIds(invoice: Invoice): string[] {
+  return [...new Set([...(invoice.packingListIds ?? []), invoice.packingListId].filter((id): id is string => !!id))];
+}
+
 export function buildPtFileRows(invoices: Invoice[], packingListLinesById: Map<string, PackingListLine[]>, sizeMaps: PtFileSizeMaps): (string | number)[][] {
   const rows: (string | number)[][] = [HEADERS];
   for (const invoice of invoices) {
-    rows.push(...buildInvoiceRows(invoice, packingListLinesById.get(invoice.packingListId), sizeMaps));
+    const lines = invoicePackingListIds(invoice).flatMap((id) => packingListLinesById.get(id) ?? []);
+    rows.push(...buildInvoiceRows(invoice, lines, sizeMaps));
   }
   return rows;
 }

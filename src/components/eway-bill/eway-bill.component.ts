@@ -173,12 +173,10 @@ export class EwayBillComponent implements OnInit, OnDestroy {
       transporterName: matched?.transportName || '',
       vehicleNo: '',
       vehicleType: 'R',
-      // Transport document reference is the invoice's own DC No./today's
-      // date, not a separate manual entry — the sandbox still wants these
-      // for Rail/Air/Ship, but there's no separate "transport document" in
-      // this app's workflow to ask the user for.
-      transDocNo: invoice?.dcNo || '',
-      transDocDt: this.todayYyyymmdd(),
+      // No transport document reference is sent — the DC No. is no longer
+      // used as the Transport Doc No. (not needed on the E-Way Bill).
+      transDocNo: '',
+      transDocDt: '',
     });
     this.showGenerateModal.set(true);
   }
@@ -215,11 +213,6 @@ export class EwayBillComponent implements OnInit, OnDestroy {
       if (byId) return byId;
     }
     return invoice.transport ? list.find((t) => t.transportName === invoice.transport) : undefined;
-  }
-
-  private todayYyyymmdd(): string {
-    const d = new Date();
-    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   }
 
   async submitGenerate(): Promise<void> {
@@ -508,11 +501,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
       : `<div style="font-size:8px;color:#999">Barcode not available</div>`;
 
     const transportModeCell = td_ ? this.transportModeLabel(td_.transMode).toUpperCase() : '-';
-    const vehicleDocCell = td_
-      ? [td_.vehicleNo, td_.transDocNo, td_.transDocDt ? this.fmtEwbDateOnly(`${td_.transDocDt.slice(0, 4)}-${td_.transDocDt.slice(4, 6)}-${td_.transDocDt.slice(6, 8)}`) : '']
-          .filter(Boolean)
-          .join(' &amp; ')
-      : '-';
+    const vehicleDocCell = td_?.vehicleNo || '-';
 
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>E-Way Bill - ${esc(invoice.ewbNo)}</title>
 <style>

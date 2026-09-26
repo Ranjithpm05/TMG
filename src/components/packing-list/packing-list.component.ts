@@ -872,8 +872,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
         + '<input id="minv-tax" type="number" class="swal2-input" style="margin:0;width:100%" value="5"></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Vehicle No.</label>'
         + '<input id="minv-vehicle" class="swal2-input" style="margin:0;width:100%" value=""></div>'
-        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Document No.</label>'
-        + '<input id="minv-docno" class="swal2-input" style="margin:0;width:100%" value=""></div>'
         + '<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Destination</label>'
         + '<input id="minv-dest" class="swal2-input" style="margin:0;width:100%" value="' + (primaryDc?.place || primaryDc.clientName || '') + '"></div>'
         + '</div>',
@@ -884,7 +882,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
         hsnSac: (document.getElementById('minv-hsn') as HTMLInputElement).value.trim() || '62059090',
         taxRate: Number((document.getElementById('minv-tax') as HTMLInputElement).value) || 5,
         vehicleNo: (document.getElementById('minv-vehicle') as HTMLInputElement).value.trim(),
-        docNo: (document.getElementById('minv-docno') as HTMLInputElement).value.trim(),
         destination: (document.getElementById('minv-dest') as HTMLInputElement).value.trim(),
       }),
     });
@@ -1034,7 +1031,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         transportAddress: primaryDc.transportAddress ?? undefined,
         transportGstNo: primaryDc.transportGstNo ?? undefined,
         vehicleNo: formValues.vehicleNo,
-        docNo: formValues.docNo,
+        docNo: '',
         shipmentDate: primaryDc.createdAt ?? null,
         totalPkgs: dcs.reduce((s, dc) => s + dc.boxCount, 0),
         agentName: primaryDc.agentName ?? '',
@@ -1539,8 +1536,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
         + '<input id="inv-tax" type="number" class="swal2-input" style="margin:0;width:100%" value="5"></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Vehicle No.</label>'
         + '<input id="inv-vehicle" class="swal2-input" style="margin:0;width:100%" value=""></div>'
-        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Document No.</label>'
-        + '<input id="inv-docno" class="swal2-input" style="margin:0;width:100%" value=""></div>'
         + '<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Destination</label>'
         + '<input id="inv-dest" class="swal2-input" style="margin:0;width:100%" value="' + (primaryDc?.place || packingList.clientName || '') + '"></div>'
         + '</div>',
@@ -1551,7 +1546,6 @@ export class PackingListComponent implements OnInit, OnDestroy {
         hsnSac: (document.getElementById('inv-hsn') as HTMLInputElement).value.trim() || '62059090',
         taxRate: Number((document.getElementById('inv-tax') as HTMLInputElement).value) || 5,
         vehicleNo: (document.getElementById('inv-vehicle') as HTMLInputElement).value.trim(),
-        docNo: (document.getElementById('inv-docno') as HTMLInputElement).value.trim(),
         destination: (document.getElementById('inv-dest') as HTMLInputElement).value.trim(),
       }),
     });
@@ -1714,7 +1708,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         transportAddress: primaryDc.transportAddress ?? loaded.transportAddress ?? undefined,
         transportGstNo: primaryDc.transportGstNo ?? loaded.transportGstNo ?? undefined,
         vehicleNo: formValues.vehicleNo,
-        docNo: formValues.docNo,
+        docNo: '',
         shipmentDate: primaryDc.createdAt ?? null,
         totalPkgs: dcsToInvoice.reduce((s, dc) => s + dc.boxCount, 0),
         agentName: primaryDc.agentName ?? loaded.agentName ?? '',
@@ -3988,7 +3982,6 @@ ${allDCHtml}
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Destination</td><td style="padding:3px 4px;font-size:13px">: ' + (invoice.destination || '—') + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Transport</td><td style="padding:3px 4px;font-size:13px">: ' + (invoice.transport || '—') + '</td></tr>'
       + (invoice.transportGstNo ? '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Transport GSTIN</td><td style="padding:3px 4px;font-size:13px">: ' + invoice.transportGstNo + '</td></tr>' : '')
-      + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Doc No.</td><td style="padding:3px 4px;font-size:13px">: ' + (invoice.docNo || '—') + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Vehicle No.</td><td style="padding:3px 4px;font-size:13px">: ' + (invoice.vehicleNo || '—') + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Total Pkgs</td><td style="padding:3px 4px;font-size:13px;font-weight:700">: ' + invoice.totalPkgs + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Agent</td><td style="padding:3px 4px;font-size:13px">: ' + (invoice.agentName || '—') + '</td></tr>'

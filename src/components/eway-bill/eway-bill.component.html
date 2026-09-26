@@ -276,12 +276,6 @@
             <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ td.transporterName }}</p>
           </div>
           }
-          @if (td.transDocNo) {
-          <div>
-            <p class="text-xs text-slate-400">Transport Doc No</p>
-            <p class="font-semibold text-slate-700 text-sm mt-0.5">{{ td.transDocNo }}</p>
-          </div>
-          }
         </div>
       </div>
       }
@@ -323,7 +317,7 @@
         <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Requirements</h3>
         <ul class="space-y-2 text-xs text-slate-500 list-disc pl-4">
           <li>E-Invoice must already be generated for this invoice (it is — IRN present).</li>
-          <li>Vehicle number is optional. When provided, its Part-B (vehicle/transport) details are included in the E-Way Bill; when left blank, Part-B is omitted from the request. For Rail/Air/Ship, the transport document no. &amp; date are filled automatically from the DC No. and today's date.</li>
+          <li>Vehicle number is optional. When provided, its Part-B (vehicle/transport) details are included in the E-Way Bill; when left blank, Part-B is omitted from the request.</li>
           <li>Distance (km) is optional.</li>
         </ul>
       </div>
@@ -412,12 +406,6 @@
             }
           </select>
         </div>
-      </div>
-      } @else {
-      <div class="rounded-xl bg-slate-50 border border-slate-200 p-3 text-xs text-slate-500">
-        Transport Doc No. and Date are filled automatically from this invoice's DC No.
-        (<strong class="text-slate-700">{{ generateForm().transDocNo || '—' }}</strong>) and today's date
-        (<strong class="text-slate-700">{{ generateForm().transDocDt }}</strong>).
       </div>
       }
     </div>

@@ -26,7 +26,7 @@ import { LoadingService } from '../../services/loading.service';
 import { PackingListService } from '../../services/packing-list.service';
 import { DesignService } from '../../services/design.service';
 import { exportInvoicesToTally } from './tally-export.util';
-import { exportInvoicesToPtFile, PtFileSizeMaps } from './pt-file-export.util';
+import { exportInvoicesToPtFile, invoicePackingListIds, PtFileSizeMaps } from './pt-file-export.util';
 import { fetchLogoDataUri } from '../../services/company-logo.util';
 import { IncrementalList } from '../../services/incremental-list.util';
 
@@ -754,7 +754,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   // updated (see packing-list.service's processScan comment), so every row
   // built from it gets filtered out and the export comes back empty.
   private async buildPtFileLookups(invoices: Invoice[]): Promise<{ packingListLinesById: Map<string, PackingListLine[]>; sizeMaps: PtFileSizeMaps }> {
-    const neededIds = [...new Set(invoices.map((i) => i.packingListId).filter((id): id is string => !!id))];
+    const neededIds = [...new Set(invoices.flatMap(invoicePackingListIds))];
     // Lines go through the per-device versioned cache (keyed by each Packing
     // List's updatedAt), so a repeat "Export All" only re-reads lists that
     // changed — not every line of every invoice ever issued each click.
@@ -1058,7 +1058,6 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Destination</td><td style="padding:2px 4px;font-size:11px">: ${invoice.destination || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Transport</td><td style="padding:2px 4px;font-size:11px">: ${invoice.transport || '—'}</td></tr>
       ${invoice.transportGstNo ? `<tr><td style="padding:2px 4px;font-size:11px;color:#555">Transport GSTIN</td><td style="padding:2px 4px;font-size:11px">: ${invoice.transportGstNo}</td></tr>` : ''}
-      <tr><td style="padding:2px 4px;font-size:11px;color:#555">Doc No.</td><td style="padding:2px 4px;font-size:11px">: ${invoice.docNo || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Shipment Date</td><td style="padding:2px 4px;font-size:11px">: ${invoice.shipmentDate ? fmtDate(invoice.shipmentDate) : '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Vehicle No.</td><td style="padding:2px 4px;font-size:11px">: ${invoice.vehicleNo || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Total Pkgs</td><td style="padding:2px 4px;font-size:11px;font-weight:700">: ${invoice.totalPkgs}</td></tr>
