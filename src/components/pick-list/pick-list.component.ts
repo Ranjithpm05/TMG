@@ -66,8 +66,16 @@ export class PickListComponent implements OnInit, OnDestroy {
   private cameraCanvas: HTMLCanvasElement | null = null;
   private barcodeDetector: any = null;
   private cameraLoopBusy = false;
+  // Camera de-dupe is presence-based, not time-based: the camera reads the
+  // same tag on every frame for as long as it stays in view, so a fixed
+  // cooldown re-submitted it every few seconds (1 physical scan → 3-5 qty).
+  // The last-submitted barcode stays locked until it has been out of frame
+  // for CAMERA_REARM_MS; lastSeenAt is refreshed on every frame it's still
+  // detected, and after each submit finishes (the loop skips detection while
+  // a scan is in flight).
   private lastCameraBarcode = '';
-  private lastCameraBarcodeAt = 0;
+  private lastCameraBarcodeSeenAt = 0;
+  private readonly CAMERA_REARM_MS = 1200;
   private completionHandled = false;
 
   mode = signal<ViewMode>('list');
@@ -1449,7 +1457,6 @@ export class PickListComponent implements OnInit, OnDestroy {
     try {
       const result = await this.pickListService.processPartyScan(pickList.id, barcode, user);
       this.manualScanValue.set('');
-      this.lastCameraBarcodeAt = Date.now();
       this.lastScannedLineId.set(result.line.lineId);
       this.sessionScannedLineIds.update((ids) => new Set(ids).add(result.line.lineId));
       const label = result.line.isAdditional
@@ -1464,6 +1471,9 @@ export class PickListComponent implements OnInit, OnDestroy {
       this.flashScanFeedback('error', text ?? title);
       await this.showToast('error', title, text);
     } finally {
+      // Tag is presumably still in front of the camera — restart its
+      // absence window from now, see lastCameraBarcodeSeenAt.
+      this.lastCameraBarcodeSeenAt = Date.now();
       this.isSubmittingScan.set(false);
       this.focusScanInput();
     }
@@ -1563,7 +1573,6 @@ export class PickListComponent implements OnInit, OnDestroy {
     try {
       const result = await this.pickListService.processScan(pickList.id, barcode, user, currentLine.lineId);
       this.manualScanValue.set('');
-      this.lastCameraBarcodeAt = Date.now();
       this.sessionScannedLineIds.update((ids) => new Set(ids).add(result.line.lineId));
       this.flashScanFeedback('success', `${result.line.styleNo} ${result.line.size} · ${result.line.pickedQty}/${result.line.requiredQty}`);
 
@@ -1598,6 +1607,9 @@ export class PickListComponent implements OnInit, OnDestroy {
       this.flashScanFeedback('error', text ?? title);
       await this.showToast('error', title, text);
     } finally {
+      // Tag is presumably still in front of the camera — restart its
+      // absence window from now, see lastCameraBarcodeSeenAt.
+      this.lastCameraBarcodeSeenAt = Date.now();
       this.isSubmittingScan.set(false);
       this.focusScanInput();
     }
@@ -1716,9 +1728,14 @@ export class PickListComponent implements OnInit, OnDestroy {
       .then((barcode) => {
         if (!barcode) return;
         const now = Date.now();
-        if (barcode === this.lastCameraBarcode && now - this.lastCameraBarcodeAt < 3000) return;
+        if (barcode === this.lastCameraBarcode && now - this.lastCameraBarcodeSeenAt < this.CAMERA_REARM_MS) {
+          // Same tag still in view — keep it locked, don't count it again.
+          this.lastCameraBarcodeSeenAt = now;
+          return;
+        }
+        if (this.isSubmittingScan()) return;
         this.lastCameraBarcode = barcode;
-        this.lastCameraBarcodeAt = now;
+        this.lastCameraBarcodeSeenAt = now;
         void this.submitBarcode(barcode);
       })
       .finally(() => {

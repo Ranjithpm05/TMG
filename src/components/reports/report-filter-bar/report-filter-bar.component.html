@@ -2,12 +2,12 @@
   <div class="flex flex-wrap items-end gap-3 mb-3">
     <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">From</label>
-      <input type="date" [ngModel]="data.startDate()" (ngModelChange)="data.updateStartDate($event)"
+      <input type="date" [ngModel]="data.draftStartDate()" (ngModelChange)="data.updateStartDate($event)"
              class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
     </div>
     <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">To</label>
-      <input type="date" [ngModel]="data.endDate()" (ngModelChange)="data.updateEndDate($event)"
+      <input type="date" [ngModel]="data.draftEndDate()" (ngModelChange)="data.updateEndDate($event)"
              class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
     </div>
     <div class="flex gap-2">
@@ -21,7 +21,7 @@
   <div class="flex flex-wrap items-end gap-3">
     <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">Customer</label>
-      <select [ngModel]="data.selectedCustomerId()" (ngModelChange)="data.selectedCustomerId.set($event)"
+      <select [ngModel]="data.draftCustomerId()" (ngModelChange)="data.draftCustomerId.set($event)"
               class="block w-48 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
         <option value="">All Customers</option>
         @for (client of data.sortedClients(); track client.id) {
@@ -31,7 +31,7 @@
     </div>
     <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">Agent</label>
-      <select [ngModel]="data.selectedAgent()" (ngModelChange)="data.selectedAgent.set($event)"
+      <select [ngModel]="data.draftAgent()" (ngModelChange)="data.draftAgent.set($event)"
               class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
         <option value="">All Agents</option>
         @for (agent of data.agentOptions(); track agent) {
@@ -41,7 +41,7 @@
     </div>
     <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">Product / Group</label>
-      <select [ngModel]="data.selectedGroup()" (ngModelChange)="data.selectedGroup.set($event)"
+      <select [ngModel]="data.draftGroup()" (ngModelChange)="data.draftGroup.set($event)"
               class="block w-44 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
         <option value="">All Products</option>
         @for (group of data.groupOptions(); track group) {
@@ -51,12 +51,12 @@
     </div>
     <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">Design / Style No</label>
-      <input type="text" placeholder="Search style no..." [ngModel]="data.designSearch()" (ngModelChange)="data.designSearch.set($event)"
+      <input type="text" placeholder="Search style no..." [ngModel]="data.draftDesignSearch()" (ngModelChange)="data.draftDesignSearch.set($event)" (keyup.enter)="data.applyFilters()"
              class="block w-40 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
     </div>
     <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
-      <select [ngModel]="data.selectedStatus()" (ngModelChange)="data.selectedStatus.set($event)"
+      <select [ngModel]="data.draftStatus()" (ngModelChange)="data.draftStatus.set($event)"
               class="block w-36 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
         <option value="">All Status</option>
         @for (status of data.statusOptions; track status) {
@@ -64,8 +64,17 @@
         }
       </select>
     </div>
+    <button (click)="data.applyFilters()"
+            [class]="data.hasPendingChanges()
+              ? 'px-4 py-2 text-xs font-semibold rounded-md text-white bg-indigo-600 hover:bg-indigo-700 ring-2 ring-indigo-300'
+              : 'px-4 py-2 text-xs font-semibold rounded-md text-white bg-indigo-600 hover:bg-indigo-700'">
+      Apply
+    </button>
     <button (click)="data.resetFilters()" class="px-3 py-2 text-xs font-medium rounded-md bg-white border border-gray-300 hover:bg-gray-100 text-gray-600">
       Clear Filters
     </button>
+    @if (data.hasPendingChanges()) {
+      <span class="text-xs text-amber-600 self-center">Filters changed — click Apply to update the report.</span>
+    }
   </div>
 </div>

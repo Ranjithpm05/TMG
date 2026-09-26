@@ -48,6 +48,29 @@ export class ReportsDataService {
 
   readonly statusOptions = STATUS_OPTIONS;
 
+  // ── Draft filter state ────────────────────────────────────────────────
+  // What the filter bar inputs edit. The applied signals above (which drive
+  // every Firestore query + client-side filter) only change when the user
+  // clicks Apply, so changing a date/dropdown no longer fires a query per
+  // keystroke/selection.
+  readonly draftStartDate = signal(this.startDate());
+  readonly draftEndDate = signal(this.endDate());
+  readonly draftCustomerId = signal('');
+  readonly draftAgent = signal('');
+  readonly draftGroup = signal('');
+  readonly draftDesignSearch = signal('');
+  readonly draftStatus = signal('');
+
+  readonly hasPendingChanges = computed(() =>
+    this.draftStartDate() !== this.startDate() ||
+    this.draftEndDate() !== this.endDate() ||
+    this.draftCustomerId() !== this.selectedCustomerId() ||
+    this.draftAgent() !== this.selectedAgent() ||
+    this.draftGroup() !== this.selectedGroup() ||
+    this.draftDesignSearch() !== this.designSearch() ||
+    this.draftStatus() !== this.selectedStatus()
+  );
+
   readonly dateRange = computed(() => {
     const rawStart = this.parseInputDate(this.startDate()) ?? this.parseInputDate(this.currentMonthStart())!;
     const rawEnd = this.parseInputDate(this.endDate()) ?? new Date();
@@ -164,32 +187,46 @@ export class ReportsDataService {
   });
 
   // ── Filter actions ────────────────────────────────────────────────────
+  // All of these edit the draft only — nothing is queried until applyFilters().
   updateStartDate(value: string): void {
-    this.startDate.set(value);
+    this.draftStartDate.set(value);
   }
 
   updateEndDate(value: string): void {
-    this.endDate.set(value);
+    this.draftEndDate.set(value);
   }
 
   resetToCurrentMonth(): void {
-    this.startDate.set(this.currentMonthStart());
-    this.endDate.set(this.currentMonthEnd());
+    this.draftStartDate.set(this.currentMonthStart());
+    this.draftEndDate.set(this.currentMonthEnd());
   }
 
   setPreset(days: number): void {
     const end = new Date();
     const start = this.shiftDays(end, -(days - 1));
-    this.startDate.set(this.formatDateInput(start));
-    this.endDate.set(this.formatDateInput(end));
+    this.draftStartDate.set(this.formatDateInput(start));
+    this.draftEndDate.set(this.formatDateInput(end));
   }
 
+  /** Commits the draft filters — the only place the applied filter signals change, so the only place a report reload is triggered. */
+  applyFilters(): void {
+    this.startDate.set(this.draftStartDate());
+    this.endDate.set(this.draftEndDate());
+    this.selectedCustomerId.set(this.draftCustomerId());
+    this.selectedAgent.set(this.draftAgent());
+    this.selectedGroup.set(this.draftGroup());
+    this.designSearch.set(this.draftDesignSearch());
+    this.selectedStatus.set(this.draftStatus());
+  }
+
+  /** Clears customer/agent/product/design/status (keeps the dates) and applies straight away. */
   resetFilters(): void {
-    this.selectedCustomerId.set('');
-    this.selectedAgent.set('');
-    this.selectedGroup.set('');
-    this.designSearch.set('');
-    this.selectedStatus.set('');
+    this.draftCustomerId.set('');
+    this.draftAgent.set('');
+    this.draftGroup.set('');
+    this.draftDesignSearch.set('');
+    this.draftStatus.set('');
+    this.applyFilters();
   }
 
   filterSummary(): string {
