@@ -137,7 +137,9 @@ export class SalesOrderService {
             const repairedDate = recoveredMillis > 0 ? new Date(recoveredMillis) : this.bestEffortCreatedAt(order);
             const timestamp = Timestamp.fromDate(repairedDate);
             try {
-                await updateDoc(doc(this.firestore, `salesOrders/${order.id}`), { createdAt: timestamp });
+                // updatedAt too: other devices' delta sync must see the doc enter its
+                // date range, or their count() check forces a full range reload.
+                await updateDoc(doc(this.firestore, `salesOrders/${order.id}`), { createdAt: timestamp, updatedAt: serverTimestamp() });
                 (order as unknown as { createdAt: unknown }).createdAt = timestamp;
             } catch {
                 // Best-effort only — if the write fails (e.g. permissions), leave the

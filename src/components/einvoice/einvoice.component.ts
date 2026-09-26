@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 import Swal from 'sweetalert2';
 import { Invoice } from '../../models/invoice.model';
 import { PackingListLine } from '../../models/packing-list.model';
@@ -755,8 +755,17 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   // built from it gets filtered out and the export comes back empty.
   private async buildPtFileLookups(invoices: Invoice[]): Promise<{ packingListLinesById: Map<string, PackingListLine[]>; sizeMaps: PtFileSizeMaps }> {
     const neededIds = [...new Set(invoices.map((i) => i.packingListId).filter((id): id is string => !!id))];
+    // Lines go through the per-device versioned cache (keyed by each Packing
+    // List's updatedAt), so a repeat "Export All" only re-reads lists that
+    // changed — not every line of every invoice ever issued each click.
+    const packingListById = new Map((await firstValueFrom(this.packingListService.getPackingLists())).map((pl) => [pl.id, pl]));
     const [linesByPackingList, byBarcode, byStyleColorSize] = await Promise.all([
-      Promise.all(neededIds.map((id) => this.packingListService.getPackingListLinesOnce(id))),
+      Promise.all(neededIds.map((id) => {
+        const packingList = packingListById.get(id);
+        return packingList
+          ? this.packingListService.getPackingListLinesForReport(packingList)
+          : this.packingListService.getPackingListLinesOnce(id);
+      })),
       this.designService.getSizeEntryByBarcodeMap(),
       this.designService.getSizeEntryByStyleColorSizeMap(),
     ]);

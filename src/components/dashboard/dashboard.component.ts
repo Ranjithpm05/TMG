@@ -17,6 +17,7 @@ import type { PickList } from '../../models/pick-list.model';
 import type { PackingList } from '../../models/packing-list.model';
 import type { DeliveryChallan } from '../../models/delivery-challan.model';
 import type { Invoice } from '../../models/invoice.model';
+import { isPartialYearDate } from '../../services/range-cache.util';
 
 interface SummaryCard {
   id: 'inventory' | 'lowStock' | 'pendingSales' | 'pickPack';
@@ -462,11 +463,16 @@ export class DashboardComponent {
 
   // ── Date filter methods ──────────────────────────────────────────────
 
+  // A date <input> reports a valid value on every keystroke while the year
+  // is typed (0002-…, 0020-…, 0202-…) — each would open a new range cache
+  // and download essentially the whole history. Ignore those partial years.
   updateStartDate(value: string): void {
+    if (isPartialYearDate(value)) return;
     this.startDate.set(value);
   }
 
   updateEndDate(value: string): void {
+    if (isPartialYearDate(value)) return;
     this.endDate.set(value);
   }
 

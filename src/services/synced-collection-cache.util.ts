@@ -293,7 +293,7 @@ export class SyncedCollectionCache<T extends { id?: string }> {
     return this.sorted(this.applyPendingPatches(items, new Set(items.map((x) => x.id!))));
   }
 
-  private async deltaSync(): Promise<T[]> {
+  private async deltaSync(recheckOnMismatch = true): Promise<T[]> {
     let maxUpdatedAt: Timestamp | null = this.cursor;
     const required = this.opts.requiredField;
     const matches = this.opts.matches;
@@ -321,6 +321,13 @@ export class SyncedCollectionCache<T extends { id?: string }> {
       else byId.delete(item.id!);
     }
 
+    if (byId.size !== serverCount && recheckOnMismatch) {
+      // The delta query and count() run in parallel, so a doc created or
+      // updated in between (another device scanning/saving) makes them
+      // disagree for a moment. Re-check once — one more delta + count, a
+      // handful of reads — before paying a full reload (~11k for inventory).
+      return this.deltaSync(false);
+    }
     if (byId.size !== serverCount) {
       // Something was deleted (or created without updatedAt) outside this
       // tab — the only case that still needs the whole collection.

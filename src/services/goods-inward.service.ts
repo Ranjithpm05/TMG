@@ -113,7 +113,9 @@ export class GoodsInwardService {
       const repairedDate = recoveredMillis > 0 ? new Date(recoveredMillis) : this.bestEffortCreatedAt(grn);
       const timestamp = Timestamp.fromDate(repairedDate);
       try {
-        await updateDoc(doc(this.firestore, `goodsInward/${grn.id}`), { createdAt: timestamp });
+        // updatedAt too: other devices' delta sync must see the doc enter its
+        // date range, or their count() check forces a full range reload.
+        await updateDoc(doc(this.firestore, `goodsInward/${grn.id}`), { createdAt: timestamp, updatedAt: serverTimestamp() });
         (grn as unknown as { createdAt: unknown }).createdAt = timestamp;
       } catch {
         // Best-effort only — if the write fails (e.g. permissions), leave the

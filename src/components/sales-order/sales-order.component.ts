@@ -12,6 +12,7 @@ import { priceAfterMargin } from '../../services/pricing.util';
 import Swal from 'sweetalert2';
 import { Timestamp } from '@angular/fire/firestore';
 import type jsPDF from 'jspdf';
+import { isPartialYearDate } from '../../services/range-cache.util';
 
 declare const jsQR: any;
 
@@ -507,12 +508,17 @@ export class SalesOrderComponent implements OnInit, OnDestroy {
     this.loadSalesOrders();
   }
 
+  // A date <input> reports a valid value on every keystroke while the year
+  // is typed (0002-…, 0020-…, 0202-…) — each would open a new range cache
+  // and download essentially the whole history. Ignore those partial years.
   onFilterFromDateChange(value: string) {
+    if (isPartialYearDate(value)) return;
     this.filterFromDate.set(value);
     this.loadSalesOrders();
   }
 
   onFilterToDateChange(value: string) {
+    if (isPartialYearDate(value)) return;
     this.filterToDate.set(value);
     this.loadSalesOrders();
   }

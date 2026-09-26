@@ -99,3 +99,14 @@ function schedulePrune(): void {
   // Off the startup path — housekeeping for ranges nobody has opened in weeks.
   setTimeout(() => void pruneStoredEntries(RANGE_KEY_PREFIX, RANGE_ENTRY_MAX_AGE_MS), 15000);
 }
+
+/**
+ * True for a yyyy-mm-dd value whose year is still being typed into a date
+ * <input> (the browser emits 0002-…, 0020-…, 0202-… on the way to 2026-…).
+ * Date filters feeding syncedRangeQuery() must ignore these: each one is a
+ * new range cache whose first load covers almost the entire collection.
+ */
+export function isPartialYearDate(value: string): boolean {
+  const year = Number(String(value ?? '').slice(0, 4));
+  return !!value && (!Number.isFinite(year) || year < 2000);
+}

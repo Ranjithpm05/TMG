@@ -432,15 +432,28 @@ export class PickListService {
     }
   }
 
+  /** ensureLegacyPickListLinesExist() + the full lines list — callers should use this return value rather than re-reading the lines (each read bills every line). */
   async ensureLegacyPickListLines(pickList: PickList): Promise<PickListLine[]> {
     if (!pickList.id) return [];
+    await this.ensureLegacyPickListLinesExist(pickList);
+    return this.getPickListLinesOnce(pickList.id);
+  }
+
+  /**
+   * Migrates a pre-fix pick list that only carries a stored `items` array
+   * into the lines subcollection. Costs a single read when lines already
+   * exist — for callers (Start Picking) whose own listener loads the lines.
+   */
+  async ensureLegacyPickListLinesExist(pickList: PickList): Promise<void> {
+    if (!pickList.id) return;
 
     const existingLines = await getDocs(query(this.linesCollection(pickList.id), limit(1)));
-    if (!existingLines.empty) {
-      return this.getPickListLinesOnce(pickList.id);
-    }
+    if (!existingLines.empty) return;
 
     const sourceItems = Array.isArray(pickList.items) ? pickList.items : [];
+    // Nothing to migrate — skip the inventory load and the status rewrite
+    // (which bills every open listener and invalidates caches on each view).
+    if (!sourceItems.length) return;
     const legacyLines: PickListLine[] = [];
     const inventoryList = await firstValueFrom(this.inventoryService.getInventory());
 
@@ -484,8 +497,6 @@ export class PickListService {
       updatedAt: serverTimestamp(),
     }))));
     await this.recalculatePickListStatus(pickList.id);
-
-    return this.getPickListLinesOnce(pickList.id);
   }
 
   async prepareLegacyPickListForPicking(pickListId: string): Promise<PickList | null> {
@@ -588,7 +599,9 @@ export class PickListService {
         this.linesCollection(pickListId),
         where('status', 'in', ['ready', 'in_progress']),
         orderBy('sortOrder', 'asc'),
-        limit(30),
+        // Only needs enough to step past lines other pickers hold right now —
+        // each candidate is a billed read, and this runs on every completed line.
+        limit(10),
       )),
     ]);
 
@@ -719,14 +732,18 @@ export class PickListService {
     pickListId: string,
     barcode: string,
     user: PickListClaimUser,
-    currentLineId?: string
+    currentLineId?: string,
+    /** The caller's live copy of currentLineId's line (from its listener) — saves a billed read per scan. Only used to locate the inventory doc; the transaction below re-reads and re-validates the line. */
+    knownLine?: PickListLine | null
   ): Promise<PickListScanResult> {
     const trimmedBarcode = barcode.trim();
     if (!trimmedBarcode) {
       throw new Error('barcode_not_found');
     }
 
-    const line = await this.resolveScannableLine(pickListId, trimmedBarcode, user.id, currentLineId);
+    const line = knownLine && currentLineId && knownLine.lineId === currentLineId && String(knownLine.barcode ?? '').trim() === trimmedBarcode
+      ? knownLine
+      : await this.resolveScannableLine(pickListId, trimmedBarcode, user.id, currentLineId);
     if (!line) {
       throw new Error(currentLineId ? 'barcode_mismatch' : 'barcode_not_found');
     }

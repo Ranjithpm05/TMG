@@ -988,11 +988,8 @@ export class PickListComponent implements OnInit, OnDestroy {
 
   async openView(pickList: PickList) {
     if (pickList.id) {
-      await this.pickListService.ensureLegacyPickListLines(pickList);
-      const [freshPickList, lines] = await Promise.all([
-        this.pickListService.getPickListByIdOnce(pickList.id),
-        this.pickListService.getPickListLinesOnce(pickList.id),
-      ]);
+      const lines = await this.pickListService.ensureLegacyPickListLines(pickList);
+      const freshPickList = await this.pickListService.getPickListByIdOnce(pickList.id);
       this.viewPickList.set(freshPickList ?? pickList);
       this.viewLines.set(lines);
     } else {
@@ -1289,7 +1286,7 @@ export class PickListComponent implements OnInit, OnDestroy {
       if (!confirmResume.isConfirmed) return;
       await this.pickListService.prepareLegacyPickListForPicking(pickList.id);
     } else {
-      await this.pickListService.ensureLegacyPickListLines(pickList);
+      await this.pickListService.ensureLegacyPickListLinesExist(pickList);
     }
 
     let freshPickList = await this.pickListService.getPickListByIdOnce(pickList.id);
@@ -1363,6 +1360,10 @@ export class PickListComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // A double-tapped Start runs two startPicking() calls concurrently —
+    // without this the first interval is orphaned and refreshes claims
+    // (a billed transaction read + a write every listener pays for) forever.
+    if (this.claimHeartbeat) clearInterval(this.claimHeartbeat);
     this.claimHeartbeat = setInterval(() => {
       const assignedLine = this.currentAssignedLine();
       const livePickList = this.livePickList();
@@ -1583,7 +1584,7 @@ export class PickListComponent implements OnInit, OnDestroy {
     this.isSubmittingScan.set(true);
 
     try {
-      const result = await this.pickListService.processScan(pickList.id, barcode, user, currentLine.lineId);
+      const result = await this.pickListService.processScan(pickList.id, barcode, user, currentLine.lineId, currentLine);
       this.manualScanValue.set('');
       this.bumpSessionScannedQty(result.line.lineId, 1);
       this.flashScanFeedback('success', `${result.line.styleNo} ${result.line.size} · ${result.line.pickedQty}/${result.line.requiredQty}`);

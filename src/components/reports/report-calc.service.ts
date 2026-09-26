@@ -1,6 +1,6 @@
 import { Injectable, inject, computed, signal } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { from, of, switchMap, catchError, finalize } from 'rxjs';
+import { from, of, switchMap, catchError, finalize, distinctUntilChanged } from 'rxjs';
 
 import { ReportsDataService } from './reports-data.service';
 import { PickListService } from '../../services/pick-list.service';
@@ -269,6 +269,11 @@ export class ReportCalcService {
 
   private readonly dispatchRecords = toSignal(
     toObservable(this.dispatchTrigger).pipe(
+      // filteredOrders() recomputes (clients/designs arriving, etc.) with the
+      // same order IDs as a fresh array — without this each recompute
+      // restarted the whole fan-out, and the abandoned promise kept reading.
+      distinctUntilChanged((a, b) =>
+        a.signature === b.signature && a.retry === b.retry && a.orderIds.join(',') === b.orderIds.join(',')),
       switchMap(({ orderIds, signature }) => {
         this.dispatchError.set(null);
         if (!orderIds.length) return of(EMPTY_DISPATCH_RESULT);

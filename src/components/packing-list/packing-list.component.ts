@@ -709,8 +709,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.isGenerating.set(true);
     try {
       const linesPerPickList = await Promise.all(pickLists.map(async (pl) => {
-        await this.pickListService.ensureLegacyPickListLines(pl);
-        const lines = await this.pickListService.getPickListLinesOnce(pl.id!);
+        const lines = await this.pickListService.ensureLegacyPickListLines(pl);
         return lines
           .filter((l) => !!l.barcode && ((l.pickedQty || 0) - (l.packedIntoPackingListsQty || 0)) > 0)
           .map((l) => ({ ...l, sourcePickListId: pl.id! }));
@@ -1093,8 +1092,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     // Lists (shown separately via getPackingListsForPickList in the
     // template) do NOT block generating another one — only how much picked
     // quantity is still un-packed determines what's offered here.
-    await this.pickListService.ensureLegacyPickListLines(pickList);
-    const lines = await this.pickListService.getPickListLinesOnce(pickList.id);
+    const lines = await this.pickListService.ensureLegacyPickListLines(pickList);
     const packableLines = lines
       .filter((l) => !!l.barcode && ((l.pickedQty || 0) - (l.packedIntoPackingListsQty || 0)) > 0)
       .map((l) => ({ ...l, sourcePickListId: pickList.id! }));
