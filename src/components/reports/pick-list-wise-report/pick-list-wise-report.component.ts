@@ -40,6 +40,11 @@ export class PickListWiseReportComponent {
 
   protected readonly rows = this.calc.pickListWiseRows;
 
+  constructor() {
+    // The only report that needs per-Pick-List-line data (and pays its reads).
+    this.calc.enableLineAttribution();
+  }
+
   private readonly resetPageOnRowsChange = effect(() => {
     this.rows();
     this.currentPage.set(1);

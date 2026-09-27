@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, inject, computed, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { switchMap, catchError, finalize, of, from } from 'rxjs';
+import { switchMap, catchError, finalize, of, from, distinctUntilChanged } from 'rxjs';
 import Swal from 'sweetalert2';
 
 import { ReportsDataService } from '../reports-data.service';
@@ -9,11 +9,12 @@ import { ReportFilterBarComponent } from '../report-filter-bar/report-filter-bar
 import { InvoiceService } from '../../../services/invoice.service';
 import { DeliveryChallanService } from '../../../services/delivery-challan.service';
 import type { Invoice } from '../../../models/invoice.model';
+import type { DeliveryChallan } from '../../../models/delivery-challan.model';
 import { LoadingService } from '../../../services/loading.service';
 import { exportRowsToExcel, exportRowsToPdf, printReportRows, type ExportMeta } from '../report-export.util';
 import { ReportStatusComponent } from '../report-status/report-status.component';
 import { ReportPaginationComponent } from '../report-pagination/report-pagination.component';
-import { buildInvoiceProductLines, type InvoiceProductLine } from '../invoice-product-lines.util';
+import { buildInvoiceProductLines, fetchInvoiceDCs, invoiceDcIds, type InvoiceProductLine } from '../invoice-product-lines.util';
 
 const REPORT_TITLE = 'Sales Report - Product-wise Format 1';
 
@@ -89,22 +90,30 @@ export class SalesReportProductWise1Component {
   protected readonly isBuildingLines = signal(false);
   protected readonly linesError = signal<string | null>(null);
 
-  private readonly rawLines = toSignal(
-    toObservable(this.filteredInvoices).pipe(
-      switchMap((invoices) => {
+  // Keyed by the DC ids (not the invoice array) so the invoice list
+  // re-emitting (saved copy, then synced) doesn't re-read every DC.
+  private readonly dcs = toSignal(
+    toObservable(computed(() => invoiceDcIds(this.filteredInvoices()).join(','))).pipe(
+      distinctUntilChanged(),
+      switchMap((key) => {
         this.linesError.set(null);
         this.isBuildingLines.set(true);
-        return from(buildInvoiceProductLines(invoices, this.data.designs(), this.dcService)).pipe(
+        return from(fetchInvoiceDCs(key ? key.split(',') : [], this.dcService)).pipe(
           catchError((err) => {
             console.error('Sales Report Product-wise Format 1: failed to build report rows', err);
             this.linesError.set('Unable to load report data. Please try again.');
-            return of([] as InvoiceProductLine[]);
+            return of([] as DeliveryChallan[]);
           }),
           finalize(() => this.isBuildingLines.set(false))
         );
       })
     ),
-    { initialValue: [] as InvoiceProductLine[] }
+    { initialValue: [] as DeliveryChallan[] }
+  );
+
+  // Rebuilt when Design Master arrives too (barcode/group/cost come from it).
+  private readonly rawLines = computed<InvoiceProductLine[]>(() =>
+    buildInvoiceProductLines(this.filteredInvoices(), this.data.designs(), this.dcs())
   );
 
   protected readonly isLoading = computed(() => this.isLoadingInvoices() || this.isBuildingLines());

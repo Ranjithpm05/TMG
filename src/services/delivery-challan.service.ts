@@ -105,6 +105,31 @@ export class DeliveryChallanService {
     return [...byId.values()];
   }
 
+  // Every DC covering any of a set of Sales Orders — Reports' dispatched-qty
+  // source (ReportCalcService.loadDcDispatch), which used to reach DCs only
+  // via Pick List -> Packing List and read every line of both on the way.
+  // Matches the `salesOrderIds` array and the legacy singular `salesOrderId`
+  // (see normalize()), deduped by id.
+  async getDCsBySalesOrderIdsOnce(salesOrderIds: string[]): Promise<DeliveryChallan[]> {
+    const uniqueIds = [...new Set(salesOrderIds.filter(Boolean))];
+    if (!uniqueIds.length) return [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += 30) chunks.push(uniqueIds.slice(i, i + 30));
+    const results = await Promise.all(
+      chunks.flatMap((chunk) => [
+        getDocs(query(this.dcRef, where('salesOrderIds', 'array-contains-any', chunk))),
+        getDocs(query(this.dcRef, where('salesOrderId', 'in', chunk))),
+      ])
+    );
+    const byId = new Map<string, DeliveryChallan>();
+    for (const snap of results) {
+      for (const d of snap.docs) {
+        byId.set(d.id, this.normalize({ id: d.id, ...d.data() }));
+      }
+    }
+    return [...byId.values()];
+  }
+
   // Batched lookup by document id — used to re-derive Invoice line data
   // (e.g. styleNo/sleeveType, see InvoiceService.backfillItemDesignInfoIfNeeded)
   // from the DC(s) an Invoice was originally built from.

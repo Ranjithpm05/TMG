@@ -1,5 +1,6 @@
 import type { Invoice } from '../../models/invoice.model';
 import type { Design, SizePrice } from '../../models/design.model';
+import type { DeliveryChallan } from '../../models/delivery-challan.model';
 import type { DeliveryChallanService } from '../../services/delivery-challan.service';
 
 /**
@@ -75,13 +76,21 @@ function buildSizeEntryByStyleColorSize(designs: Design[]): Map<string, SizePric
   return map;
 }
 
-export async function buildInvoiceProductLines(
+/** Every DC id the given invoices were built from, deduped and sorted — a stable key for fetchInvoiceDCs(). */
+export function invoiceDcIds(invoices: Invoice[]): string[] {
+  return [...new Set(invoices.flatMap((inv) => inv.dcIds ?? []).filter(Boolean))].sort();
+}
+
+/** Fetched separately from buildInvoiceProductLines() so the (billed) DC read runs once per invoice set, not on every rebuild. */
+export async function fetchInvoiceDCs(dcIds: string[], dcService: DeliveryChallanService): Promise<DeliveryChallan[]> {
+  return dcIds.length ? dcService.getDCsByIdsOnce(dcIds) : [];
+}
+
+export function buildInvoiceProductLines(
   invoices: Invoice[],
   designs: Design[],
-  dcService: DeliveryChallanService
-): Promise<InvoiceProductLine[]> {
-  const dcIds = [...new Set(invoices.flatMap((inv) => inv.dcIds ?? []).filter(Boolean))];
-  const dcs = dcIds.length ? await dcService.getDCsByIdsOnce(dcIds) : [];
+  dcs: DeliveryChallan[]
+): InvoiceProductLine[] {
   const dcById = new Map(dcs.filter((dc) => dc.id).map((dc) => [dc.id!, dc] as const));
   const groupByStyleColor = buildGroupByStyleColor(designs);
   const sizeEntryByStyleColorSize = buildSizeEntryByStyleColorSize(designs);

@@ -4,6 +4,7 @@ import {
   Firestore,
   collection,
   doc,
+  documentId,
   increment,
   limit,
   orderBy,
@@ -180,6 +181,18 @@ export class PackingListService {
       }
     }
     return [...byId.values()];
+  }
+
+  // Batched lookup by document id (chunks of 30, Firestore's `in` cap).
+  async getPackingListsByIdsOnce(ids: string[]): Promise<PackingList[]> {
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+    if (!uniqueIds.length) return [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += 30) chunks.push(uniqueIds.slice(i, i + 30));
+    const results = await Promise.all(
+      chunks.map((chunk) => getDocs(query(this.packingRef, where(documentId(), 'in', chunk))))
+    );
+    return results.flatMap((snap) => snap.docs.map((docSnap) => this.normalizePackingList({ id: docSnap.id, ...docSnap.data() })));
   }
 
   // A Pick List may be packed in several batches over time (many Packing

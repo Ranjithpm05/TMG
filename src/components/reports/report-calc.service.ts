@@ -8,8 +8,8 @@ import { PackingListService } from '../../services/packing-list.service';
 import { DeliveryChallanService } from '../../services/delivery-challan.service';
 import { InvoiceService } from '../../services/invoice.service';
 import type { PickList, PickListLine, PickListType } from '../../models/pick-list.model';
-import type { PackingList } from '../../models/packing-list.model';
-import type { DeliveryChallan } from '../../models/delivery-challan.model';
+import type { PackingList, PackingListLine } from '../../models/packing-list.model';
+import type { DCItem, DeliveryChallan } from '../../models/delivery-challan.model';
 
 /** One ordered (SalesOrder, style/color/size) line, flattened for joining against dispatch data. */
 export interface OrderLine {
@@ -75,6 +75,28 @@ interface DispatchAttributionResult extends DispatchFanOutResult {
 }
 
 const EMPTY_DISPATCH_RESULT: DispatchAttributionResult = { pickLists: [], lineRecords: [], unassignedRecords: [] };
+
+/** Dispatched qty of one DC item size, attributed to one in-scope Sales Order (see ReportCalcService.loadDcDispatch). */
+interface DcDispatchRecord {
+  salesOrderId: string;
+  salesNo: string;
+  clientId: string;
+  clientName: string;
+  styleNo: string;
+  color: string;
+  group: string;
+  size: string;
+  sleeveType: string;
+  dcQty: number;
+  dcNo: string;
+  dcDate: Date | null;
+}
+
+interface DcSplitBucket {
+  byOrder: Map<string, { weight: number; lines: number }>;
+  packed: number;
+  sourced: number;
+}
 
 /** Order vs. dispatch fulfillment for one (salesOrder, style/color/size) SKU — the atom every report aggregates from. */
 export interface SkuFulfillment {
@@ -184,16 +206,38 @@ export class ReportCalcService {
   private readonly dcService = inject(DeliveryChallanService);
   private readonly invoiceService = inject(InvoiceService);
 
-  /** Scoped to the dispatch fan-out only — does NOT drive the app-wide blocking modal. Report components render their own local loading state from this. */
-  readonly isLoadingDispatch = signal(false);
-  readonly dispatchError = signal<string | null>(null);
+  // Two dispatch pipelines: the DC-level one behind skuFulfillments() (every
+  // order-vs-dispatch report) and the per-Pick-List-line one behind
+  // pickListWiseRows(), which only Pick List Wise enables (see
+  // enableLineAttribution()).
+  private readonly isLoadingDcDispatch = signal(false);
+  private readonly isLoadingLineDispatch = signal(false);
+  private readonly dcDispatchError = signal<string | null>(null);
+  private readonly lineDispatchError = signal<string | null>(null);
+  private readonly lineAttributionEnabled = signal(false);
+
+  /** Scoped to the dispatch fetches only — does NOT drive the app-wide blocking modal. Report components render their own local loading state from this. */
+  readonly isLoadingDispatch = computed(() => this.isLoadingDcDispatch() || this.isLoadingLineDispatch());
+  readonly dispatchError = computed(() => this.dcDispatchError() || this.lineDispatchError());
   private readonly retryTrigger = signal(0);
 
   /** Clears the error and re-runs the last dispatch fetch (bypassing the cache, since the prior attempt for this signature failed). */
   retryDispatch(): void {
-    this.dispatchError.set(null);
+    this.dcDispatchError.set(null);
+    this.lineDispatchError.set(null);
     this.dispatchCache.delete(this.filterSignature());
+    this.dcDispatchCache.delete(this.filterSignature());
     this.retryTrigger.update((n) => n + 1);
+  }
+
+  /**
+   * Turns on the per-Pick-List-line fan-out (every line of every in-scope
+   * Pick List and Packing List). Only Pick List Wise needs it: for July to
+   * date that is ~120k line reads, which made every report take 20+ minutes
+   * when all of them ran it just to get dispatched qty.
+   */
+  enableLineAttribution(): void {
+    this.lineAttributionEnabled.set(true);
   }
 
   // Cache of dispatch-attribution results keyed by the filter tuple that
@@ -203,6 +247,7 @@ export class ReportCalcService {
   // Capped like SalesOrderService's own range cache; ReportCalcService itself
   // is recreated fresh per Reports visit, so this never outlives one visit.
   private readonly dispatchCache = new Map<string, DispatchAttributionResult>();
+  private readonly dcDispatchCache = new Map<string, DcDispatchRecord[]>();
   private static readonly MAX_DISPATCH_CACHE_ENTRIES = 20;
 
   private readonly filterSignature = computed(() => {
@@ -249,8 +294,10 @@ export class ReportCalcService {
   // Pick List Report's type==='party' filter was incidental to that one
   // report, not a technical restriction.
   //
-  // Fetched via a query-level scoped read (getPickListsByOrderIdsOnce) keyed
-  // to exactly these order IDs — NOT the full pickLists collection. Reading
+  // skuFulfillments() reads DCs by these order IDs (loadDcDispatch). The
+  // line-level path below (Pick List Wise only) reads Pick Lists via a
+  // query-level scoped read (getPickListsByOrderIdsOnce) keyed to exactly
+  // these order IDs — NOT the full pickLists collection. Reading
   // the entire collection here (as an earlier version of this service did)
   // was the root cause of the Reports page hanging behind a full-page
   // "Processing…" modal: it pulled every Pick List ever created on every
@@ -267,31 +314,174 @@ export class ReportCalcService {
     retry: this.retryTrigger(),
   }));
 
-  private readonly dispatchRecords = toSignal(
-    toObservable(this.dispatchTrigger).pipe(
-      // filteredOrders() recomputes (clients/designs arriving, etc.) with the
-      // same order IDs as a fresh array — without this each recompute
-      // restarted the whole fan-out, and the abandoned promise kept reading.
-      distinctUntilChanged((a, b) =>
-        a.signature === b.signature && a.retry === b.retry && a.orderIds.join(',') === b.orderIds.join(',')),
-      switchMap(({ orderIds, signature }) => {
-        this.dispatchError.set(null);
-        if (!orderIds.length) return of(EMPTY_DISPATCH_RESULT);
-        const cached = this.dispatchCache.get(signature);
+  // filteredOrders() recomputes (clients/designs arriving, etc.) with the
+  // same order IDs as a fresh array — without this each recompute restarted
+  // the whole fetch, and the abandoned promise kept reading.
+  private static sameDispatchTrigger(
+    a: { orderIds: string[]; signature: string; retry: number },
+    b: { orderIds: string[]; signature: string; retry: number },
+  ): boolean {
+    return a.signature === b.signature && a.retry === b.retry && a.orderIds.join(',') === b.orderIds.join(',');
+  }
+
+  /** Dispatched qty per DC item line, attributed to Sales Orders — what skuFulfillments() joins against. */
+  // Not needed (and not fetched) on Pick List Wise, which only reads pickListWiseRows().
+  private readonly dcDispatchRecords = toSignal(
+    toObservable(computed(() => (this.lineAttributionEnabled() ? null : this.dispatchTrigger()))).pipe(
+      distinctUntilChanged((a, b) => (a && b ? ReportCalcService.sameDispatchTrigger(a, b) : a === b)),
+      switchMap((trigger) => {
+        this.dcDispatchError.set(null);
+        if (!trigger?.orderIds.length) return of([] as DcDispatchRecord[]);
+        const { orderIds, signature } = trigger;
+        const cached = this.dcDispatchCache.get(signature);
         if (cached) return of(cached);
-        this.isLoadingDispatch.set(true);
-        return from(this.loadDispatchAttribution(orderIds, signature)).pipe(
+        this.isLoadingDcDispatch.set(true);
+        return from(this.loadDcDispatch(orderIds, signature)).pipe(
           catchError((err) => {
             console.error('Reports: failed to load dispatch data', err);
-            this.dispatchError.set('Unable to load report data. Please try again.');
+            this.dcDispatchError.set('Unable to load report data. Please try again.');
+            return of([] as DcDispatchRecord[]);
+          }),
+          finalize(() => this.isLoadingDcDispatch.set(false))
+        );
+      })
+    ),
+    { initialValue: [] as DcDispatchRecord[] }
+  );
+
+  private readonly dispatchRecords = toSignal(
+    toObservable(computed(() => (this.lineAttributionEnabled() ? this.dispatchTrigger() : null))).pipe(
+      distinctUntilChanged((a, b) => (a && b ? ReportCalcService.sameDispatchTrigger(a, b) : a === b)),
+      switchMap((trigger) => {
+        this.lineDispatchError.set(null);
+        if (!trigger?.orderIds.length) return of(EMPTY_DISPATCH_RESULT);
+        const cached = this.dispatchCache.get(trigger.signature);
+        if (cached) return of(cached);
+        this.isLoadingLineDispatch.set(true);
+        return from(this.loadDispatchAttribution(trigger.orderIds, trigger.signature)).pipe(
+          catchError((err) => {
+            console.error('Reports: failed to load dispatch data', err);
+            this.lineDispatchError.set('Unable to load report data. Please try again.');
             return of(EMPTY_DISPATCH_RESULT);
           }),
-          finalize(() => this.isLoadingDispatch.set(false))
+          finalize(() => this.isLoadingLineDispatch.set(false))
         );
       })
     ),
     { initialValue: EMPTY_DISPATCH_RESULT }
   );
+
+  /**
+   * Dispatched qty straight from the DCs of the in-scope Sales Orders. A DC
+   * covering one Sales Order is attributed to it directly — the line-level
+   * fan-out gave exactly the same total. Only a DC merging several Sales
+   * Orders needs its Packing List's lines, to split each item between them
+   * the same way buildDispatchAttribution() does (by sourced packed qty,
+   * uncovered/manual qty to the DC's first Sales Order).
+   */
+  private async loadDcDispatch(orderIds: string[], signature: string): Promise<DcDispatchRecord[]> {
+    const t0 = performance.now();
+    const inScope = new Set(orderIds);
+    const dcs = await this.dcService.getDCsBySalesOrderIdsOnce(orderIds);
+
+    const multiOrderPackingListIds = [...new Set(
+      dcs.filter((dc) => dc.salesOrderIds.length > 1 && dc.packingListId).map((dc) => dc.packingListId)
+    )];
+    const packingLists = multiOrderPackingListIds.length
+      ? await this.packingListService.getPackingListsByIdsOnce(multiOrderPackingListIds)
+      : [];
+    const linesByPackingListId = new Map(
+      await mapWithConcurrency(packingLists, 20, async (pl) => [pl.id!, await this.packingListService.getPackingListLinesForReport(pl)] as const)
+    );
+    console.debug(`[Reports] dispatch: ${dcs.length} DCs (${multiOrderPackingListIds.length} multi-order) for ${orderIds.length} orders in ${Math.round(performance.now() - t0)}ms`);
+
+    const orderById = new Map(this.reportsData.filteredOrders().map((o) => [o.id, o] as const));
+    const clientById = this.reportsData.clientById();
+    const records: DcDispatchRecord[] = [];
+
+    for (const dc of dcs) {
+      const dcDate = this.toDate(dc.packedOn) ?? this.toDate(dc.createdAt);
+      const firstOrderId = dc.salesOrderIds[0] ?? '';
+      const split = dc.salesOrderIds.length > 1 ? this.buildDcSplit(linesByPackingListId.get(dc.packingListId) ?? []) : null;
+
+      const push = (salesOrderId: string, item: DCItem, size: string, qty: number) => {
+        if (qty <= 0 || !inScope.has(salesOrderId)) return;
+        const order = orderById.get(salesOrderId);
+        const clientId = order?.clientId ?? dc.clientId;
+        records.push({
+          salesOrderId, salesNo: order?.salesNo ?? '',
+          clientId, clientName: clientById.get(clientId)?.clientName ?? dc.clientName,
+          styleNo: item.styleNo, color: item.color, group: item.partName, size, sleeveType: item.sleeveType ?? '',
+          dcQty: qty, dcNo: dc.dcNo, dcDate,
+        });
+      };
+
+      for (const item of dc.items) {
+        for (const [size, rawQty] of Object.entries(item.sizeQty ?? {})) {
+          const qty = Number(rawQty) || 0;
+          if (qty <= 0) continue;
+          if (!split) {
+            push(firstOrderId, item, size, qty);
+            continue;
+          }
+
+          const bucket = split.get(bucketKey(item.partName, item.styleNo, item.color, item.sleeveType ?? '', size));
+          const entries = [...(bucket?.byOrder ?? new Map<string, { weight: number; lines: number }>()).entries()]
+            .filter(([salesOrderId]) => dc.salesOrderIds.includes(salesOrderId));
+          const uncovered = bucket ? Math.max(0, bucket.packed - bucket.sourced) : 0;
+          if (!entries.length && uncovered <= 0) {
+            push(firstOrderId, item, size, qty);
+            continue;
+          }
+          const totalWeight = entries.reduce((sum, [, e]) => sum + e.weight, 0) + uncovered;
+          const equalSplitDenominator = entries.reduce((sum, [, e]) => sum + e.lines, 0) + (uncovered > 0 ? 1 : 0);
+          for (const [salesOrderId, e] of entries) {
+            push(salesOrderId, item, size, totalWeight > 0 ? (qty * e.weight) / totalWeight : (qty * e.lines) / equalSplitDenominator);
+          }
+          if (uncovered > 0) {
+            push(firstOrderId, item, size, totalWeight > 0 ? (qty * uncovered) / totalWeight : qty / equalSplitDenominator);
+          }
+        }
+      }
+    }
+
+    this.dcDispatchCache.set(signature, records);
+    if (this.dcDispatchCache.size > ReportCalcService.MAX_DISPATCH_CACHE_ENTRIES) {
+      const oldestKey = this.dcDispatchCache.keys().next().value;
+      if (oldestKey !== undefined) this.dcDispatchCache.delete(oldestKey);
+    }
+    return records;
+  }
+
+  /**
+   * Per (part, style, color, sleeve, size) bucket of one Packing List: the
+   * sourced (Pick-List-traced) packed qty per Sales Order — a generated
+   * Packing List line always belongs to exactly one Sales Order, see
+   * PackingListService.buildPackableLines — plus the bucket's packed vs
+   * sourced totals for the uncovered/manual share.
+   */
+  private buildDcSplit(lines: PackingListLine[]): Map<string, DcSplitBucket> {
+    const buckets = new Map<string, DcSplitBucket>();
+    for (const line of lines) {
+      const key = bucketKey(line.partName, line.styleNo, line.color, line.sleeveType ?? '', line.size);
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = { byOrder: new Map(), packed: 0, sourced: 0 };
+        buckets.set(key, bucket);
+      }
+      const sourced = (line.sources ?? []).reduce((sum, s) => sum + (Number(s.qty) || 0), 0);
+      bucket.packed += Number(line.packedQty) || 0;
+      bucket.sourced += sourced;
+      const salesOrderId = line.salesOrderIds?.[0];
+      if (salesOrderId) {
+        const entry = bucket.byOrder.get(salesOrderId) ?? { weight: 0, lines: 0 };
+        entry.weight += sourced;
+        entry.lines += 1;
+        bucket.byOrder.set(salesOrderId, entry);
+      }
+    }
+    return buckets;
+  }
 
   private async loadDispatchAttribution(orderIds: string[], signature: string): Promise<DispatchAttributionResult> {
     const t0 = performance.now();
@@ -342,8 +532,7 @@ export class ReportCalcService {
     }
 
     const clientById = this.reportsData.clientById();
-    const { lineRecords, unassignedRecords } = this.dispatchRecords();
-    for (const rec of [...lineRecords, ...unassignedRecords]) {
+    for (const rec of this.dcDispatchRecords()) {
       if (rec.dcQty <= 0) continue;
       if (!this.reportsData.matchesGroupAndDesign(rec.group, rec.styleNo)) continue;
       const key = joinKey(rec.salesOrderId, rec.styleNo, rec.color, rec.size, rec.sleeveType);
