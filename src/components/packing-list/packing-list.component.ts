@@ -3937,6 +3937,10 @@ ${allDCHtml}
     const B = 'border:1px solid #ccc;';
     const th = (txt: string, extra = '') => '<th style="padding:5px 7px;' + B + 'background:#e8e8e8;font-size:13px;font-weight:700;text-align:center;' + extra + '">' + txt + '</th>';
     const td = (txt: string | number, extra = '') => '<td style="padding:5px 7px;' + B + 'font-size:13px;text-align:center;' + extra + '">' + txt + '</td>';
+    // Invoice print shows only the running number of each DC (DCC2627-1314 → 1314).
+    const shortDcNos = (raw: string | undefined): string =>
+      (raw || '').split(',').map(s => s.trim()).filter(Boolean)
+        .map(s => s.slice(s.lastIndexOf('-') + 1)).join(', ');
     const fmtDate = (raw: any): string => {
       if (!raw) return '-';
       try { const d = raw?.toDate ? raw.toDate() : new (Function.prototype.bind.call(Date, null, raw))(); return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }); } catch { return '-'; }
@@ -3977,7 +3981,7 @@ ${allDCHtml}
       + '<div style="min-width:210px;padding:5px 10px"><table style="border-collapse:collapse;width:100%">'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Invoice No.</td><td style="padding:3px 4px;font-size:13px;font-weight:700">: ' + invoice.invoiceNo + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Invoice Date</td><td style="padding:3px 4px;font-size:13px">: ' + fmtDate(invoice.invoiceDate) + '</td></tr>'
-      + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">DC No.</td><td style="padding:3px 4px;font-size:13px;font-weight:700">: ' + (invoice.dcNo || '—') + '</td></tr>'
+      + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">DC No.</td><td style="padding:3px 4px;font-size:13px;font-weight:700">: ' + (shortDcNos(invoice.dcNo) || '—') + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Order No.</td><td style="padding:3px 4px;font-size:13px;font-weight:600">: ' + (invoice.orderNo || invoice.salesNos.join(', ') || '—') + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Destination</td><td style="padding:3px 4px;font-size:13px">: ' + (invoice.destination || '—') + '</td></tr>'
       + '<tr><td style="padding:3px 4px;font-size:13px;color:#555">Transport</td><td style="padding:3px 4px;font-size:13px">: ' + (invoice.transport || '—') + '</td></tr>'

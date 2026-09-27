@@ -919,6 +919,10 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     const td = (txt: string | number, extra = '') =>
       `<td style="padding:4px 6px;${B}font-size:11px;text-align:center;${extra}">${txt}</td>`;
 
+    // Invoice print shows only the running number of each DC (DCC2627-1314 → 1314).
+    const shortDcNos = (raw: string | undefined): string =>
+      (raw || '').split(',').map(s => s.trim()).filter(Boolean)
+        .map(s => s.slice(s.lastIndexOf('-') + 1)).join(', ');
     const fmtDate = (raw: any): string => {
       if (!raw) return '-';
       try {
@@ -1053,7 +1057,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     <table style="border-collapse:collapse;width:100%">
       <tr><td style="padding:2px 4px;font-size:11px;color:#555;white-space:nowrap">Invoice No.</td><td style="padding:2px 4px;font-size:11px;font-weight:700">: ${invoice.invoiceNo}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Invoice Date</td><td style="padding:2px 4px;font-size:11px">: ${fmtDate(invoice.invoiceDate)}</td></tr>
-      <tr><td style="padding:2px 4px;font-size:11px;color:#555">DC No.</td><td style="padding:2px 4px;font-size:11px;font-weight:700">: ${invoice.dcNo || '—'}</td></tr>
+      <tr><td style="padding:2px 4px;font-size:11px;color:#555">DC No.</td><td style="padding:2px 4px;font-size:11px;font-weight:700">: ${shortDcNos(invoice.dcNo) || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Order No.</td><td style="padding:2px 4px;font-size:11px;font-weight:600">: ${invoice.orderNo || invoice.salesNos.join(', ') || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Destination</td><td style="padding:2px 4px;font-size:11px">: ${invoice.destination || '—'}</td></tr>
       <tr><td style="padding:2px 4px;font-size:11px;color:#555">Transport</td><td style="padding:2px 4px;font-size:11px">: ${invoice.transport || '—'}</td></tr>
