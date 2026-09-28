@@ -327,27 +327,44 @@ export class InvoiceService {
     return { ...invoice, items };
   }
 
-  // Invoices created before the Ship To Address fix (2026-08-30) have no
-  // clientShipToAddress field at all — normalize() reads it as `undefined`,
-  // never '' (invoices created after the fix always populate it, falling
-  // back to the billing address when the client has none, so it's never
-  // truly undefined there). Re-fetches the live Client Master record for
-  // exactly those old invoices and persists the result, so this only ever
-  // runs once per invoice, not on every print — same pattern as
-  // backfillItemDesignInfoIfNeeded above.
-  async backfillClientShipToIfNeeded(invoice: Invoice): Promise<Invoice> {
-    if (!invoice.id || invoice.clientShipToAddress !== undefined) return invoice;
-    if (!invoice.clientId) return invoice;
+  // The invoice stores a snapshot of the customer's name/address taken when
+  // it was created, so a later Client Master correction (e.g. SARAVANA STORES
+  // renamed to "SARAVANA STORES (TEX) - SHOPn" and its blank address filled
+  // in) never reached the Invoice / E-Invoice / E-Way Bill. Called before
+  // every view/print/IRN/EWB so the Client Master is always the source of
+  // truth: re-reads the live master record and persists only the fields that
+  // differ. A blank master field keeps the invoice's existing value rather
+  // than wiping it. Skipped once an IRN exists — the party details are then
+  // registered with the GST portal and the printed invoice must match them.
+  async syncClientFromMaster(invoice: Invoice): Promise<Invoice> {
+    if (!invoice.id || !invoice.clientId || invoice.irn) return invoice;
 
     const client = await this.clientService.getClientForDC(invoice.clientId, invoice.clientName);
     if (!client) return invoice;
 
-    const patch = {
-      clientShipToAddress: client.shipToAddress || client.billingAddress || invoice.clientAddress || '',
-      clientShipToPlace: client.shipToPlace || client.place || invoice.clientPlace || '',
-      clientShipToState: client.shipToState || client.state || invoice.clientState || '',
-      clientShipToZipCode: client.shipToZipCode || client.zipCode || invoice.clientZipCode || '',
+    const billTo = {
+      clientName: client.clientName || invoice.clientName,
+      clientAddress: client.billingAddress || invoice.clientAddress,
+      clientPlace: client.place || invoice.clientPlace,
+      clientState: client.state || invoice.clientState,
+      clientZipCode: client.zipCode || invoice.clientZipCode,
+      clientPhone: client.mobile || invoice.clientPhone,
+      clientGstin: client.gstNo || invoice.clientGstin,
     };
+    const master: Partial<Invoice> = {
+      ...billTo,
+      clientShipToAddress: client.shipToAddress || billTo.clientAddress || invoice.clientShipToAddress || '',
+      clientShipToPlace: client.shipToPlace || billTo.clientPlace || invoice.clientShipToPlace || '',
+      clientShipToState: client.shipToState || billTo.clientState || invoice.clientShipToState || '',
+      clientShipToZipCode: client.shipToZipCode || billTo.clientZipCode || invoice.clientShipToZipCode || '',
+    };
+
+    const patch = Object.fromEntries(
+      // normalize() reads a stored '' Ship To as undefined — treat them as equal.
+      Object.entries(master).filter(([key, value]) => ((invoice as any)[key] ?? '') !== value)
+    ) as Partial<Invoice>;
+    if (!Object.keys(patch).length) return invoice;
+
     await this.updateInvoice(invoice.id, patch);
     return { ...invoice, ...patch };
   }

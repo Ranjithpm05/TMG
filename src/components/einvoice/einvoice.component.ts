@@ -256,7 +256,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   viewInvoice(invoice: Invoice): void {
     this.selectedInvoice.set(invoice);
     this.mode.set('view');
-    this.invoiceService.backfillClientShipToIfNeeded(invoice).then((updated) => {
+    this.invoiceService.syncClientFromMaster(invoice).then((updated) => {
       if (updated === invoice) return;
       if (this.selectedInvoice()?.id === updated.id) this.selectedInvoice.set(updated);
       this.invoices.update((list) => list.map((i) => (i.id === updated.id ? updated : i)));
@@ -305,7 +305,10 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       // overlay on top of the dialog and swallowed the OK click, so the
       // overlay never closed — a deadlock, not just a slow request.
       const { result, payload } = await this.loadingService.run(async () => {
-        const { result, payload } = await this.einvoiceService.submitToIRP(invoice, settings);
+        // Buyer name/address must come from the Client Master, not the
+        // snapshot taken when the invoice was created.
+        const synced = await this.invoiceService.syncClientFromMaster(invoice);
+        const { result, payload } = await this.einvoiceService.submitToIRP(synced, settings);
         await this.einvoiceService.saveEInvoice(invoice.id!, result, payload);
         return { result, payload };
       });
@@ -628,7 +631,8 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     }
 
     try {
-      const payload = await this.loadingService.run(() => this.einvoiceService.preparePayload(invoice!, settings));
+      const payload = await this.loadingService.run(async () =>
+        this.einvoiceService.preparePayload(await this.invoiceService.syncClientFromMaster(invoice!), settings));
       this.payloadJson.set(JSON.stringify(payload, null, 2));
       this.showPayloadModal.set(true);
     } catch (err: any) {
@@ -666,7 +670,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
         fetchLogoDataUri(),
         this.invoiceService.backfillItemDesignInfoIfNeeded(invoice),
       ]);
-      const printInvoice = await this.invoiceService.backfillClientShipToIfNeeded(invoiceWithDesign);
+      const printInvoice = await this.invoiceService.syncClientFromMaster(invoiceWithDesign);
       if (printInvoice !== invoice) {
         this.selectedInvoice.set(printInvoice);
         this.invoices.update((list) => list.map((i) => (i.id === invoice.id ? printInvoice : i)));

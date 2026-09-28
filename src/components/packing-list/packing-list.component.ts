@@ -1014,7 +1014,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         salesNos: mergedSalesNos,
         orderNo: mergedOrderNos.join(', '),
         clientId,
-        clientName: primaryDc.clientName,
+        clientName: invoiceClient?.clientName || primaryDc.clientName,
         clientAddress: invoiceClient?.billingAddress ?? '',
         clientPlace: invoiceClient?.place ?? '',
         clientState: invoiceClient?.state ?? '',
@@ -1564,7 +1564,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
       // see the doc comment above) so the Invoice's items/quantities exactly
       // mirror everything packed under this Packing List, including any
       // additional/extra scanned items each DC already carries.
-      const clientName = primaryDc.clientName || loaded.clientName;
+      const clientName = invoiceClient?.clientName || primaryDc.clientName || loaded.clientName;
       const clientId = loaded.clientId;
 
       // Price = MRP after Margin (Client Master), same basis as the DC —
@@ -1763,7 +1763,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
           fetchLogoDataUri(),
           this.invoiceService.backfillItemDesignInfoIfNeeded(invoice),
         ]);
-        const printInvoice = await this.invoiceService.backfillClientShipToIfNeeded(invoiceWithDesign);
+        const printInvoice = await this.invoiceService.syncClientFromMaster(invoiceWithDesign);
         const html = this.buildInvoiceHtml(printInvoice, logoDataUri);
         win.document.write(html);
         win.document.close();
@@ -1781,7 +1781,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     try {
       await this.loadingService.run(async () => {
         const XLSX = await import('xlsx');
-        invoice = await this.invoiceService.backfillClientShipToIfNeeded(invoice);
+        invoice = await this.invoiceService.syncClientFromMaster(invoice);
         const taxRows: any[][] = [
           ...(invoice.cgstAmount > 0 ? [['', '', '', '', '', '', '', '', 'CGST (' + invoice.cgstRate + '%):', invoice.cgstAmount]] : []),
           ...(invoice.sgstAmount > 0 ? [['', '', '', '', '', '', '', '', 'SGST (' + invoice.sgstRate + '%):', invoice.sgstAmount]] : []),
@@ -1855,7 +1855,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         return;
       }
       this.boxLabelPackingList.set(packingList);
-      this.boxLabelDc.set(existingDCs[0] ?? null);
+      this.boxLabelDc.set(existingDCs[0] ? await this.dcService.syncClientFromMaster(existingDCs[0]) : null);
       this.boxLabelSelected.set(new Set(cartons.map((_, idx) => idx)));
       this.boxLabelPreviewIndex.set(0);
       this.boxLabelQzStatus.set('unknown');
@@ -2743,12 +2743,18 @@ export class PackingListComponent implements OnInit, OnDestroy {
   }
 
   async reprintDC(dc: DeliveryChallan) {
+    // Opened synchronously, before the master sync below, so the popup isn't blocked.
+    const win = window.open('', '_blank', 'width=960,height=820');
+    if (!win) {
+      await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
+      return;
+    }
+    dc = await this.loadingService.run(() => this.dcService.syncClientFromMaster(dc));
     const html = `<!DOCTYPE html><html>
 <head><meta charset="utf-8"><title>DC - ${dc.dcNo}</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#000}table{width:100%;border-collapse:collapse}</style></head>
 <body>${this.buildCustomerDCHtml(dc, 1, 1)}</body></html>`;
-    const win = window.open('', '_blank', 'width=960,height=820');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+    win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600);
   }
 
   // ─── Click-based packing ───────────────────────────────────────────────────
@@ -3348,12 +3354,15 @@ export class PackingListComponent implements OnInit, OnDestroy {
       salesNos,
       orderNo,
       clientId: packingList.clientId,
-      clientName: clientName || packingList.clientName,
-      // DC is a shipping document — always use the client's Ship To Address, not Bill To.
-      billingAddress: client?.shipToAddress ?? '',
-      place: client?.shipToPlace ?? '',
-      state: client?.shipToState ?? '',
-      zipCode: client?.shipToZipCode ?? '',
+      // Client Master name wins — the packing list's clientName is a copy
+      // taken at pick-list time and goes stale when the master is renamed.
+      clientName: client?.clientName || clientName || packingList.clientName,
+      // DC is a shipping document — always use the client's Ship To Address,
+      // falling back to Bill To when the master has no Ship To filled in.
+      billingAddress: client?.shipToAddress || client?.billingAddress || '',
+      place: client?.shipToPlace || client?.place || '',
+      state: client?.shipToState || client?.state || '',
+      zipCode: client?.shipToZipCode || client?.zipCode || '',
       clientPhone: client?.mobile ?? '',
       clientGstin: client?.gstNo ?? '',
       totalQty,
@@ -3370,10 +3379,12 @@ export class PackingListComponent implements OnInit, OnDestroy {
   }
 
   private async printDCsWithLabels(dcs: DeliveryChallan[], packingList: PackingList, preOpenedWin: Window | null = null): Promise<void> {
+    // Name/address always from the Client Master, not the DC's creation-time snapshot.
+    dcs = await Promise.all(dcs.map((dc) => this.dcService.syncClientFromMaster(dc)));
     const total = dcs.length;
     const dcHtmlParts = dcs.map((dc, idx) => this.buildCustomerDCHtml(dc, idx + 1, total));
     const allDCHtml = dcHtmlParts.join('<div style="page-break-before:always"></div>');
-    const labelsHtml = this.buildAllLabelsHtml(packingList);
+    const labelsHtml = this.buildAllLabelsHtml(packingList, dcs[0]?.clientName);
 
     const combinedHtml = `<!DOCTYPE html><html>
 <head><meta charset="utf-8"><title>DC - ${packingList.packingListNo}</title>
@@ -3789,7 +3800,7 @@ ${allDCHtml}
       </body></html>`;
   }
 
-  private buildAllLabelsHtml(packingList: PackingList): string {
+  private buildAllLabelsHtml(packingList: PackingList, masterClientName = ''): string {
     const cartons = packingList.cartons ?? [];
     if (!cartons.length) {
       return '<p style="text-align:center;color:#94a3b8;padding:20px;font-size:12px">No boxes to print.</p>';
@@ -3802,7 +3813,7 @@ ${allDCHtml}
       const soIds = [...new Set(carton.entries.flatMap((e) => e.salesOrderIds))];
       const soNos = [...new Set(carton.entries.flatMap((e) => e.salesNos))];
       const party = partyProgress.find((p) => soIds.includes(p.salesOrderId));
-      const customerName = party?.clientName || packingList.clientName;
+      const customerName = masterClientName || party?.clientName || packingList.clientName;
       const salesNosStr = soNos.length ? soNos.join(', ') : (packingList.salesNos ?? []).join(', ');
 
       const itemRows = carton.entries.map((e) =>
@@ -3900,7 +3911,8 @@ ${allDCHtml}
     const partyProgress = packingList.partyProgress ?? [];
     const soIds = [...new Set(carton.entries.flatMap((e) => e.salesOrderIds))];
     const party = partyProgress.find((p) => soIds.includes(p.salesOrderId));
-    const customerName = party?.clientName || packingList.clientName;
+    // DC name is synced from the Client Master — see DeliveryChallanService.syncClientFromMaster.
+    const customerName = dc?.clientName || party?.clientName || packingList.clientName;
     const addrParts: string[] = [];
     if (dc?.billingAddress) addrParts.push(dc.billingAddress);
     if (dc?.place || dc?.state) addrParts.push([dc.place, dc.state].filter(Boolean).join(', ') + (dc?.zipCode ? ' - ' + dc.zipCode : ''));

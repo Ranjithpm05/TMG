@@ -16,6 +16,7 @@ import { getDocs, runTransaction } from './firestore-reads';
 import { Observable } from 'rxjs';
 import { DCItem, DeliveryChallan } from '../models/delivery-challan.model';
 import { PackingListService } from './packing-list.service';
+import { ClientService } from './client.service';
 import { invalidateRangeCaches, syncedRangeQuery } from './range-cache.util';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 
@@ -23,6 +24,7 @@ import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cach
 export class DeliveryChallanService {
   private firestore = inject(Firestore);
   private packingListService = inject(PackingListService);
+  private clientService = inject(ClientService);
   private dcRef = collection(this.firestore, 'deliveryChallans');
 
   // Read repeatedly (Packing List and e-Invoice screens, every DC-generation
@@ -225,6 +227,38 @@ export class DeliveryChallanService {
   async updateDCItems(dcId: string, items: DCItem[]): Promise<void> {
     await updateDoc(doc(this.dcRef, dcId), this.stripUndefined({ items, updatedAt: serverTimestamp() }));
     this.invalidateCache();
+  }
+
+  // A DC stores a snapshot of the customer's name/address taken when it was
+  // generated, so a later Client Master correction never reached the printed
+  // DC (e.g. SARAVANA STORES renamed to "SARAVANA STORES (TEX) - SHOPn" and
+  // its blank address filled in). Called before every DC print so the Client
+  // Master is always the source of truth: persists only the fields that
+  // differ. A DC is a shipping document, so it carries the Ship To address
+  // (falling back to Bill To). A blank master field keeps the DC's value.
+  async syncClientFromMaster(dc: DeliveryChallan): Promise<DeliveryChallan> {
+    if (!dc.id || !dc.clientId) return dc;
+
+    const client = await this.clientService.getClientForDC(dc.clientId, dc.clientName);
+    if (!client) return dc;
+
+    const master: Partial<DeliveryChallan> = {
+      clientName: client.clientName || dc.clientName,
+      billingAddress: client.shipToAddress || client.billingAddress || dc.billingAddress,
+      place: client.shipToPlace || client.place || dc.place,
+      state: client.shipToState || client.state || dc.state,
+      zipCode: client.shipToZipCode || client.zipCode || dc.zipCode,
+      clientPhone: client.mobile || dc.clientPhone,
+      clientGstin: client.gstNo || dc.clientGstin,
+    };
+    const patch = Object.fromEntries(
+      Object.entries(master).filter(([key, value]) => (dc as any)[key] !== value)
+    ) as Partial<DeliveryChallan>;
+    if (!Object.keys(patch).length) return dc;
+
+    await updateDoc(doc(this.dcRef, dc.id), this.stripUndefined({ ...patch, updatedAt: serverTimestamp() }));
+    this.invalidateCache();
+    return { ...dc, ...patch };
   }
 
   private stripUndefined<T>(value: T): T {

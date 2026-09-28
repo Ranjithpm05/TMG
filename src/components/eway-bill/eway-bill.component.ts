@@ -143,7 +143,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   viewInvoice(invoice: Invoice): void {
     this.selectedInvoice.set(invoice);
     this.mode.set('view');
-    this.invoiceService.backfillClientShipToIfNeeded(invoice).then((updated) => {
+    this.invoiceService.syncClientFromMaster(invoice).then((updated) => {
       if (updated === invoice) return;
       if (this.selectedInvoice()?.id === updated.id) this.selectedInvoice.set(updated);
       this.allInvoices.update((list) => list.map((i) => (i.id === updated.id ? updated : i)));
@@ -218,7 +218,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   async submitGenerate(): Promise<void> {
     let invoice = this.selectedInvoice();
     if (!invoice?.id) return;
-    invoice = await this.invoiceService.backfillClientShipToIfNeeded(invoice);
+    invoice = await this.invoiceService.syncClientFromMaster(invoice);
 
     const settings = this.companySettings();
     if (!settings?.gstin?.trim()) {
@@ -400,7 +400,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
       Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try again.' });
       return;
     }
-    invoice = await this.invoiceService.backfillClientShipToIfNeeded(invoice);
+    invoice = await this.invoiceService.syncClientFromMaster(invoice);
     const logoDataUri = await fetchLogoDataUri();
     const html = await this.buildEwayBillDocumentHtml(invoice, this.companySettings(), logoDataUri);
     win.document.write(html);

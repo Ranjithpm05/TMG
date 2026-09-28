@@ -191,7 +191,7 @@ export function buildBoxLabelZpl(
   const partyProgress = packingList.partyProgress ?? [];
   const soIds = [...new Set(carton.entries.flatMap((e) => e.salesOrderIds))];
   const party = partyProgress.find((p) => soIds.includes(p.salesOrderId));
-  const customerName = party?.clientName || packingList.clientName;
+  const customerName = dc?.clientName || party?.clientName || packingList.clientName;
 
   const addrParts: string[] = [];
   if (dc?.billingAddress) addrParts.push(dc.billingAddress);
