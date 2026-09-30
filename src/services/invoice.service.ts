@@ -463,6 +463,7 @@ export class InvoiceService {
       grossAmount: Number(raw?.grossAmount) || 0,
       discountPct: Number(raw?.discountPct) || 0,
       discountAmount: Number(raw?.discountAmount) || 0,
+      freightAmount: Number(raw?.freightAmount) || 0,
       taxableValue: Number(raw?.taxableValue) || 0,
       cgstRate: Number(raw?.cgstRate) || 0,
       cgstAmount: Number(raw?.cgstAmount) || 0,

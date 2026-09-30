@@ -1096,6 +1096,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   </div>
   <table style="width:280px;border-collapse:collapse;flex-shrink:0">
     ${invoice.discountAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd">Discount (${invoice.discountPct}%)</td><td style="padding:3px 8px;font-size:11px;font-weight:700;text-align:right;border:1px solid #ddd">${invoice.discountAmount.toFixed(2)}</td></tr>` : ''}
+    ${(invoice.freightAmount || 0) > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd">Freight</td><td style="padding:3px 8px;font-size:11px;font-weight:700;text-align:right;border:1px solid #ddd">${(invoice.freightAmount || 0).toFixed(2)}</td></tr>` : ''}
     <tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd">Taxable Value</td><td style="padding:3px 8px;font-size:11px;font-weight:700;text-align:right;border:1px solid #ddd">${invoice.taxableValue.toFixed(2)}</td></tr>
     ${invoice.cgstAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd">CGST (${invoice.cgstRate}%)</td><td style="padding:3px 8px;font-size:11px;text-align:right;border:1px solid #ddd">${invoice.cgstAmount.toFixed(2)}</td></tr>` : ''}
     ${invoice.sgstAmount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;border:1px solid #ddd">SGST (${invoice.sgstRate}%)</td><td style="padding:3px 8px;font-size:11px;text-align:right;border:1px solid #ddd">${invoice.sgstAmount.toFixed(2)}</td></tr>` : ''}

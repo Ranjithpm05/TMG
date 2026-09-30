@@ -57,8 +57,9 @@ function formatTimestamp(): string {
  * own value in ExpLed1, same as the invoice applies it once at the bottom
  * against Gross to get Taxable Value. CGST/SGST/IGST are computed straight
  * off that same gross Amount so each row's own numbers tie out (%×Amount).
+ * Invoice-level Freight goes in Ledger1 (INCOME) on the first row only.
  */
-function buildItemRow(invoice: Invoice, item: InvoiceItem, clientCode: string): (string | number)[] {
+function buildItemRow(invoice: Invoice, item: InvoiceItem, clientCode: string, freightAmount = 0): (string | number)[] {
   const dateStr = formatTallyDate(invoice.invoiceDate);
   const grossAmount = r2(item.amount);
   const discountPct = invoice.discountPct || 0;
@@ -92,7 +93,7 @@ function buildItemRow(invoice: Invoice, item: InvoiceItem, clientCode: string): 
     cgstRate, cgstAmt, sgstRate, sgstAmt, igstRate, igstAmt,
     0, 0,
     ledgerName,
-    0, 0, discountAmount, 0,
+    freightAmount, 0, discountAmount, 0,
     invoice.invoiceNo,
     totalGstRate,
     '',
@@ -103,9 +104,10 @@ export function buildTallyRows(invoices: Invoice[], clientCodeByClientId: Map<st
   const rows: (string | number)[][] = [HEADER_ROW_1, HEADER_ROW_2];
   for (const invoice of invoices) {
     const clientCode = clientCodeByClientId.get(invoice.clientId) || '';
-    for (const item of invoice.items) {
-      rows.push(buildItemRow(invoice, item, clientCode));
-    }
+    // Freight is invoice-level — carried once, on the invoice's first row.
+    invoice.items.forEach((item, i) => {
+      rows.push(buildItemRow(invoice, item, clientCode, i === 0 ? r2(invoice.freightAmount || 0) : 0));
+    });
   }
   return rows;
 }

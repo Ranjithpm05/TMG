@@ -80,6 +80,10 @@ export interface Invoice {
   grossAmount: number;
   discountPct: number;
   discountAmount: number;
+  // Freight entered at invoice generation — added after the discount and
+  // taxed with the goods, i.e. taxableValue = gross − discount + freight.
+  // Absent (treated as 0) on invoices generated before this field existed.
+  freightAmount?: number;
   taxableValue: number;
   cgstRate: number;
   cgstAmount: number;

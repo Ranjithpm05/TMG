@@ -226,7 +226,9 @@ export class HsnGstWiseReportComponent {
 
       for (const tax of taxSummary) {
         const hsn = this.data.toText(tax.hsnSac) || 'N/A';
-        const grossAmount1 = this.round2(grossByHsn.get(hsn) ?? 0);
+        // A row with no items of its own (the Freight SAC row) has no
+        // discount — its gross is its taxable value.
+        const grossAmount1 = this.round2(grossByHsn.get(hsn) ?? tax.taxableValue);
         const grossAmount2 = this.round2(tax.taxableValue);
         rows.push({
           invoiceNo: invoice.invoiceNo,

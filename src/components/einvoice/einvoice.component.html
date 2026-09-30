@@ -568,6 +568,11 @@
           <div class="flex justify-between text-sm text-slate-600">
             <span>Discount ({{ inv.discountPct }}%)</span><span class="text-rose-500">- {{ formatCurrency(inv.discountAmount) }}</span>
           </div>
+          @if ((inv.freightAmount || 0) > 0) {
+          <div class="flex justify-between text-sm text-slate-600">
+            <span>Freight</span><span>+ {{ formatCurrency(inv.freightAmount || 0) }}</span>
+          </div>
+          }
           <div class="flex justify-between text-sm font-semibold text-slate-700 border-t border-slate-100 pt-2">
             <span>Taxable Value</span><span>{{ formatCurrency(inv.taxableValue) }}</span>
           </div>

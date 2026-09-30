@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Firestore, doc, updateDoc, serverTimestamp } from '@angular/fire/firestore';
 import { Functions, httpsCallable } from '@angular/fire/functions';
 import { Invoice } from '../models/invoice.model';
+import { FREIGHT_SAC } from '../models/hsn-code.model';
 import {
   CompanySettings,
   EInvoiceBuyerDtls,
@@ -167,6 +168,44 @@ export class EInvoiceService {
         TotItemVal: totItemVal,
       };
     });
+
+    // Freight is taxable (part of invoice.taxableValue, same GST rate as the
+    // goods), so it goes in as its own service line rather than ValDtls.OthChrg
+    // (untaxed) — NIC requires each goods line's AssAmt = TotAmt − Discount,
+    // so it can't be folded into those lines either.
+    const freightAmount = Math.round((invoice.freightAmount || 0) * 100) / 100;
+    if (freightAmount > 0) {
+      const gstRate = invoice.items[0]?.taxRate || (invoice.igstRate || (invoice.cgstRate + invoice.sgstRate));
+      const igstAmt = isInterState ? Math.round(freightAmount * (gstRate / 100) * 100) / 100 : 0;
+      const cgstAmt = !isInterState ? Math.round(freightAmount * (gstRate / 2 / 100) * 100) / 100 : 0;
+      const sgstAmt = cgstAmt;
+      itemList.push({
+        SlNo: String(itemList.length + 1),
+        PrdDesc: 'Freight Charges',
+        IsServc: 'Y',
+        HsnCd: FREIGHT_SAC,
+        Qty: 1,
+        FreeQty: 0,
+        Unit: 'OTH',
+        UnitPrice: freightAmount,
+        TotAmt: freightAmount,
+        Discount: 0,
+        PreTaxVal: 0,
+        AssAmt: freightAmount,
+        GstRt: gstRate,
+        IgstAmt: igstAmt,
+        CgstAmt: cgstAmt,
+        SgstAmt: sgstAmt,
+        CesRt: 0,
+        CesAmt: 0,
+        CesNonAdvlAmt: 0,
+        StateCesRt: 0,
+        StateCesAmt: 0,
+        StateCesNonAdvlAmt: 0,
+        OthChrg: 0,
+        TotItemVal: Math.round((freightAmount + igstAmt + cgstAmt + sgstAmt) * 100) / 100,
+      });
+    }
 
     const payload: EInvoicePayload = {
       Version: '1.1',

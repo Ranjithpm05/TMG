@@ -23,7 +23,7 @@ import { TransportService } from '../../services/transport.service';
 import { DeliveryChallanService } from '../../services/delivery-challan.service';
 import { SalesOrderService } from '../../services/sales-order.service';
 import { Invoice } from '../../models/invoice.model';
-import { resolveHsnCode } from '../../models/hsn-code.model';
+import { FREIGHT_SAC, resolveHsnCode } from '../../models/hsn-code.model';
 import { InvoiceService } from '../../services/invoice.service';
 import { CompanySettingsService } from '../../services/company-settings.service';
 import { resolveGstPlaceOfSupply } from '../../services/gst-state.util';
@@ -870,6 +870,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
         + '<input class="swal2-input" style="margin:0;width:100%;background:#f3f4f6" value="' + clientDiscountPct + '" disabled></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Tax Rate % (total GST)</label>'
         + '<input id="minv-tax" type="number" class="swal2-input" style="margin:0;width:100%" value="5"></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Freight (&#x20B9;, added after discount &amp; taxed with the goods)</label>'
+        + '<input id="minv-freight" type="number" min="0" step="0.01" class="swal2-input" style="margin:0;width:100%" value="0"></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Vehicle No.</label>'
         + '<input id="minv-vehicle" class="swal2-input" style="margin:0;width:100%" value=""></div>'
         + '<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Destination</label>'
@@ -878,12 +880,20 @@ export class PackingListComponent implements OnInit, OnDestroy {
       showCancelButton: true,
       confirmButtonText: 'Generate Invoice',
       confirmButtonColor: '#4f46e5',
-      preConfirm: () => ({
-        hsnSac: (document.getElementById('minv-hsn') as HTMLInputElement).value.trim() || '62059090',
-        taxRate: Number((document.getElementById('minv-tax') as HTMLInputElement).value) || 5,
-        vehicleNo: (document.getElementById('minv-vehicle') as HTMLInputElement).value.trim(),
-        destination: (document.getElementById('minv-dest') as HTMLInputElement).value.trim(),
-      }),
+      preConfirm: () => {
+        const freight = Number((document.getElementById('minv-freight') as HTMLInputElement).value || 0);
+        if (!Number.isFinite(freight) || freight < 0) {
+          Swal.showValidationMessage('Freight must be 0 or a positive amount.');
+          return false;
+        }
+        return {
+          hsnSac: (document.getElementById('minv-hsn') as HTMLInputElement).value.trim() || '62059090',
+          taxRate: Number((document.getElementById('minv-tax') as HTMLInputElement).value) || 5,
+          freightAmount: Math.round(freight * 100) / 100,
+          vehicleNo: (document.getElementById('minv-vehicle') as HTMLInputElement).value.trim(),
+          destination: (document.getElementById('minv-dest') as HTMLInputElement).value.trim(),
+        };
+      },
     });
     if (!formValues) return;
 
@@ -948,7 +958,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
       const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
       const discountAmount = Math.round(grossAmount * discountPct / 100 * 100) / 100;
-      const taxableValue = Math.round((grossAmount - discountAmount) * 100) / 100;
+      // Freight is added after the discount and taxed with the goods.
+      const freightAmount = formValues.freightAmount;
+      const taxableValue = Math.round((grossAmount - discountAmount + freightAmount) * 100) / 100;
 
       const company = await this.companySettingsService.getCompanySettingsOnce();
       const shipToDiffers = !!invoiceClient?.shipToAddress && !invoiceClient.shipToSameAsBilling &&
@@ -996,6 +1008,18 @@ export class PackingListComponent implements OnInit, OnDestroy {
           igstRate: isInterState ? taxRate : 0, igstAmount: groupIgst,
         };
       });
+      // Freight gets its own SAC row so the summary still totals to Taxable Value.
+      if (freightAmount > 0) {
+        const freightCgst = isInterState ? 0 : Math.round(freightAmount * halfTax / 100 * 100) / 100;
+        const freightIgst = isInterState ? Math.round(freightAmount * taxRate / 100 * 100) / 100 : 0;
+        taxSummary.push({
+          hsnSac: FREIGHT_SAC,
+          taxableValue: freightAmount,
+          cgstRate: isInterState ? 0 : halfTax, cgstAmount: freightCgst,
+          sgstRate: isInterState ? 0 : halfTax, sgstAmount: freightCgst,
+          igstRate: isInterState ? taxRate : 0, igstAmount: freightIgst,
+        });
+      }
 
       const mergedSalesOrderIds = [...new Set(dcs.flatMap((dc) => dc.salesOrderIds))];
       const mergedSalesNos = [...new Set(dcs.flatMap((dc) => dc.salesNos))];
@@ -1036,7 +1060,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         totalPkgs: dcs.reduce((s, dc) => s + dc.boxCount, 0),
         agentName: primaryDc.agentName ?? '',
         items: invoiceItems,
-        grossAmount, discountPct, discountAmount, taxableValue,
+        grossAmount, discountPct, discountAmount, freightAmount, taxableValue,
         cgstRate: isInterState ? 0 : halfTax, cgstAmount,
         sgstRate: isInterState ? 0 : halfTax, sgstAmount,
         igstRate: isInterState ? taxRate : 0, igstAmount, totalTaxAmount, roundOff, totalAmount,
@@ -1534,6 +1558,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
         + '<input class="swal2-input" style="margin:0;width:100%;background:#f3f4f6" value="' + clientDiscountPct + '" disabled></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Tax Rate % (total GST)</label>'
         + '<input id="inv-tax" type="number" class="swal2-input" style="margin:0;width:100%" value="5"></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Freight (&#x20B9;, added after discount &amp; taxed with the goods)</label>'
+        + '<input id="inv-freight" type="number" min="0" step="0.01" class="swal2-input" style="margin:0;width:100%" value="0"></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Vehicle No.</label>'
         + '<input id="inv-vehicle" class="swal2-input" style="margin:0;width:100%" value=""></div>'
         + '<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Destination</label>'
@@ -1542,12 +1568,20 @@ export class PackingListComponent implements OnInit, OnDestroy {
       showCancelButton: true,
       confirmButtonText: 'Generate Invoice',
       confirmButtonColor: '#4f46e5',
-      preConfirm: () => ({
-        hsnSac: (document.getElementById('inv-hsn') as HTMLInputElement).value.trim() || '62059090',
-        taxRate: Number((document.getElementById('inv-tax') as HTMLInputElement).value) || 5,
-        vehicleNo: (document.getElementById('inv-vehicle') as HTMLInputElement).value.trim(),
-        destination: (document.getElementById('inv-dest') as HTMLInputElement).value.trim(),
-      }),
+      preConfirm: () => {
+        const freight = Number((document.getElementById('inv-freight') as HTMLInputElement).value || 0);
+        if (!Number.isFinite(freight) || freight < 0) {
+          Swal.showValidationMessage('Freight must be 0 or a positive amount.');
+          return false;
+        }
+        return {
+          hsnSac: (document.getElementById('inv-hsn') as HTMLInputElement).value.trim() || '62059090',
+          taxRate: Number((document.getElementById('inv-tax') as HTMLInputElement).value) || 5,
+          freightAmount: Math.round(freight * 100) / 100,
+          vehicleNo: (document.getElementById('inv-vehicle') as HTMLInputElement).value.trim(),
+          destination: (document.getElementById('inv-dest') as HTMLInputElement).value.trim(),
+        };
+      },
     });
     if (!formValues) return;
 
@@ -1606,7 +1640,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
       const grossAmount = Math.round(invoiceItems.reduce((s, i) => s + i.amount, 0) * 100) / 100;
       const discountAmount = Math.round(grossAmount * discountPct / 100 * 100) / 100;
-      const taxableValue = Math.round((grossAmount - discountAmount) * 100) / 100;
+      // Freight is added after the discount and taxed with the goods (same
+      // GST rate — composite supply), so it's part of the Taxable Value.
+      const freightAmount = formValues.freightAmount;
+      const taxableValue = Math.round((grossAmount - discountAmount + freightAmount) * 100) / 100;
 
       // GST type (CGST+SGST for an intra-state sale vs IGST for inter-state)
       // depends on the seller's own state (Company Settings) vs the client's
@@ -1668,6 +1705,18 @@ export class PackingListComponent implements OnInit, OnDestroy {
           igstRate: isInterState ? taxRate : 0, igstAmount: groupIgst,
         };
       });
+      // Freight gets its own SAC row so the summary still totals to Taxable Value.
+      if (freightAmount > 0) {
+        const freightCgst = isInterState ? 0 : Math.round(freightAmount * halfTax / 100 * 100) / 100;
+        const freightIgst = isInterState ? Math.round(freightAmount * taxRate / 100 * 100) / 100 : 0;
+        taxSummary.push({
+          hsnSac: FREIGHT_SAC,
+          taxableValue: freightAmount,
+          cgstRate: isInterState ? 0 : halfTax, cgstAmount: freightCgst,
+          sgstRate: isInterState ? 0 : halfTax, sgstAmount: freightCgst,
+          igstRate: isInterState ? taxRate : 0, igstAmount: freightIgst,
+        });
+      }
 
       const mergedSalesOrderIds = [...new Set(dcsToInvoice.flatMap((dc) => dc.salesOrderIds.length ? dc.salesOrderIds : loaded.salesOrderIds))];
       const mergedSalesNos = [...new Set(dcsToInvoice.flatMap((dc) => dc.salesNos.length ? dc.salesNos : loaded.salesNos))];
@@ -1713,7 +1762,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         totalPkgs: dcsToInvoice.reduce((s, dc) => s + dc.boxCount, 0),
         agentName: primaryDc.agentName ?? loaded.agentName ?? '',
         items: invoiceItems,
-        grossAmount, discountPct, discountAmount, taxableValue,
+        grossAmount, discountPct, discountAmount, freightAmount, taxableValue,
         cgstRate: isInterState ? 0 : halfTax, cgstAmount,
         sgstRate: isInterState ? 0 : halfTax, sgstAmount,
         igstRate: isInterState ? taxRate : 0, igstAmount, totalTaxAmount, roundOff, totalAmount,
@@ -1810,6 +1859,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
           [],
           ['', '', '', '', '', '', '', '', 'Gross Amount:', invoice.grossAmount],
           ['', '', '', '', '', '', '', '', 'Discount (' + invoice.discountPct + '%):', invoice.discountAmount],
+          ...((invoice.freightAmount || 0) > 0 ? [['', '', '', '', '', '', '', '', 'Freight:', invoice.freightAmount]] : []),
           ['', '', '', '', '', '', '', '', 'Taxable Value:', invoice.taxableValue],
           ...taxRows,
           ['', '', '', '', '', '', '', '', 'Total Tax:', invoice.totalTaxAmount],
@@ -4013,6 +4063,7 @@ ${allDCHtml}
       + '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">'
       + '<table style="width:300px;border-collapse:collapse">'
       + '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">Discount (' + invoice.discountPct + '%)</td><td style="padding:4px 10px;font-size:13px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.discountAmount.toFixed(2) + '</td></tr>'
+      + ((invoice.freightAmount || 0) > 0 ? '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">Freight</td><td style="padding:4px 10px;font-size:13px;font-weight:700;text-align:right;border:1px solid #ddd">' + (invoice.freightAmount || 0).toFixed(2) + '</td></tr>' : '')
       + '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">Taxable Value</td><td style="padding:4px 10px;font-size:13px;font-weight:700;text-align:right;border:1px solid #ddd">' + invoice.taxableValue.toFixed(2) + '</td></tr>'
       + (invoice.cgstAmount > 0 ? '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">CGST (' + invoice.cgstRate + '%)</td><td style="padding:4px 10px;font-size:13px;text-align:right;border:1px solid #ddd">' + invoice.cgstAmount.toFixed(2) + '</td></tr>' : '')
       + (invoice.sgstAmount > 0 ? '<tr><td style="padding:4px 10px;font-size:13px;border:1px solid #ddd">SGST (' + invoice.sgstRate + '%)</td><td style="padding:4px 10px;font-size:13px;text-align:right;border:1px solid #ddd">' + invoice.sgstAmount.toFixed(2) + '</td></tr>' : '')

@@ -15,6 +15,12 @@ export const DEFAULT_HSN_BY_PRODUCT: Record<string, string> = {
   'DENIM BAGGY': '62034200',
 };
 
+// SAC for freight charged on the invoice (goods transport by road). Freight
+// billed with the goods is part of a composite supply, so it's taxed at the
+// goods' own GST rate — this code only labels its own tax-summary row and
+// e-Invoice line.
+export const FREIGHT_SAC = '996511';
+
 export function resolveHsnCode(productName: string | undefined, fallback: string): string {
   const key = (productName ?? '').trim().toUpperCase();
   return DEFAULT_HSN_BY_PRODUCT[key] || fallback;
