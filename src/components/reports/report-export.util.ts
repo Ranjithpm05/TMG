@@ -31,6 +31,16 @@ function formatSummaryLine(summary?: Record<string, number | string>): string {
   return Object.entries(summary).map(([label, value]) => `${label}: ${value}`).join('  ·  ');
 }
 
+/** Excel sheet names can't contain : \ / ? * [ ] and are capped at 31 chars — xlsx throws otherwise. */
+function toSheetName(title: string): string {
+  return title.replace(/[:\\/?*[\]]/g, '-').slice(0, 31);
+}
+
+/** Safe download filename stem (no path separators or other characters browsers/OSes reject). */
+function toFileStem(title: string): string {
+  return title.replace(/[\\/:*?"<>|]/g, ' ').trim().replace(/\s+/g, '_');
+}
+
 const defaultIsGrandTotalRow = (row: any[]) => [1, 2, 3].some((i) => String(row[i]).toLowerCase().includes('total'));
 
 /** Builds and downloads an .xlsx file from a header+body row matrix via a dynamic `xlsx` import. */
@@ -46,9 +56,10 @@ export async function exportRowsToExcel(rows: any[][], title: string, filterSumm
 
     const ws = XLSX.utils.aoa_to_sheet([...metaRows, ...rows]);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
-    XLSX.writeFile(wb, `${title.replace(/\s+/g, '_')}_${formatTimestamp()}.xlsx`);
-  } catch {
+    XLSX.utils.book_append_sheet(wb, ws, toSheetName(title));
+    XLSX.writeFile(wb, `${toFileStem(title)}_${formatTimestamp()}.xlsx`);
+  } catch (err) {
+    console.error('Excel export failed', err);
     Swal.fire({ icon: 'error', title: 'Export Failed', text: 'Could not generate the Excel file.' });
   }
 }
@@ -194,5 +205,5 @@ export async function exportRowsToPdf(
     });
   }
 
-  doc.save(`${title.replace(/\s+/g, '_')}_${formatTimestamp()}.pdf`);
+  doc.save(`${toFileStem(title)}_${formatTimestamp()}.pdf`);
 }
