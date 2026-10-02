@@ -44,12 +44,16 @@ import {
 } from '../../services/box-label-zpl.util';
 import {
   MrpLabelData,
+  MrpLabelLookup,
+  MrpLabelPreviewImages,
   MrpLabelPrinterSettings,
   buildMrpLabelDataForLines,
+  buildMrpLabelZpl,
   buildMrpLabelZplBatch,
-  buildRotationDiagnosticZpl,
   loadMrpLabelSettings,
+  mrpForLine,
   mrpLabelDataForLine,
+  renderMrpLabelPreview,
   saveMrpLabelSettings,
 } from '../../services/mrp-label-zpl.util';
 
@@ -178,7 +182,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
   mrpLabelPrinters = signal<string[]>([]);
   mrpLabelSelected = signal<Set<number>>(new Set());
   mrpLabelPreviewLineIndex = signal(0);
-  mrpLabelMrpByBarcode = signal<Map<string, number>>(new Map());
+  mrpLabelPreviewView = signal<'readable' | 'printer'>('readable');
+  mrpLabelMrpLookup = signal<MrpLabelLookup>({ byBarcode: new Map(), byStyleColorSize: new Map() });
   isDetectingMrpLabelPrinters = signal(false);
   isPrintingMrpLabels = signal(false);
   mrpLabelQzStatus = signal<'unknown' | 'connected' | 'error'>('unknown');
@@ -201,8 +206,21 @@ export class PackingListComponent implements OnInit, OnDestroy {
     if (!line) return null;
     const idx = Math.min(this.mrpLabelPreviewLineIndex(), lines.length - 1);
     const rightLine = lines[idx + 1] ?? line;
-    const mrpByBarcode = this.mrpLabelMrpByBarcode();
-    return [mrpLabelDataForLine(line, mrpByBarcode), mrpLabelDataForLine(rightLine, mrpByBarcode)];
+    const lookup = this.mrpLabelMrpLookup();
+    return [mrpLabelDataForLine(line, lookup), mrpLabelDataForLine(rightLine, lookup)];
+  });
+
+  // Rendered from the same 1-bit sheet bitmap the ZPL sends (see
+  // renderMrpLabelPreview), so what's shown is what the head prints.
+  mrpLabelPreview = computed<MrpLabelPreviewImages | null>(() => {
+    const pair = this.mrpLabelPreviewPair();
+    if (!pair) return null;
+    try {
+      return renderMrpLabelPreview(pair[0], pair[1], this.mrpLabelSettings());
+    } catch (err) {
+      console.error('MRP label preview failed', err);
+      return null;
+    }
   });
 
   // Total physical labels (one per piece) the selected lines would print — shown next to Print Selected/All.
@@ -2050,15 +2068,18 @@ export class PackingListComponent implements OnInit, OnDestroy {
   async printMrpLabels(packingList: PackingList): Promise<void> {
     if (!packingList.id) return;
     await this.loadingService.run(async () => {
-      const [lines, mrpByBarcode] = await Promise.all([
+      const [lines, byBarcode, sizeEntryByStyleColorSize] = await Promise.all([
         this.packingListService.getPackingListLinesOnce(packingList.id!),
         this.designService.getMrpByBarcodeMap(),
+        this.designService.getSizeEntryByStyleColorSizeMap(),
       ]);
       if (!lines.length) {
         await Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'No lines to print', timer: 2000, showConfirmButton: false });
         return;
       }
-      this.mrpLabelMrpByBarcode.set(mrpByBarcode);
+      const byStyleColorSize = new Map<string, number>();
+      for (const [key, entry] of sizeEntryByStyleColorSize) byStyleColorSize.set(key, Number(entry.price) || 0);
+      this.mrpLabelMrpLookup.set({ byBarcode, byStyleColorSize });
       this.mrpLabelPackingList.set(packingList);
       this.mrpLabelLines.set(lines);
       this.mrpLabelSelected.set(new Set(lines.map((_, idx) => idx)));
@@ -2077,80 +2098,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.mode.set(this.labelPrintReturnMode());
   }
 
-  // Mirrors buildMrpLabelZpl's 2-up layout in mm-based absolute-positioned
-  // HTML inside an <iframe [srcdoc]> — no rotation is involved (unlike the
-  // Box Label preview), since this label's media orientation already
-  // matches the design's landscape layout.
-  mrpLabelPreviewHtml(): SafeHtml {
-    const settings = this.mrpLabelSettings();
-    const pair = this.mrpLabelPreviewPair();
-    const inner = pair
-      ? this.buildMrpLabelPreviewInnerHtml(pair[0], pair[1], settings)
-      : '<div style="padding:10px;color:#999;font-size:11px;font-family:Arial,sans-serif">No entries to preview</div>';
-    const doc = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
-      + '*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;background:#fff}'
-      + `.label-frame{position:relative;width:${settings.labelWidthMm}mm;height:${settings.labelHeightMm}mm;overflow:hidden;border:1px solid #000}`
-      + '</style></head><body>' + `<div class="label-frame">${inner}</div>` + '</body></html>';
-    return this.sanitizer.bypassSecurityTrustHtml(doc);
-  }
-
-  // Mirrors mrpLabelTagFields in mrp-label-zpl.util.ts exactly — same field
-  // content/order (Design/Style/Shade/Size/Qty stacked top-left, QR
-  // top-right, MRP + tax caption prominent below), all UPRIGHT (no
-  // rotation), matching the user's reference sample.
-  private buildMrpLabelPreviewInnerHtml(left: MrpLabelData, right: MrpLabelData, settings: MrpLabelPrinterSettings): string {
-    const REF_HALF_W = 39;
-
-    const W = settings.labelWidthMm;
-    const DIVIDER_GAP_MM = 2;
-    const halfW = (W - DIVIDER_GAP_MM) / 2;
-    const scaleW = halfW / REF_HALF_W;
-    const rendered = (mm: number) => mm * scaleW;
-
-    const buildHalf = (offsetXMm: number, data: MrpLabelData): string => {
-      // QR + code text, top-right corner, upright.
-      const qrSizeMm = Math.min(20, halfW * 0.5);
-      const qrX = halfW - qrSizeMm - 1.5;
-      const qrY = 2;
-      const qrCodeFontHMm = 1.3;
-      const qrHtml = `<div style="position:absolute;left:${offsetXMm + qrX}mm;top:${qrY}mm;width:${qrSizeMm}mm;height:${qrSizeMm}mm;border:0.3mm solid #0f172a;display:flex;align-items:center;justify-content:center;font-size:${rendered(2)}mm;color:#888">QR</div>`;
-      const codeHtml = `<div style="position:absolute;left:${offsetXMm + qrX}mm;top:${qrY + qrSizeMm + 1}mm;width:${qrSizeMm}mm;font-size:${rendered(qrCodeFontHMm)}mm;color:#555;text-align:center;word-break:break-all">${data.code}</div>`;
-
-      // Design / Style / Shade / Size / Qty, top-left, stacked upright.
-      const fieldColXMm = 1.5;
-      const fieldFontHMm = 2;
-      const fieldLineHMm = rendered(fieldFontHMm) + 1.8;
-      let fieldY = 2;
-      const fieldsHtml: string[] = [];
-      const pushField = (value: string) => {
-        fieldsHtml.push(`<div style="position:absolute;left:${offsetXMm + fieldColXMm}mm;top:${fieldY}mm;color:#0f172a;font-weight:600;font-size:${rendered(fieldFontHMm)}mm;white-space:nowrap;line-height:1">${value}</div>`);
-        fieldY += fieldLineHMm;
-      };
-      pushField(`Design : ${data.design || '-'}`);
-      pushField(`Style : ${data.style}`);
-      pushField(`Shade : ${data.shade}`);
-      pushField(`Size : ${data.size || '-'}`);
-      pushField('Qty : 1 No');
-
-      // MRP, prominent, below both the field column and the QR block.
-      const qrBlockBottomMm = qrY + qrSizeMm + 1 + rendered(qrCodeFontHMm);
-      const topBlockBottomMm = Math.max(fieldY, qrBlockBottomMm);
-      const mrpFontHMm = 5;
-      const mrpYMm = topBlockBottomMm + 2.5;
-      const mrpHtml = `<div style="position:absolute;left:${offsetXMm + 1.5}mm;top:${mrpYMm}mm;color:#0f172a;font-weight:900;font-size:${rendered(mrpFontHMm)}mm;white-space:nowrap;line-height:1">MRP : ₹ ${data.mrp.toFixed(2)}</div>`;
-
-      // Tax caption, directly below MRP.
-      const taxFontHMm = 1.9;
-      const taxYMm = mrpYMm + rendered(mrpFontHMm) + 1.5;
-      const taxHtml = `<div style="position:absolute;left:${offsetXMm + 1.5}mm;top:${taxYMm}mm;color:#0f172a;font-weight:600;font-size:${rendered(taxFontHMm)}mm;white-space:nowrap;line-height:1">(Incl. of all Taxes)</div>`;
-
-      return qrHtml + codeHtml + fieldsHtml.join('') + mrpHtml + taxHtml;
-    };
-
-    const rightOffsetXMm = halfW + DIVIDER_GAP_MM;
-    const dividerHtml = `<div style="position:absolute;left:${halfW + DIVIDER_GAP_MM / 2}mm;top:0;width:0.3mm;height:100%;background:#999"></div>`;
-
-    return `<div style="position:relative;width:100%;height:100%">${buildHalf(0, left)}${buildHalf(rightOffsetXMm, right)}${dividerHtml}</div>`;
+  // Per-size MRP each line's tags will carry — shown in the lines table so a
+  // missing/₹0 MRP is visible before anything is printed.
+  getMrpLabelLineMrp(line: PackingListLine): number {
+    return mrpForLine(line, this.mrpLabelMrpLookup());
   }
 
   setMrpLabelPreviewLine(idx: number): void {
@@ -2210,26 +2161,24 @@ export class PackingListComponent implements OnInit, OnDestroy {
     await this.runMrpLabelPrint(Array.from({ length: total }, (_, i) => i));
   }
 
-  // Diagnostic-only print — see buildRotationDiagnosticZpl's own doc
-  // comment. Two consecutive rotation techniques (^A0R, then ^ADR) both
-  // failed on the real printer per physical test prints; this isolates the
-  // rotation question from the rest of the label so one more physical
-  // print can settle which technique (if any) actually works on this
-  // hardware, instead of guessing a third full-label redesign.
-  async printMrpRotationTest(): Promise<void> {
+  // Prints just the previewed sheet once — for checking alignment against
+  // the pre-printed band and dialling in Offset X/Y before a full run.
+  async printMrpLabelTestSheet(): Promise<void> {
     const settings = this.mrpLabelSettings();
+    const pair = this.mrpLabelPreviewPair();
+    if (!pair) return;
     if (!settings.printerName) {
       await Swal.fire({ icon: 'warning', title: 'No Printer Selected', text: 'Detect and select a thermal printer first.' });
       return;
     }
     this.isPrintingMrpLabels.set(true);
     try {
-      await this.qzTrayService.printRaw(settings.printerName, [buildRotationDiagnosticZpl(settings)]);
+      await this.qzTrayService.printRaw(settings.printerName, [buildMrpLabelZpl(pair[0], pair[1], settings)]);
       this.mrpLabelQzStatus.set('connected');
       await Swal.fire({
         icon: 'info',
-        title: 'Rotation Test Sent',
-        html: 'Check the printed label: 6 columns, each with an unrotated caption (A0R / A0B / ADR / ADB / AER / A0R-big) above a "TEST" sample using that technique. Whichever "TEST" prints sideways (not upright like its caption) tells us which technique to use — let me know which one(s) rotated, and which direction.',
+        title: 'Test Sheet Sent',
+        html: 'Check the printed sheet against the pre-printed TMG CLOTHINGS band. If the text sits too close to or over the band, adjust <b>Offset X</b> (across the roll) / <b>Offset Y</b> (along the feed) in 0.5mm steps; if it reads the wrong way round with the band on the wrong side, switch <b>Text Direction</b>.',
       });
     } catch (err: any) {
       this.mrpLabelQzStatus.set('error');
@@ -2250,11 +2199,24 @@ export class PackingListComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const lookup = this.mrpLabelMrpLookup();
+    const selectedLines = lineIndexes.map((idx) => lines[idx]).filter((l): l is PackingListLine => !!l);
+    // An MRP tag reading ₹0.00 can't go on a garment — stop and name the
+    // sizes, the same way DC generation refuses lines missing an MRP.
+    const missingMrp = selectedLines.filter((l) => !(mrpForLine(l, lookup) > 0));
+    if (missingMrp.length) {
+      const names = [...new Set(missingMrp.map((l) => `${l.styleNo} ${l.sleeveType ?? ''} size ${l.size} (${l.barcode || 'no barcode'})`.replace(/\s+/g, ' ')))];
+      await Swal.fire({
+        icon: 'error',
+        title: 'MRP Missing',
+        text: `MRP not found in Design Master for ${names.length} item(s): ${names.slice(0, 10).join(', ')}${names.length > 10 ? ', …' : ''}. Set the MRP in Design Master, then reopen MRP Label Print.`,
+      });
+      return;
+    }
+
     this.isPrintingMrpLabels.set(true);
     try {
-      const mrpByBarcode = this.mrpLabelMrpByBarcode();
-      const selectedLines = lineIndexes.map((idx) => lines[idx]).filter((l): l is PackingListLine => !!l);
-      const dataList = buildMrpLabelDataForLines(selectedLines, mrpByBarcode);
+      const dataList = buildMrpLabelDataForLines(selectedLines, lookup);
       if (!dataList.length) {
         await Swal.fire({ toast: true, position: 'top-end', icon: 'warning', title: 'No pieces to print in the selected line(s)', timer: 2000, showConfirmButton: false });
         return;

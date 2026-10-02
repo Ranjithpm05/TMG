@@ -1370,10 +1370,10 @@
               } @else {
                 <span class="text-xs font-semibold text-gray-400">QZ Tray status unknown — click Detect</span>
               }
-              <button (click)="printMrpRotationTest()" [disabled]="isPrintingMrpLabels() || !mrpLabelSettings().printerName"
-                title="Prints a small diagnostic label testing several ZPL rotation techniques side by side, to figure out which one this printer actually supports"
+              <button (click)="printMrpLabelTestSheet()" [disabled]="isPrintingMrpLabels() || !mrpLabelSettings().printerName || !mrpLabelPreviewPair()"
+                title="Prints only the previewed sheet once — check its alignment against the pre-printed band before a full run"
                 class="px-2.5 py-1 border border-amber-300 bg-amber-50 text-amber-700 text-[11px] font-semibold rounded-lg hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
-                Print Rotation Test
+                Test Print (1 sheet)
               </button>
             </div>
           </div>
@@ -1425,26 +1425,81 @@
                 class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
             </div>
           </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4 mt-4">
+            <div>
+              <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Printer DPI</label>
+              <select [ngModel]="mrpLabelSettings().dpi" (ngModelChange)="updateMrpLabelSetting('dpi', +$event === 300 ? 300 : 203)"
+                class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
+                <option [ngValue]="203">203 dpi (8 dots/mm)</option>
+                <option [ngValue]="300">300 dpi (12 dots/mm)</option>
+              </select>
+            </div>
+            <div class="col-span-2">
+              <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Text Direction (as fed)</label>
+              <select [ngModel]="mrpLabelSettings().rotation" (ngModelChange)="updateMrpLabelSetting('rotation', +$event === 90 ? 90 : 270)"
+                class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
+                <option [ngValue]="270">Bottom → Top · TMG band on right (default)</option>
+                <option [ngValue]="90">Top → Bottom · TMG band on left</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tag Gap (mm)</label>
+              <input type="number" step="0.5" min="0"
+                [ngModel]="mrpLabelSettings().columnGapMm" (ngModelChange)="updateMrpLabelSetting('columnGapMm', +$event)"
+                title="Liner gap between the two tags across the sheet"
+                class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Offset X (mm)</label>
+              <input type="number" step="0.5"
+                [ngModel]="mrpLabelSettings().offsetXMm" (ngModelChange)="updateMrpLabelSetting('offsetXMm', +$event)"
+                title="+ moves the print right, across the roll"
+                class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Offset Y (mm)</label>
+              <input type="number" step="0.5"
+                [ngModel]="mrpLabelSettings().offsetYMm" (ngModelChange)="updateMrpLabelSetting('offsetYMm', +$event)"
+                title="+ moves the print further along the feed"
+                class="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
+            </div>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 xl:grid-cols-[1fr,1.15fr] gap-5">
           <!-- Label Preview -->
           <div class="border border-gray-200 rounded-xl p-4">
-            <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
               <h3 class="text-sm font-bold text-gray-800">Label Preview</h3>
-              <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700">{{mrpLabelSettings().labelWidthMm}} mm × {{mrpLabelSettings().labelHeightMm}} mm</span>
+              <div class="flex items-center gap-2">
+                <div class="inline-flex rounded-lg border border-gray-300 overflow-hidden text-xs font-semibold">
+                  <button (click)="mrpLabelPreviewView.set('readable')" class="px-2.5 py-1"
+                    [class.bg-indigo-600]="mrpLabelPreviewView() === 'readable'" [class.text-white]="mrpLabelPreviewView() === 'readable'"
+                    [class.text-gray-600]="mrpLabelPreviewView() !== 'readable'">Tags</button>
+                  <button (click)="mrpLabelPreviewView.set('printer')" class="px-2.5 py-1 border-l border-gray-300"
+                    [class.bg-indigo-600]="mrpLabelPreviewView() === 'printer'" [class.text-white]="mrpLabelPreviewView() === 'printer'"
+                    [class.text-gray-600]="mrpLabelPreviewView() !== 'printer'">As Fed (Printer Dots)</button>
+                </div>
+                <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700">{{mrpLabelSettings().labelWidthMm}} mm × {{mrpLabelSettings().labelHeightMm}} mm · {{mrpLabelSettings().dpi}} dpi</span>
+              </div>
             </div>
-            <div class="border border-gray-200 rounded-lg overflow-auto bg-gray-100 flex items-center justify-center" style="min-height:260px">
-              <iframe [srcdoc]="mrpLabelPreviewHtml()"
-                [style.width.mm]="mrpLabelSettings().labelWidthMm"
-                [style.height.mm]="mrpLabelSettings().labelHeightMm"
-                style="border:none;pointer-events:none;display:block;background:#fff"
-                title="MRP label preview"></iframe>
+            <div class="border border-gray-200 rounded-lg overflow-auto bg-gray-100 flex items-center justify-center p-3" style="min-height:260px">
+              @if (mrpLabelPreview(); as preview) {
+                @if (mrpLabelPreviewView() === 'readable') {
+                  <img [src]="preview.readable" alt="MRP tags preview" class="block shadow-sm"
+                    [style.width.mm]="mrpLabelSettings().labelHeightMm * 1.4" style="max-width:none">
+                } @else {
+                  <img [src]="preview.printer" alt="MRP sheet as sent to the printer" class="block shadow-sm"
+                    [style.width.mm]="mrpLabelSettings().labelWidthMm * 1.4" style="max-width:none;image-rendering:pixelated">
+                }
+              } @else {
+                <span class="text-xs text-gray-400">No entries to preview</span>
+              }
             </div>
             @if (mrpLabelPreviewLine(); as previewLine) {
-              <p class="text-xs text-gray-400 mt-2">Previewing: <strong class="text-gray-600">{{previewLine.styleNo}} / {{previewLine.size}}</strong> — line {{mrpLabelPreviewLineIndex() + 1}} of {{mrpLabelLines().length}}</p>
+              <p class="text-xs text-gray-400 mt-2">Previewing: <strong class="text-gray-600">{{previewLine.styleNo}} / {{previewLine.size}}</strong> — line {{mrpLabelPreviewLineIndex() + 1}} of {{mrpLabelLines().length}} (paired with the next line, as on one sheet)</p>
             }
-            <p class="text-[11px] text-amber-600 mt-2">Based on this Packing List's required quantities — available as soon as the Packing List is generated, whether or not packing has started. Each 80×70mm sheet holds 2 garment tags (~39mm wide each) side by side (shown paired above). Prints only over the pre-printed TMG CLOTHINGS label stock — the branding itself is not printed by this software. Actual printing uses raw ZPL commands sent via QZ Tray — verify alignment on the real printer before a full run.</p>
+            <p class="text-[11px] text-amber-600 mt-2">Based on this Packing List's required quantities — available as soon as the Packing List is generated, whether or not packing has started. Each 80×70mm sheet holds 2 garment tags (70×39mm each) side by side; text runs along the feed. Shows only the content this process prints — exactly the dots the printer will burn (same bitmap as the ZPL). The TMG CLOTHINGS band is already pre-printed on the label stock, so the blank strip along each tag is left for it. Use Test Print (1 sheet) and Offset X/Y to align on the real printer before a full run.</p>
           </div>
 
           <!-- Lines (Design / Style / Shade / Size) -->
@@ -1465,6 +1520,7 @@
                     <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600">Design / Style</th>
                     <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600">Shade</th>
                     <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600">Size</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-gray-600">MRP</th>
                     <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600">Qty</th>
                     <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600">Status</th>
                     <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600">Preview</th>
@@ -1477,6 +1533,10 @@
                       <td class="px-3 py-2 font-semibold text-gray-800">{{l.styleNo}}{{l.sleeveType ? ' / ' + l.sleeveType : ''}}</td>
                       <td class="px-3 py-2 text-gray-600">{{l.color || '-'}}</td>
                       <td class="px-3 py-2 text-center text-gray-600">{{l.size}}</td>
+                      @let lineMrp = getMrpLabelLineMrp(l);
+                      <td class="px-3 py-2 text-right whitespace-nowrap" [class.text-gray-700]="lineMrp > 0" [class.text-red-600]="!(lineMrp > 0)" [class.font-bold]="!(lineMrp > 0)">
+                        {{lineMrp > 0 ? '₹' + lineMrp.toFixed(2) : 'Missing'}}
+                      </td>
                       <td class="px-3 py-2 text-center font-bold text-teal-700">{{l.requiredQty}}</td>
                       <td class="px-3 py-2 text-center">
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
