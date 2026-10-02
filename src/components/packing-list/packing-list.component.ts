@@ -14,7 +14,7 @@ import { firstValueFrom, Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
 import { PickList, PickListLine } from '../../models/pick-list.model';
 import { PackingCarton, PackingList, PackingListLine, PackingPartyProgress } from '../../models/packing-list.model';
-import { DCItem, DeliveryChallan } from '../../models/delivery-challan.model';
+import { DCDelivery, DCItem, DeliveryChallan } from '../../models/delivery-challan.model';
 import { PickListService } from '../../services/pick-list.service';
 import { PackingListService } from '../../services/packing-list.service';
 import { ClientService } from '../../services/client.service';
@@ -36,6 +36,18 @@ import { QzTrayService } from '../../services/qz-tray.service';
 import { getStageBadgeClass, getStageStatusLabel } from '../../services/document-stage.util';
 import { fetchLogoDataUri } from '../../services/company-logo.util';
 import { IncrementalList } from '../../services/incremental-list.util';
+import {
+  DC_DELIVERY_STATUS_LABEL,
+  DCDeliverySummary,
+  ItemSizeQty,
+  buildDeliveryItems,
+  dcWithItems,
+  effectiveDeliveries,
+  hasPartialDeliveries,
+  isUndeliveredDC,
+  summarizeDCDelivery,
+  validateDeliveryQty,
+} from '../../services/dc-delivery.util';
 import {
   BoxLabelPrinterSettings,
   buildBoxLabelZplBatch,
@@ -60,6 +72,17 @@ import {
 type ViewMode = 'list' | 'view' | 'live-pack' | 'combine' | 'multi-invoice' | 'box-label-print' | 'mrp-label-print';
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', '6XL', 'Free Size'];
+
+// One partial/balance delivery being invoiced — collected by
+// openDeliveryDialog() and handed to generateInvoice(), which bills just this
+// qty via InvoiceService.createDeliveryInvoice().
+interface PendingDelivery {
+  dc: DeliveryChallan;
+  requested: ItemSizeQty;
+  deliveryDate: Date;
+  boxCount: number;
+  remarks: string;
+}
 
 @Component({
   selector: 'app-packing-list',
@@ -373,7 +396,37 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   // A DC has no `status` field in this system — !invoiceNo is the only real
   // eligibility signal (there is also no "cancelled DC" concept to exclude).
-  invoiceEligibleDCs = computed(() => this.deliveryChallans().filter((dc) => !dc.invoiceNo));
+  // A DC already delivered in parts is never eligible here: it bills each
+  // delivery on its own (see openDeliveryDialog).
+  invoiceEligibleDCs = computed(() => this.deliveryChallans().filter((dc) => !dc.invoiceNo && isUndeliveredDC(dc)));
+
+  // ─── Partial delivery (DC History) ─────────────────────────────────────────
+
+  readonly dcDeliveryStatusLabel = DC_DELIVERY_STATUS_LABEL;
+  dcSummaryById = computed(() => new Map<string, DCDeliverySummary>(
+    this.deliveryChallans().filter((dc) => dc.id).map((dc) => [dc.id!, summarizeDCDelivery(dc)] as const)
+  ));
+  expandedDcIds = signal<Set<string>>(new Set());
+
+  toggleDcHistory(dc: DeliveryChallan): void {
+    if (!dc.id) return;
+    const next = new Set(this.expandedDcIds());
+    if (next.has(dc.id)) next.delete(dc.id); else next.add(dc.id);
+    this.expandedDcIds.set(next);
+  }
+
+  dcDeliveryBadgeClass(status: string | undefined): string {
+    switch (status) {
+      case 'delivered': return 'bg-green-100 text-green-700 border-green-200';
+      case 'partial': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'closed': return 'bg-gray-100 text-gray-700 border-gray-300';
+      default: return 'bg-amber-100 text-amber-700 border-amber-200';
+    }
+  }
+
+  dcHasPartialDeliveries(dc: DeliveryChallan): boolean {
+    return hasPartialDeliveries(dc);
+  }
 
   invoiceEligibleCustomers = computed((): { clientId: string; clientName: string }[] => {
     const map = new Map<string, string>();
@@ -1112,6 +1165,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
     } catch (err: any) {
       const text = err?.message === 'already_has_invoice'
         ? 'One or more selected Delivery Challans have already been invoiced.'
+        : err?.message === 'dc_partially_delivered'
+          ? 'One or more selected Delivery Challans are being delivered in parts — bill those with "Deliver" on the DC History tab.'
         : err?.message === 'dc_not_found'
           ? 'One or more selected Delivery Challans could not be found. Refresh and try again.'
           : err?.message ?? 'Unable to generate invoice.';
@@ -1521,12 +1576,45 @@ export class PackingListComponent implements OnInit, OnDestroy {
     await this.generateInvoice(packingList);
   }
 
-  async generateInvoice(packingList: PackingList): Promise<void> {
+  // `delivery` set = bill just that partial/balance delivery of one DC (from
+  // openDeliveryDialog); unset = the original full-quantity flow.
+  async generateInvoice(packingList: PackingList, delivery?: PendingDelivery): Promise<void> {
     if (!packingList.id || this.isGeneratingInvoice()) return;
 
-    const dcs = await this.dcService.getDCsByPackingListIdOnce(packingList.id);
+    const dcs = delivery ? [delivery.dc] : await this.dcService.getDCsByPackingListIdOnce(packingList.id);
     if (!dcs.length) {
       await Swal.fire({ icon: 'warning', title: 'No Delivery Challan Yet', text: 'Generate the Delivery Challan before creating an Invoice.' });
+      return;
+    }
+
+    // Once a DC has gone out in parts, a full-DC invoice would bill the
+    // already-delivered qty a second time — the balance can only be billed
+    // as its own delivery.
+    const partialDc = delivery ? undefined : dcs.find(hasPartialDeliveries);
+    if (partialDc) {
+      const summary = summarizeDCDelivery(partialDc);
+      const invoiceNos = summary.deliveries.map((d) => d.invoiceNo).filter(Boolean);
+      const result = await Swal.fire({
+        icon: 'info',
+        title: 'Delivered in Parts',
+        html: '<p style="font-size:13px">' + partialDc.dcNo + ' is being delivered in parts — Delivered <strong>' + summary.deliveredQty
+          + '</strong> of ' + summary.originalQty + ', Balance <strong>' + summary.balanceQty + '</strong>.'
+          + (invoiceNos.length ? '<br>Invoices: <strong>' + invoiceNos.join(', ') + '</strong>' : '') + '</p>',
+        showConfirmButton: true,
+        showDenyButton: summary.balanceQty > 0,
+        showCancelButton: true,
+        confirmButtonText: 'Reprint Invoices',
+        denyButtonText: 'Deliver Balance',
+        cancelButtonText: 'Close',
+        confirmButtonColor: '#4f46e5',
+        denyButtonColor: '#2563eb',
+      });
+      if (result.isConfirmed) {
+        const existing = await this.invoiceService.getInvoicesByDCIdsOnce([partialDc.id!]);
+        for (const inv of existing) await this.reprintInvoice(inv);
+      } else if (result.isDenied) {
+        await this.openDeliveryDialog(partialDc);
+      }
       return;
     }
 
@@ -1536,8 +1624,11 @@ export class PackingListComponent implements OnInit, OnDestroy {
     // pre-check can't.
     let allowDuplicateInvoice = false;
 
-    const existingInvoices = await this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id);
-    let dcsToInvoice = dcs;
+    const existingInvoices = delivery ? [] : await this.invoiceService.getInvoicesByPackingListIdOnce(packingList.id);
+    // A delivery bills a view of its DC cut down to just this delivery's qty,
+    // so every item/tax/total computation below works unchanged.
+    const deliveryItems = delivery ? buildDeliveryItems(delivery.dc, delivery.requested) : [];
+    let dcsToInvoice = delivery ? [dcWithItems(delivery.dc, deliveryItems)] : dcs;
 
     if (existingInvoices.length) {
       const result = await Swal.fire({
@@ -1745,7 +1836,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         dcsToInvoice.flatMap((dc) => (dc.orderNo || '').split(',').map((s) => s.trim()).filter(Boolean))
       )];
 
-      const invoice = await this.invoiceService.createInvoice({
+      const invoiceInput = {
         dcIds: dcsToInvoice.map((dc) => dc.id!),
         dcId: primaryDc.id!,
         dcNo: dcsToInvoice.map((dc) => dc.dcNo).join(', '),
@@ -1776,8 +1867,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
         transportGstNo: primaryDc.transportGstNo ?? loaded.transportGstNo ?? undefined,
         vehicleNo: formValues.vehicleNo,
         docNo: '',
-        shipmentDate: primaryDc.createdAt ?? null,
-        totalPkgs: dcsToInvoice.reduce((s, dc) => s + dc.boxCount, 0),
+        shipmentDate: delivery ? delivery.deliveryDate : (primaryDc.createdAt ?? null),
+        totalPkgs: delivery ? delivery.boxCount : dcsToInvoice.reduce((s, dc) => s + dc.boxCount, 0),
         agentName: primaryDc.agentName ?? loaded.agentName ?? '',
         items: invoiceItems,
         grossAmount, discountPct, discountAmount, freightAmount, taxableValue,
@@ -1786,14 +1877,32 @@ export class PackingListComponent implements OnInit, OnDestroy {
         igstRate: isInterState ? taxRate : 0, igstAmount, totalTaxAmount, roundOff, totalAmount,
         amountInWords: this.amountToWords(totalAmount),
         taxSummary,
-      }, { allowDuplicate: allowDuplicateInvoice });
+      };
 
-      await this.refreshInvoices();
+      let deliveryNote = '';
+      let invoice: Invoice;
+      if (delivery) {
+        const created = await this.invoiceService.createDeliveryInvoice(invoiceInput, {
+          dcId: delivery.dc.id!,
+          requested: delivery.requested,
+          deliveryDate: delivery.deliveryDate,
+          boxCount: delivery.boxCount,
+          remarks: delivery.remarks,
+        });
+        invoice = created.invoice;
+        const summary = summarizeDCDelivery(created.dc);
+        deliveryNote = '<br>Delivery #' + (invoice.deliveryNo ?? '') + ' of ' + created.dc.dcNo + ': <strong>' + deliveryItems.reduce((s, i) => s + i.total, 0)
+          + '</strong> pcs · Delivered ' + summary.deliveredQty + '/' + summary.originalQty + ' · Balance <strong>' + summary.balanceQty + '</strong>';
+      } else {
+        invoice = await this.invoiceService.createInvoice(invoiceInput, { allowDuplicate: allowDuplicateInvoice });
+      }
+
+      await Promise.all([this.refreshInvoices(), this.refreshDeliveryChallans()]);
 
       await Swal.fire({
         icon: 'success',
         title: 'Invoice ' + invoice.invoiceNo + ' Generated!',
-        html: '<p style="font-size:13px">' + invoice.invoiceNo + ': <strong>&#x20B9;' + invoice.totalAmount.toLocaleString('en-IN') + '</strong></p>',
+        html: '<p style="font-size:13px">' + invoice.invoiceNo + ': <strong>&#x20B9;' + invoice.totalAmount.toLocaleString('en-IN') + '</strong>' + deliveryNote + '</p>',
         showConfirmButton: true,
         showDenyButton: true,
         showCancelButton: true,
@@ -1809,12 +1918,271 @@ export class PackingListComponent implements OnInit, OnDestroy {
     } catch (err: any) {
       const text = err?.message === 'already_has_invoice'
         ? 'An invoice has already been generated for this Packing List.'
-        : err?.message ?? 'Unable to generate invoice.';
+        : err?.message === 'dc_partially_delivered'
+          ? 'This Delivery Challan is being delivered in parts — bill the remaining quantity with "Deliver" on the DC History tab.'
+          : err?.message ?? 'Unable to generate invoice.';
       await Swal.fire({ icon: 'error', title: 'Invoice Generation Failed', text });
-      await this.refreshInvoices();
+      await Promise.all([this.refreshInvoices(), this.refreshDeliveryChallans()]);
     } finally {
       this.isGeneratingInvoice.set(false);
     }
+  }
+
+  // ─── Partial delivery ──────────────────────────────────────────────────────
+
+  // Customer wants only part of a DC now (e.g. 80 of 100): pick the qty per
+  // design/size, capped at each one's pending balance, then bill just that
+  // through the normal Invoice Settings dialog (generateInvoice with a
+  // delivery). Defaults to the full pending balance, so the full-quantity
+  // case is one click. The rest stays open on the same DC for later
+  // deliveries until delivered in full or explicitly closed.
+  async openDeliveryDialog(dcIn: DeliveryChallan): Promise<void> {
+    if (!dcIn.id || this.isGeneratingInvoice()) return;
+    // Fresh copy — the list signal may be behind a delivery made elsewhere.
+    const dc = (await this.dcService.getDCsByIdsOnce([dcIn.id]))[0] ?? dcIn;
+    const summary = summarizeDCDelivery(dc);
+    if (summary.balanceQty <= 0) {
+      await Swal.fire({ icon: 'info', title: 'Nothing Pending', text: `${dc.dcNo} has no balance quantity left to deliver (${this.dcDeliveryStatusLabel[summary.status]}).` });
+      await this.refreshDeliveryChallans();
+      return;
+    }
+
+    const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+    const sizes = dc.sizes.length ? dc.sizes : [...new Set(summary.rows.flatMap((r) => Object.keys(r.original)))];
+    const pendingRows = summary.rows.filter((r) => r.balanceQty > 0);
+    const cell = 'padding:4px 5px;border:1px solid #e5e7eb;font-size:11px;text-align:center';
+    const head = '<tr style="background:#eef2ff">'
+      + '<th style="' + cell + ';text-align:left">Design / Shade / Sleeve</th><th style="' + cell + '">MRP</th>'
+      + sizes.map((sz) => '<th style="' + cell + '">' + esc(sz) + '</th>').join('')
+      + '<th style="' + cell + '">Balance</th></tr>';
+    const body = pendingRows.map((r) => '<tr>'
+      + '<td style="' + cell + ';text-align:left"><strong>' + esc(r.item.styleNo) + '</strong> ' + esc(r.item.color) + (r.item.sleeveType ? ' · ' + esc(r.item.sleeveType) : '')
+      + '<div style="font-size:10px;color:#6b7280">' + esc(r.item.partName) + ' · DC ' + r.originalQty + ' · Delivered ' + r.deliveredQty + '</div></td>'
+      + '<td style="' + cell + '">' + (r.item.mrp || '-') + '</td>'
+      + sizes.map((sz, si) => {
+        const pending = r.balance[sz] ?? 0;
+        if (pending <= 0) return '<td style="' + cell + ';color:#d1d5db">-</td>';
+        return '<td style="' + cell + '"><input id="dl-q-' + r.itemIndex + '-' + si + '" data-bal="' + pending + '" type="number" min="0" max="' + pending + '" step="1" value="' + pending + '"'
+          + ' style="width:52px;padding:2px 4px;border:1px solid #c7d2fe;border-radius:4px;text-align:center;font-size:12px">'
+          + '<div style="font-size:9px;color:#6b7280">of ' + pending + '</div></td>';
+      }).join('')
+      + '<td style="' + cell + ';font-weight:700">' + r.balanceQty + '</td></tr>').join('');
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const label = 'display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px';
+
+    const { value: picked } = await Swal.fire({
+      title: 'Deliver — ' + esc(dc.dcNo),
+      width: Math.min(1100, 420 + sizes.length * 70),
+      html: '<div style="text-align:left;font-size:12px">'
+        + '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;font-size:12px">'
+        + '<span>DC Qty: <strong>' + summary.originalQty + '</strong></span>'
+        + '<span>Delivered: <strong style="color:#15803d">' + summary.deliveredQty + '</strong></span>'
+        + '<span>Balance: <strong style="color:#b45309">' + summary.balanceQty + '</strong></span>'
+        + '<span>Deliveries so far: <strong>' + summary.deliveries.length + '</strong></span></div>'
+        + '<div style="display:flex;gap:6px;margin-bottom:6px">'
+        + '<button type="button" id="dl-fill" style="padding:3px 8px;font-size:11px;border:1px solid #c7d2fe;border-radius:4px;background:#eef2ff;color:#4338ca">Fill full balance</button>'
+        + '<button type="button" id="dl-clear" style="padding:3px 8px;font-size:11px;border:1px solid #e5e7eb;border-radius:4px;background:#fff;color:#374151">Clear all</button>'
+        + '<span id="dl-total" style="margin-left:auto;font-weight:700;color:#1d4ed8"></span></div>'
+        + '<div style="overflow:auto;max-height:45vh"><table style="border-collapse:collapse;width:100%">' + head + body + '</table></div>'
+        + '<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">'
+        + '<div style="flex:1;min-width:140px"><label style="' + label + '">Delivery Date</label><input id="dl-date" type="date" class="swal2-input" style="margin:0;width:100%" value="' + todayStr + '"></div>'
+        + '<div style="flex:1;min-width:120px"><label style="' + label + '">No. of Boxes</label><input id="dl-boxes" type="number" min="0" step="1" class="swal2-input" style="margin:0;width:100%" value="' + (summary.deliveries.length ? '' : dc.boxCount) + '"></div>'
+        + '<div style="flex:2;min-width:200px"><label style="' + label + '">Remarks</label><input id="dl-remarks" class="swal2-input" style="margin:0;width:100%" placeholder="e.g. Customer requested 80 now"></div>'
+        + '</div></div>',
+      showCancelButton: true,
+      confirmButtonText: 'Next: Invoice Settings',
+      confirmButtonColor: '#2563eb',
+      didOpen: (popup) => {
+        const inputs = Array.from(popup.querySelectorAll<HTMLInputElement>('input[id^="dl-q-"]'));
+        const totalEl = popup.querySelector<HTMLElement>('#dl-total')!;
+        const recalc = () => {
+          const total = inputs.reduce((s, i) => s + (Number(i.value) || 0), 0);
+          totalEl.textContent = 'This delivery: ' + total + ' pcs · Balance after: ' + (summary.balanceQty - total);
+        };
+        inputs.forEach((i) => i.addEventListener('input', recalc));
+        popup.querySelector('#dl-fill')!.addEventListener('click', () => { inputs.forEach((i) => (i.value = i.dataset['bal'] ?? '0')); recalc(); });
+        popup.querySelector('#dl-clear')!.addEventListener('click', () => { inputs.forEach((i) => (i.value = '0')); recalc(); });
+        recalc();
+      },
+      preConfirm: () => {
+        const requested: ItemSizeQty = {};
+        for (const r of pendingRows) {
+          sizes.forEach((sz, si) => {
+            const el = document.getElementById('dl-q-' + r.itemIndex + '-' + si) as HTMLInputElement | null;
+            if (!el || el.value.trim() === '') return;
+            const qty = Number(el.value);
+            (requested[r.itemIndex] ??= {})[sz] = qty;
+          });
+        }
+        const invalid = validateDeliveryQty(dc, requested);
+        if (invalid) {
+          Swal.showValidationMessage(invalid);
+          return false;
+        }
+        const dateValue = (document.getElementById('dl-date') as HTMLInputElement).value;
+        const deliveryDate = dateValue ? new Date(dateValue + 'T00:00:00') : new Date();
+        if (Number.isNaN(deliveryDate.getTime())) {
+          Swal.showValidationMessage('Enter a valid delivery date.');
+          return false;
+        }
+        const boxCount = Number((document.getElementById('dl-boxes') as HTMLInputElement).value || 0);
+        if (!Number.isInteger(boxCount) || boxCount < 0) {
+          Swal.showValidationMessage('No. of Boxes must be a whole number.');
+          return false;
+        }
+        return { requested, deliveryDate, boxCount, remarks: (document.getElementById('dl-remarks') as HTMLInputElement).value.trim() };
+      },
+    });
+    if (!picked) return;
+
+    const packingList = await this.packingListService.getPackingListByIdOnce(dc.packingListId);
+    if (!packingList) {
+      await Swal.fire({ icon: 'error', title: 'Packing List Not Found', text: 'The Packing List for this Delivery Challan could not be found.' });
+      return;
+    }
+    await this.generateInvoice(packingList, { dc, ...picked });
+  }
+
+  // Explicit cancel/close of the remaining balance — the only way a DC with
+  // pending qty stops being open. Pending pieces go back to inventory (see
+  // DeliveryChallanService.closeBalance). Offered only once part of the DC
+  // has been delivered; an untouched DC keeps the original full flow.
+  async closeDCBalance(dcIn: DeliveryChallan): Promise<void> {
+    if (!dcIn.id) return;
+    const dc = (await this.dcService.getDCsByIdsOnce([dcIn.id]))[0] ?? dcIn;
+    const summary = summarizeDCDelivery(dc);
+    if (summary.balanceQty <= 0) {
+      await Swal.fire({ icon: 'info', title: 'Nothing Pending', text: `${dc.dcNo} has no balance quantity to close.` });
+      await this.refreshDeliveryChallans();
+      return;
+    }
+    const { value: reason } = await Swal.fire({
+      icon: 'warning',
+      title: 'Close Balance — ' + dc.dcNo,
+      html: '<p style="font-size:13px;text-align:left">Delivered <strong>' + summary.deliveredQty + '</strong> of ' + summary.originalQty
+        + '. The remaining <strong>' + summary.balanceQty + '</strong> pcs will be closed (not delivered) and <strong>returned to inventory</strong>. This cannot be undone.</p>',
+      input: 'textarea',
+      inputLabel: 'Reason (required)',
+      inputPlaceholder: 'e.g. Customer cancelled the remaining quantity',
+      showCancelButton: true,
+      confirmButtonText: 'Close Balance',
+      confirmButtonColor: '#dc2626',
+      inputValidator: (value) => (!value || !value.trim() ? 'Enter a reason for closing the balance.' : undefined),
+    });
+    if (!reason) return;
+
+    let outcome: { returnedQty: number; unreturned: string[] } | null = null;
+    let error = '';
+    try {
+      outcome = await this.loadingService.run(() => this.dcService.closeBalance(dc.id!, reason));
+    } catch (err: any) {
+      error = err?.message === 'no_balance' ? 'There is no balance quantity left to close.'
+        : err?.message === 'balance_already_closed' ? 'This balance has already been closed.'
+        : err?.message ?? 'Unable to close the balance.';
+    }
+    await this.refreshDeliveryChallans();
+    if (!outcome) {
+      await Swal.fire({ icon: 'error', title: 'Close Balance Failed', text: error });
+      return;
+    }
+    await Swal.fire({
+      icon: outcome.unreturned.length ? 'warning' : 'success',
+      title: 'Balance Closed',
+      html: '<p style="font-size:13px">' + outcome.returnedQty + ' pcs returned to inventory.</p>'
+        + (outcome.unreturned.length
+          ? '<p style="font-size:12px;color:#b45309;text-align:left;margin-top:6px">Could not find an inventory record for (adjust stock manually):<br>' + outcome.unreturned.join('<br>') + '</p>'
+          : ''),
+    });
+  }
+
+  // Delivery note for one delivery: the DC layout with only that delivery's
+  // qty in the items table, plus the DC's Original/Delivered/Balance as of
+  // that delivery and the delivery history up to it.
+  async printDeliveryNote(dc: DeliveryChallan, delivery: DCDelivery): Promise<void> {
+    const win = window.open('', '_blank', 'width=960,height=820');
+    if (!win) {
+      await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
+      return;
+    }
+    dc = await this.loadingService.run(() => this.dcService.syncClientFromMaster(dc));
+    const html = `<!DOCTYPE html><html>
+<head><meta charset="utf-8"><title>DC - ${dc.dcNo} - Delivery ${delivery.deliveryNo}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#000}table{width:100%;border-collapse:collapse}</style></head>
+<body>${this.buildCustomerDCHtml(dc, 1, 1, delivery)}</body></html>`;
+    win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600);
+  }
+
+  dcDeliveriesFor(dc: DeliveryChallan): DCDelivery[] {
+    return effectiveDeliveries(dc);
+  }
+
+  // Original/Delivered/Balance block + delivery history printed under the
+  // DC's items table. `asOf` limits it to deliveries up to that one (a
+  // reprinted delivery note shows the state when it went out).
+  private buildDeliverySummaryHtml(fullDc: DeliveryChallan, asOf?: DCDelivery): string {
+    const view = asOf
+      ? { ...fullDc, deliveries: (fullDc.deliveries ?? []).filter((d) => d.deliveryNo <= asOf.deliveryNo), balanceClosure: undefined }
+      : fullDc;
+    const summary = summarizeDCDelivery(view);
+    const B = 'border:1px solid #bbb;';
+    const th = (t: string, extra = '') => `<th style="padding:4px 6px;${B}background:#e8e8e8;font-size:9.5px;font-weight:700;text-align:center;${extra}">${t}</th>`;
+    const td = (t: string | number, extra = '') => `<td style="padding:4px 6px;${B}font-size:9.5px;text-align:center;${extra}">${t}</td>`;
+    const currentByIndex = new Map((asOf?.items ?? []).map((i) => [i.itemIndex, i.total] as const));
+    const showClosed = summary.closedQty > 0;
+
+    const rows = summary.rows.filter((r) => r.originalQty > 0).map((r) => `<tr>
+      ${td(`${r.item.styleNo} ${r.item.color}${r.item.sleeveType ? ' · ' + r.item.sleeveType : ''}`, 'text-align:left;font-weight:600')}
+      ${td(r.item.mrp ? r.item.mrp.toFixed(2).replace(/\.00$/, '') : '-')}
+      ${td(r.originalQty)}
+      ${asOf ? td(currentByIndex.get(r.itemIndex) ?? 0, 'font-weight:700') : ''}
+      ${td(r.deliveredQty)}
+      ${showClosed ? td(r.closedQty) : ''}
+      ${td(r.balanceQty, 'font-weight:700')}
+    </tr>`).join('');
+    const currentTotal = asOf?.totalQty ?? 0;
+    const totalRow = `<tr style="background:#f0f0f0;font-weight:700">
+      ${td('Total', 'text-align:right;font-weight:700')}${td('')}
+      ${td(summary.originalQty, 'font-weight:700')}
+      ${asOf ? td(currentTotal, 'font-weight:900') : ''}
+      ${td(summary.deliveredQty, 'font-weight:700')}
+      ${showClosed ? td(summary.closedQty, 'font-weight:700') : ''}
+      ${td(summary.balanceQty, 'font-weight:900')}
+    </tr>`;
+
+    const fmt = (raw: any) => {
+      if (!raw) return '-';
+      try {
+        const d = raw?.toDate ? raw.toDate() : new Date(raw);
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      } catch { return '-'; }
+    };
+    const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+    const historyRows = summary.deliveries.map((d) => `<tr${asOf && d.deliveryNo === asOf.deliveryNo ? ' style="background:#eef2ff;font-weight:700"' : ''}>
+      ${td(d.deliveryNo)}${td(fmt(d.deliveryDate))}${td(d.totalQty, 'font-weight:700')}${td(d.boxCount ?? '-')}${td(d.invoiceNo || '-')}${td(esc(d.remarks) || '-', 'text-align:left')}
+    </tr>`).join('');
+    const closure = view.balanceClosure;
+    const closureRow = closure
+      ? `<tr style="background:#f9f9f9">${td('Closed')}${td(fmt(closure.closedDate))}${td(closure.totalQty, 'font-weight:700')}${td('-')}${td(closure.returnedToStock ? 'Returned to stock' : 'Partly returned')}${td(esc(closure.reason) || '-', 'text-align:left')}</tr>`
+      : '';
+
+    return `
+<div style="margin-top:12px;display:flex;gap:12px;align-items:flex-start">
+  <div style="flex:3">
+    <div style="font-size:10.5px;font-weight:700;margin-bottom:4px">Delivery Summary${asOf ? ` (as of Delivery #${asOf.deliveryNo})` : ''}</div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>${th('Design', 'text-align:left')}${th('MRP')}${th('Original Qty')}${asOf ? th('Current Delivery') : ''}${th('Delivered Qty')}${showClosed ? th('Closed Qty') : ''}${th('Balance Qty')}</tr></thead>
+      <tbody>${rows}${totalRow}</tbody>
+    </table>
+  </div>
+  <div style="flex:2">
+    <div style="font-size:10.5px;font-weight:700;margin-bottom:4px">Partial Delivery History</div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>${th('#')}${th('Date')}${th('Qty')}${th('Boxes')}${th('Invoice')}${th('Remarks', 'text-align:left')}</tr></thead>
+      <tbody>${historyRows || `<tr>${td('No deliveries yet', 'color:#888')}</tr>`}${closureRow}</tbody>
+    </table>
+  </div>
+</div>`;
   }
 
   async reprintInvoice(invoice: Invoice): Promise<void> {
@@ -3421,7 +3789,14 @@ ${allDCHtml}
     else await Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try printing again.' });
   }
 
-  private buildCustomerDCHtml(dc: DeliveryChallan, pageNum: number, totalPages: number): string {
+  // `delivery` set = a delivery note: the items table holds only that
+  // delivery's qty. Either way, a DC that has gone out in parts (or is being
+  // printed for one delivery) also gets the Delivery Summary/History block;
+  // an untouched or single-full-delivery DC prints exactly as before.
+  private buildCustomerDCHtml(dc: DeliveryChallan, pageNum: number, totalPages: number, delivery?: DCDelivery): string {
+    const fullDc = dc;
+    if (delivery) dc = dcWithItems(fullDc, delivery.items);
+    const deliverySummaryHtml = delivery || hasPartialDeliveries(fullDc) ? this.buildDeliverySummaryHtml(fullDc, delivery) : '';
     const B = 'border:1px solid #bbb;';
     const th2 = (txt: string, extra = '') =>
       `<th style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center;${extra}">${txt}</th>`;
@@ -3557,7 +3932,8 @@ ${allDCHtml}
   <div style="flex:1;text-align:right;font-size:9px;color:#666">Page ${pageNum}/${totalPages}</div>
 </div>
 
-<div style="font-size:14px;font-weight:700;text-align:center;letter-spacing:2px;text-decoration:underline;margin-bottom:8px">DELIVERY CHALLAN</div>
+<div style="font-size:14px;font-weight:700;text-align:center;letter-spacing:2px;text-decoration:underline;margin-bottom:${delivery ? '2px' : '8px'}">DELIVERY CHALLAN</div>
+${delivery ? `<div style="font-size:11px;font-weight:700;text-align:center;margin-bottom:8px">Delivery #${delivery.deliveryNo} &nbsp;|&nbsp; Delivery Date: ${toDateStr(delivery.deliveryDate)}</div>` : ''}
 
 <div style="display:flex;border:1px solid #aaa;margin-bottom:10px">
   <div style="flex:1;padding:8px 10px;border-right:1px solid #aaa;min-height:90px">
@@ -3571,8 +3947,13 @@ ${allDCHtml}
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Packed On</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order No.</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.orderNo || (dc.salesNos.length ? dc.salesNos.join(', ') : dc.packingListNo)}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Order Date</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dateStr}</td></tr>
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555">Total Qty</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${grandTotal}</td></tr>
-      <tr><td style="padding:3px 6px;font-size:10px;color:#555">No.of Box</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${dc.boxCount}</td></tr>
+      ${delivery
+        ? `<tr><td style="padding:3px 6px;font-size:10px;color:#555">DC Qty</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${fullDc.totalQty}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">This Delivery Qty</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${grandTotal}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">No.of Box</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${delivery.boxCount ?? '-'}</td></tr>
+      ${delivery.invoiceNo ? `<tr><td style="padding:3px 6px;font-size:10px;color:#555">Invoice No.</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${delivery.invoiceNo}</td></tr>` : ''}`
+        : `<tr><td style="padding:3px 6px;font-size:10px;color:#555">Total Qty</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${grandTotal}</td></tr>
+      <tr><td style="padding:3px 6px;font-size:10px;color:#555">No.of Box</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${dc.boxCount}</td></tr>`}
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Agent Name</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.agentName || '-'}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Transport</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.transport || '-'}</td></tr>
       ${dc.transportGstNo ? `<tr><td style="padding:3px 6px;font-size:10px;color:#555">Transport GSTIN</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.transportGstNo}</td></tr>` : ''}
@@ -3587,8 +3968,9 @@ ${allDCHtml}
     ${totalRow}
   </tbody>
 </table>
+${deliverySummaryHtml}
 
-<div style="margin-top:14px;font-size:10px">Remarks :</div>
+<div style="margin-top:14px;font-size:10px">Remarks :${delivery?.remarks ? ' ' + delivery.remarks.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!)) : ''}</div>
 <div style="display:flex;justify-content:space-between;margin-top:40px;gap:30px">
   <div style="flex:1;text-align:center">
     <div style="border-top:1px solid #555;padding-top:5px;font-size:10px;color:#444">Checked By</div>

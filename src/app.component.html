@@ -59,13 +59,42 @@
   </ng-template>
 
   <!-- Static sidebar for desktop -->
-  <aside class="hidden md:flex md:w-72 lg:w-80 flex-col border-r border-slate-200/70 bg-slate-950 text-white shadow-2xl">
-    <div class="flex items-center justify-start gap-3 px-6 py-6">
-      <img src="/src/assets/logo.jpeg" alt="Company Logo" width="52" height="52" class="rounded-2xl ring-2 ring-white/20">
-      <div>
-        <p class="text-xs uppercase tracking-[0.28em] text-slate-400">Production OS</p>
-        <span class="text-2xl font-black">TMG Clothings</span>
+  <aside class="hidden md:flex flex-col flex-shrink-0 border-r border-slate-200/70 bg-slate-950 text-white shadow-2xl transition-[width] duration-300 ease-in-out overflow-hidden"
+         [class]="isDesktopSidebarCollapsed() ? 'md:w-16' : 'md:w-72 lg:w-80'">
+    @if (isDesktopSidebarCollapsed()) {
+    <!-- Collapsed rail: expand toggle + logout only -->
+    <div class="flex flex-col items-center justify-between h-full py-5">
+      <div class="flex flex-col items-center gap-4">
+        <button type="button" (click)="toggleDesktopSidebar()" title="Expand sidebar" aria-label="Expand sidebar"
+                class="flex items-center justify-center h-10 w-10 rounded-xl text-slate-300 hover:bg-white/10 hover:text-white transition-colors">
+          <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+        <img src="/src/assets/logo.jpeg" alt="Company Logo" width="36" height="36" class="rounded-xl ring-2 ring-white/20">
       </div>
+      <button (click)="logout()" title="Logout" aria-label="Logout"
+              class="flex items-center justify-center h-10 w-10 rounded-xl text-slate-300 hover:bg-rose-500 hover:text-white transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        </svg>
+      </button>
+    </div>
+    } @else {
+    <div class="flex items-center justify-between gap-3 px-6 py-6">
+      <div class="flex items-center gap-3 min-w-0">
+        <img src="/src/assets/logo.jpeg" alt="Company Logo" width="52" height="52" class="rounded-2xl ring-2 ring-white/20">
+        <div class="min-w-0">
+          <p class="text-xs uppercase tracking-[0.28em] text-slate-400">Production OS</p>
+          <span class="text-2xl font-black whitespace-nowrap">TMG Clothings</span>
+        </div>
+      </div>
+      <button type="button" (click)="toggleDesktopSidebar()" title="Collapse sidebar" aria-label="Collapse sidebar"
+              class="flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white transition-colors">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+        </svg>
+      </button>
     </div>
     <nav class="flex-1 flex flex-col justify-between px-4 pb-5 overflow-y-auto">
       <ng-container *ngTemplateOutlet="navGroupsTpl"></ng-container>
@@ -79,6 +108,7 @@
         </button>
       </div>
     </nav>
+    }
   </aside>
 
   <!-- Content area -->

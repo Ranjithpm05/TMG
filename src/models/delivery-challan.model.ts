@@ -21,6 +21,48 @@ export interface DCItem {
   amount?: number;
 }
 
+// One physical dispatch against a DC. A DC's quantity can go out in several
+// deliveries (e.g. 80 now, 10 after ten days, …) — each delivery gets its own
+// Invoice (and so its own e-Invoice/E-Way Bill), created in the same
+// transaction that appends it here (InvoiceService.createDeliveryInvoice /
+// createInvoice / createInvoiceFromDCs). Items reuse DCItem with sizeQty/
+// total/amount holding just this delivery's qty; itemIndex points back at
+// DeliveryChallan.items[itemIndex] (a DC can carry the same design twice at
+// different MRPs, so matching by design alone would be ambiguous).
+export interface DCDeliveryItem extends DCItem {
+  itemIndex: number;
+}
+
+export interface DCDelivery {
+  deliveryId: string;
+  deliveryNo: number;
+  deliveryDate: any;
+  items: DCDeliveryItem[];
+  totalQty: number;
+  totalAmount: number;
+  // Boxes that went out in this delivery (DC.boxCount is the whole DC's).
+  boxCount?: number;
+  invoiceId?: string;
+  invoiceNo?: string;
+  remarks?: string;
+  createdAt: any;
+}
+
+// Undelivered balance explicitly closed (DeliveryChallanService.closeBalance).
+// The closed pieces are returned to inventory — they were deducted at packing
+// completion, long before the DC existed.
+export interface DCBalanceClosure {
+  closedDate: any;
+  items: DCDeliveryItem[];
+  totalQty: number;
+  reason: string;
+  returnedToStock: boolean;
+}
+
+// open: nothing delivered yet · partial: some delivered, balance pending ·
+// delivered: full qty delivered · closed: balance cancelled/closed.
+export type DCDeliveryStatus = 'open' | 'partial' | 'delivered' | 'closed';
+
 export interface DeliveryChallan {
   id?: string;
   dcNo: string;
@@ -62,6 +104,16 @@ export interface DeliveryChallan {
   // legacy Packing List can carry more than one DC doc.
   invoiceId?: string;
   invoiceNo?: string;
+  // Partial delivery tracking — see DCDelivery. Absent on DCs created before
+  // this existed; dc-delivery.util.ts treats such a DC as fully delivered when
+  // it already has an Invoice, otherwise as open with its full qty pending.
+  // deliveredQty/balanceQty/deliveryStatus are denormalized aggregates kept in
+  // step with deliveries[]/balanceClosure (the source of truth) for display.
+  deliveries?: DCDelivery[];
+  balanceClosure?: DCBalanceClosure;
+  deliveredQty?: number;
+  balanceQty?: number;
+  deliveryStatus?: DCDeliveryStatus;
   createdAt: any;
   updatedAt: any;
 }

@@ -10,6 +10,7 @@ import { InvoiceService } from '../../services/invoice.service';
 import type { PickList, PickListLine, PickListType } from '../../models/pick-list.model';
 import type { PackingList, PackingListLine } from '../../models/packing-list.model';
 import type { DCItem, DeliveryChallan } from '../../models/delivery-challan.model';
+import { invoicedItemSizeQty } from '../../services/dc-delivery.util';
 
 /** One ordered (SalesOrder, style/color/size) line, flattened for joining against dispatch data. */
 export interface OrderLine {
@@ -800,11 +801,18 @@ export class ReportCalcService {
       for (const dc of dcs) {
         const dcDate = this.toDate(dc.packedOn) ?? this.toDate(dc.createdAt);
         const invoice = dc.id ? invoiceByDcId.get(dc.id) : undefined;
+        // A DC delivered in parts is billed one delivery at a time, so only
+        // the share of each item/size actually invoiced so far counts toward
+        // Invoice Qty (not "an invoice exists ⇒ the whole DC was billed").
+        const invoicedQty = dc.deliveries?.length ? invoicedItemSizeQty(dc) : null;
 
-        for (const item of dc.items) {
+        for (const [itemIndex, item] of dc.items.entries()) {
           for (const [size, rawQty] of Object.entries(item.sizeQty ?? {})) {
             const qty = Number(rawQty) || 0;
             if (qty <= 0) continue;
+            const invoicedRatio = invoicedQty
+              ? Math.min(1, (invoicedQty[itemIndex]?.[size] ?? 0) / qty)
+              : (invoice ? 1 : 0);
 
             const key = bucketKey(item.partName, item.styleNo, item.color, item.sleeveType ?? '', size);
             const matched = (linesByBucket.get(key) ?? []).filter(
@@ -821,8 +829,8 @@ export class ReportCalcService {
                 rec.packingListId = packingList.id!; rec.packingListNo = packingList.packingListNo;
                 rec.dcId = dc.id ?? rec.dcId; rec.dcNo = dc.dcNo; rec.dcDate = dcDate ?? rec.dcDate;
               }
-              if (invoice) {
-                rec.invoiceQty += share;
+              if (invoice && invoicedRatio > 0) {
+                rec.invoiceQty += share * invoicedRatio;
                 rec.invoiceId = invoice.id ?? rec.invoiceId; rec.invoiceNo = invoice.invoiceNo ?? rec.invoiceNo;
               }
             };
@@ -839,7 +847,7 @@ export class ReportCalcService {
                 salesNo: dc.salesNos?.[0] ?? packingList.salesNos?.[0] ?? '',
                 clientId: packingList.clientId, clientName: packingList.clientName,
                 styleNo: item.styleNo, color: item.color, group: item.partName, size, sleeveType: item.sleeveType ?? '',
-                requiredQty: 0, pickedQty: 0, packedQty: qty, dcQty: qty, invoiceQty: invoice ? qty : 0,
+                requiredQty: 0, pickedQty: 0, packedQty: qty, dcQty: qty, invoiceQty: invoice ? qty * invoicedRatio : 0,
               });
               continue;
             }

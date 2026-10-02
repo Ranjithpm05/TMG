@@ -108,7 +108,11 @@ export function buildInvoiceProductLines(
       const dc = dcById.get(dcId);
       if (!dc) continue;
 
-      for (const dcItem of dc.items ?? []) {
+      // An invoice that billed one (possibly partial) delivery of its DC
+      // carries the exact per-size qty it billed — use that, never the DC's
+      // full items, or every partial invoice would report the whole DC.
+      const billedItems = invoice.deliveryItems?.length ? invoice.deliveryItems : (dc.items ?? []);
+      for (const dcItem of billedItems) {
         for (const [size, rawQty] of Object.entries(dcItem.sizeQty ?? {})) {
           const qty = Number(rawQty) || 0;
           if (qty <= 0) continue;

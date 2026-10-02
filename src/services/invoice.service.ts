@@ -18,6 +18,16 @@ import { PackingListService } from './packing-list.service';
 import { ClientService } from './client.service';
 import { invalidateRangeCaches, syncedRangeQuery } from './range-cache.util';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
+import type { DeliveryChallan } from '../models/delivery-challan.model';
+import {
+  ItemSizeQty,
+  buildDeliveryItems,
+  deliveryPatch,
+  hasPartialDeliveries,
+  isUndeliveredDC,
+  newDelivery,
+  validateDeliveryQty,
+} from './dc-delivery.util';
 
 @Injectable({ providedIn: 'root' })
 export class InvoiceService {
@@ -161,6 +171,12 @@ export class InvoiceService {
 
       const dcSnaps = await Promise.all(dcRefs.map((ref) => transaction.get(ref)));
       if (dcSnaps.some((snap) => !snap.exists())) throw new Error('dc_not_found');
+      const dcs = dcSnaps.map((snap) => this.deliveryChallanService.fromSnapshotData(snap.id, snap.data()));
+      // This bills every DC in full — never allowed once a DC has gone out in
+      // parts (or had its balance closed), not even via the explicit "Generate
+      // New Invoice" override: the remaining qty must go through
+      // createDeliveryInvoice() instead, or it would be billed twice.
+      if (dcs.some(hasPartialDeliveries)) throw new Error('dc_partially_delivered');
 
       const counterSnap = await transaction.get(counterRef);
       const currentSeq = counterSnap.exists() ? (Number(counterSnap.data()?.['seq']) || 0) : 0;
@@ -180,9 +196,11 @@ export class InvoiceService {
 
       transaction.set(invoiceDocRef, this.stripUndefined(invoiceData));
       transaction.update(packingListRef, { invoiceId: invoiceDocRef.id, updatedAt: serverTimestamp() });
-      for (const dcRef of dcRefs) {
-        transaction.update(dcRef, { invoiceId: invoiceDocRef.id, invoiceNo, updatedAt: serverTimestamp() });
-      }
+      dcs.forEach((dc, i) => {
+        transaction.update(dcRefs[i], this.stripUndefined({
+          invoiceId: invoiceDocRef.id, invoiceNo, ...this.fullDeliveryPatch(dc, invoiceDocRef.id, invoiceNo), updatedAt: serverTimestamp(),
+        }));
+      });
       if (counterSnap.exists()) {
         transaction.update(counterRef, { seq: nextSeq, updatedAt: serverTimestamp() });
       } else {
@@ -233,6 +251,8 @@ export class InvoiceService {
       const dcSnaps = await Promise.all(dcRefs.map((ref) => transaction.get(ref)));
       if (dcSnaps.some((snap) => !snap.exists())) throw new Error('dc_not_found');
       if (dcSnaps.some((snap) => snap.data()?.['invoiceId'])) throw new Error('already_has_invoice');
+      const dcs = dcSnaps.map((snap) => this.deliveryChallanService.fromSnapshotData(snap.id, snap.data()));
+      if (dcs.some((dc) => !isUndeliveredDC(dc))) throw new Error('dc_partially_delivered');
 
       const packingListSnaps = await Promise.all(packingListRefs.map((ref) => transaction.get(ref)));
       if (packingListSnaps.some((snap) => snap.exists() && snap.data()?.['invoiceId'])) throw new Error('already_has_invoice');
@@ -255,9 +275,11 @@ export class InvoiceService {
       };
 
       transaction.set(invoiceDocRef, this.stripUndefined(invoiceData));
-      for (const dcRef of dcRefs) {
-        transaction.update(dcRef, { invoiceId: invoiceDocRef.id, invoiceNo, updatedAt: serverTimestamp() });
-      }
+      dcs.forEach((dc, i) => {
+        transaction.update(dcRefs[i], this.stripUndefined({
+          invoiceId: invoiceDocRef.id, invoiceNo, ...this.fullDeliveryPatch(dc, invoiceDocRef.id, invoiceNo), updatedAt: serverTimestamp(),
+        }));
+      });
       for (const packingListRef of packingListRefs) {
         transaction.update(packingListRef, { invoiceId: invoiceDocRef.id, updatedAt: serverTimestamp() });
       }
@@ -369,6 +391,100 @@ export class InvoiceService {
     return { ...invoice, ...patch };
   }
 
+  // Partial (or balance) delivery of ONE DC: bills only `delivery.requested`
+  // (itemIndex -> size -> qty) and, in the same transaction, appends the
+  // matching DCDelivery to the DC — so a delivery can never exist without its
+  // Invoice or vice versa, and the Invoice/e-Invoice/E-Way Bill always carry
+  // exactly the qty that physically left. The over-delivery check
+  // (validateDeliveryQty) is re-run here against the freshly read DC, which
+  // closes the two-tabs/double-click race the dialog's own check can't.
+  // Unlike createInvoice() there is no "one invoice per Packing List" gate:
+  // several deliveries — hence several invoices — per DC is the point.
+  async createDeliveryInvoice(
+    input: Omit<Invoice, 'id' | 'invoiceNo' | 'invoiceSeq' | 'invoiceDate' | 'createdAt' | 'updatedAt' | 'packingListIds' | 'deliveryId' | 'deliveryNo' | 'deliveryItems'> & { dcIds: string[] },
+    delivery: { dcId: string; requested: ItemSizeQty; deliveryDate?: Date | null; boxCount?: number; remarks?: string },
+  ): Promise<{ invoice: Invoice; dc: DeliveryChallan }> {
+    const dcRef = doc(this.firestore, `deliveryChallans/${delivery.dcId}`);
+    const packingListRef = doc(this.firestore, `packingLists/${input.packingListId}`);
+    const counterRef = doc(this.firestore, 'counters/invoiceCounter');
+    const invoiceDocRef = doc(this.invoicesRef);
+    const fyCode = this.getFyCode();
+
+    const result = await runTransaction(this.firestore, async (transaction) => {
+      const dcSnap = await transaction.get(dcRef);
+      if (!dcSnap.exists()) throw new Error('dc_not_found');
+      const dc = this.deliveryChallanService.fromSnapshotData(dcSnap.id, dcSnap.data());
+      const invalid = validateDeliveryQty(dc, delivery.requested);
+      if (invalid) throw new Error(invalid);
+      const items = buildDeliveryItems(dc, delivery.requested);
+
+      const packingSnap = input.packingListId ? await transaction.get(packingListRef) : null;
+      const counterSnap = await transaction.get(counterRef);
+      const currentSeq = counterSnap.exists() ? (Number(counterSnap.data()?.['seq']) || 0) : 0;
+      const nextSeq = currentSeq + 1;
+      const invoiceNo = 'TMGC' + fyCode + '-' + String(nextSeq).padStart(4, '0');
+
+      const dcDelivery = newDelivery(dc, items, {
+        deliveryId: invoiceDocRef.id,
+        deliveryDate: delivery.deliveryDate,
+        boxCount: delivery.boxCount,
+        invoiceId: invoiceDocRef.id,
+        invoiceNo,
+        remarks: delivery.remarks,
+      });
+      const invoiceData = {
+        ...input,
+        dcId: dc.id!,
+        dcIds: [dc.id!],
+        packingListIds: [input.packingListId],
+        deliveryId: dcDelivery.deliveryId,
+        deliveryNo: dcDelivery.deliveryNo,
+        deliveryItems: items,
+        invoiceNo,
+        invoiceSeq: nextSeq,
+        invoiceDate: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      const patch = deliveryPatch(dc, dcDelivery);
+
+      transaction.set(invoiceDocRef, this.stripUndefined(invoiceData));
+      transaction.update(dcRef, this.stripUndefined({ ...patch, invoiceId: invoiceDocRef.id, invoiceNo, updatedAt: serverTimestamp() }));
+      if (packingSnap?.exists()) {
+        transaction.update(packingListRef, { invoiceId: invoiceDocRef.id, updatedAt: serverTimestamp() });
+      }
+      if (counterSnap.exists()) {
+        transaction.update(counterRef, { seq: nextSeq, updatedAt: serverTimestamp() });
+      } else {
+        transaction.set(counterRef, { seq: nextSeq, fy: fyCode, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      }
+
+      return { invoiceData, dc: { ...dc, ...patch, invoiceId: invoiceDocRef.id, invoiceNo } };
+    });
+
+    this.invalidateCache();
+    this.deliveryChallanService.invalidateCache();
+    this.packingListService.invalidateCache();
+    return { invoice: { id: invoiceDocRef.id, ...result.invoiceData } as Invoice, dc: result.dc };
+  }
+
+  // DC-side writes for the full-quantity flows (createInvoice /
+  // createInvoiceFromDCs): an untouched DC gets one delivery covering its
+  // whole qty, so DC History and the DC print show the same delivery history
+  // as a partially delivered one. A DC re-invoiced via "Generate New
+  // Invoice" (already has its single full delivery) just has that delivery
+  // re-pointed at the new invoice.
+  private fullDeliveryPatch(dc: DeliveryChallan, invoiceId: string, invoiceNo: string): Partial<DeliveryChallan> {
+    if (isUndeliveredDC(dc)) {
+      const items = dc.items.map((item, itemIndex) => ({ ...item, itemIndex }));
+      return deliveryPatch(dc, newDelivery(dc, items, { deliveryId: invoiceId, boxCount: dc.boxCount, invoiceId, invoiceNo }));
+    }
+    if (dc.deliveries?.length === 1) {
+      return { deliveries: [{ ...dc.deliveries[0], invoiceId, invoiceNo }] };
+    }
+    return {};
+  }
+
   private getFyCode(): string {
     const d = new Date();
     const month = d.getMonth() + 1;
@@ -420,6 +536,9 @@ export class InvoiceService {
       packingListIds: Array.isArray(raw?.packingListIds) && raw.packingListIds.length
         ? raw.packingListIds.map((s: any) => String(s))
         : (raw?.packingListId ? [String(raw.packingListId)] : []),
+      deliveryId: raw?.deliveryId ? String(raw.deliveryId) : undefined,
+      deliveryNo: raw?.deliveryNo ? Number(raw.deliveryNo) : undefined,
+      deliveryItems: Array.isArray(raw?.deliveryItems) ? raw.deliveryItems : undefined,
       salesOrderIds: Array.isArray(raw?.salesOrderIds) ? raw.salesOrderIds.map(String) : [],
       salesNos: Array.isArray(raw?.salesNos) ? raw.salesNos.map(String) : [],
       orderNo: String(raw?.orderNo ?? ''),

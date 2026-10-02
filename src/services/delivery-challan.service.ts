@@ -4,6 +4,7 @@ import {
   collection,
   doc,
   documentId,
+  increment,
   limit,
   orderBy,
   query,
@@ -13,10 +14,12 @@ import {
   where,
 } from '@angular/fire/firestore';
 import { getDocs, runTransaction } from './firestore-reads';
-import { Observable } from 'rxjs';
-import { DCItem, DeliveryChallan } from '../models/delivery-challan.model';
+import { Observable, firstValueFrom } from 'rxjs';
+import { DCBalanceClosure, DCDelivery, DCDeliveryItem, DCItem, DeliveryChallan } from '../models/delivery-challan.model';
 import { PackingListService } from './packing-list.service';
 import { ClientService } from './client.service';
+import { InventoryService } from './inventory.service';
+import { balanceItemSizeQty, buildDeliveryItems, deliveryPatch } from './dc-delivery.util';
 import { invalidateRangeCaches, syncedRangeQuery } from './range-cache.util';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 
@@ -25,6 +28,7 @@ export class DeliveryChallanService {
   private firestore = inject(Firestore);
   private packingListService = inject(PackingListService);
   private clientService = inject(ClientService);
+  private inventoryService = inject(InventoryService);
   private dcRef = collection(this.firestore, 'deliveryChallans');
 
   // Read repeatedly (Packing List and e-Invoice screens, every DC-generation
@@ -261,6 +265,104 @@ export class DeliveryChallanService {
     return { ...dc, ...patch };
   }
 
+  // Explicitly closes a DC's undelivered balance (the "remaining qty is
+  // cancelled" case — never automatic) and returns those pieces to inventory:
+  // they were deducted from currentStock at packing completion
+  // (PackingListService.deductInventoryOnCompletion), so leaving them deducted
+  // would lose them from stock for good. Inventory records are resolved from
+  // the DC's Packing List lines (inventoryId, else barcode), falling back to a
+  // styleNo/color/sleeve/size match, before the transaction (queries can't run
+  // inside one); the balance itself is re-read and recomputed inside it, so a
+  // delivery saved from another tab in the meantime can't be returned twice.
+  // Pieces that can't be matched to an inventory record are still closed but
+  // reported back in `unreturned`, so the caller can tell the user.
+  async closeBalance(dcId: string, reason: string): Promise<{ dc: DeliveryChallan; returnedQty: number; unreturned: string[] }> {
+    const dcDocRef = doc(this.dcRef, dcId);
+    const before = (await this.getDCsByIdsOnce([dcId]))[0];
+    if (!before) throw new Error('dc_not_found');
+
+    const keyOf = (styleNo: string, color: string, sleeveType: string | undefined, size: string) =>
+      `${styleNo}|${color}|${sleeveType ?? ''}|${size}`.toUpperCase();
+    const inventoryIdByKey = new Map<string, string>();
+    const barcodeByKey = new Map<string, string>();
+    const lines = before.packingListId ? await this.packingListService.getPackingListLinesOnce(before.packingListId) : [];
+    for (const line of lines) {
+      const key = keyOf(line.styleNo, line.color, line.sleeveType, line.size);
+      if (line.inventoryId && !inventoryIdByKey.has(key)) inventoryIdByKey.set(key, line.inventoryId);
+      else if (line.barcode && !barcodeByKey.has(key)) barcodeByKey.set(key, line.barcode);
+    }
+    const byBarcode = [...barcodeByKey.entries()].filter(([key]) => !inventoryIdByKey.has(key));
+    if (byBarcode.length) {
+      const found = await this.inventoryService.getInventoryByBarcodes(byBarcode.map(([, barcode]) => barcode));
+      for (const [key, barcode] of byBarcode) {
+        const inv = found.find((i) => i.barcode === barcode && i.id);
+        if (inv) inventoryIdByKey.set(key, inv.id!);
+      }
+    }
+    const pending = balanceItemSizeQty(before);
+    const balanceKeys = before.items.flatMap((item, itemIndex) =>
+      Object.keys(pending[itemIndex] ?? {}).map((size) => keyOf(item.styleNo, item.color, item.sleeveType, size)));
+    if (balanceKeys.some((key) => !inventoryIdByKey.has(key))) {
+      for (const inv of await firstValueFrom(this.inventoryService.getInventory())) {
+        const key = keyOf(inv.styleNo, inv.color, inv.sleeveType, inv.size);
+        if (inv.id && !inventoryIdByKey.has(key)) inventoryIdByKey.set(key, inv.id);
+      }
+    }
+
+    const result = await runTransaction(this.firestore, async (transaction) => {
+      const snap = await transaction.get(dcDocRef);
+      if (!snap.exists()) throw new Error('dc_not_found');
+      const dc = this.normalize({ id: snap.id, ...snap.data() });
+      if (dc.balanceClosure) throw new Error('balance_already_closed');
+      const items: DCDeliveryItem[] = buildDeliveryItems(dc, balanceItemSizeQty(dc));
+      const totalQty = items.reduce((s, i) => s + i.total, 0);
+      if (totalQty <= 0) throw new Error('no_balance');
+
+      const returns = new Map<string, number>();
+      const unreturned: string[] = [];
+      for (const item of items) {
+        for (const [size, qty] of Object.entries(item.sizeQty)) {
+          const inventoryId = inventoryIdByKey.get(keyOf(item.styleNo, item.color, item.sleeveType, size));
+          if (inventoryId) returns.set(inventoryId, (returns.get(inventoryId) ?? 0) + qty);
+          else unreturned.push(`${item.styleNo} ${item.color} ${item.sleeveType ?? ''} size ${size} × ${qty}`.replace(/\s+/g, ' '));
+        }
+      }
+      const invEntries = [...returns.entries()];
+      const invSnaps = await Promise.all(invEntries.map(([id]) => transaction.get(doc(this.firestore, `inventory/${id}`))));
+      let returnedQty = 0;
+      invEntries.forEach(([id, qty], i) => {
+        if (!invSnaps[i].exists()) {
+          unreturned.push(`inventory record ${id} × ${qty}`);
+          return;
+        }
+        transaction.update(invSnaps[i].ref, { currentStock: increment(qty), updatedAt: serverTimestamp() });
+        returnedQty += qty;
+      });
+
+      const balanceClosure: DCBalanceClosure = {
+        closedDate: Timestamp.now(),
+        items,
+        totalQty,
+        reason: reason.trim(),
+        returnedToStock: unreturned.length === 0,
+      };
+      const closed = { ...dc, balanceClosure };
+      const patch = { balanceClosure, ...deliveryPatch(closed) };
+      transaction.update(dcDocRef, this.stripUndefined({ ...patch, updatedAt: serverTimestamp() }));
+      return { dc: { ...closed, ...patch }, returnedQty, unreturned };
+    });
+
+    this.invalidateCache();
+    if (result.returnedQty > 0) this.inventoryService.invalidateCache();
+    return result;
+  }
+
+  // Exposed for InvoiceService's delivery transactions, which read DC docs
+  // directly via transaction.get() and need the same parsing.
+  fromSnapshotData(id: string, data: any): DeliveryChallan {
+    return this.normalize({ id, ...data });
+  }
+
   private stripUndefined<T>(value: T): T {
     if (Array.isArray(value)) {
       return value.filter((entry) => entry !== undefined).map((entry) => this.stripUndefined(entry)) as T;
@@ -334,8 +436,52 @@ export class DeliveryChallanService {
       totalAmount: Number(raw?.totalAmount) || 0,
       invoiceId: raw?.invoiceId ? String(raw.invoiceId) : undefined,
       invoiceNo: raw?.invoiceNo ? String(raw.invoiceNo) : undefined,
+      deliveries: Array.isArray(raw?.deliveries)
+        ? raw.deliveries.map((d: any): DCDelivery => ({
+            deliveryId: String(d?.deliveryId ?? ''),
+            deliveryNo: Number(d?.deliveryNo) || 0,
+            deliveryDate: d?.deliveryDate,
+            items: this.normalizeDeliveryItems(d?.items),
+            totalQty: Number(d?.totalQty) || 0,
+            totalAmount: Number(d?.totalAmount) || 0,
+            boxCount: d?.boxCount != null ? Number(d.boxCount) || 0 : undefined,
+            invoiceId: d?.invoiceId ? String(d.invoiceId) : undefined,
+            invoiceNo: d?.invoiceNo ? String(d.invoiceNo) : undefined,
+            remarks: d?.remarks ? String(d.remarks) : undefined,
+            createdAt: d?.createdAt,
+          }))
+        : undefined,
+      balanceClosure: raw?.balanceClosure
+        ? {
+            closedDate: raw.balanceClosure.closedDate,
+            items: this.normalizeDeliveryItems(raw.balanceClosure.items),
+            totalQty: Number(raw.balanceClosure.totalQty) || 0,
+            reason: String(raw.balanceClosure.reason ?? ''),
+            returnedToStock: raw.balanceClosure.returnedToStock === true,
+          }
+        : undefined,
+      deliveredQty: raw?.deliveredQty != null ? Number(raw.deliveredQty) || 0 : undefined,
+      balanceQty: raw?.balanceQty != null ? Number(raw.balanceQty) || 0 : undefined,
+      deliveryStatus: raw?.deliveryStatus || undefined,
       createdAt: raw?.createdAt,
       updatedAt: raw?.updatedAt,
     };
+  }
+
+  private normalizeDeliveryItems(raw: any): DCDeliveryItem[] {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item: any): DCDeliveryItem => ({
+      itemIndex: Number(item?.itemIndex) || 0,
+      partName: String(item?.partName ?? ''),
+      styleNo: String(item?.styleNo ?? ''),
+      color: String(item?.color ?? ''),
+      sleeveType: item?.sleeveType ? String(item.sleeveType) : undefined,
+      sizeQty: item?.sizeQty && typeof item.sizeQty === 'object' ? item.sizeQty : {},
+      total: Number(item?.total) || 0,
+      mrp: Number(item?.mrp) || 0,
+      mrpBySize: item?.mrpBySize && typeof item.mrpBySize === 'object' ? item.mrpBySize : undefined,
+      price: Number(item?.price) || 0,
+      amount: Number(item?.amount) || 0,
+    }));
   }
 }

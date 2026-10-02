@@ -50,6 +50,7 @@ interface NavGroup {
 }
 
 const VIEW_STORAGE_KEY = 'gom.activeView';
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'gom.sidebarCollapsed';
 const VIEW_SEQUENCE: View[] = [
   'dashboard', 'sales', 'clients', 'designs', 'transportMaster', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList', 'einvoice', 'ewayBill',
   'customerWiseReport', 'agentWiseReport', 'salesReportProductWise1', 'salesReportProductWise2', 'productWiseReport', 'salesOrderSupplyPendingReport',
@@ -178,6 +179,7 @@ export class AppComponent {
   isAuthenticated = computed(() => this.authService.isAuthenticated());
   currentView = signal<View>('dashboard');
   isSidebarOpen = signal(false);
+  isDesktopSidebarCollapsed = signal(this.readSidebarCollapsed());
 
   private readonly expandedGroups = signal<Set<string>>(new Set(NAV_GROUPS.map((g) => g.id)));
 
@@ -280,6 +282,13 @@ export class AppComponent {
 
   toggleSidebar() {
     this.isSidebarOpen.update(v => !v);
+  }
+
+  toggleDesktopSidebar() {
+    this.isDesktopSidebarCollapsed.update(v => !v);
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(this.isDesktopSidebarCollapsed()));
+    } catch { /* storage unavailable — preference just won't persist */ }
   }
 
   canView(screen: AppScreen): boolean {
@@ -394,6 +403,14 @@ export class AppComponent {
 
   private clearStoredView(): void {
     this.getStorage()?.removeItem(VIEW_STORAGE_KEY);
+  }
+
+  private readSidebarCollapsed(): boolean {
+    try {
+      return typeof window !== 'undefined' && window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
   }
 
   private getStorage(): Storage | null {

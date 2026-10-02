@@ -1,3 +1,5 @@
+import type { DCDeliveryItem } from './delivery-challan.model';
+
 export interface InvoiceItem {
   description: string;
   styleNo?: string;
@@ -43,6 +45,15 @@ export interface Invoice {
   // PackingListComponent.confirmMultiDCInvoice) can span several Packing
   // Lists, since DC:PackingList is 1:1. Always includes packingListId.
   packingListIds: string[];
+  // Set when this Invoice bills one delivery of a DC (see DCDelivery) — a
+  // partial delivery bills only part of its DC, so deliveryItems holds the
+  // per-size quantities actually billed. Reports must read those instead of
+  // the DC's own items whenever present (see invoice-product-lines.util.ts).
+  // Absent on invoices from before partial delivery existed (they billed
+  // their DC(s) in full).
+  deliveryId?: string;
+  deliveryNo?: number;
+  deliveryItems?: DCDeliveryItem[];
   salesOrderIds: string[];
   salesNos: string[];
   // Customer PO Number(s) — merged from the invoiced DC(s)' own orderNo (see
