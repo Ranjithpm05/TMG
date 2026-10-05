@@ -45,6 +45,8 @@ interface TransportDetailsForm {
 
 type FilterTab = 'all' | 'pending' | 'generated' | 'failed' | 'cancelled';
 
+const INVOICE_COPY_LABELS = ['Original-For Buyer', 'Duplicate-For Transport', 'Triplicate-For Assesee'] as const;
+
 @Component({
   selector: 'app-einvoice',
   standalone: true,
@@ -74,6 +76,11 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   filterFromDate = signal<string>('');
   filterToDate = signal<string>('');
   filterClientId = signal<string>('');
+
+  // Day-wise bulk print: every invoice dated `dayPdfDate` in one PDF.
+  dayPdfDate = signal<string>(this.todayIso());
+  dayPdfCopies = signal<'original' | 'all'>('original');
+  isPrintingDayPdf = signal(false);
 
   invoices = signal<Invoice[]>([]);
   selectedInvoice = signal<Invoice | null>(null);
@@ -687,6 +694,95 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     }
   }
 
+  private todayIso(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // Prints every non-cancelled invoice dated on the chosen day, in invoice-no
+  // order, as one print job — the browser's "Save as PDF" then gives a single
+  // PDF for the whole day. Uses the same per-invoice prep as printPdf() so a
+  // bulk copy never differs from a single print of the same invoice.
+  async printDayInvoicesPdf(): Promise<void> {
+    const day = this.dayPdfDate();
+    if (!day) {
+      Swal.fire('Select Date', 'Please select an invoice date first.', 'info');
+      return;
+    }
+    const fromMs = new Date(day).setHours(0, 0, 0, 0);
+    const toMs = new Date(day).setHours(23, 59, 59, 999);
+    const dayInvoices = this.invoices()
+      .filter((inv) => {
+        if (inv.eInvoiceStatus === 'cancelled') return false;
+        const raw = inv.invoiceDate;
+        const ms = raw ? (raw?.toDate ? raw.toDate() : new Date(raw)).getTime() : NaN;
+        return Number.isFinite(ms) && ms >= fromMs && ms <= toMs;
+      })
+      .sort((a, b) => a.invoiceNo.localeCompare(b.invoiceNo, undefined, { numeric: true }));
+    if (!dayInvoices.length) {
+      Swal.fire('No Invoices', `No invoices found for ${day.split('-').reverse().join('-')}.`, 'info');
+      return;
+    }
+
+    // Opened synchronously, before any await, so the popup isn't blocked.
+    const win = window.open('', '_blank', 'width=1100,height=860');
+    if (!win) {
+      Swal.fire({ icon: 'warning', title: 'Popup Blocked', text: 'Please allow popups for this site, then try again.' });
+      return;
+    }
+    win.document.write(`<p style="padding:20px;font-family:Arial,sans-serif;color:#475569">Preparing ${dayInvoices.length} invoice(s)…</p>`);
+    this.isPrintingDayPdf.set(true);
+    try {
+      const prepared = await this.loadingService.run(async () => {
+        const [logoDataUri, invoices] = await Promise.all([
+          fetchLogoDataUri(),
+          this.prepareInvoicesForBulkPrint(dayInvoices),
+        ]);
+        return { logoDataUri, invoices };
+      });
+      const preparedById = new Map(prepared.invoices.map((inv) => [inv.id, inv]));
+      this.invoices.update((list) => list.map((i) => preparedById.get(i.id) ?? i));
+
+      const copyLabels = this.dayPdfCopies() === 'all' ? INVOICE_COPY_LABELS : INVOICE_COPY_LABELS.slice(0, 1);
+      const company = this.companySettings();
+      const pagesHtml = prepared.invoices.map((inv) => this.buildInvoicePagesHtml(inv, company, prepared.logoDataUri, copyLabels)).join('');
+      win.document.open();
+      win.document.write(this.wrapInvoicePrintDocument(`Invoices-${day.split('-').reverse().join('-')}`, pagesHtml));
+      win.document.close();
+      setTimeout(() => win.print(), 900);
+    } catch (err: any) {
+      win.document.open();
+      win.document.write(`<pre style="padding:20px;color:#b91c1c;font-family:monospace;white-space:pre-wrap">Failed to render the invoices print.
+
+${err?.message || err}</pre>`);
+      win.document.close();
+    } finally {
+      this.isPrintingDayPdf.set(false);
+    }
+  }
+
+  // The design-info backfill and Client Master sync are refreshes, not
+  // requirements — the stored invoice is already printable. Each one is
+  // best-effort, so one Firestore hiccup ('unavailable' from a server-only
+  // read) falls back to the stored copy instead of failing the whole day's
+  // PDF. Runs a few at a time rather than firing every read at once.
+  private async prepareInvoicesForBulkPrint(invoices: Invoice[]): Promise<Invoice[]> {
+    const CONCURRENCY = 4;
+    const result: Invoice[] = new Array(invoices.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < invoices.length) {
+        const i = next++;
+        let inv = invoices[i];
+        try { inv = await this.invoiceService.backfillItemDesignInfoIfNeeded(inv); } catch (err) { console.warn(`Design backfill skipped for ${inv.invoiceNo}`, err); }
+        try { inv = await this.invoiceService.syncClientFromMaster(inv); } catch (err) { console.warn(`Client sync skipped for ${inv.invoiceNo}`, err); }
+        result[i] = inv;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, invoices.length) }, worker));
+    return result;
+  }
+
   // The NIC/IRP standard "e-Invoice" acknowledgement print (IRN/QR/Transaction
   // Details/Party Details/E-Way Bill sections) — a distinct document from the
   // commercial Tax Invoice above. Only meaningful once an IRN actually
@@ -917,6 +1013,31 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   // ─── HTML Invoice Builder ──────────────────────────────────────────────────
 
   private buildInvoiceHtml(invoice: Invoice, company: CompanySettings | null, logoDataUri: string): string {
+    return this.wrapInvoicePrintDocument(
+      `Invoice - ${invoice.invoiceNo}`,
+      this.buildInvoicePagesHtml(invoice, company, logoDataUri, INVOICE_COPY_LABELS)
+    );
+  }
+
+  // Shared print shell for one or many invoices — each `.page` breaks onto
+  // a new A4 sheet, so concatenated pages print as one multi-invoice PDF.
+  private wrapInvoicePrintDocument(title: string, pagesHtml: string): string {
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:12px;color:#000}
+  table{width:100%;border-collapse:collapse}
+  .page{padding:10px 14px}
+  @media print{
+    @page{size:A4;margin:10mm}
+    .page{page-break-after:always}
+    .page:last-child{page-break-after:auto}
+  }
+</style>
+</head><body>${pagesHtml}</body></html>`;
+  }
+
+  private buildInvoicePagesHtml(invoice: Invoice, company: CompanySettings | null, logoDataUri: string, copyLabels: readonly string[]): string {
     const B = 'border:1px solid #ccc;';
     const th = (txt: string, extra = '') =>
       `<th style="padding:4px 6px;${B}background:#e8e8e8;font-size:11px;font-weight:700;text-align:center;${extra}">${txt}</th>`;
@@ -1138,23 +1259,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
 </div>`;
     };
 
-    const pages = ['Original-For Buyer', 'Duplicate-For Transport', 'Triplicate-For Assesee']
-      .map(buildCopy)
-      .join('');
-
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice - ${invoice.invoiceNo}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,sans-serif;font-size:12px;color:#000}
-  table{width:100%;border-collapse:collapse}
-  .page{padding:10px 14px}
-  @media print{
-    @page{size:A4;margin:10mm}
-    .page{page-break-after:always}
-    .page:last-child{page-break-after:auto}
-  }
-</style>
-</head><body>${pages}</body></html>`;
+    return copyLabels.map(buildCopy).join('');
   }
 
   // ─── E-Invoice (NIC/IRP) Document Builder ──────────────────────────────────

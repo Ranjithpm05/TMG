@@ -113,6 +113,28 @@
       <div class="text-xs text-slate-500 ml-auto self-end pb-1">
         {{ filteredInvoices().length }} of {{ invoices().length }} invoice(s)
       </div>
+      <div class="flex items-end gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 sm:border-l border-slate-200 sm:pl-3">
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Day-wise PDF</label>
+          <input type="date" [ngModel]="dayPdfDate()" (ngModelChange)="dayPdfDate.set($event)"
+            class="border border-slate-200 rounded-lg text-sm px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Copies</label>
+          <select [ngModel]="dayPdfCopies()" (ngModelChange)="dayPdfCopies.set($event)"
+            class="border border-slate-200 rounded-lg text-sm px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <option value="original">Original only</option>
+            <option value="all">All 3 copies</option>
+          </select>
+        </div>
+        <button (click)="printDayInvoicesPdf()" [disabled]="isPrintingDayPdf() || isLoading()"
+          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-slate-800 text-white font-semibold hover:bg-slate-900 disabled:opacity-60">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          {{ isPrintingDayPdf() ? 'Preparing…' : 'Download PDF' }}
+        </button>
+      </div>
     </div>
 
     <!-- Invoice Table -->
