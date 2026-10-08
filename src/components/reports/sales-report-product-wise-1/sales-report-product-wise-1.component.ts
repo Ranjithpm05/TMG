@@ -81,6 +81,7 @@ export class SalesReportProductWise1Component {
     const toMs = end.getTime();
     return this.invoices().filter((invoice) => {
       if (customerId && invoice.clientId !== customerId) return false;
+      if (!this.data.matchesSelectedAgent(invoice.clientId)) return false;
       const invoiceDate = this.toDate(invoice.invoiceDate);
       const ms = invoiceDate?.getTime();
       return ms !== undefined && Number.isFinite(ms) && ms >= fromMs && ms <= toMs;
@@ -113,7 +114,7 @@ export class SalesReportProductWise1Component {
 
   // Rebuilt when Design Master arrives too (barcode/group/cost come from it).
   private readonly rawLines = computed<InvoiceProductLine[]>(() =>
-    buildInvoiceProductLines(this.filteredInvoices(), this.data.designs(), this.dcs())
+    buildInvoiceProductLines(this.filteredInvoices(), this.data.designs(), this.dcs(), { includeFreight: true })
   );
 
   protected readonly isLoading = computed(() => this.isLoadingInvoices() || this.isBuildingLines());

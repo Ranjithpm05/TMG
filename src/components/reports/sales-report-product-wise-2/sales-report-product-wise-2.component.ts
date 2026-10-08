@@ -11,12 +11,16 @@ import { DeliveryChallanService } from '../../../services/delivery-challan.servi
 import type { Invoice } from '../../../models/invoice.model';
 import type { DeliveryChallan } from '../../../models/delivery-challan.model';
 import { LoadingService } from '../../../services/loading.service';
-import { exportRowsToExcel, exportRowsToPdf, printReportRows, type ExportMeta } from '../report-export.util';
+import { exportRowsToExcel, exportRowsToPdf, printReportRows, type ExportMeta, type ExportRowOpts } from '../report-export.util';
 import { ReportStatusComponent } from '../report-status/report-status.component';
 import { ReportPaginationComponent } from '../report-pagination/report-pagination.component';
 import { buildInvoiceProductLines, fetchInvoiceDCs, invoiceDcIds, type InvoiceProductLine } from '../invoice-product-lines.util';
 
 const REPORT_TITLE = 'Sales Report - Product-wise Format 2';
+
+// The Grand Total label sits in the Fabric Description column (index 5),
+// outside the default label check's columns 1-3.
+const GRAND_TOTAL_ROW_OPTS: ExportRowOpts = { isGrandTotalRow: (row) => row[5] === 'Grand Total' };
 
 // Matches the SIZE_ORDER convention used in style-wise-report/pick-list/
 // packing-list/goods-inward components — numeric sizes (e.g. 36/38/40) fall
@@ -94,6 +98,7 @@ export class SalesReportProductWise2Component {
     const toMs = end.getTime();
     return this.invoices().filter((invoice) => {
       if (customerId && invoice.clientId !== customerId) return false;
+      if (!this.data.matchesSelectedAgent(invoice.clientId)) return false;
       const invoiceDate = this.toDate(invoice.invoiceDate);
       const ms = invoiceDate?.getTime();
       return ms !== undefined && Number.isFinite(ms) && ms >= fromMs && ms <= toMs;
@@ -203,7 +208,7 @@ export class SalesReportProductWise2Component {
     }
     await this.loadingService.run(async () => {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      await exportRowsToPdf(rows, REPORT_TITLE, this.data.filterSummary(), undefined, this.exportMeta());
+      await exportRowsToPdf(rows, REPORT_TITLE, this.data.filterSummary(), GRAND_TOTAL_ROW_OPTS, this.exportMeta());
     });
   }
 
@@ -215,7 +220,7 @@ export class SalesReportProductWise2Component {
     }
     await this.loadingService.run(async () => {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      printReportRows(rows, REPORT_TITLE, this.data.filterSummary(), undefined, this.exportMeta());
+      printReportRows(rows, REPORT_TITLE, this.data.filterSummary(), GRAND_TOTAL_ROW_OPTS, this.exportMeta());
     });
   }
 

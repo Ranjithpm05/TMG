@@ -86,10 +86,31 @@ export async function fetchInvoiceDCs(dcIds: string[], dcService: DeliveryChalla
   return dcIds.length ? dcService.getDCsByIdsOnce(dcIds) : [];
 }
 
+/**
+ * The price the invoice actually billed, per styleNo|sleeveType|mrp (invoice
+ * lines are already one-per-MRP). Some DCs were saved with price === mrp (no
+ * client margin applied), so the DC's own price/mrp ratio can't be trusted
+ * for a billed amount — the invoice line is the source of truth.
+ */
+function buildInvoicePriceMap(invoice: Invoice): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const item of invoice.items ?? []) {
+    const price = Number(item.price);
+    const mrp = Number(item.mrp);
+    if (!(price > 0) || !(mrp > 0)) continue;
+    map.set(`${item.styleNo ?? ''}|${item.sleeveType ?? ''}|${mrp}`, price);
+    // Sleeve-less fallback key for lines whose sleeve text differs from the DC's.
+    if (!map.has(`${item.styleNo ?? ''}||${mrp}`)) map.set(`${item.styleNo ?? ''}||${mrp}`, price);
+  }
+  return map;
+}
+
+/** includeFreight: adds one 'FREIGHT' row per invoice carrying its freightAmount (taxed with goods) so amount totals tie to the invoice — only for amount-based reports (Format 1), not qty pivots. */
 export function buildInvoiceProductLines(
   invoices: Invoice[],
   designs: Design[],
-  dcs: DeliveryChallan[]
+  dcs: DeliveryChallan[],
+  options: { includeFreight?: boolean } = {}
 ): InvoiceProductLine[] {
   const dcById = new Map(dcs.filter((dc) => dc.id).map((dc) => [dc.id!, dc] as const));
   const groupByStyleColor = buildGroupByStyleColor(designs);
@@ -103,27 +124,31 @@ export function buildInvoiceProductLines(
     const cgstRate = Number(invoice.cgstRate) || 0;
     const sgstRate = Number(invoice.sgstRate) || 0;
     const igstRate = Number(invoice.igstRate) || 0;
+    const priceByStyleMrp = buildInvoicePriceMap(invoice);
 
     for (const dcId of invoice.dcIds ?? []) {
       const dc = dcById.get(dcId);
-      if (!dc) continue;
 
       // An invoice that billed one (possibly partial) delivery of its DC
       // carries the exact per-size qty it billed — use that, never the DC's
-      // full items, or every partial invoice would report the whole DC.
-      const billedItems = invoice.deliveryItems?.length ? invoice.deliveryItems : (dc.items ?? []);
+      // full items, or every partial invoice would report the whole DC. It
+      // is self-sufficient, so it still reports if the DC was later deleted.
+      const billedItems = invoice.deliveryItems?.length ? invoice.deliveryItems : (dc?.items ?? []);
       for (const dcItem of billedItems) {
         for (const [size, rawQty] of Object.entries(dcItem.sizeQty ?? {})) {
           const qty = Number(rawQty) || 0;
           if (qty <= 0) continue;
 
           const mrp = dcItem.mrpBySize?.[size] ?? dcItem.mrp;
-          // Same MRP-split precedent used to redisplay an older multi-MRP DC
-          // item (packing-list.component.ts ~line 3057-3067): recover the
-          // per-size margin-adjusted price from the item's own mrp/price
-          // ratio rather than re-deriving Client Margin% again here.
+          // Billed price from the invoice line first; only when no line
+          // matches, fall back to the MRP-split precedent used to redisplay
+          // an older multi-MRP DC item (packing-list.component.ts ~line
+          // 3057-3067) — the item's own price/mrp ratio.
+          const billedPrice =
+            priceByStyleMrp.get(`${dcItem.styleNo ?? ''}|${dcItem.sleeveType ?? ''}|${Number(mrp)}`) ??
+            priceByStyleMrp.get(`${dcItem.styleNo ?? ''}||${Number(mrp)}`);
           const factor = dcItem.mrp > 0 && dcItem.price != null ? dcItem.price / dcItem.mrp : 1;
-          const wsp = round2(mrp * factor);
+          const wsp = billedPrice ?? round2(mrp * factor);
 
           const sizeEntry: SizePrice | undefined = sizeEntryByStyleColorSize.get(`${dcItem.styleNo}|${dcItem.color}|${size}`);
           const group = groupByStyleColor.get(`${dcItem.styleNo}|${dcItem.color}`) ?? '';
@@ -163,6 +188,39 @@ export function buildInvoiceProductLines(
           });
         }
       }
+    }
+
+    const freight = round2(Number(invoice.freightAmount) || 0);
+    if (options.includeFreight && freight > 0) {
+      const cgstAmount = round2((freight * cgstRate) / 100);
+      const sgstAmount = round2((freight * sgstRate) / 100);
+      const igstAmount = round2((freight * igstRate) / 100);
+      rows.push({
+        invoiceNo: invoice.invoiceNo,
+        invoiceDate,
+        clientName: invoice.clientName || 'Unknown Client',
+        barcode: '',
+        group: '',
+        fabricDescription: '',
+        styleNo: 'FREIGHT',
+        color: '',
+        sleeveType: '',
+        size: '',
+        costPrice: 0,
+        mrp: 0,
+        wsp: 0,
+        qty: 0,
+        grossAmount1: freight,
+        discount: 0,
+        grossAmount2: freight,
+        cgstRate,
+        cgstAmount,
+        sgstRate,
+        sgstAmount,
+        igstRate,
+        igstAmount,
+        totalAmount: round2(freight + cgstAmount + sgstAmount + igstAmount),
+      });
     }
   }
 

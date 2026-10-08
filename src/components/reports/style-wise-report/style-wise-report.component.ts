@@ -51,6 +51,17 @@ interface StyleWiseReport {
 }
 
 // Intermediate accumulator while scanning order items.
+/** Dispatch side of one pivot row, summed from skuFulfillments(). */
+interface DispatchEntry {
+  styleNo: string;
+  color: string;
+  sleeveType: string;
+  dispatchedBySize: Map<string, number>;
+  dispatchedQty: number;
+  extraQty: number;
+  pendingQty: number;
+}
+
 interface StyleAccumulatorEntry {
   fabricDescription: string;
   colors: Map<string, { color: string; sleeveType: string; qtyBySize: Map<string, number>; value: number }>;
@@ -214,8 +225,20 @@ export class StyleWiseReportComponent {
       }
     }
 
-    const sizes = this.sortSizes([...sizeSet]);
     const dispatchByStyleColor = this.buildDispatchByStyleColor();
+    // Dispatch with no matching order row (extra/additional scanned items, a
+    // color or sleeve that differs from the order) still gets a row, so
+    // Dispatched/Extra totals tie to the other reports.
+    for (const entry of dispatchByStyleColor.values()) {
+      if (entry.dispatchedQty <= 0) continue;
+      for (const size of entry.dispatchedBySize.keys()) sizeSet.add(size);
+      let style = styleMap.get(entry.styleNo);
+      if (!style) { style = { fabricDescription: 'Uncategorized', colors: new Map() }; styleMap.set(entry.styleNo, style); }
+      const colorKey = `${entry.color}||${entry.sleeveType}`;
+      if (!style.colors.has(colorKey)) style.colors.set(colorKey, { color: entry.color, sleeveType: entry.sleeveType, qtyBySize: new Map(), value: 0 });
+    }
+
+    const sizes = this.sortSizes([...sizeSet]);
     const styles = this.buildStyleGroups(styleMap, sizes, dispatchByStyleColor);
     const grandTotal = {
       totalQty: styles.reduce((s, st) => s + st.totalQty, 0),
@@ -229,17 +252,19 @@ export class StyleWiseReportComponent {
   }
 
   /** Dispatch side, sourced from the shared calc layer (not re-derived) and re-keyed by style+color+sleeve+size to match this report's pivot shape. */
-  private buildDispatchByStyleColor(): Map<string, { dispatchedBySize: Map<string, number>; dispatchedQty: number }> {
-    const map = new Map<string, { dispatchedBySize: Map<string, number>; dispatchedQty: number }>();
+  private buildDispatchByStyleColor(): Map<string, DispatchEntry> {
+    const map = new Map<string, DispatchEntry>();
     for (const f of this.calc.skuFulfillments()) {
       const styleNo = f.styleNo || 'Unknown';
       const color = f.color || 'Unspecified';
       const sleeveType = f.sleeveType || '-';
       const key = `${styleNo}||${color}||${sleeveType}`;
       let entry = map.get(key);
-      if (!entry) { entry = { dispatchedBySize: new Map(), dispatchedQty: 0 }; map.set(key, entry); }
+      if (!entry) { entry = { styleNo, color, sleeveType, dispatchedBySize: new Map(), dispatchedQty: 0, extraQty: 0, pendingQty: 0 }; map.set(key, entry); }
       entry.dispatchedBySize.set(f.size, (entry.dispatchedBySize.get(f.size) ?? 0) + f.dispatchedQty);
       entry.dispatchedQty += f.dispatchedQty;
+      entry.extraQty += f.extraQty;
+      entry.pendingQty += f.pendingQty;
     }
     return map;
   }
@@ -272,7 +297,7 @@ export class StyleWiseReportComponent {
   private buildStyleGroups(
     styleMap: Map<string, StyleAccumulatorEntry>,
     sizes: string[],
-    dispatchByStyleColor: Map<string, { dispatchedBySize: Map<string, number>; dispatchedQty: number }>
+    dispatchByStyleColor: Map<string, DispatchEntry>
   ): StyleGroup[] {
     return [...styleMap.entries()]
       .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
@@ -287,12 +312,15 @@ export class StyleWiseReportComponent {
             const wsp = totalQty > 0 ? this.round2(entry.value / totalQty) : 0;
             const dispatch = dispatchByStyleColor.get(key);
             const dispatchedQty = dispatch?.dispatchedQty ?? 0;
+            // Extra/Pending summed per Sales Order x size (skuFulfillments),
+            // same as every other report — netting them on this aggregated
+            // row would let one size's extra cancel another size's pending.
             return {
               key, color: entry.color, sleeveType: entry.sleeveType, qtyBySize,
               dispatchedBySize: Object.fromEntries(dispatch?.dispatchedBySize ?? new Map()),
               totalQty, dispatchedQty,
-              extraQty: Math.max(0, dispatchedQty - totalQty),
-              pendingQty: Math.max(0, totalQty - dispatchedQty),
+              extraQty: dispatch ? dispatch.extraQty : 0,
+              pendingQty: dispatch ? dispatch.pendingQty : totalQty,
               wsp, value,
             };
           });

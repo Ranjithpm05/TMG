@@ -16,8 +16,11 @@ import { ReportPaginationComponent } from '../report-pagination/report-paginatio
 const REPORT_TITLE = 'HSN / GST Wise Sales Report';
 
 // One row per Invoice + HSN combination — an invoice with multiple HSN codes
-// across its line items produces one row per code, all sharing the same
-// Invoice#/Date/Customer/GST No/Total Amount.
+// across its line items produces one row per code, sharing Invoice#/Date/
+// Customer/GST No. Every amount column, Total Amount included, is that HSN
+// row's own share — the invoice's round-off sits on its first row only — so
+// the rows of one invoice add up to the invoice total and any Excel
+// filter/sum on HSN stays correct.
 interface HsnGstRow {
   invoiceNo: string;
   invoiceDate: Date | null;
@@ -31,6 +34,7 @@ interface HsnGstRow {
   cgstAmount: number;
   sgstAmount: number;
   igstAmount: number;
+  roundOff: number;
   totalAmount: number;
 }
 
@@ -43,6 +47,7 @@ interface HsnGstTotals {
   cgstAmount: number;
   sgstAmount: number;
   igstAmount: number;
+  roundOff: number;
   totalAmount: number;
 }
 
@@ -193,16 +198,16 @@ export class HsnGstWiseReportComponent {
     const { rows, grandTotal } = this.report();
     const header = [
       '#', 'Invoice#', 'Invoice Date', 'Customer', 'GST No', 'HSN', 'Qty Invoiced',
-      'Gross Amount1', 'Discount', 'Gross Amount2', 'CGST Amount', 'SGST Amount', 'IGST Amount', 'Total Amount',
+      'Gross Amount1', 'Discount', 'Gross Amount2', 'CGST Amount', 'SGST Amount', 'IGST Amount', 'Round Off', 'Total Amount',
     ];
     const body: any[][] = rows.map((row, i) => [
       i + 1, row.invoiceNo, this.formatDate(row.invoiceDate), row.clientName, row.clientGstin, row.hsnSac,
-      row.qty, row.grossAmount1, row.discount, row.grossAmount2, row.cgstAmount, row.sgstAmount, row.igstAmount, row.totalAmount,
+      row.qty, row.grossAmount1, row.discount, row.grossAmount2, row.cgstAmount, row.sgstAmount, row.igstAmount, row.roundOff, row.totalAmount,
     ]);
     body.push([
       '', 'Grand Total', '', '', '', '',
       grandTotal.qty, grandTotal.grossAmount1, grandTotal.discount, grandTotal.grossAmount2,
-      grandTotal.cgstAmount, grandTotal.sgstAmount, grandTotal.igstAmount, grandTotal.totalAmount,
+      grandTotal.cgstAmount, grandTotal.sgstAmount, grandTotal.igstAmount, grandTotal.roundOff, grandTotal.totalAmount,
     ]);
     return [header, ...body];
   }
@@ -222,7 +227,7 @@ export class HsnGstWiseReportComponent {
 
       const taxSummary = invoice.taxSummary?.length ? invoice.taxSummary : this.fallbackTaxSummary(invoice, grossByHsn);
       const invoiceDate = this.toDate(invoice.invoiceDate);
-      const totalAmount = this.round2(invoice.totalAmount);
+      const invoiceRows: HsnGstRow[] = [];
 
       for (const tax of taxSummary) {
         const hsn = this.data.toText(tax.hsnSac) || 'N/A';
@@ -230,7 +235,10 @@ export class HsnGstWiseReportComponent {
         // discount — its gross is its taxable value.
         const grossAmount1 = this.round2(grossByHsn.get(hsn) ?? tax.taxableValue);
         const grossAmount2 = this.round2(tax.taxableValue);
-        rows.push({
+        const cgstAmount = this.round2(tax.cgstAmount);
+        const sgstAmount = this.round2(tax.sgstAmount);
+        const igstAmount = this.round2(tax.igstAmount);
+        invoiceRows.push({
           invoiceNo: invoice.invoiceNo,
           invoiceDate,
           clientName: invoice.clientName || 'Unknown Client',
@@ -240,11 +248,23 @@ export class HsnGstWiseReportComponent {
           grossAmount1,
           discount: this.round2(grossAmount1 - grossAmount2),
           grossAmount2,
-          cgstAmount: this.round2(tax.cgstAmount),
-          sgstAmount: this.round2(tax.sgstAmount),
-          igstAmount: this.round2(tax.igstAmount),
-          totalAmount,
+          cgstAmount,
+          sgstAmount,
+          igstAmount,
+          roundOff: 0,
+          totalAmount: this.round2(grossAmount2 + cgstAmount + sgstAmount + igstAmount),
         });
+      }
+
+      // Round-off is whatever separates the HSN rows from the saved invoice
+      // total (invoice.roundOff for current invoices; derived the same way for
+      // older ones that never stored it) — booked once, on the first row.
+      if (invoiceRows.length) {
+        const rowsTotal = invoiceRows.reduce((sum, row) => sum + row.totalAmount, 0);
+        const roundOff = this.round2((Number(invoice.totalAmount) || 0) - rowsTotal);
+        invoiceRows[0].roundOff = roundOff;
+        invoiceRows[0].totalAmount = this.round2(invoiceRows[0].totalAmount + roundOff);
+        rows.push(...invoiceRows);
       }
     }
 
@@ -259,7 +279,7 @@ export class HsnGstWiseReportComponent {
     const seenInvoices = new Set<string>();
     const total: HsnGstTotals = {
       invoiceCount: 0, qty: 0, grossAmount1: 0, discount: 0, grossAmount2: 0,
-      cgstAmount: 0, sgstAmount: 0, igstAmount: 0, totalAmount: 0,
+      cgstAmount: 0, sgstAmount: 0, igstAmount: 0, roundOff: 0, totalAmount: 0,
     };
     for (const row of rows) {
       total.qty += row.qty;
@@ -269,12 +289,9 @@ export class HsnGstWiseReportComponent {
       total.cgstAmount += row.cgstAmount;
       total.sgstAmount += row.sgstAmount;
       total.igstAmount += row.igstAmount;
-      // Total Amount is an invoice-level figure repeated on every HSN row of
-      // that invoice — sum it once per invoice, not once per row.
-      if (!seenInvoices.has(row.invoiceNo)) {
-        seenInvoices.add(row.invoiceNo);
-        total.totalAmount += row.totalAmount;
-      }
+      total.roundOff += row.roundOff;
+      total.totalAmount += row.totalAmount;
+      seenInvoices.add(row.invoiceNo);
     }
     total.invoiceCount = seenInvoices.size;
     total.grossAmount1 = this.round2(total.grossAmount1);
@@ -283,6 +300,7 @@ export class HsnGstWiseReportComponent {
     total.cgstAmount = this.round2(total.cgstAmount);
     total.sgstAmount = this.round2(total.sgstAmount);
     total.igstAmount = this.round2(total.igstAmount);
+    total.roundOff = this.round2(total.roundOff);
     total.totalAmount = this.round2(total.totalAmount);
     return total;
   }
@@ -317,6 +335,7 @@ export class HsnGstWiseReportComponent {
     const toMs = end.getTime();
     return this.invoices().filter((invoice) => {
       if (customerId && invoice.clientId !== customerId) return false;
+      if (!this.data.matchesSelectedAgent(invoice.clientId)) return false;
       const invoiceDate = this.toDate(invoice.invoiceDate);
       const ms = invoiceDate?.getTime();
       return ms !== undefined && Number.isFinite(ms) && ms >= fromMs && ms <= toMs;

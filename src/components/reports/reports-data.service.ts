@@ -259,6 +259,14 @@ export class ReportsDataService {
     return true;
   }
 
+  /** Agent filter for invoice-based reports — same client-resolved agent the Sales-Order filteredOrders pipeline uses. */
+  matchesSelectedAgent(clientId: string | undefined): boolean {
+    const agent = this.selectedAgent();
+    if (!agent) return true;
+    const client = clientId ? this.clientById().get(clientId) : undefined;
+    return !!client && this.resolveAgentName(client) === agent;
+  }
+
   resolveAgentName(client: Client): string {
     const agent = this.toText(client.agentName);
     if (agent) return agent;

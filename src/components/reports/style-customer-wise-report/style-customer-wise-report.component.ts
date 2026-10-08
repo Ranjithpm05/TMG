@@ -62,6 +62,19 @@ interface StyleCustomerWiseReport {
 }
 
 // Intermediate accumulator while scanning order items.
+/** Dispatch side of one pivot row, summed from skuFulfillments(). */
+interface DispatchEntry {
+  clientName: string;
+  agentName: string;
+  styleNo: string;
+  color: string;
+  sleeveType: string;
+  dispatchedBySize: Map<string, number>;
+  dispatchedQty: number;
+  extraQty: number;
+  pendingQty: number;
+}
+
 interface StyleAccumulatorEntry {
   fabricDescription: string;
   colors: Map<string, { color: string; sleeveType: string; qtyBySize: Map<string, number>; value: number }>;
@@ -237,8 +250,23 @@ export class StyleCustomerWiseReportComponent {
       }
     }
 
-    const sizes = this.sortSizes([...sizeSet]);
     const dispatchByCustomerStyleColor = this.buildDispatchByCustomerStyleColor();
+    // Dispatch with no matching order row (extra/additional scanned items, a
+    // color or sleeve that differs from the order) still gets a row, so
+    // Dispatched/Extra totals tie to the other reports.
+    for (const entry of dispatchByCustomerStyleColor.values()) {
+      if (entry.dispatchedQty <= 0) continue;
+      for (const size of entry.dispatchedBySize.keys()) sizeSet.add(size);
+      let styleMap = customerMap.get(entry.clientName);
+      if (!styleMap) { styleMap = new Map(); customerMap.set(entry.clientName, styleMap); }
+      if (!agentByCustomer.has(entry.clientName)) agentByCustomer.set(entry.clientName, entry.agentName);
+      let style = styleMap.get(entry.styleNo);
+      if (!style) { style = { fabricDescription: 'Uncategorized', colors: new Map() }; styleMap.set(entry.styleNo, style); }
+      const colorKey = `${entry.color}||${entry.sleeveType}`;
+      if (!style.colors.has(colorKey)) style.colors.set(colorKey, { color: entry.color, sleeveType: entry.sleeveType, qtyBySize: new Map(), value: 0 });
+    }
+
+    const sizes = this.sortSizes([...sizeSet]);
     const customers: CustomerStyleGroup[] = [...customerMap.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([clientName, styleMap]) => {
@@ -267,8 +295,8 @@ export class StyleCustomerWiseReportComponent {
   }
 
   /** Dispatch side, sourced from the shared calc layer (not re-derived) and re-keyed by customer+style+color+sleeve+size to match this report's pivot shape. */
-  private buildDispatchByCustomerStyleColor(): Map<string, { dispatchedBySize: Map<string, number>; dispatchedQty: number }> {
-    const map = new Map<string, { dispatchedBySize: Map<string, number>; dispatchedQty: number }>();
+  private buildDispatchByCustomerStyleColor(): Map<string, DispatchEntry> {
+    const map = new Map<string, DispatchEntry>();
     for (const f of this.calc.skuFulfillments()) {
       const clientName = f.clientName || 'Unknown Client';
       const styleNo = f.styleNo || 'Unknown';
@@ -276,9 +304,14 @@ export class StyleCustomerWiseReportComponent {
       const sleeveType = f.sleeveType || '-';
       const key = `${clientName}||${styleNo}||${color}||${sleeveType}`;
       let entry = map.get(key);
-      if (!entry) { entry = { dispatchedBySize: new Map(), dispatchedQty: 0 }; map.set(key, entry); }
+      if (!entry) {
+        entry = { clientName, agentName: f.agentName || 'Unassigned', styleNo, color, sleeveType, dispatchedBySize: new Map(), dispatchedQty: 0, extraQty: 0, pendingQty: 0 };
+        map.set(key, entry);
+      }
       entry.dispatchedBySize.set(f.size, (entry.dispatchedBySize.get(f.size) ?? 0) + f.dispatchedQty);
       entry.dispatchedQty += f.dispatchedQty;
+      entry.extraQty += f.extraQty;
+      entry.pendingQty += f.pendingQty;
     }
     return map;
   }
@@ -312,7 +345,7 @@ export class StyleCustomerWiseReportComponent {
     clientName: string,
     styleMap: Map<string, StyleAccumulatorEntry>,
     sizes: string[],
-    dispatchByCustomerStyleColor: Map<string, { dispatchedBySize: Map<string, number>; dispatchedQty: number }>
+    dispatchByCustomerStyleColor: Map<string, DispatchEntry>
   ): StyleGroup[] {
     return [...styleMap.entries()]
       .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
@@ -327,12 +360,15 @@ export class StyleCustomerWiseReportComponent {
             const wsp = totalQty > 0 ? this.round2(entry.value / totalQty) : 0;
             const dispatch = dispatchByCustomerStyleColor.get(key);
             const dispatchedQty = dispatch?.dispatchedQty ?? 0;
+            // Extra/Pending summed per Sales Order x size (skuFulfillments),
+            // same as every other report — netting them on this aggregated
+            // row would let one size's extra cancel another size's pending.
             return {
               key, color: entry.color, sleeveType: entry.sleeveType, qtyBySize,
               dispatchedBySize: Object.fromEntries(dispatch?.dispatchedBySize ?? new Map()),
               totalQty, dispatchedQty,
-              extraQty: Math.max(0, dispatchedQty - totalQty),
-              pendingQty: Math.max(0, totalQty - dispatchedQty),
+              extraQty: dispatch ? dispatch.extraQty : 0,
+              pendingQty: dispatch ? dispatch.pendingQty : totalQty,
               wsp, value,
             };
           });

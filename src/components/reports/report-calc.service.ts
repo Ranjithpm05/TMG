@@ -10,7 +10,7 @@ import { InvoiceService } from '../../services/invoice.service';
 import type { PickList, PickListLine, PickListType } from '../../models/pick-list.model';
 import type { PackingList, PackingListLine } from '../../models/packing-list.model';
 import type { DCItem, DeliveryChallan } from '../../models/delivery-challan.model';
-import { invoicedItemSizeQty } from '../../services/dc-delivery.util';
+import { invoicedItemSizeQty, summarizeDCDelivery } from '../../services/dc-delivery.util';
 
 /** One ordered (SalesOrder, style/color/size) line, flattened for joining against dispatch data. */
 export interface OrderLine {
@@ -417,9 +417,11 @@ export class ReportCalcService {
         });
       };
 
-      for (const item of dc.items) {
+      // A closed balance went back to stock — it was never dispatched.
+      const closedByItem = dc.balanceClosure ? summarizeDCDelivery(dc).rows.map((row) => row.closed) : null;
+      for (const [itemIndex, item] of dc.items.entries()) {
         for (const [size, rawQty] of Object.entries(item.sizeQty ?? {})) {
-          const qty = Number(rawQty) || 0;
+          const qty = (Number(rawQty) || 0) - (closedByItem?.[itemIndex]?.[size] ?? 0);
           if (qty <= 0) continue;
           if (!split) {
             push(firstOrderId, item, size, qty);
@@ -470,13 +472,19 @@ export class ReportCalcService {
         bucket = { byOrder: new Map(), packed: 0, sourced: 0 };
         buckets.set(key, bucket);
       }
+      const packed = Number(line.packedQty) || 0;
       const sourced = (line.sources ?? []).reduce((sum, s) => sum + (Number(s.qty) || 0), 0);
-      bucket.packed += Number(line.packedQty) || 0;
-      bucket.sourced += sourced;
       const salesOrderId = line.salesOrderIds?.[0];
+      // A line packed against a Sales Order owns its whole packed qty — the
+      // un-sourced part (extra/additional scanned items) included. Only
+      // qty on lines with no Sales Order at all is left uncovered and falls
+      // back to the DC's first Sales Order.
+      const covered = salesOrderId ? Math.max(sourced, packed) : sourced;
+      bucket.packed += packed;
+      bucket.sourced += covered;
       if (salesOrderId) {
         const entry = bucket.byOrder.get(salesOrderId) ?? { weight: 0, lines: 0 };
-        entry.weight += sourced;
+        entry.weight += covered;
         entry.lines += 1;
         bucket.byOrder.set(salesOrderId, entry);
       }
@@ -626,6 +634,9 @@ export class ReportCalcService {
   // ── Pick List Wise ─────────────────────────────────────────────────────
   readonly pickListWiseRows = computed<PickListWiseRow[]>(() => {
     const { pickLists, lineRecords } = this.dispatchRecords();
+    // A Pick List is fetched because one of its Sales Orders is in scope, but
+    // its lines for other (out-of-range / filtered-out) orders must not leak in.
+    const inScope = new Set(this.orderIdsInRange());
     const pickListsById = new Map(pickLists.map((pl) => [pl.id!, pl] as const));
     const clientById = this.reportsData.clientById();
     const rows: PickListWiseRow[] = [];
@@ -633,6 +644,7 @@ export class ReportCalcService {
     for (const rec of lineRecords) {
       const pickList = pickListsById.get(rec.pickListId);
       if (!pickList) continue;
+      if (rec.salesOrderId && !inScope.has(rec.salesOrderId)) continue;
       if (!this.reportsData.matchesGroupAndDesign(rec.group, rec.styleNo)) continue;
 
       const client = clientById.get(rec.clientId || pickList.clientId);
@@ -657,7 +669,9 @@ export class ReportCalcService {
   });
 
   private deriveDisplayStatus(requiredQty: number, pickedQty: number, dispatchedQty: number, pickListStatus: PickList['status']): PickListDisplayStatus {
-    if (requiredQty > 0 && dispatchedQty >= requiredQty) return pickListStatus === 'Completed' ? 'Completed' : 'Dispatched';
+    // Additional lines carry requiredQty 0 — their target is what was picked.
+    const target = requiredQty > 0 ? requiredQty : pickedQty;
+    if (target > 0 && dispatchedQty >= target) return pickListStatus === 'Completed' ? 'Completed' : 'Dispatched';
     if (dispatchedQty > 0) return 'Partially Dispatched';
     if (requiredQty > 0 && pickedQty >= requiredQty) return 'Picked';
     if (pickedQty > 0) return 'Partially Picked';
@@ -805,10 +819,12 @@ export class ReportCalcService {
         // the share of each item/size actually invoiced so far counts toward
         // Invoice Qty (not "an invoice exists ⇒ the whole DC was billed").
         const invoicedQty = dc.deliveries?.length ? invoicedItemSizeQty(dc) : null;
+        // A closed balance went back to stock — it was never dispatched.
+        const closedByItem = dc.balanceClosure ? summarizeDCDelivery(dc).rows.map((row) => row.closed) : null;
 
         for (const [itemIndex, item] of dc.items.entries()) {
           for (const [size, rawQty] of Object.entries(item.sizeQty ?? {})) {
-            const qty = Number(rawQty) || 0;
+            const qty = (Number(rawQty) || 0) - (closedByItem?.[itemIndex]?.[size] ?? 0);
             if (qty <= 0) continue;
             const invoicedRatio = invoicedQty
               ? Math.min(1, (invoicedQty[itemIndex]?.[size] ?? 0) / qty)

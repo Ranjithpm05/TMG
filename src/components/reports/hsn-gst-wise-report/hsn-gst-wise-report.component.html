@@ -65,6 +65,7 @@
           <th class="px-4 py-3 text-right font-medium whitespace-nowrap">CGST Amount</th>
           <th class="px-4 py-3 text-right font-medium whitespace-nowrap">SGST Amount</th>
           <th class="px-4 py-3 text-right font-medium whitespace-nowrap">IGST Amount</th>
+          <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Round Off</th>
           <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Total Amount</th>
         </tr>
       </thead>
@@ -84,6 +85,7 @@
             <td class="px-4 py-2 text-right text-gray-700">{{ row.cgstAmount | number:'1.2-2' }}</td>
             <td class="px-4 py-2 text-right text-gray-700">{{ row.sgstAmount | number:'1.2-2' }}</td>
             <td class="px-4 py-2 text-right text-gray-700">{{ row.igstAmount | number:'1.2-2' }}</td>
+            <td class="px-4 py-2 text-right text-gray-700">{{ row.roundOff | number:'1.2-2' }}</td>
             <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ row.totalAmount | number:'1.2-2' }}</td>
           </tr>
         }
@@ -98,6 +100,7 @@
           <td class="px-4 py-3 text-right text-gray-900">{{ hsnGst.grandTotal.cgstAmount | number:'1.2-2' }}</td>
           <td class="px-4 py-3 text-right text-gray-900">{{ hsnGst.grandTotal.sgstAmount | number:'1.2-2' }}</td>
           <td class="px-4 py-3 text-right text-gray-900">{{ hsnGst.grandTotal.igstAmount | number:'1.2-2' }}</td>
+          <td class="px-4 py-3 text-right text-gray-900">{{ hsnGst.grandTotal.roundOff | number:'1.2-2' }}</td>
           <td class="px-4 py-3 text-right text-gray-900">{{ hsnGst.grandTotal.totalAmount | number:'1.2-2' }}</td>
         </tr>
       </tfoot>
