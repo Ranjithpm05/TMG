@@ -1,0 +1,376 @@
+<div class="animate-fade-in">
+  <div class="bg-white shadow-lg rounded-xl p-6 sm:p-8">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-4 mb-6">
+      <div>
+        <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">{{ reportTitle }}</h2>
+        <p class="text-sm text-gray-500 mt-1">Current stock of every item against pending Sales Orders — what is available, what is short, and which customers are waiting.</p>
+      </div>
+    </div>
+
+    <app-report-filter-bar />
+    <p class="text-xs text-gray-500 -mt-4 mb-4">Date range, customer, agent and status select which Sales Orders count as pending demand (by order date). Stock is always the current stock.</p>
+
+    @let sku = stock.itemLevel() === 'sku';
+
+    <!-- Report-specific filters (apply instantly, no reload) -->
+    <div class="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Item Code / Name</label>
+          <input type="text" placeholder="Barcode, style, color, product..." [ngModel]="stock.itemSearch()" (ngModelChange)="stock.itemSearch.set($event)"
+                 class="block w-56 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Sales Order No</label>
+          <input type="text" placeholder="e.g. SO2627-0123" [ngModel]="stock.salesOrderSearch()" (ngModelChange)="stock.salesOrderSearch.set($event)"
+                 class="block w-44 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Item Level</label>
+          <div class="inline-flex rounded-md shadow-sm" role="group">
+            <button type="button" (click)="setItemLevel('sku')"
+                    [class]="sku ? 'px-3 py-2 text-xs font-medium rounded-l-md border border-indigo-600 bg-indigo-600 text-white' : 'px-3 py-2 text-xs font-medium rounded-l-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'">
+              Item (Size)
+            </button>
+            <button type="button" (click)="setItemLevel('style')"
+                    [class]="!sku ? 'px-3 py-2 text-xs font-medium rounded-r-md border border-indigo-600 bg-indigo-600 text-white' : 'px-3 py-2 text-xs font-medium rounded-r-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'">
+              Style &amp; Color
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">View</label>
+          <div class="inline-flex rounded-md shadow-sm" role="group">
+            <button type="button" (click)="viewMode.set('items')"
+                    [class]="viewMode() === 'items' ? 'px-3 py-2 text-xs font-medium rounded-l-md border border-indigo-600 bg-indigo-600 text-white' : 'px-3 py-2 text-xs font-medium rounded-l-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'">
+              Item Summary
+            </button>
+            <button type="button" (click)="viewMode.set('orders')"
+                    [class]="viewMode() === 'orders' ? 'px-3 py-2 text-xs font-medium rounded-r-md border border-indigo-600 bg-indigo-600 text-white' : 'px-3 py-2 text-xs font-medium rounded-r-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'">
+              Sales Order Breakdown
+            </button>
+          </div>
+        </div>
+        @if (viewMode() === 'items') {
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Stock Status</label>
+            <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)"
+                    class="block w-56 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+              @for (option of statusFilterOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Sort By</label>
+            <select [ngModel]="sortKey()" (ngModelChange)="sortKey.set($event)"
+                    class="block w-60 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+              @for (option of sortOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+          </div>
+          <label class="inline-flex items-center gap-2 text-sm text-gray-700 self-center pt-4">
+            <input type="checkbox" [ngModel]="pendingOnly()" (ngModelChange)="pendingOnly.set($event)" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+            Only items with pending orders
+          </label>
+        } @else {
+          <label class="inline-flex items-center gap-2 text-sm text-gray-700 self-center pt-4">
+            <input type="checkbox" [ngModel]="onlyShortOrders()" (ngModelChange)="onlyShortOrders.set($event)" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+            Only orders waiting for stock
+          </label>
+        }
+      </div>
+      @if (stock.demandIsFiltered()) {
+        <p class="text-xs text-amber-700 mt-3">A customer / agent / status / SO No. filter is active — only items on matching pending orders are listed, and stock is allocated among those orders only.</p>
+      }
+    </div>
+
+    <details class="mb-4 text-xs text-gray-600 border border-gray-200 rounded-lg px-4 py-2 bg-gray-50">
+      <summary class="cursor-pointer font-medium text-gray-700">How the quantities are calculated</summary>
+      <ul class="list-disc pl-5 mt-2 space-y-1">
+        <li><b>Current Stock</b> — inventory stock as recorded (Goods Inward in, Pick List scans and Packing completion out). Can be negative when a barcode was picked with no stock on record.</li>
+        <li><b>Pending SO Qty</b> — ordered qty minus qty dispatched on Delivery Challans, per Sales Order line. A DC balance closed back to stock is not dispatched. Fully dispatched lines are excluded; extra qty dispatched on one line never offsets another line. Same figure as the other pending-order reports.</li>
+        <li><b>Reserved (Picked, Not Dispatched)</b> — picked for a pending order but not yet on a DC. Picking already deducted these pieces from Current Stock, so they count toward the order, not against stock.</li>
+        <li><b>Required from Stock</b> = Pending − Reserved. <b>Available Stock</b> = Current Stock (0 if negative).</li>
+        <li><b>Additional Required</b> = Required from Stock − Available (if positive). <b>Excess</b> = Available − Required from Stock (if positive) — stock free for new orders.</li>
+        <li>Stock is allocated to pending orders oldest order date first; the Sales Order breakdown shows which orders are covered and which are short.</li>
+        <li>Status: <b>Zero Stock</b> when nothing is available, <b>Insufficient</b> when available stock does not cover the requirement, otherwise <b>Sufficient</b>. At Style &amp; Color level, shortages and excess are summed per size — surplus in one size never covers another.</li>
+        <li>There is a single stock location in the system (no warehouse field on inventory), so the report is not split by warehouse.</li>
+      </ul>
+    </details>
+
+    <div class="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-2 mb-4">
+      <button (click)="exportExcel()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export Excel
+      </button>
+      <button (click)="exportPdf()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+        Export PDF
+      </button>
+      <button (click)="printReport()" [disabled]="isLoading()" class="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+        Print
+      </button>
+    </div>
+    <p class="text-xs text-gray-500 mb-4">{{ filterSummary() }}</p>
+
+    <app-report-status [loading]="isLoading()" [error]="error()" label="Stock vs Pending Sales Orders" (retry)="retry()" />
+
+    @if (!isLoading() && !error()) {
+      @if (viewMode() === 'items') {
+        @let t = totals();
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+          <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Items</p>
+            <p class="mt-1 text-2xl font-semibold text-gray-900">{{ t.itemCount | number }}</p>
+            <p class="text-xs text-gray-500">{{ t.itemsWithPending | number }} with pending orders</p>
+          </div>
+          <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Current Stock</p>
+            <p class="mt-1 text-2xl font-semibold text-gray-900">{{ t.currentStock | number }}</p>
+            <p class="text-xs text-gray-500">{{ t.availableQty | number }} available</p>
+          </div>
+          <div class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3">
+            <p class="text-xs font-medium text-indigo-600 uppercase tracking-wide">Pending SO Qty</p>
+            <p class="mt-1 text-2xl font-semibold text-indigo-900">{{ t.pendingQty | number }}</p>
+            <p class="text-xs text-indigo-700">{{ t.reservedQty | number }} already picked</p>
+          </div>
+          <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+            <p class="text-xs font-medium text-rose-600 uppercase tracking-wide">Additional Required</p>
+            <p class="mt-1 text-2xl font-semibold text-rose-900">{{ t.additionalRequiredQty | number }}</p>
+            <p class="text-xs text-rose-700">{{ t.insufficientCount | number }} items short</p>
+          </div>
+          <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            <p class="text-xs font-medium text-amber-700 uppercase tracking-wide">Zero Stock Items</p>
+            <p class="mt-1 text-2xl font-semibold text-amber-900">{{ t.zeroStockCount | number }}</p>
+          </div>
+          <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <p class="text-xs font-medium text-emerald-700 uppercase tracking-wide">Excess / Free Stock</p>
+            <p class="mt-1 text-2xl font-semibold text-emerald-900">{{ t.excessQty | number }}</p>
+            <p class="text-xs text-emerald-700">available for new orders</p>
+          </div>
+        </div>
+
+        @if (itemRows().length > 0) {
+          <div class="overflow-x-auto border border-gray-200 rounded-lg">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-800 text-white">
+                <tr>
+                  <th class="px-2 py-3 w-8"><span class="sr-only">Expand</span></th>
+                  @if (sku) { <th class="px-3 py-3 text-left font-medium whitespace-nowrap">Item Code</th> }
+                  <th class="px-3 py-3 text-left font-medium whitespace-nowrap">Style No</th>
+                  <th class="px-3 py-3 text-left font-medium">Product</th>
+                  <th class="px-3 py-3 text-left font-medium">Color</th>
+                  <th class="px-3 py-3 text-center font-medium">Sleeve</th>
+                  @if (sku) { <th class="px-3 py-3 text-center font-medium">Size</th> }
+                  <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Current Stock</th>
+                  <th class="px-3 py-3 text-right font-medium whitespace-nowrap" title="Picked for a pending order, not yet on a DC (already deducted from Current Stock)">Reserved</th>
+                  <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Available</th>
+                  <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Pending SO</th>
+                  <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Req. from Stock</th>
+                  <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Additional Req.</th>
+                  <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Excess</th>
+                  <th class="px-3 py-3 text-center font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                @for (row of pagedItemRows(); track row.key) {
+                  @let open = expanded().has(row.key);
+                  <tr class="hover:bg-gray-50" [class.bg-indigo-50]="open">
+                    <td class="px-2 py-2 text-center">
+                      @if (row.orders.length) {
+                        <button type="button" (click)="toggleExpanded(row.key)" class="text-gray-500 hover:text-indigo-600 font-bold w-6" [attr.aria-expanded]="open" [attr.aria-label]="(open ? 'Hide' : 'Show') + ' pending sales orders'">
+                          {{ open ? '−' : '+' }}
+                        </button>
+                      }
+                    </td>
+                    @if (sku) { <td class="px-3 py-2 text-gray-700 whitespace-nowrap font-mono text-xs">{{ row.barcode || '-' }}</td> }
+                    <td class="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">
+                      {{ row.styleNo }}
+                      @if (!row.inMaster) { <span class="ml-1 text-[10px] uppercase text-amber-700 bg-amber-100 rounded px-1" title="Not found in Design Master">not in master</span> }
+                    </td>
+                    <td class="px-3 py-2 text-gray-700 whitespace-nowrap">{{ row.group || '-' }}</td>
+                    <td class="px-3 py-2 text-gray-700">{{ row.color || '-' }}</td>
+                    <td class="px-3 py-2 text-center text-gray-700">{{ row.sleeveType || '-' }}</td>
+                    @if (sku) { <td class="px-3 py-2 text-center text-gray-700">{{ row.size }}</td> }
+                    <td class="px-3 py-2 text-right" [class.text-rose-700]="row.currentStock < 0" [class.text-gray-900]="row.currentStock >= 0">{{ row.currentStock | number }}</td>
+                    <td class="px-3 py-2 text-right text-sky-700">{{ row.reservedQty ? (row.reservedQty | number) : '-' }}</td>
+                    <td class="px-3 py-2 text-right text-gray-900">{{ row.availableQty | number }}</td>
+                    <td class="px-3 py-2 text-right font-medium text-indigo-700">{{ row.pendingQty ? (row.pendingQty | number) : '-' }}</td>
+                    <td class="px-3 py-2 text-right text-gray-700">{{ row.requiredFromStockQty ? (row.requiredFromStockQty | number) : '-' }}</td>
+                    <td class="px-3 py-2 text-right font-semibold text-rose-700">{{ row.additionalRequiredQty ? (row.additionalRequiredQty | number) : '-' }}</td>
+                    <td class="px-3 py-2 text-right text-emerald-700">{{ row.excessQty ? (row.excessQty | number) : '-' }}</td>
+                    <td class="px-3 py-2 text-center">
+                      <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" [class]="statusClass(row.status)">{{ row.status }}</span>
+                    </td>
+                  </tr>
+                  @if (open) {
+                    <tr>
+                      <td [attr.colspan]="sku ? 15 : 13" class="bg-gray-50 px-4 py-3">
+                        <p class="text-xs font-semibold text-gray-600 mb-2">Pending Sales Orders — stock allocated oldest order first</p>
+                        <div class="overflow-x-auto">
+                          <table class="min-w-full text-xs border border-gray-200 bg-white">
+                            <thead class="bg-gray-100 text-gray-700">
+                              <tr>
+                                <th class="px-2 py-2 text-left font-medium whitespace-nowrap">SO No</th>
+                                <th class="px-2 py-2 text-center font-medium whitespace-nowrap">Order Date</th>
+                                <th class="px-2 py-2 text-center font-medium whitespace-nowrap">Delivery Date</th>
+                                <th class="px-2 py-2 text-left font-medium">Customer</th>
+                                @if (!sku) { <th class="px-2 py-2 text-center font-medium">Size</th> }
+                                <th class="px-2 py-2 text-right font-medium">Ordered</th>
+                                <th class="px-2 py-2 text-right font-medium">Dispatched</th>
+                                <th class="px-2 py-2 text-right font-medium">Pending</th>
+                                <th class="px-2 py-2 text-right font-medium">Reserved</th>
+                                <th class="px-2 py-2 text-right font-medium whitespace-nowrap">Req. from Stock</th>
+                                <th class="px-2 py-2 text-right font-medium whitespace-nowrap">Covered by Stock</th>
+                                <th class="px-2 py-2 text-right font-medium">Short</th>
+                                <th class="px-2 py-2 text-center font-medium">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                              @for (o of row.orders; track o.salesOrderId + '|' + o.size) {
+                                @let c = coverage(o);
+                                <tr>
+                                  <td class="px-2 py-1.5 font-medium text-gray-900 whitespace-nowrap">{{ o.salesNo }}</td>
+                                  <td class="px-2 py-1.5 text-center whitespace-nowrap">{{ formatDate(o.orderDate) }}</td>
+                                  <td class="px-2 py-1.5 text-center whitespace-nowrap">{{ formatDeliveryDate(o.deliveryDate) }}</td>
+                                  <td class="px-2 py-1.5">{{ o.clientName }}</td>
+                                  @if (!sku) { <td class="px-2 py-1.5 text-center">{{ o.size }}</td> }
+                                  <td class="px-2 py-1.5 text-right">{{ o.orderQty }}</td>
+                                  <td class="px-2 py-1.5 text-right">{{ o.dispatchedQty }}</td>
+                                  <td class="px-2 py-1.5 text-right font-medium text-indigo-700">{{ o.pendingQty }}</td>
+                                  <td class="px-2 py-1.5 text-right text-sky-700">{{ o.reservedQty || '-' }}</td>
+                                  <td class="px-2 py-1.5 text-right">{{ o.requiredFromStockQty }}</td>
+                                  <td class="px-2 py-1.5 text-right text-emerald-700">{{ o.allocatedQty || '-' }}</td>
+                                  <td class="px-2 py-1.5 text-right font-semibold text-rose-700">{{ o.shortQty || '-' }}</td>
+                                  <td class="px-2 py-1.5 text-center">
+                                    <span class="inline-block px-2 py-0.5 rounded-full font-medium whitespace-nowrap" [class]="coverageClass(c)">{{ c }}</span>
+                                  </td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                }
+              </tbody>
+              <tfoot class="bg-gray-100 font-bold">
+                <tr>
+                  <td [attr.colspan]="sku ? 7 : 5" class="px-3 py-3 text-gray-900">Grand Total ({{ t.itemCount | number }} items)</td>
+                  <td class="px-3 py-3 text-right text-gray-900">{{ t.currentStock | number }}</td>
+                  <td class="px-3 py-3 text-right text-gray-900">{{ t.reservedQty | number }}</td>
+                  <td class="px-3 py-3 text-right text-gray-900">{{ t.availableQty | number }}</td>
+                  <td class="px-3 py-3 text-right text-gray-900">{{ t.pendingQty | number }}</td>
+                  <td class="px-3 py-3 text-right text-gray-900">{{ t.requiredFromStockQty | number }}</td>
+                  <td class="px-3 py-3 text-right text-rose-700">{{ t.additionalRequiredQty | number }}</td>
+                  <td class="px-3 py-3 text-right text-emerald-700">{{ t.excessQty | number }}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <app-report-pagination
+            [total]="itemRows().length"
+            [page]="currentPage()"
+            [pageSize]="pageSize()"
+            [pageSizeOptions]="[25, 50, 100, 250]"
+            (pageChange)="setPage($event)"
+            (pageSizeChange)="setPageSize($event)"
+          />
+        } @else {
+          <div class="text-center py-10">
+            <p class="text-sm text-gray-500">No items match the current filters.</p>
+          </div>
+        }
+      } @else {
+        @let ot = orderTotals();
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+          <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Customers</p>
+            <p class="mt-1 text-2xl font-semibold text-gray-900">{{ ot.customerCount | number }}</p>
+          </div>
+          <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Sales Orders</p>
+            <p class="mt-1 text-2xl font-semibold text-gray-900">{{ ot.orderCount | number }}</p>
+          </div>
+          <div class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3">
+            <p class="text-xs font-medium text-indigo-600 uppercase tracking-wide">Pending Qty</p>
+            <p class="mt-1 text-2xl font-semibold text-indigo-900">{{ ot.pendingQty | number }}</p>
+            <p class="text-xs text-indigo-700">{{ ot.reservedQty | number }} already picked</p>
+          </div>
+          <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <p class="text-xs font-medium text-emerald-700 uppercase tracking-wide">Covered by Stock</p>
+            <p class="mt-1 text-2xl font-semibold text-emerald-900">{{ ot.allocatedQty | number }}</p>
+          </div>
+          <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+            <p class="text-xs font-medium text-rose-600 uppercase tracking-wide">Short (Waiting for Stock)</p>
+            <p class="mt-1 text-2xl font-semibold text-rose-900">{{ ot.shortQty | number }}</p>
+          </div>
+        </div>
+
+        @if (orderRows().length > 0) {
+          <div class="overflow-x-auto border border-gray-200 rounded-lg">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-800 text-white">
+                <tr>
+                  <th class="px-3 py-3 text-left font-medium">Customer</th>
+                  <th class="px-3 py-3 text-left font-medium whitespace-nowrap">SO No</th>
+                  <th class="px-3 py-3 text-center font-medium whitespace-nowrap">Order Date</th>
+                  <th class="px-3 py-3 text-center font-medium whitespace-nowrap">Delivery Date</th>
+                  <th class="px-3 py-3 text-left font-medium whitespace-nowrap">Style No</th>
+                  <th class="px-3 py-3 text-left font-medium">Color</th>
+                  <th class="px-3 py-3 text-center font-medium">Sleeve</th>
+                  <th class="px-3 py-3 text-center font-medium">Size</th>
+                  <th class="px-3 py-3 text-right font-medium">Ordered</th>
+                  <th class="px-3 py-3 text-right font-medium">Dispatched</th>
+                  <th class="px-3 py-3 text-right font-medium">Pending</th>
+                  <th class="px-3 py-3 text-right font-medium">Reserved</th>
+                  <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Covered by Stock</th>
+                  <th class="px-3 py-3 text-right font-medium">Short</th>
+                  <th class="px-3 py-3 text-center font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                @for (o of pagedOrderRows(); track o.salesOrderId + '|' + o.styleNo + '|' + o.color + '|' + o.sleeveType + '|' + o.size) {
+                  @let c = coverage(o);
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-3 py-2 text-gray-900">{{ o.clientName }}</td>
+                    <td class="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{{ o.salesNo }}</td>
+                    <td class="px-3 py-2 text-center whitespace-nowrap">{{ formatDate(o.orderDate) }}</td>
+                    <td class="px-3 py-2 text-center whitespace-nowrap">{{ formatDeliveryDate(o.deliveryDate) }}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">{{ o.styleNo }}</td>
+                    <td class="px-3 py-2">{{ o.color || '-' }}</td>
+                    <td class="px-3 py-2 text-center">{{ o.sleeveType || '-' }}</td>
+                    <td class="px-3 py-2 text-center">{{ o.size }}</td>
+                    <td class="px-3 py-2 text-right">{{ o.orderQty }}</td>
+                    <td class="px-3 py-2 text-right">{{ o.dispatchedQty }}</td>
+                    <td class="px-3 py-2 text-right font-medium text-indigo-700">{{ o.pendingQty }}</td>
+                    <td class="px-3 py-2 text-right text-sky-700">{{ o.reservedQty || '-' }}</td>
+                    <td class="px-3 py-2 text-right text-emerald-700">{{ o.allocatedQty || '-' }}</td>
+                    <td class="px-3 py-2 text-right font-semibold text-rose-700">{{ o.shortQty || '-' }}</td>
+                    <td class="px-3 py-2 text-center">
+                      <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" [class]="coverageClass(c)">{{ c }}</span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-report-pagination
+            [total]="orderRows().length"
+            [page]="currentPage()"
+            [pageSize]="pageSize()"
+            [pageSizeOptions]="[25, 50, 100, 250]"
+            (pageChange)="setPage($event)"
+            (pageSizeChange)="setPageSize($event)"
+          />
+        } @else {
+          <div class="text-center py-10">
+            <p class="text-sm text-gray-500">{{ onlyShortOrders() ? 'No pending orders are waiting for stock.' : 'No pending Sales Orders match the current filters.' }}</p>
+          </div>
+        }
+      }
+    }
+  </div>
+</div>

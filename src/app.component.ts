@@ -28,11 +28,12 @@ import { StyleWiseReportComponent } from './components/reports/style-wise-report
 import { StyleCustomerWiseReportComponent } from './components/reports/style-customer-wise-report/style-customer-wise-report.component';
 import { PickListWiseReportComponent } from './components/reports/pick-list-wise-report/pick-list-wise-report.component';
 import { HsnGstWiseReportComponent } from './components/reports/hsn-gst-wise-report/hsn-gst-wise-report.component';
+import { StockRequirementReportComponent } from './components/reports/stock-requirement-report/stock-requirement-report.component';
 import { setMeterPage } from './services/firestore-read-meter';
 
 type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'transportMaster' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'einvoice' | 'ewayBill'
   | 'salesReportProductWise1' | 'salesReportProductWise2' | 'salesOrderSupplyPendingReport' | 'pendingOrderCustomerWiseReport'
-  | 'customerWiseReport' | 'agentWiseReport' | 'productWiseReport' | 'exceedOrderReport' | 'styleWiseReport' | 'styleCustomerWiseReport' | 'pickListWiseReport' | 'hsnGstWiseReport';
+  | 'customerWiseReport' | 'agentWiseReport' | 'productWiseReport' | 'exceedOrderReport' | 'styleWiseReport' | 'styleCustomerWiseReport' | 'pickListWiseReport' | 'hsnGstWiseReport' | 'stockRequirementReport';
 type ViewHistoryState = { view: View };
 
 interface NavItem {
@@ -54,7 +55,7 @@ const SIDEBAR_COLLAPSED_STORAGE_KEY = 'gom.sidebarCollapsed';
 const VIEW_SEQUENCE: View[] = [
   'dashboard', 'sales', 'clients', 'designs', 'transportMaster', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList', 'einvoice', 'ewayBill',
   'customerWiseReport', 'agentWiseReport', 'salesReportProductWise1', 'salesReportProductWise2', 'productWiseReport', 'salesOrderSupplyPendingReport',
-  'pendingOrderCustomerWiseReport', 'exceedOrderReport', 'styleWiseReport', 'styleCustomerWiseReport', 'pickListWiseReport', 'hsnGstWiseReport',
+  'pendingOrderCustomerWiseReport', 'exceedOrderReport', 'styleWiseReport', 'styleCustomerWiseReport', 'pickListWiseReport', 'hsnGstWiseReport', 'stockRequirementReport',
 ];
 
 const REPORT_ICON_PATHS = ['M11 3.055A9 9 0 1020.945 13H11V3.055z', 'M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z'];
@@ -85,6 +86,7 @@ const NAV_GROUPS: NavGroup[] = [
       { view: 'styleCustomerWiseReport', label: 'Style No. & Customer Wise', screen: 'styleCustomerWiseReport', iconPaths: REPORT_ICON_PATHS },
       { view: 'pickListWiseReport', label: 'Pick List Wise', screen: 'pickListWiseReport', iconPaths: REPORT_ICON_PATHS },
       { view: 'hsnGstWiseReport', label: 'HSN / GST Wise', screen: 'hsnGstWiseReport', iconPaths: REPORT_ICON_PATHS },
+      { view: 'stockRequirementReport', label: 'Stock vs Pending Orders', screen: 'stockRequirementReport', iconPaths: REPORT_ICON_PATHS },
     ],
   },
   {
@@ -170,6 +172,7 @@ const NAV_GROUPS: NavGroup[] = [
     StyleCustomerWiseReportComponent,
     PickListWiseReportComponent,
     HsnGstWiseReportComponent,
+    StockRequirementReportComponent,
   ],
 })
 export class AppComponent {

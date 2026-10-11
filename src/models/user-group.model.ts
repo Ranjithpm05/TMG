@@ -1,4 +1,4 @@
-export type AppScreen = 'sales' | 'clients' | 'designs' | 'transportMaster' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'users' | 'einvoice' | 'ewayBill' | 'salesReportProductWise1' | 'salesReportProductWise2' | 'salesOrderSupplyPendingReport' | 'pendingOrderCustomerWiseReport' | 'customerWiseReport' | 'agentWiseReport' | 'productWiseReport' | 'exceedOrderReport' | 'styleWiseReport' | 'styleCustomerWiseReport' | 'pickListWiseReport' | 'hsnGstWiseReport';
+export type AppScreen = 'sales' | 'clients' | 'designs' | 'transportMaster' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'users' | 'einvoice' | 'ewayBill' | 'salesReportProductWise1' | 'salesReportProductWise2' | 'salesOrderSupplyPendingReport' | 'pendingOrderCustomerWiseReport' | 'customerWiseReport' | 'agentWiseReport' | 'productWiseReport' | 'exceedOrderReport' | 'styleWiseReport' | 'styleCustomerWiseReport' | 'pickListWiseReport' | 'hsnGstWiseReport' | 'stockRequirementReport';
 
 export const ALL_SCREENS: { id: AppScreen, name: string }[] = [
   { id: 'sales',       name: 'Sales Order' },
@@ -24,6 +24,7 @@ export const ALL_SCREENS: { id: AppScreen, name: string }[] = [
   { id: 'styleCustomerWiseReport', name: 'Report - Style No. & Customer Wise' },
   { id: 'pickListWiseReport', name: 'Report - Pick List Wise' },
   { id: 'hsnGstWiseReport', name: 'Report - HSN / GST Wise' },
+  { id: 'stockRequirementReport', name: 'Report - Stock vs Pending Sales Orders' },
 ];
 
 export interface UserGroup {

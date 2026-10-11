@@ -1,6 +1,6 @@
 import { Injectable, inject, computed, signal } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { from, of, switchMap, catchError, finalize, distinctUntilChanged } from 'rxjs';
+import { from, of, switchMap, catchError, finalize, distinctUntilChanged, tap } from 'rxjs';
 
 import { ReportsDataService } from './reports-data.service';
 import { PickListService } from '../../services/pick-list.service';
@@ -89,6 +89,8 @@ interface DcDispatchRecord {
   size: string;
   sleeveType: string;
   dcQty: number;
+  /** Part of this DC line's qty whose balance was closed (returned to stock) — never counted in dcQty. */
+  closedQty: number;
   dcNo: string;
   dcDate: Date | null;
 }
@@ -117,6 +119,8 @@ export interface SkuFulfillment {
   dispatchedQty: number;
   extraQty: number;
   pendingQty: number;
+  /** DC qty for this SKU whose balance was closed and returned to stock (DeliveryChallanService.closeBalance) — already excluded from dispatchedQty. */
+  closedQty: number;
   /** Most recent DC touching this SKU — used by Exceed Order Report's "Dispatch / DC No." + "Dispatch Date" columns. */
   lastDcNo: string;
   lastDcDate: Date | null;
@@ -170,7 +174,7 @@ export interface PickListWiseRow {
 }
 
 /** Bounded-concurrency map — avoids opening one Firestore round-trip chain per item when the in-scope set is large. */
-async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+export async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let cursor = 0;
   const worker = async () => {
@@ -190,7 +194,7 @@ const bucketKey = (partName: string, styleNo: string, color: string, sleeveType:
 const lineRecordKey = (pickListId: string, pickListLineId: string) => `${pickListId}||${pickListLineId}`;
 
 /** Order-vs-DC join is case/whitespace-insensitive — a DC item saying "Navy " or "xl" is the same SKU as the order's "NAVY"/"XL". */
-const normKey = (value: unknown) => String(value ?? '').trim().toUpperCase();
+export const normKey =(value: unknown) => String(value ?? '').trim().toUpperCase();
 
 /**
  * Splits an integer qty across weights in whole pieces (largest remainder),
@@ -349,6 +353,22 @@ export class ReportCalcService {
     return a.signature === b.signature && a.retry === b.retry && a.orderIds.join(',') === b.orderIds.join(',');
   }
 
+  private static dispatchTriggerKey(t: { orderIds: string[]; signature: string; retry: number }): string {
+    return `${t.signature}|${t.retry}|${t.orderIds.join(',')}`;
+  }
+
+  // Which dispatchTrigger() the current dcDispatchRecords() were loaded for.
+  // isLoadingDcDispatch alone can't tell "loaded" from "not started yet"
+  // (it is only raised once the fetch begins), and a consumer that keys a
+  // follow-up fetch off pendingQty must not run it on the pre-dispatch
+  // all-pending numbers.
+  private readonly dcDispatchLoadedFor = signal<string | null>(null);
+
+  /** True once skuFulfillments() reflects DC dispatch for the current filters (DC pipeline only). */
+  readonly isDispatchReady = computed(() =>
+    !this.lineAttributionEnabled() && this.dcDispatchLoadedFor() === ReportCalcService.dispatchTriggerKey(this.dispatchTrigger())
+  );
+
   /** Dispatched qty per DC item line, attributed to Sales Orders — what skuFulfillments() joins against. */
   // Not needed (and not fetched) on Pick List Wise, which only reads pickListWiseRows().
   private readonly dcDispatchRecords = toSignal(
@@ -356,10 +376,11 @@ export class ReportCalcService {
       distinctUntilChanged((a, b) => (a && b ? ReportCalcService.sameDispatchTrigger(a, b) : a === b)),
       switchMap((trigger) => {
         this.dcDispatchError.set(null);
-        if (!trigger?.orderIds.length) return of([] as DcDispatchRecord[]);
+        const markLoaded = tap<DcDispatchRecord[]>(() => { if (trigger) this.dcDispatchLoadedFor.set(ReportCalcService.dispatchTriggerKey(trigger)); });
+        if (!trigger?.orderIds.length) return of([] as DcDispatchRecord[]).pipe(markLoaded);
         const { orderIds, signature } = trigger;
         const cached = this.dcDispatchCache.get(signature);
-        if (cached) return of(cached);
+        if (cached) return of(cached).pipe(markLoaded);
         this.isLoadingDcDispatch.set(true);
         return from(this.loadDcDispatch(orderIds, signature)).pipe(
           catchError((err) => {
@@ -367,6 +388,7 @@ export class ReportCalcService {
             this.dcDispatchError.set('Unable to load report data. Please try again.');
             return of([] as DcDispatchRecord[]);
           }),
+          markLoaded,
           finalize(() => this.isLoadingDcDispatch.set(false))
         );
       })
@@ -429,15 +451,15 @@ export class ReportCalcService {
       const firstOrderId = dc.salesOrderIds[0] ?? '';
       const split = dc.salesOrderIds.length > 1 ? this.buildDcSplit(linesByPackingListId.get(dc.packingListId) ?? []) : null;
 
-      const push = (salesOrderId: string, item: DCItem, size: string, qty: number) => {
-        if (qty <= 0 || !inScope.has(salesOrderId)) return;
+      const push = (salesOrderId: string, item: DCItem, size: string, qty: number, closedQty: number) => {
+        if ((qty <= 0 && closedQty <= 0) || !inScope.has(salesOrderId)) return;
         const order = orderById.get(salesOrderId);
         const clientId = order?.clientId ?? dc.clientId;
         records.push({
           salesOrderId, salesNo: order?.salesNo ?? '',
           clientId, clientName: clientById.get(clientId)?.clientName ?? dc.clientName,
           styleNo: item.styleNo, color: item.color, group: item.partName, size, sleeveType: item.sleeveType ?? '',
-          dcQty: qty, dcNo: dc.dcNo, dcDate,
+          dcQty: Math.max(0, qty), closedQty: Math.max(0, closedQty), dcNo: dc.dcNo, dcDate,
         });
       };
 
@@ -445,10 +467,12 @@ export class ReportCalcService {
       const closedByItem = dc.balanceClosure ? summarizeDCDelivery(dc).rows.map((row) => row.closed) : null;
       for (const [itemIndex, item] of dc.items.entries()) {
         for (const [size, rawQty] of Object.entries(item.sizeQty ?? {})) {
-          const qty = (Number(rawQty) || 0) - (closedByItem?.[itemIndex]?.[size] ?? 0);
-          if (qty <= 0) continue;
+          const lineQty = Number(rawQty) || 0;
+          if (lineQty <= 0) continue;
+          const closed = Math.min(lineQty, closedByItem?.[itemIndex]?.[size] ?? 0);
+          const qty = lineQty - closed;
           if (!split) {
-            push(firstOrderId, item, size, qty);
+            push(firstOrderId, item, size, qty, closed);
             continue;
           }
 
@@ -457,7 +481,7 @@ export class ReportCalcService {
             .filter(([salesOrderId]) => dc.salesOrderIds.includes(salesOrderId));
           const uncovered = bucket ? Math.max(0, bucket.packed - bucket.sourced) : 0;
           if (!entries.length && uncovered <= 0) {
-            push(firstOrderId, item, size, qty);
+            push(firstOrderId, item, size, qty, closed);
             continue;
           }
           const totalWeight = entries.reduce((sum, [, e]) => sum + e.weight, 0) + uncovered;
@@ -466,8 +490,9 @@ export class ReportCalcService {
             ? [...entries.map(([, e]) => e.weight), uncovered]
             : [...entries.map(([, e]) => e.lines), uncovered > 0 ? 1 : 0];
           const shares = allocateWhole(qty, weights);
-          entries.forEach(([salesOrderId], i) => push(salesOrderId, item, size, shares[i]));
-          push(firstOrderId, item, size, shares[entries.length]);
+          const closedShares = allocateWhole(closed, weights);
+          entries.forEach(([salesOrderId], i) => push(salesOrderId, item, size, shares[i], closedShares[i]));
+          push(firstOrderId, item, size, shares[entries.length], closedShares[entries.length]);
         }
       }
     }
@@ -543,8 +568,8 @@ export class ReportCalcService {
       `${skuKey(salesOrderId, styleNo, color, size)}||${normKey(sleeveType)}`;
 
     interface Bucket {
-      orderQty: number; dispatchedQty: number; lastDcNo: string; lastDcDate: Date | null;
-      sample: Omit<SkuFulfillment, 'joinKey' | 'orderQty' | 'dispatchedQty' | 'extraQty' | 'pendingQty' | 'lastDcNo' | 'lastDcDate'>;
+      orderQty: number; dispatchedQty: number; closedQty: number; lastDcNo: string; lastDcDate: Date | null;
+      sample: Omit<SkuFulfillment, 'joinKey' | 'orderQty' | 'dispatchedQty' | 'extraQty' | 'pendingQty' | 'closedQty' | 'lastDcNo' | 'lastDcDate'>;
     }
     const buckets = new Map<string, Bucket>();
 
@@ -553,7 +578,7 @@ export class ReportCalcService {
       let bucket = buckets.get(key);
       if (!bucket) {
         bucket = {
-          orderQty: 0, dispatchedQty: 0, lastDcNo: '', lastDcDate: null,
+          orderQty: 0, dispatchedQty: 0, closedQty: 0, lastDcNo: '', lastDcDate: null,
           sample: {
             salesOrderId: line.salesOrderId, salesNo: line.salesNo,
             clientId: line.clientId, clientName: line.clientName, agentName: line.agentName,
@@ -590,8 +615,15 @@ export class ReportCalcService {
 
     const clientById = this.reportsData.clientById();
     for (const rec of this.dcDispatchRecords()) {
-      if (rec.dcQty <= 0) continue;
+      if (rec.dcQty <= 0 && rec.closedQty <= 0) continue;
       const orderKey = resolveOrderKey(rec);
+      if (rec.dcQty <= 0) {
+        // Fully closed DC line: nothing dispatched, only note the returned
+        // qty on the ordered SKU it belongs to (never opens a new bucket).
+        const ordered = orderKey ? buckets.get(orderKey) : undefined;
+        if (ordered) ordered.closedQty += rec.closedQty;
+        continue;
+      }
       // A DC line matching an ordered SKU already passed the Product/Design
       // filter on the order side — the DC's own partName can differ from the
       // design's group (e.g. 'General' vs 'Other'), which used to drop the
@@ -602,7 +634,7 @@ export class ReportCalcService {
       if (!bucket) {
         const client = clientById.get(rec.clientId);
         bucket = {
-          orderQty: 0, dispatchedQty: 0, lastDcNo: '', lastDcDate: null,
+          orderQty: 0, dispatchedQty: 0, closedQty: 0, lastDcNo: '', lastDcDate: null,
           sample: {
             salesOrderId: rec.salesOrderId, salesNo: rec.salesNo,
             clientId: rec.clientId, clientName: rec.clientName || client?.clientName || '',
@@ -614,6 +646,7 @@ export class ReportCalcService {
         buckets.set(key, bucket);
       }
       bucket.dispatchedQty += rec.dcQty;
+      bucket.closedQty += rec.closedQty;
       if (rec.dcDate && (!bucket.lastDcDate || rec.dcDate > bucket.lastDcDate)) {
         bucket.lastDcDate = rec.dcDate;
         bucket.lastDcNo = rec.dcNo;
@@ -627,6 +660,7 @@ export class ReportCalcService {
       dispatchedQty: b.dispatchedQty,
       extraQty: Math.max(0, b.dispatchedQty - b.orderQty),
       pendingQty: Math.max(0, b.orderQty - b.dispatchedQty),
+      closedQty: b.closedQty,
       lastDcNo: b.lastDcNo,
       lastDcDate: b.lastDcDate,
     }));
