@@ -16,15 +16,25 @@
 // List claims are NOT released, same "permanently gone" rule as an in-app
 // Packing List delete. A JSON backup of every touched doc is written first.
 //
+// --with-pick-list (2026-10-11, DCC2627-1903): also deletes the DC's source
+// Pick List(s) + lines and returns their picked stock — a Pick List scan
+// deducts currentStock itself (unless inventoryReserved), separately from
+// the packing-completion deduction, same as PickListService.deletePickList.
+// SKIPPED if that Pick List also fed any other Packing List.
+//
 // Usage:
 //   node scripts/delete-dcs-return-stock.mjs            (dry run, no writes)
 //   node scripts/delete-dcs-return-stock.mjs --apply     (writes to production)
+//   node scripts/delete-dcs-return-stock.mjs --dc DCC2627-1903 --with-pick-list [--apply]
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APPLY = process.argv.includes("--apply");
+const WITH_PICK_LIST = process.argv.includes("--with-pick-list");
+// --dc <DC No.> (repeatable) overrides TARGETS; no sheet qty to cross-check then.
+const CLI_DCS = process.argv.flatMap((arg, i, all) => (arg === "--dc" && all[i + 1] ? [all[i + 1]] : []));
 
 // From the user's sheet, 2026-10-05: DC No. -> DC Qty.
 const TARGETS = {
@@ -123,7 +133,7 @@ async function commit(writes) {
 }
 
 async function main() {
-  const dcNos = Object.keys(TARGETS);
+  const dcNos = CLI_DCS.length ? CLI_DCS : Object.keys(TARGETS);
   console.log(`${APPLY ? "APPLY" : "DRY RUN"} — ${dcNos.length} DC(s)\n`);
 
   const dcDocs = await runQuery("deliveryChallans", fieldFilter("dcNo", "IN", strArray(dcNos)));
@@ -154,7 +164,7 @@ async function main() {
     if (!dc || dupes.includes(dcNo)) continue;
     const problems = [];
     const dcQty = Number(dc.totalQty) || 0;
-    if (dcQty !== TARGETS[dcNo]) problems.push(`DC qty ${dcQty} ≠ sheet qty ${TARGETS[dcNo]}`);
+    if (!CLI_DCS.length && dcQty !== TARGETS[dcNo]) problems.push(`DC qty ${dcQty} ≠ sheet qty ${TARGETS[dcNo]}`);
     const linkedInvoices = invoices.filter((inv) => inv.dcId === dc.id || (inv.dcIds ?? []).includes(dc.id));
     if (dc.invoiceId || linkedInvoices.length) problems.push(`has invoice ${[dc.invoiceNo, ...linkedInvoices.map((i) => i.invoiceNo)].filter(Boolean).join("/") || dc.invoiceId}`);
     if ((dc.deliveries ?? []).length) problems.push(`has ${dc.deliveries.length} delivery record(s)`);
@@ -191,19 +201,55 @@ async function main() {
         if (packedTotal !== dcQty) problems.push(`packed qty ${packedTotal} ≠ DC qty ${dcQty}`);
       }
     }
-    for (const invId of returns.keys()) {
+
+    const pickLists = [];
+    const pickReturns = new Map();
+    let pickedTotal = 0;
+    if (WITH_PICK_LIST && pl) {
+      const pickListIds = [...new Set([...(pl.pickListIds ?? []), pl.pickListId].filter(Boolean))];
+      if (!pickListIds.length) problems.push("packing list has no source pick list");
+      for (const pickListId of pickListIds) {
+        const pickDoc = await getDoc(`pickLists/${pickListId}`);
+        if (!pickDoc) { problems.push(`pick list ${pickListId} not found`); continue; }
+        const pick = { id: pickListId, raw: pickDoc, ...decodeFields(pickDoc.fields) };
+        const feeding = [
+          ...(await runQuery("packingLists", fieldFilter("pickListIds", "ARRAY_CONTAINS", { stringValue: pickListId }))),
+          ...(await runQuery("packingLists", fieldFilter("pickListId", "EQUAL", { stringValue: pickListId }))),
+        ].map((d) => ({ id: docId(d.name), ...decodeFields(d.fields) }));
+        const otherPls = [...new Map(feeding.filter((p) => p.id !== pl.id).map((p) => [p.id, p])).values()];
+        if (otherPls.length) problems.push(`pick list ${pick.pickListNo} also fed packing list ${otherPls.map((p) => p.packingListNo || p.id).join(", ")}`);
+        pick.lines = (await listDocs(`pickLists/${pickListId}/lines`)).map((d) => ({ lineId: docId(d.name), raw: d, ...decodeFields(d.fields) }));
+        if (!pick.inventoryReserved) {
+          for (const line of pick.lines) {
+            const qty = Number(line.pickedQty) || 0;
+            if (qty <= 0) continue;
+            pickedTotal += qty;
+            if (!line.inventoryId) { problems.push(`pick line ${line.styleNo} ${line.size} ×${qty} has no inventoryId`); continue; }
+            pickReturns.set(line.inventoryId, (pickReturns.get(line.inventoryId) ?? 0) + qty);
+          }
+        }
+        pickLists.push(pick);
+      }
+    }
+
+    for (const invId of new Set([...returns.keys(), ...pickReturns.keys()])) {
       if (!inventoryCache.has(invId)) {
         const d = await getDoc(`inventory/${invId}`);
         inventoryCache.set(invId, d ? { id: invId, raw: d, ...decodeFields(d.fields) } : null);
       }
       if (!inventoryCache.get(invId)) problems.push(`inventory ${invId} not found`);
     }
-    plans.push({ dc, pl, returns, packedTotal, problems });
+    const totalReturns = new Map(returns);
+    for (const [invId, qty] of pickReturns) totalReturns.set(invId, (totalReturns.get(invId) ?? 0) + qty);
+    plans.push({ dc, pl, returns: totalReturns, packedTotal, pickLists, pickedTotal, problems });
   }
 
   for (const p of plans) {
     const status = p.problems.length ? `SKIP — ${p.problems.join("; ")}` : "OK";
     console.log(`${p.dc.dcNo}  ${p.dc.clientName}  DC qty ${p.dc.totalQty}  PL ${p.dc.packingListNo || p.dc.packingListId}  → return ${[...p.returns.values()].reduce((s, q) => s + q, 0)} pcs to ${p.returns.size} item(s)  [${status}]`);
+    if (WITH_PICK_LIST) {
+      console.log(`    packed qty returned: ${p.packedTotal}; pick list(s) ${p.pickLists.map((k) => `${k.pickListNo} (${k.status}, ${k.lines.length} lines${k.inventoryReserved ? ", inventoryReserved" : ""})`).join(", ") || "-"} → picked qty returned: ${p.pickedTotal}`);
+    }
     if (process.argv.includes("--verbose")) {
       for (const [invId, qty] of p.returns) {
         const inv = inventoryCache.get(invId);
@@ -212,7 +258,7 @@ async function main() {
     }
   }
   const ok = plans.filter((p) => !p.problems.length);
-  console.log(`\n${ok.length} ready, ${plans.length - ok.length} skipped, ${missing.length} not found. Total return: ${ok.reduce((s, p) => s + p.packedTotal, 0)} pcs.`);
+  console.log(`\n${ok.length} ready, ${plans.length - ok.length} skipped, ${missing.length} not found. Total return: ${ok.reduce((s, p) => s + p.packedTotal + p.pickedTotal, 0)} pcs.`);
 
   if (!APPLY) { console.log("\nDry run only — re-run with --apply to write."); return; }
   if (!ok.length) return;
@@ -222,6 +268,7 @@ async function main() {
     dc: p.dc.raw,
     packingList: p.pl.raw,
     packingListLines: p.pl.lines.map((l) => l.raw),
+    pickLists: p.pickLists.map((k) => ({ pickList: k.raw, lines: k.lines.map((l) => l.raw) })),
     inventoryBefore: [...p.returns.keys()].map((id) => inventoryCache.get(id).raw),
     returns: Object.fromEntries(p.returns),
   })), null, 2));
@@ -237,11 +284,15 @@ async function main() {
         updateTransforms: [{ fieldPath: "currentStock", increment: { integerValue: String(qty) } }],
         currentDocument: { exists: true },
       })),
-      ...p.pl.lines.map((line) => ({ delete: line.raw.name, currentDocument: { exists: true } })),
       { delete: p.pl.raw.name, currentDocument: { updateTime: p.pl.raw.updateTime } },
+      ...p.pickLists.map((k) => ({ delete: k.raw.name, currentDocument: { updateTime: k.raw.updateTime } })),
     ];
+    // DC + stock + parent docs in one atomic commit; the lines subcollections
+    // (a Pick List can hold 600+ lines, over the 500-write commit limit) after.
     await commit(writes);
-    console.log(`  deleted ${p.dc.dcNo} + ${p.dc.packingListNo}, returned ${p.packedTotal} pcs`);
+    const lineDeletes = [...p.pl.lines, ...p.pickLists.flatMap((k) => k.lines)].map((line) => ({ delete: line.raw.name }));
+    for (let i = 0; i < lineDeletes.length; i += 450) await commit(lineDeletes.slice(i, i + 450));
+    console.log(`  deleted ${p.dc.dcNo} + ${p.dc.packingListNo}${p.pickLists.length ? ` + ${p.pickLists.map((k) => k.pickListNo).join(", ")}` : ""}, returned ${p.packedTotal + p.pickedTotal} pcs`);
   }
   console.log("\nDone.");
 }

@@ -189,6 +189,30 @@ const bucketKey = (partName: string, styleNo: string, color: string, sleeveType:
 
 const lineRecordKey = (pickListId: string, pickListLineId: string) => `${pickListId}||${pickListLineId}`;
 
+/** Order-vs-DC join is case/whitespace-insensitive — a DC item saying "Navy " or "xl" is the same SKU as the order's "NAVY"/"XL". */
+const normKey = (value: unknown) => String(value ?? '').trim().toUpperCase();
+
+/**
+ * Splits an integer qty across weights in whole pieces (largest remainder),
+ * so the parts always add back up to qty. A plain proportional split left
+ * fractional dispatch (e.g. 3.333 + 6.667) on multi-order DCs, which showed
+ * up as fractional / off-by-one Pending Qty.
+ */
+function allocateWhole(qty: number, weights: number[]): number[] {
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  if (total <= 0 || !Number.isInteger(qty)) return weights.map((w) => (total > 0 ? (qty * w) / total : 0));
+  const exact = weights.map((w) => (qty * w) / total);
+  const parts = exact.map(Math.floor);
+  let remainder = qty - parts.reduce((sum, p) => sum + p, 0);
+  const byFraction = exact.map((e, i) => [e - parts[i], i] as const).sort((a, b) => b[0] - a[0]);
+  for (const [, i] of byFraction) {
+    if (remainder <= 0) break;
+    parts[i] += 1;
+    remainder -= 1;
+  }
+  return parts;
+}
+
 /**
  * Shared calculation layer used by most report screens. Computes Order Qty /
  * Dispatched Qty / Extra Dispatched Qty / Pending Qty exactly once per
@@ -437,13 +461,13 @@ export class ReportCalcService {
             continue;
           }
           const totalWeight = entries.reduce((sum, [, e]) => sum + e.weight, 0) + uncovered;
-          const equalSplitDenominator = entries.reduce((sum, [, e]) => sum + e.lines, 0) + (uncovered > 0 ? 1 : 0);
-          for (const [salesOrderId, e] of entries) {
-            push(salesOrderId, item, size, totalWeight > 0 ? (qty * e.weight) / totalWeight : (qty * e.lines) / equalSplitDenominator);
-          }
-          if (uncovered > 0) {
-            push(firstOrderId, item, size, totalWeight > 0 ? (qty * uncovered) / totalWeight : qty / equalSplitDenominator);
-          }
+          // Equal split by line count when nothing carries a packed weight.
+          const weights = totalWeight > 0
+            ? [...entries.map(([, e]) => e.weight), uncovered]
+            : [...entries.map(([, e]) => e.lines), uncovered > 0 ? 1 : 0];
+          const shares = allocateWhole(qty, weights);
+          entries.forEach(([salesOrderId], i) => push(salesOrderId, item, size, shares[i]));
+          push(firstOrderId, item, size, shares[entries.length]);
         }
       }
     }
@@ -513,8 +537,10 @@ export class ReportCalcService {
 
   // ── SKU-level fulfillment (the join) ──────────────────────────────────
   readonly skuFulfillments = computed<SkuFulfillment[]>(() => {
+    const skuKey = (salesOrderId: string, styleNo: string, color: string, size: string) =>
+      `${salesOrderId || '__unassigned__'}||${normKey(styleNo)}||${normKey(color)}||${normKey(size)}`;
     const joinKey = (salesOrderId: string, styleNo: string, color: string, size: string, sleeveType: string) =>
-      `${salesOrderId || '__unassigned__'}||${styleNo}||${color}||${size}||${sleeveType || ''}`;
+      `${skuKey(salesOrderId, styleNo, color, size)}||${normKey(sleeveType)}`;
 
     interface Bucket {
       orderQty: number; dispatchedQty: number; lastDcNo: string; lastDcDate: Date | null;
@@ -540,11 +566,38 @@ export class ReportCalcService {
       bucket.orderQty += line.orderQty;
     }
 
+    // Ordered sleeve types per (order, style, color, size) — for DC lines
+    // whose sleeveType is blank on one side only (DCs made before the field
+    // existed, or orders saved without it). Those used to count the same
+    // pieces as both Pending (order side) and Extra (DC side).
+    const orderSleevesBySku = new Map<string, string[]>();
+    for (const key of buckets.keys()) {
+      const sep = key.lastIndexOf('||');
+      const sku = key.slice(0, sep);
+      const sleeves = orderSleevesBySku.get(sku);
+      if (sleeves) sleeves.push(key.slice(sep + 2)); else orderSleevesBySku.set(sku, [key.slice(sep + 2)]);
+    }
+    const resolveOrderKey = (rec: DcDispatchRecord): string | null => {
+      const exact = joinKey(rec.salesOrderId, rec.styleNo, rec.color, rec.size, rec.sleeveType);
+      if (buckets.has(exact)) return exact;
+      const sku = skuKey(rec.salesOrderId, rec.styleNo, rec.color, rec.size);
+      const sleeves = orderSleevesBySku.get(sku) ?? [];
+      const recSleeve = normKey(rec.sleeveType);
+      if (!recSleeve && sleeves.length === 1) return `${sku}||${sleeves[0]}`;
+      if (recSleeve && sleeves.length === 1 && !sleeves[0]) return `${sku}||`;
+      return null;
+    };
+
     const clientById = this.reportsData.clientById();
     for (const rec of this.dcDispatchRecords()) {
       if (rec.dcQty <= 0) continue;
-      if (!this.reportsData.matchesGroupAndDesign(rec.group, rec.styleNo)) continue;
-      const key = joinKey(rec.salesOrderId, rec.styleNo, rec.color, rec.size, rec.sleeveType);
+      const orderKey = resolveOrderKey(rec);
+      // A DC line matching an ordered SKU already passed the Product/Design
+      // filter on the order side — the DC's own partName can differ from the
+      // design's group (e.g. 'General' vs 'Other'), which used to drop the
+      // dispatch and leave the order fully pending under a Product filter.
+      if (!orderKey && !this.reportsData.matchesGroupAndDesign(rec.group, rec.styleNo)) continue;
+      const key = orderKey ?? joinKey(rec.salesOrderId, rec.styleNo, rec.color, rec.size, rec.sleeveType);
       let bucket = buckets.get(key);
       if (!bucket) {
         const client = clientById.get(rec.clientId);
