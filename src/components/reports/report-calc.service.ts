@@ -246,7 +246,12 @@ export class ReportCalcService {
   private readonly lineAttributionEnabled = signal(false);
 
   /** Scoped to the dispatch fetches only — does NOT drive the app-wide blocking modal. Report components render their own local loading state from this. */
-  readonly isLoadingDispatch = computed(() => this.isLoadingDcDispatch() || this.isLoadingLineDispatch());
+  // Also true until the DC records match the current filters/orders — between
+  // the orders arriving and the DC fetch starting, skuFulfillments() would
+  // otherwise render with nothing dispatched (Pending = full Order Qty).
+  readonly isLoadingDispatch = computed(() =>
+    this.isLoadingDcDispatch() || this.isLoadingLineDispatch() || (!this.lineAttributionEnabled() && !this.isDispatchReady())
+  );
   readonly dispatchError = computed(() => this.dcDispatchError() || this.lineDispatchError());
   private readonly retryTrigger = signal(0);
 
@@ -254,8 +259,9 @@ export class ReportCalcService {
   retryDispatch(): void {
     this.dcDispatchError.set(null);
     this.lineDispatchError.set(null);
-    this.dispatchCache.delete(this.filterSignature());
-    this.dcDispatchCache.delete(this.filterSignature());
+    const cacheKey = ReportCalcService.dispatchCacheKey(this.dispatchTrigger());
+    this.dispatchCache.delete(cacheKey);
+    this.dcDispatchCache.delete(cacheKey);
     this.retryTrigger.update((n) => n + 1);
   }
 
@@ -269,8 +275,8 @@ export class ReportCalcService {
     this.lineAttributionEnabled.set(true);
   }
 
-  // Cache of dispatch-attribution results keyed by the filter tuple that
-  // determines order membership (date range + customer/agent/status) — lets
+  // Cache of dispatch-attribution results keyed by the filter tuple AND the
+  // exact order IDs the fetch covered (see dispatchCacheKey) — lets
   // switching report tabs back and forth, or re-selecting a previously-seen
   // filter combination, reuse the fan-out result instead of re-fetching.
   // Capped like SalesOrderService's own range cache; ReportCalcService itself
@@ -357,6 +363,20 @@ export class ReportCalcService {
     return `${t.signature}|${t.retry}|${t.orderIds.join(',')}`;
   }
 
+  // The order IDs are part of the key, not just the filter signature: on
+  // Apply the signature changes at once while filteredOrders() still holds
+  // the previous range's orders until the new range loads. Keyed by
+  // signature alone, that stale fetch (e.g. October's 3 orders) was cached
+  // as the new range's result (Jul–Oct) and every later read hit it — so
+  // July–September DCs were never subtracted and Pending ≈ Order Qty.
+  private static dispatchCacheKey(t: { orderIds: string[]; signature: string }): string {
+    return `${t.signature}|${t.orderIds.join(',')}`;
+  }
+
+  // No dispatch fetch while the Sales Orders for the applied filters are
+  // still loading — filteredOrders() is the previous range's list then.
+  private readonly ordersSettled = computed(() => !this.reportsData.isLoadingOrders());
+
   // Which dispatchTrigger() the current dcDispatchRecords() were loaded for.
   // isLoadingDcDispatch alone can't tell "loaded" from "not started yet"
   // (it is only raised once the fetch begins), and a consumer that keys a
@@ -372,17 +392,17 @@ export class ReportCalcService {
   /** Dispatched qty per DC item line, attributed to Sales Orders — what skuFulfillments() joins against. */
   // Not needed (and not fetched) on Pick List Wise, which only reads pickListWiseRows().
   private readonly dcDispatchRecords = toSignal(
-    toObservable(computed(() => (this.lineAttributionEnabled() ? null : this.dispatchTrigger()))).pipe(
+    toObservable(computed(() => (this.lineAttributionEnabled() || !this.ordersSettled() ? null : this.dispatchTrigger()))).pipe(
       distinctUntilChanged((a, b) => (a && b ? ReportCalcService.sameDispatchTrigger(a, b) : a === b)),
       switchMap((trigger) => {
         this.dcDispatchError.set(null);
         const markLoaded = tap<DcDispatchRecord[]>(() => { if (trigger) this.dcDispatchLoadedFor.set(ReportCalcService.dispatchTriggerKey(trigger)); });
         if (!trigger?.orderIds.length) return of([] as DcDispatchRecord[]).pipe(markLoaded);
-        const { orderIds, signature } = trigger;
-        const cached = this.dcDispatchCache.get(signature);
+        const cacheKey = ReportCalcService.dispatchCacheKey(trigger);
+        const cached = this.dcDispatchCache.get(cacheKey);
         if (cached) return of(cached).pipe(markLoaded);
         this.isLoadingDcDispatch.set(true);
-        return from(this.loadDcDispatch(orderIds, signature)).pipe(
+        return from(this.loadDcDispatch(trigger.orderIds, cacheKey)).pipe(
           catchError((err) => {
             console.error('Reports: failed to load dispatch data', err);
             this.dcDispatchError.set('Unable to load report data. Please try again.');
@@ -397,15 +417,16 @@ export class ReportCalcService {
   );
 
   private readonly dispatchRecords = toSignal(
-    toObservable(computed(() => (this.lineAttributionEnabled() ? this.dispatchTrigger() : null))).pipe(
+    toObservable(computed(() => (this.lineAttributionEnabled() && this.ordersSettled() ? this.dispatchTrigger() : null))).pipe(
       distinctUntilChanged((a, b) => (a && b ? ReportCalcService.sameDispatchTrigger(a, b) : a === b)),
       switchMap((trigger) => {
         this.lineDispatchError.set(null);
         if (!trigger?.orderIds.length) return of(EMPTY_DISPATCH_RESULT);
-        const cached = this.dispatchCache.get(trigger.signature);
+        const cacheKey = ReportCalcService.dispatchCacheKey(trigger);
+        const cached = this.dispatchCache.get(cacheKey);
         if (cached) return of(cached);
         this.isLoadingLineDispatch.set(true);
-        return from(this.loadDispatchAttribution(trigger.orderIds, trigger.signature)).pipe(
+        return from(this.loadDispatchAttribution(trigger.orderIds, cacheKey)).pipe(
           catchError((err) => {
             console.error('Reports: failed to load dispatch data', err);
             this.lineDispatchError.set('Unable to load report data. Please try again.');
@@ -426,7 +447,7 @@ export class ReportCalcService {
    * the same way buildDispatchAttribution() does (by sourced packed qty,
    * uncovered/manual qty to the DC's first Sales Order).
    */
-  private async loadDcDispatch(orderIds: string[], signature: string): Promise<DcDispatchRecord[]> {
+  private async loadDcDispatch(orderIds: string[], cacheKey: string): Promise<DcDispatchRecord[]> {
     const t0 = performance.now();
     const inScope = new Set(orderIds);
     const dcs = await this.dcService.getDCsBySalesOrderIdsOnce(orderIds);
@@ -497,7 +518,7 @@ export class ReportCalcService {
       }
     }
 
-    this.dcDispatchCache.set(signature, records);
+    this.dcDispatchCache.set(cacheKey, records);
     if (this.dcDispatchCache.size > ReportCalcService.MAX_DISPATCH_CACHE_ENTRIES) {
       const oldestKey = this.dcDispatchCache.keys().next().value;
       if (oldestKey !== undefined) this.dcDispatchCache.delete(oldestKey);
@@ -541,7 +562,7 @@ export class ReportCalcService {
     return buckets;
   }
 
-  private async loadDispatchAttribution(orderIds: string[], signature: string): Promise<DispatchAttributionResult> {
+  private async loadDispatchAttribution(orderIds: string[], cacheKey: string): Promise<DispatchAttributionResult> {
     const t0 = performance.now();
     const pickLists = await this.pickListService.getPickListsByOrderIdsOnce(orderIds);
     console.debug(`[Reports] pick lists: ${pickLists.length} for ${orderIds.length} orders in ${Math.round(performance.now() - t0)}ms`);
@@ -552,7 +573,7 @@ export class ReportCalcService {
     console.debug(`[Reports] dispatch attribution: ${attribution.lineRecords.length} lines in ${Math.round(performance.now() - t1)}ms`);
     const result: DispatchAttributionResult = { pickLists, ...attribution };
 
-    this.dispatchCache.set(signature, result);
+    this.dispatchCache.set(cacheKey, result);
     if (this.dispatchCache.size > ReportCalcService.MAX_DISPATCH_CACHE_ENTRIES) {
       const oldestKey = this.dispatchCache.keys().next().value;
       if (oldestKey !== undefined) this.dispatchCache.delete(oldestKey);
