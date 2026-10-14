@@ -1,0 +1,5447 @@
+[
+  {
+    "invoice": {
+      "name": "projects/tmg-clothings/databases/(default)/documents/invoices/juKb90Dip7ktqMU6hS28",
+      "fields": {
+        "dcIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "VBnftfTm63McK0HopbZs"
+              },
+              {
+                "stringValue": "mnjbHHSPi1DR3T9MGajT"
+              }
+            ]
+          }
+        },
+        "dcId": {
+          "stringValue": "VBnftfTm63McK0HopbZs"
+        },
+        "dcNo": {
+          "stringValue": "DCC2627-1981, DCC2627-1918"
+        },
+        "packingListId": {
+          "stringValue": "lGjxP9oyLf2Q3E1IieF6"
+        },
+        "packingListNo": {
+          "stringValue": "PK-1791615355281"
+        },
+        "salesOrderIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "EV3aIx5EXj0ZmzB50MuM"
+              }
+            ]
+          }
+        },
+        "salesNos": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "SO-1791614946391"
+              }
+            ]
+          }
+        },
+        "orderNo": {
+          "stringValue": ""
+        },
+        "clientId": {
+          "stringValue": "MjBCeHa5CgCqORqN4Xlb"
+        },
+        "clientName": {
+          "stringValue": "SS ANDAVAR SILKS - KANGEYAM"
+        },
+        "clientAddress": {
+          "stringValue": "SF NO:1062/3C2,TIRUPUR ROAD,SIVANMALAI,"
+        },
+        "clientPlace": {
+          "stringValue": "KANGEYAM"
+        },
+        "clientState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientZipCode": {
+          "stringValue": "638701"
+        },
+        "clientPhone": {
+          "stringValue": "9384815772"
+        },
+        "clientGstin": {
+          "stringValue": "33ALBPN0637N2Z2"
+        },
+        "clientShipToAddress": {
+          "stringValue": "SF NO:1062/3C2,TIRUPUR ROAD,SIVANMALAI,"
+        },
+        "clientShipToPlace": {
+          "stringValue": "KANGEYAM"
+        },
+        "clientShipToState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientShipToZipCode": {
+          "stringValue": "638701"
+        },
+        "destination": {
+          "stringValue": "KANGEYAM"
+        },
+        "transport": {
+          "stringValue": "AKR EXPRESS"
+        },
+        "transportId": {
+          "stringValue": "0tTX7y60lP59v92Dj1sl"
+        },
+        "transportAddress": {
+          "stringValue": "THOTTIPALAYAM,\nCOIMBATORE"
+        },
+        "transportGstNo": {
+          "stringValue": "33AAECA2701K1Z4"
+        },
+        "vehicleNo": {
+          "stringValue": ""
+        },
+        "docNo": {
+          "stringValue": ""
+        },
+        "shipmentDate": {
+          "timestampValue": "2026-10-14T05:15:21.581Z"
+        },
+        "totalPkgs": {
+          "integerValue": "2"
+        },
+        "agentName": {
+          "stringValue": "D Hari Babu"
+        },
+        "items": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA196"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 1534.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA196"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 1534.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA199"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 767.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA199"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 767.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA211"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1449"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 927.36
+                    },
+                    "amount": {
+                      "doubleValue": 1854.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA211"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1449"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 927.36
+                    },
+                    "amount": {
+                      "doubleValue": 927.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS130"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS130"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS130"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS130"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS160"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 1790.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS160"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 1790.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS160"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 895.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA106"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 895.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA114"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 831.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA114"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 831.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA116"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 831.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA116"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 831.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA119"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA119"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA169"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 1726.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA170"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA170"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA170"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA171"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA181"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1049"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 671.36
+                    },
+                    "amount": {
+                      "doubleValue": 671.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA212"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1449"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 927.36
+                    },
+                    "amount": {
+                      "doubleValue": 1854.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC258"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS113"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 895.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS139"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 2878.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS139"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 1918.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS139"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 959.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS140"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 895.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS147"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS147"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS156"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS157"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS203"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 767.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA196"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 1534.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA196"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 1534.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA199"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 767.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA199"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 767.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA211"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1449"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 927.36
+                    },
+                    "amount": {
+                      "doubleValue": 1854.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA211"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1449"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 927.36
+                    },
+                    "amount": {
+                      "doubleValue": 927.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS130"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS130"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS130"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS130"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS160"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 1790.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS160"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 1790.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS160"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 895.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA106"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 895.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA114"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 831.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA114"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 831.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA116"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 831.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA116"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 831.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA119"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA119"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA169"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 1726.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA170"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA170"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA170"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA171"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA181"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1049"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 671.36
+                    },
+                    "amount": {
+                      "doubleValue": 671.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA212"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1449"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 927.36
+                    },
+                    "amount": {
+                      "doubleValue": 1854.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC258"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS113"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 895.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS139"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 2878.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS139"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "2"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 1918.72
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS139"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 959.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS140"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 895.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS147"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS147"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1249"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 799.36
+                    },
+                    "amount": {
+                      "doubleValue": 799.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS156"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS157"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1349"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 863.36
+                    },
+                    "amount": {
+                      "doubleValue": 863.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS203"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 767.36
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "grossAmount": {
+          "integerValue": "84672"
+        },
+        "discountPct": {
+          "integerValue": "10"
+        },
+        "discountAmount": {
+          "doubleValue": 8467.2
+        },
+        "freightAmount": {
+          "integerValue": "0"
+        },
+        "taxableValue": {
+          "doubleValue": 76204.8
+        },
+        "cgstRate": {
+          "doubleValue": 2.5
+        },
+        "cgstAmount": {
+          "doubleValue": 1905.12
+        },
+        "sgstRate": {
+          "doubleValue": 2.5
+        },
+        "sgstAmount": {
+          "doubleValue": 1905.12
+        },
+        "igstRate": {
+          "integerValue": "0"
+        },
+        "igstAmount": {
+          "integerValue": "0"
+        },
+        "totalTaxAmount": {
+          "doubleValue": 3810.24
+        },
+        "roundOff": {
+          "doubleValue": -0.04
+        },
+        "totalAmount": {
+          "integerValue": "80015"
+        },
+        "amountInWords": {
+          "stringValue": "EIGHTY THOUSAND FIFTEEN RUPEES ONLY"
+        },
+        "taxSummary": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "taxableValue": {
+                      "doubleValue": 76204.8
+                    },
+                    "cgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "cgstAmount": {
+                      "doubleValue": 1905.12
+                    },
+                    "sgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "sgstAmount": {
+                      "doubleValue": 1905.12
+                    },
+                    "igstRate": {
+                      "integerValue": "0"
+                    },
+                    "igstAmount": {
+                      "integerValue": "0"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "packingListIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "lGjxP9oyLf2Q3E1IieF6"
+              }
+            ]
+          }
+        },
+        "invoiceNo": {
+          "stringValue": "TMGC2627-2589"
+        },
+        "invoiceSeq": {
+          "integerValue": "2589"
+        },
+        "createdAt": {
+          "timestampValue": "2026-10-14T05:17:26.759Z"
+        },
+        "invoiceDate": {
+          "timestampValue": "2026-10-14T05:17:26.759Z"
+        },
+        "updatedAt": {
+          "timestampValue": "2026-10-14T05:17:26.759Z"
+        }
+      },
+      "createTime": "2026-10-14T05:17:26.830195Z",
+      "updateTime": "2026-10-14T05:17:26.830195Z"
+    }
+  },
+  {
+    "invoice": {
+      "name": "projects/tmg-clothings/databases/(default)/documents/invoices/SCtAOXRUuYzTmvLx21Zg",
+      "fields": {
+        "dcIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "hBggPV0hQYXG0OnsP3Qx"
+              },
+              {
+                "stringValue": "llwbloQ2x9pppZv14aCU"
+              }
+            ]
+          }
+        },
+        "dcId": {
+          "stringValue": "hBggPV0hQYXG0OnsP3Qx"
+        },
+        "dcNo": {
+          "stringValue": "DCC2627-1917, DCC2627-1982"
+        },
+        "packingListId": {
+          "stringValue": "0UGLFU6iKa6GYr3rVExN"
+        },
+        "packingListNo": {
+          "stringValue": "PK-1791615920592"
+        },
+        "salesOrderIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "EV3aIx5EXj0ZmzB50MuM"
+              }
+            ]
+          }
+        },
+        "salesNos": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "SO-1791614946391"
+              }
+            ]
+          }
+        },
+        "orderNo": {
+          "stringValue": ""
+        },
+        "clientId": {
+          "stringValue": "MjBCeHa5CgCqORqN4Xlb"
+        },
+        "clientName": {
+          "stringValue": "SS ANDAVAR SILKS - KANGEYAM"
+        },
+        "clientAddress": {
+          "stringValue": "SF NO:1062/3C2,TIRUPUR ROAD,SIVANMALAI,"
+        },
+        "clientPlace": {
+          "stringValue": "KANGEYAM"
+        },
+        "clientState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientZipCode": {
+          "stringValue": "638701"
+        },
+        "clientPhone": {
+          "stringValue": "9384815772"
+        },
+        "clientGstin": {
+          "stringValue": "33ALBPN0637N2Z2"
+        },
+        "clientShipToAddress": {
+          "stringValue": "SF NO:1062/3C2,TIRUPUR ROAD,SIVANMALAI,"
+        },
+        "clientShipToPlace": {
+          "stringValue": "KANGEYAM"
+        },
+        "clientShipToState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientShipToZipCode": {
+          "stringValue": "638701"
+        },
+        "destination": {
+          "stringValue": "KANGEYAM"
+        },
+        "transport": {
+          "stringValue": "AKR EXPRESS"
+        },
+        "transportId": {
+          "stringValue": "0tTX7y60lP59v92Dj1sl"
+        },
+        "transportAddress": {
+          "stringValue": "THOTTIPALAYAM,\nCOIMBATORE"
+        },
+        "transportGstNo": {
+          "stringValue": "33AAECA2701K1Z4"
+        },
+        "vehicleNo": {
+          "stringValue": ""
+        },
+        "docNo": {
+          "stringValue": ""
+        },
+        "shipmentDate": {
+          "timestampValue": "2026-10-10T07:38:08.498Z"
+        },
+        "totalPkgs": {
+          "integerValue": "2"
+        },
+        "agentName": {
+          "stringValue": "D Hari Babu"
+        },
+        "items": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA235"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "4"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 3837.44
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA235"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 2878.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA235"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 2878.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA235"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 2878.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA245"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA245"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA247"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA247"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC258"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC258"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC258"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC258"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 703.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC259"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC260"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "4"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 3069.44
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC260"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "4"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 3069.44
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC260"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "4"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 3069.44
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA235"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "4"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 3837.44
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA235"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 2878.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA235"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 2878.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA235"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 2878.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA245"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA245"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA247"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA247"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC258"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC258"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC258"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC258"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 703.36
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC259"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC260"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "4"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 3069.44
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC260"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "4"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 3069.44
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC260"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "4"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 3069.44
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "grossAmount": {
+          "integerValue": "81600"
+        },
+        "discountPct": {
+          "integerValue": "10"
+        },
+        "discountAmount": {
+          "integerValue": "8160"
+        },
+        "freightAmount": {
+          "integerValue": "0"
+        },
+        "taxableValue": {
+          "integerValue": "73440"
+        },
+        "cgstRate": {
+          "doubleValue": 2.5
+        },
+        "cgstAmount": {
+          "integerValue": "1836"
+        },
+        "sgstRate": {
+          "doubleValue": 2.5
+        },
+        "sgstAmount": {
+          "integerValue": "1836"
+        },
+        "igstRate": {
+          "integerValue": "0"
+        },
+        "igstAmount": {
+          "integerValue": "0"
+        },
+        "totalTaxAmount": {
+          "integerValue": "3672"
+        },
+        "roundOff": {
+          "integerValue": "0"
+        },
+        "totalAmount": {
+          "integerValue": "77112"
+        },
+        "amountInWords": {
+          "stringValue": "SEVENTY SEVEN THOUSAND ONE HUNDRED TWELVE RUPEES ONLY"
+        },
+        "taxSummary": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "taxableValue": {
+                      "integerValue": "73440"
+                    },
+                    "cgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "cgstAmount": {
+                      "integerValue": "1836"
+                    },
+                    "sgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "sgstAmount": {
+                      "integerValue": "1836"
+                    },
+                    "igstRate": {
+                      "integerValue": "0"
+                    },
+                    "igstAmount": {
+                      "integerValue": "0"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "packingListIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "0UGLFU6iKa6GYr3rVExN"
+              }
+            ]
+          }
+        },
+        "invoiceNo": {
+          "stringValue": "TMGC2627-2590"
+        },
+        "invoiceSeq": {
+          "integerValue": "2590"
+        },
+        "createdAt": {
+          "timestampValue": "2026-10-14T05:17:41.611Z"
+        },
+        "invoiceDate": {
+          "timestampValue": "2026-10-14T05:17:41.611Z"
+        },
+        "updatedAt": {
+          "timestampValue": "2026-10-14T05:17:41.611Z"
+        }
+      },
+      "createTime": "2026-10-14T05:17:41.671722Z",
+      "updateTime": "2026-10-14T05:17:41.671722Z"
+    }
+  },
+  {
+    "invoice": {
+      "name": "projects/tmg-clothings/databases/(default)/documents/invoices/xMNPsRZGHJA3Itv3UrkJ",
+      "fields": {
+        "dcIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "NSn8B2PJeIekGfztrkO2"
+              },
+              {
+                "stringValue": "Xo0rXJs0ajvpeMMzSfrn"
+              }
+            ]
+          }
+        },
+        "dcId": {
+          "stringValue": "NSn8B2PJeIekGfztrkO2"
+        },
+        "dcNo": {
+          "stringValue": "DCC2627-1983, DCC2627-1919"
+        },
+        "packingListId": {
+          "stringValue": "uTC5iwXLUBguzEVwiioh"
+        },
+        "packingListNo": {
+          "stringValue": "PK-1791616134480"
+        },
+        "salesOrderIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "EV3aIx5EXj0ZmzB50MuM"
+              }
+            ]
+          }
+        },
+        "salesNos": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "SO-1791614946391"
+              }
+            ]
+          }
+        },
+        "orderNo": {
+          "stringValue": ""
+        },
+        "clientId": {
+          "stringValue": "MjBCeHa5CgCqORqN4Xlb"
+        },
+        "clientName": {
+          "stringValue": "SS ANDAVAR SILKS - KANGEYAM"
+        },
+        "clientAddress": {
+          "stringValue": "SF NO:1062/3C2,TIRUPUR ROAD,SIVANMALAI,"
+        },
+        "clientPlace": {
+          "stringValue": "KANGEYAM"
+        },
+        "clientState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientZipCode": {
+          "stringValue": "638701"
+        },
+        "clientPhone": {
+          "stringValue": "9384815772"
+        },
+        "clientGstin": {
+          "stringValue": "33ALBPN0637N2Z2"
+        },
+        "clientShipToAddress": {
+          "stringValue": "SF NO:1062/3C2,TIRUPUR ROAD,SIVANMALAI,"
+        },
+        "clientShipToPlace": {
+          "stringValue": "KANGEYAM"
+        },
+        "clientShipToState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientShipToZipCode": {
+          "stringValue": "638701"
+        },
+        "destination": {
+          "stringValue": "KANGEYAM"
+        },
+        "transport": {
+          "stringValue": "AKR EXPRESS"
+        },
+        "transportId": {
+          "stringValue": "0tTX7y60lP59v92Dj1sl"
+        },
+        "transportAddress": {
+          "stringValue": "THOTTIPALAYAM,\nCOIMBATORE"
+        },
+        "transportGstNo": {
+          "stringValue": "33AAECA2701K1Z4"
+        },
+        "vehicleNo": {
+          "stringValue": ""
+        },
+        "docNo": {
+          "stringValue": ""
+        },
+        "shipmentDate": {
+          "timestampValue": "2026-10-14T05:16:43.925Z"
+        },
+        "totalPkgs": {
+          "integerValue": "2"
+        },
+        "agentName": {
+          "stringValue": "D Hari Babu"
+        },
+        "items": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA195"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 2302.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA213"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1449"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 927.36
+                    },
+                    "amount": {
+                      "doubleValue": 2782.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA235"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 2878.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA247"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA247"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA247"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC259"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS113"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 2686.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS113"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 2686.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS140"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 2686.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS205"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 2302.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS206"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1449"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 927.36
+                    },
+                    "amount": {
+                      "doubleValue": 2782.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA195"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 2302.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA213"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1449"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 927.36
+                    },
+                    "amount": {
+                      "doubleValue": 2782.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA235"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1499"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 959.36
+                    },
+                    "amount": {
+                      "doubleValue": 2878.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA247"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA247"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTA247"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1299"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 831.36
+                    },
+                    "amount": {
+                      "doubleValue": 2494.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTC259"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1099"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 703.36
+                    },
+                    "amount": {
+                      "doubleValue": 2110.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS113"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 2686.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS113"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 2686.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS140"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1399"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 895.36
+                    },
+                    "amount": {
+                      "doubleValue": 2686.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS205"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1199"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 767.36
+                    },
+                    "amount": {
+                      "doubleValue": 2302.08
+                    }
+                  }
+                }
+              },
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL TROUSER"
+                    },
+                    "styleNo": {
+                      "stringValue": "RTS206"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "discountPct": {
+                      "integerValue": "10"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "1449"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "3"
+                    },
+                    "price": {
+                      "doubleValue": 927.36
+                    },
+                    "amount": {
+                      "doubleValue": 2782.08
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "grossAmount": {
+          "doubleValue": 61393.92
+        },
+        "discountPct": {
+          "integerValue": "10"
+        },
+        "discountAmount": {
+          "doubleValue": 6139.39
+        },
+        "freightAmount": {
+          "integerValue": "0"
+        },
+        "taxableValue": {
+          "doubleValue": 55254.53
+        },
+        "cgstRate": {
+          "doubleValue": 2.5
+        },
+        "cgstAmount": {
+          "doubleValue": 1381.36
+        },
+        "sgstRate": {
+          "doubleValue": 2.5
+        },
+        "sgstAmount": {
+          "doubleValue": 1381.36
+        },
+        "igstRate": {
+          "integerValue": "0"
+        },
+        "igstAmount": {
+          "integerValue": "0"
+        },
+        "totalTaxAmount": {
+          "doubleValue": 2762.72
+        },
+        "roundOff": {
+          "doubleValue": -0.25
+        },
+        "totalAmount": {
+          "integerValue": "58017"
+        },
+        "amountInWords": {
+          "stringValue": "FIFTY EIGHT THOUSAND SEVENTEEN RUPEES ONLY"
+        },
+        "taxSummary": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "hsnSac": {
+                      "stringValue": "62034200"
+                    },
+                    "taxableValue": {
+                      "doubleValue": 55254.53
+                    },
+                    "cgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "cgstAmount": {
+                      "doubleValue": 1381.36
+                    },
+                    "sgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "sgstAmount": {
+                      "doubleValue": 1381.36
+                    },
+                    "igstRate": {
+                      "integerValue": "0"
+                    },
+                    "igstAmount": {
+                      "integerValue": "0"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "packingListIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "uTC5iwXLUBguzEVwiioh"
+              }
+            ]
+          }
+        },
+        "invoiceNo": {
+          "stringValue": "TMGC2627-2591"
+        },
+        "invoiceSeq": {
+          "integerValue": "2591"
+        },
+        "createdAt": {
+          "timestampValue": "2026-10-14T05:17:55.337Z"
+        },
+        "invoiceDate": {
+          "timestampValue": "2026-10-14T05:17:55.337Z"
+        },
+        "updatedAt": {
+          "timestampValue": "2026-10-14T05:17:55.337Z"
+        }
+      },
+      "createTime": "2026-10-14T05:17:55.389854Z",
+      "updateTime": "2026-10-14T05:17:55.389854Z"
+    }
+  }
+]
