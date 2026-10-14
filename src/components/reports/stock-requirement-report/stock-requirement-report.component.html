@@ -11,6 +11,7 @@
     <p class="text-xs text-gray-500 -mt-4 mb-4">Date range, customer, agent and status select which Sales Orders count as pending demand (by order date). Stock is always the current stock.</p>
 
     @let sku = stock.itemLevel() === 'sku';
+    @let groupLevel = stock.itemLevel() === 'group';
 
     <!-- Report-specific filters (apply instantly, no reload) -->
     <div class="bg-white border border-gray-200 rounded-lg p-4 mb-4">
@@ -28,14 +29,12 @@
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Item Level</label>
           <div class="inline-flex rounded-md shadow-sm" role="group">
-            <button type="button" (click)="setItemLevel('sku')"
-                    [class]="sku ? 'px-3 py-2 text-xs font-medium rounded-l-md border border-indigo-600 bg-indigo-600 text-white' : 'px-3 py-2 text-xs font-medium rounded-l-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'">
-              Item (Size)
-            </button>
-            <button type="button" (click)="setItemLevel('style')"
-                    [class]="!sku ? 'px-3 py-2 text-xs font-medium rounded-r-md border border-indigo-600 bg-indigo-600 text-white' : 'px-3 py-2 text-xs font-medium rounded-r-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'">
-              Style &amp; Color
-            </button>
+            @for (level of levels; track level; let first = $first, last = $last) {
+              <button type="button" (click)="setItemLevel(level)"
+                      [class]="'px-3 py-2 text-xs font-medium border ' + (first ? 'rounded-l-md ' : '-ml-px ') + (last ? 'rounded-r-md ' : '') + (stock.itemLevel() === level ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50')">
+                {{ levelLabels[level] }}
+              </button>
+            }
           </div>
         </div>
         <div>
@@ -96,6 +95,7 @@
         <li><b>Additional Required</b> = Required from Stock − Available (if positive). <b>Excess</b> = Available − Required from Stock (if positive) — stock free for new orders.</li>
         <li>Stock is allocated to pending orders oldest order date first; the Sales Order breakdown shows which orders are covered and which are short.</li>
         <li>Status: <b>Zero Stock</b> when nothing is available, <b>Insufficient</b> when available stock does not cover the requirement, otherwise <b>Sufficient</b>. At Style &amp; Color level, shortages and excess are summed per size — surplus in one size never covers another.</li>
+        <li><b>Stock Value</b> = Current Stock × WSP, <b>Pending SO Value</b> = Pending SO Qty × WSP, per item (size). WSP is the Design Master rate for the size, else the rate on the inventory record. Style &amp; Color and Product / Group values are the sums of their sizes.</li>
         <li>There is a single stock location in the system (no warehouse field on inventory), so the report is not split by warehouse.</li>
       </ul>
     </details>
@@ -118,7 +118,7 @@
     @if (!isLoading() && !error()) {
       @if (viewMode() === 'items') {
         @let t = totals();
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
             <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Items</p>
             <p class="mt-1 text-2xl font-semibold text-gray-900">{{ t.itemCount | number }}</p>
@@ -148,9 +148,73 @@
             <p class="mt-1 text-2xl font-semibold text-emerald-900">{{ t.excessQty | number }}</p>
             <p class="text-xs text-emerald-700">available for new orders</p>
           </div>
+          <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+            <p class="text-xs font-medium text-blue-600 uppercase tracking-wide">Stock Value</p>
+            <p class="mt-1 text-2xl font-semibold text-blue-900">{{ t.stockValue | number: '1.2-2' }}</p>
+            <p class="text-xs text-blue-700">current stock × WSP</p>
+          </div>
+          <div class="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
+            <p class="text-xs font-medium text-violet-600 uppercase tracking-wide">Pending SO Value</p>
+            <p class="mt-1 text-2xl font-semibold text-violet-900">{{ t.pendingValue | number: '1.2-2' }}</p>
+            <p class="text-xs text-violet-700">pending qty × WSP</p>
+          </div>
         </div>
 
-        @if (itemRows().length > 0) {
+        @if (itemRows().length > 0 && groupLevel) {
+          <div class="overflow-x-auto border border-gray-200 rounded-lg">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-800 text-white">
+                <tr>
+                  <th class="px-4 py-3 text-center font-medium w-12">#</th>
+                  <th class="px-4 py-3 text-left font-medium">Product / Group</th>
+                  <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Current Stock</th>
+                  <th class="px-4 py-3 text-right font-medium whitespace-nowrap" title="Picked for a pending order, not yet on a DC (already deducted from Current Stock)">Reserved</th>
+                  <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Pending SO Qty</th>
+                  <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Additional Req.</th>
+                  <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Excess</th>
+                  <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Stock Value</th>
+                  <th class="px-4 py-3 text-right font-medium whitespace-nowrap">Pending SO Value</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                @for (row of pagedItemRows(); track row.key; let i = $index) {
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-center text-gray-600">{{ (currentPage() - 1) * pageSize() + i + 1 }}</td>
+                    <td class="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{{ row.group }}</td>
+                    <td class="px-4 py-3 text-right" [class.text-rose-700]="row.currentStock < 0" [class.text-gray-900]="row.currentStock >= 0">{{ row.currentStock | number }}</td>
+                    <td class="px-4 py-3 text-right text-sky-700">{{ row.reservedQty | number }}</td>
+                    <td class="px-4 py-3 text-right font-medium text-blue-700">{{ row.pendingQty | number }}</td>
+                    <td class="px-4 py-3 text-right font-medium text-rose-700">{{ row.additionalRequiredQty | number }}</td>
+                    <td class="px-4 py-3 text-right font-medium text-amber-700">{{ row.excessQty | number }}</td>
+                    <td class="px-4 py-3 text-right font-semibold text-gray-900">{{ row.stockValue | number: '1.2-2' }}</td>
+                    <td class="px-4 py-3 text-right font-semibold text-gray-900">{{ row.pendingValue | number: '1.2-2' }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot class="bg-gray-100 font-bold">
+                <tr>
+                  <td></td>
+                  <td class="px-4 py-3 text-gray-900">Grand Total</td>
+                  <td class="px-4 py-3 text-right text-gray-900">{{ t.currentStock | number }}</td>
+                  <td class="px-4 py-3 text-right text-sky-800">{{ t.reservedQty | number }}</td>
+                  <td class="px-4 py-3 text-right text-blue-800">{{ t.pendingQty | number }}</td>
+                  <td class="px-4 py-3 text-right text-rose-800">{{ t.additionalRequiredQty | number }}</td>
+                  <td class="px-4 py-3 text-right text-amber-800">{{ t.excessQty | number }}</td>
+                  <td class="px-4 py-3 text-right text-gray-900">{{ t.stockValue | number: '1.2-2' }}</td>
+                  <td class="px-4 py-3 text-right text-gray-900">{{ t.pendingValue | number: '1.2-2' }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <app-report-pagination
+            [total]="itemRows().length"
+            [page]="currentPage()"
+            [pageSize]="pageSize()"
+            [pageSizeOptions]="[25, 50, 100, 250]"
+            (pageChange)="setPage($event)"
+            (pageSizeChange)="setPageSize($event)"
+          />
+        } @else if (itemRows().length > 0) {
           <div class="overflow-x-auto border border-gray-200 rounded-lg">
             <table class="min-w-full text-sm">
               <thead class="bg-gray-800 text-white">
@@ -161,7 +225,10 @@
                   <th class="px-3 py-3 text-left font-medium">Product</th>
                   <th class="px-3 py-3 text-left font-medium">Color</th>
                   <th class="px-3 py-3 text-center font-medium">Sleeve</th>
-                  @if (sku) { <th class="px-3 py-3 text-center font-medium">Size</th> }
+                  @if (sku) {
+                    <th class="px-3 py-3 text-center font-medium">Size</th>
+                    <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Rate (WSP)</th>
+                  }
                   <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Current Stock</th>
                   <th class="px-3 py-3 text-right font-medium whitespace-nowrap" title="Picked for a pending order, not yet on a DC (already deducted from Current Stock)">Reserved</th>
                   <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Available</th>
@@ -169,6 +236,8 @@
                   <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Req. from Stock</th>
                   <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Additional Req.</th>
                   <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Excess</th>
+                  <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Stock Value</th>
+                  <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Pending Value</th>
                   <th class="px-3 py-3 text-center font-medium">Status</th>
                 </tr>
               </thead>
@@ -191,7 +260,10 @@
                     <td class="px-3 py-2 text-gray-700 whitespace-nowrap">{{ row.group || '-' }}</td>
                     <td class="px-3 py-2 text-gray-700">{{ row.color || '-' }}</td>
                     <td class="px-3 py-2 text-center text-gray-700">{{ row.sleeveType || '-' }}</td>
-                    @if (sku) { <td class="px-3 py-2 text-center text-gray-700">{{ row.size }}</td> }
+                    @if (sku) {
+                      <td class="px-3 py-2 text-center text-gray-700">{{ row.size }}</td>
+                      <td class="px-3 py-2 text-right text-gray-700">{{ row.rate ? (row.rate | number: '1.2-2') : '-' }}</td>
+                    }
                     <td class="px-3 py-2 text-right" [class.text-rose-700]="row.currentStock < 0" [class.text-gray-900]="row.currentStock >= 0">{{ row.currentStock | number }}</td>
                     <td class="px-3 py-2 text-right text-sky-700">{{ row.reservedQty ? (row.reservedQty | number) : '-' }}</td>
                     <td class="px-3 py-2 text-right text-gray-900">{{ row.availableQty | number }}</td>
@@ -199,13 +271,15 @@
                     <td class="px-3 py-2 text-right text-gray-700">{{ row.requiredFromStockQty ? (row.requiredFromStockQty | number) : '-' }}</td>
                     <td class="px-3 py-2 text-right font-semibold text-rose-700">{{ row.additionalRequiredQty ? (row.additionalRequiredQty | number) : '-' }}</td>
                     <td class="px-3 py-2 text-right text-emerald-700">{{ row.excessQty ? (row.excessQty | number) : '-' }}</td>
+                    <td class="px-3 py-2 text-right text-gray-900 whitespace-nowrap">{{ row.stockValue ? (row.stockValue | number: '1.2-2') : '-' }}</td>
+                    <td class="px-3 py-2 text-right text-gray-900 whitespace-nowrap">{{ row.pendingValue ? (row.pendingValue | number: '1.2-2') : '-' }}</td>
                     <td class="px-3 py-2 text-center">
                       <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" [class]="statusClass(row.status)">{{ row.status }}</span>
                     </td>
                   </tr>
                   @if (open) {
                     <tr>
-                      <td [attr.colspan]="sku ? 15 : 13" class="bg-gray-50 px-4 py-3">
+                      <td [attr.colspan]="sku ? 18 : 15" class="bg-gray-50 px-4 py-3">
                         <p class="text-xs font-semibold text-gray-600 mb-2">Pending Sales Orders — stock allocated oldest order first</p>
                         <div class="overflow-x-auto">
                           <table class="min-w-full text-xs border border-gray-200 bg-white">
@@ -257,7 +331,7 @@
               </tbody>
               <tfoot class="bg-gray-100 font-bold">
                 <tr>
-                  <td [attr.colspan]="sku ? 7 : 5" class="px-3 py-3 text-gray-900">Grand Total ({{ t.itemCount | number }} items)</td>
+                  <td [attr.colspan]="sku ? 8 : 5" class="px-3 py-3 text-gray-900">Grand Total ({{ t.itemCount | number }} items)</td>
                   <td class="px-3 py-3 text-right text-gray-900">{{ t.currentStock | number }}</td>
                   <td class="px-3 py-3 text-right text-gray-900">{{ t.reservedQty | number }}</td>
                   <td class="px-3 py-3 text-right text-gray-900">{{ t.availableQty | number }}</td>
@@ -265,6 +339,8 @@
                   <td class="px-3 py-3 text-right text-gray-900">{{ t.requiredFromStockQty | number }}</td>
                   <td class="px-3 py-3 text-right text-rose-700">{{ t.additionalRequiredQty | number }}</td>
                   <td class="px-3 py-3 text-right text-emerald-700">{{ t.excessQty | number }}</td>
+                  <td class="px-3 py-3 text-right text-gray-900 whitespace-nowrap">{{ t.stockValue | number: '1.2-2' }}</td>
+                  <td class="px-3 py-3 text-right text-gray-900 whitespace-nowrap">{{ t.pendingValue | number: '1.2-2' }}</td>
                   <td></td>
                 </tr>
               </tfoot>

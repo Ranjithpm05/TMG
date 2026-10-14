@@ -46,6 +46,8 @@ export interface StockItemRow {
   sleeveType: string;
   size: string;
   fabricType: string;
+  /** Wholesale rate (WSP) per piece — Design Master size price, else the inventory record's. 0 when unknown; blank at Style / Group level. */
+  rate: number;
   /** False when the item exists only in inventory or on a Sales Order, not in Design Master. */
   inMaster: boolean;
   currentStock: number;
@@ -56,6 +58,10 @@ export interface StockItemRow {
   additionalRequiredQty: number;
   excessQty: number;
   status: StockStatus;
+  /** currentStock × rate (summed per size at Style / Group level). */
+  stockValue: number;
+  /** pendingQty × rate (summed per size at Style / Group level). */
+  pendingValue: number;
   orders: PendingOrderAllocation[];
 }
 
@@ -69,11 +75,13 @@ export interface StockTotals {
   requiredFromStockQty: number;
   additionalRequiredQty: number;
   excessQty: number;
+  stockValue: number;
+  pendingValue: number;
   insufficientCount: number;
   zeroStockCount: number;
 }
 
-export type ItemLevel = 'sku' | 'style';
+export type ItemLevel = 'sku' | 'style' | 'group';
 
 /** Keys an item by style/color/size, then sleeve — sleeve is matched separately because either side may have left it blank. */
 const baseKey = (styleNo: unknown, color: unknown, size: unknown) => `${normKey(styleNo)}||${normKey(color)}||${normKey(size)}`;
@@ -242,9 +250,9 @@ export class StockRequirementService {
       let row = rows.get(key);
       if (!row) {
         row = {
-          key, barcode: '', styleNo, color, group: '', sleeveType, size, fabricType: '', inMaster: false,
+          key, barcode: '', styleNo, color, group: '', sleeveType, size, fabricType: '', rate: 0, inMaster: false,
           currentStock: 0, reservedQty: 0, availableQty: 0, pendingQty: 0, requiredFromStockQty: 0,
-          additionalRequiredQty: 0, excessQty: 0, status: 'Zero Stock', orders: [],
+          additionalRequiredQty: 0, excessQty: 0, status: 'Zero Stock', stockValue: 0, pendingValue: 0, orders: [],
           ...init,
         };
         rows.set(key, row);
@@ -272,6 +280,7 @@ export class StockRequirementService {
           group, inMaster: true, fabricType: this.data.toText(entry.fabricType),
         });
         if (!row.barcode) row.barcode = this.data.toText(entry.BARCODE);
+        if (!row.rate) row.rate = Number(entry.WSP) || 0;
       }
     }
 
@@ -289,6 +298,7 @@ export class StockRequirementService {
       row.currentStock += Number(inv.currentStock) || 0;
       if (!row.barcode) row.barcode = this.data.toText(inv.barcode);
       if (!row.group) row.group = this.data.toText(inv.group);
+      if (!row.rate) row.rate = Number(inv.WSP) || 0;
     }
 
     // 3. Pending Sales Order demand.
@@ -344,6 +354,8 @@ export class StockRequirementService {
       row.additionalRequiredQty = Math.max(0, row.requiredFromStockQty - row.availableQty);
       row.excessQty = Math.max(0, row.availableQty - row.requiredFromStockQty);
       row.status = statusOf(row.availableQty, row.additionalRequiredQty);
+      row.stockValue = row.currentStock * row.rate;
+      row.pendingValue = row.pendingQty * row.rate;
       result.push(row);
     }
     return result;
@@ -353,16 +365,27 @@ export class StockRequirementService {
    * Style & Color level: sums of the SKU rows. Shortage/excess are summed
    * per size, never netted — surplus Large can't cover a Medium order.
    */
-  private readonly styleRows = computed<StockItemRow[]>(() => {
+  private readonly styleRows = computed<StockItemRow[]>(() => this.rollUp(
+    (sku) => `${normKey(sku.styleNo)}||${normKey(sku.color)}||${normKey(sku.sleeveType)}`,
+    () => ({ size: '' }),
+  ));
+
+  /** Product / Group level: sums of the SKU rows per Design Master group. */
+  private readonly groupRows = computed<StockItemRow[]>(() => this.rollUp(
+    (sku) => normKey(sku.group || 'Other'),
+    (sku) => ({ group: sku.group || 'Other', styleNo: '', color: '', sleeveType: '', size: '', fabricType: '' }),
+  ));
+
+  private rollUp(keyOf: (sku: StockItemRow) => string, identity: (sku: StockItemRow) => Partial<StockItemRow>): StockItemRow[] {
     const groups = new Map<string, StockItemRow>();
     for (const sku of this.skuRows()) {
-      const key = `${normKey(sku.styleNo)}||${normKey(sku.color)}||${normKey(sku.sleeveType)}`;
+      const key = keyOf(sku);
       let row = groups.get(key);
       if (!row) {
         row = {
-          ...sku, key, barcode: '', size: '', fabricType: sku.fabricType,
+          ...sku, ...identity(sku), key, barcode: '', rate: 0,
           currentStock: 0, reservedQty: 0, availableQty: 0, pendingQty: 0, requiredFromStockQty: 0,
-          additionalRequiredQty: 0, excessQty: 0, orders: [],
+          additionalRequiredQty: 0, excessQty: 0, stockValue: 0, pendingValue: 0, orders: [],
         };
         groups.set(key, row);
       }
@@ -374,6 +397,8 @@ export class StockRequirementService {
       row.requiredFromStockQty += sku.requiredFromStockQty;
       row.additionalRequiredQty += sku.additionalRequiredQty;
       row.excessQty += sku.excessQty;
+      row.stockValue += sku.stockValue;
+      row.pendingValue += sku.pendingValue;
       row.orders.push(...sku.orders);
     }
     for (const row of groups.values()) {
@@ -381,11 +406,12 @@ export class StockRequirementService {
       row.orders.sort((a, b) => (a.orderDate?.getTime() ?? 0) - (b.orderDate?.getTime() ?? 0) || a.salesNo.localeCompare(b.salesNo) || a.size.localeCompare(b.size, undefined, { numeric: true }));
     }
     return [...groups.values()];
-  });
+  }
 
   /** Rows at the selected level, narrowed by the item search (barcode / style / color / product). */
   readonly rows = computed<StockItemRow[]>(() => {
-    const source = this.itemLevel() === 'style' ? this.styleRows() : this.skuRows();
+    const level = this.itemLevel();
+    const source = level === 'group' ? this.groupRows() : level === 'style' ? this.styleRows() : this.skuRows();
     const search = this.itemSearch().trim().toLowerCase();
     if (!search) return source;
     return source.filter((row) =>
@@ -399,7 +425,8 @@ export class StockRequirementService {
   totalsOf(rows: StockItemRow[]): StockTotals {
     const totals: StockTotals = {
       itemCount: rows.length, itemsWithPending: 0, currentStock: 0, reservedQty: 0, availableQty: 0, pendingQty: 0,
-      requiredFromStockQty: 0, additionalRequiredQty: 0, excessQty: 0, insufficientCount: 0, zeroStockCount: 0,
+      requiredFromStockQty: 0, additionalRequiredQty: 0, excessQty: 0, stockValue: 0, pendingValue: 0,
+      insufficientCount: 0, zeroStockCount: 0,
     };
     for (const row of rows) {
       if (row.pendingQty > 0) totals.itemsWithPending += 1;
@@ -410,6 +437,8 @@ export class StockRequirementService {
       totals.requiredFromStockQty += row.requiredFromStockQty;
       totals.additionalRequiredQty += row.additionalRequiredQty;
       totals.excessQty += row.excessQty;
+      totals.stockValue += row.stockValue;
+      totals.pendingValue += row.pendingValue;
       if (row.additionalRequiredQty > 0) totals.insufficientCount += 1;
       if (row.status === 'Zero Stock') totals.zeroStockCount += 1;
     }
