@@ -342,6 +342,13 @@
                         class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs rounded-lg transition-colors">
                         Box Labels
                       </button>
+                      @if (!dc.invoiceNo && !dcDeliveries.length && !(ds?.closedQty ?? 0)) {
+                        <button (click)="deleteDC(dc)"
+                          title="Delete this DC and return its stock to inventory"
+                          class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-red-300 text-red-600 hover:bg-red-50 text-xs rounded-lg transition-colors">
+                          Delete DC
+                        </button>
+                      }
                     </div>
                   </td>
                 </tr>

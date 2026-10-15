@@ -34,7 +34,7 @@ import { InventoryService } from './inventory.service';
 import { PickListService } from './pick-list.service';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 import { VersionedLinesCache } from './versioned-lines-cache.util';
-import { invalidateRangeCaches, syncedRangeQuery } from './range-cache.util';
+import { invalidateRangeCaches, removeFromRangeCaches, syncedRangeQuery } from './range-cache.util';
 
 @Injectable({ providedIn: 'root' })
 export class PackingListService {
@@ -90,6 +90,12 @@ export class PackingListService {
   /** Updates one packing list's cached top-level fields (aggregates, status) already known from a just-committed transaction, without a Firestore round-trip. No-op if the cache hasn't loaded yet. */
   private patchPackingListInCache(packingList: PackingList): void {
     this.packingListsCache.patchOne(packingList);
+  }
+
+  /** Drops one packing list deleted elsewhere in this app (DeliveryChallanService.deleteDC) — a delta sync can't see deletions. */
+  removeFromCache(id: string): void {
+    this.packingListsCache.removeOne(id);
+    removeFromRangeCaches(this.packingListsRangeCache, id);
   }
 
   getPackingLists(): Observable<PackingList[]> {
@@ -1166,7 +1172,11 @@ export class PackingListService {
     this.invalidateCache();
   }
 
-  private async deductInventoryOnCompletion(packingListId: string): Promise<boolean> {
+  // Public for DeliveryChallanService.createDC(): a "Delete DC only" returns
+  // the packed stock and resets stockDeducted, so regenerating a DC from the
+  // same Packing List must take it out of inventory again. Idempotent — a
+  // no-op once stockDeducted is true.
+  async deductInventoryOnCompletion(packingListId: string): Promise<boolean> {
     const items = await this.getPackingListLinesOnce(packingListId);
     type Deduction = { ref: ReturnType<typeof doc>; qty: number };
     const deductions = new Map<string, Deduction>();

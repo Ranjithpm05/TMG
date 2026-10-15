@@ -104,6 +104,12 @@ export class PickListService {
     this.pickListsCache.patchOne(pickList);
   }
 
+  /** Drops one pick list deleted elsewhere in this app (DeliveryChallanService.deleteDC) — a delta sync can't see deletions. */
+  removeFromCache(id: string): void {
+    this.pickListsCache.removeOne(id);
+    removeFromRangeCaches(this.pickListsRangeCache, id);
+  }
+
   getPickLists(): Observable<PickList[]> {
     return this.pickListsCache.get$();
   }

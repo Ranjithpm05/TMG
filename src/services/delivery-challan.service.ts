@@ -12,6 +12,7 @@ import {
   Timestamp,
   updateDoc,
   where,
+  writeBatch,
 } from '@angular/fire/firestore';
 import { getDocs, runTransaction } from './firestore-reads';
 import { Observable, firstValueFrom } from 'rxjs';
@@ -19,14 +20,32 @@ import { DCBalanceClosure, DCDelivery, DCDeliveryItem, DCItem, DeliveryChallan }
 import { PackingListService } from './packing-list.service';
 import { ClientService } from './client.service';
 import { InventoryService } from './inventory.service';
+import { PickListService } from './pick-list.service';
 import { balanceItemSizeQty, buildDeliveryItems, deliveryPatch } from './dc-delivery.util';
-import { invalidateRangeCaches, syncedRangeQuery } from './range-cache.util';
+import { invalidateRangeCaches, removeFromRangeCaches, syncedRangeQuery } from './range-cache.util';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
+
+export interface DeleteDCResult {
+  dcNo: string;
+  returnedQty: number;
+  packedQty: number;
+  pickedQty: number;
+  packingListNo?: string;
+  pickListNos: string[];
+  // Shared Pick Lists kept for their other Packing Lists, with only this
+  // DC's qty taken off.
+  reducedPickListNos: string[];
+  unreturned: string[];
+}
+
+// Why deleteDC() refused — message is shown to the user as-is.
+export class DeleteDCError extends Error {}
 
 @Injectable({ providedIn: 'root' })
 export class DeliveryChallanService {
   private firestore = inject(Firestore);
   private packingListService = inject(PackingListService);
+  private pickListService = inject(PickListService);
   private clientService = inject(ClientService);
   private inventoryService = inject(InventoryService);
   private dcRef = collection(this.firestore, 'deliveryChallans');
@@ -181,9 +200,11 @@ export class DeliveryChallanService {
     const dcDocRef = doc(this.dcRef);
     const fyCode = this.getFyCode();
 
+    let redeductStock = false;
     const data = await runTransaction(this.firestore, async (transaction) => {
       const packingSnap = await transaction.get(packingListRef);
       if (!packingSnap.exists()) throw new Error('packinglist_not_found');
+      redeductStock = packingSnap.data()?.['restockedByDcDelete'] === true;
 
       const existingKeys: string[] = Array.isArray(packingSnap.data()?.['dcGeneratedKeys'])
         ? packingSnap.data()!['dcGeneratedKeys']
@@ -206,6 +227,7 @@ export class DeliveryChallanService {
       transaction.set(dcDocRef, dcData);
       transaction.update(packingListRef, {
         dcGeneratedKeys: [...new Set([...existingKeys, dcKey])],
+        ...(redeductStock ? { restockedByDcDelete: false } : {}),
         updatedAt: serverTimestamp(),
       });
       if (counterSnap.exists()) {
@@ -222,7 +244,236 @@ export class DeliveryChallanService {
     // List doc — invalidate its cached list too so a subsequent Packing List
     // screen visit doesn't show stale dcGeneratedKeys/lock state.
     this.packingListService.invalidateCache();
+    // A previous DC on this Packing List was removed with "Delete DC only",
+    // which returned the packed stock — take it out again for the new DC.
+    if (redeductStock) await this.packingListService.deductInventoryOnCompletion(input.packingListId);
     return { id: dcDocRef.id, ...data };
+  }
+
+  // Deletes a DC and puts its stock back into inventory. Two modes:
+  //  - 'dc_only': the DC alone. The Packing List's packed qty is returned
+  //    (stock left inventory at packing completion, see
+  //    PackingListService.deductInventoryOnCompletion) and the Packing List is
+  //    unlocked (dcGeneratedKeys cleared, stockDeducted reset) so a new DC can
+  //    be generated from it — createDC() then deducts the stock again
+  //    (restockedByDcDelete flag).
+  //  - 'full': the DC, its Packing List and source Pick List(s), all with
+  //    their lines. Returns the packed qty plus each Pick List's picked qty
+  //    (a Pick List scan deducts stock itself unless inventoryReserved — same
+  //    as PickListService.deletePickList), then re-syncs Sales Order status.
+  // Same rules as scripts/delete-dcs-return-stock.mjs: refused (nothing
+  // written) when the DC has an Invoice, a delivery, a closed balance or an
+  // LR Entry, when its Packing List has an Invoice or holds other DCs, or
+  // ('full') when a Pick List also fed another Packing List. DC + stock +
+  // parent docs commit in one transaction; the lines subcollections (a Pick
+  // List can exceed the 500-write limit) are deleted in batches after.
+  async deleteDC(dcId: string, mode: 'dc_only' | 'full'): Promise<DeleteDCResult> {
+    const dc = (await this.getDCsByIdsOnce([dcId]))[0];
+    if (!dc) throw new Error('dc_not_found');
+
+    const fail = (reason: string): never => { throw new DeleteDCError(reason); };
+    if (dc.invoiceId || dc.invoiceNo) fail(`has Invoice ${dc.invoiceNo || dc.invoiceId} — delete the Invoice first`);
+    if ((dc.deliveries ?? []).length) fail(`has ${dc.deliveries!.length} delivery record(s)`);
+    if (dc.balanceClosure) fail('its balance is already closed (stock partly returned)');
+
+    const invoicesRef = collection(this.firestore, 'invoices');
+    const [invByDcId, invByDcIds, lrSnap] = await Promise.all([
+      getDocs(query(invoicesRef, where('dcId', '==', dcId))),
+      getDocs(query(invoicesRef, where('dcIds', 'array-contains', dcId))),
+      getDocs(query(collection(this.firestore, 'lrEntries'), where('dcId', '==', dcId))),
+    ]);
+    const invoiceNos = [...invByDcId.docs, ...invByDcIds.docs].map((d) => d.data()?.['invoiceNo'] || d.id);
+    if (invoiceNos.length) fail(`has Invoice ${[...new Set(invoiceNos)].join(', ')} — delete the Invoice first`);
+    if (!lrSnap.empty) fail(`has LR Entry ${lrSnap.docs.map((d) => d.data()?.['lrNo'] || d.id).join(', ')}`);
+
+    const returns = new Map<string, number>();
+    const addReturn = (inventoryId: string, qty: number) => returns.set(inventoryId, (returns.get(inventoryId) ?? 0) + qty);
+    const unreturned: string[] = [];
+    const describe = (line: any, qty: number) =>
+      `${line?.styleNo ?? ''} ${line?.color ?? ''} ${line?.sleeveType ?? ''} size ${line?.size ?? ''} × ${qty}`.replace(/\s+/g, ' ');
+
+    // Packing List: packed qty goes back only if it was ever deducted.
+    const plId = dc.packingListId;
+    const plRef = plId ? doc(this.firestore, `packingLists/${plId}`) : null;
+    const pl = plId ? await this.packingListService.getPackingListByIdOnce(plId) : null;
+    if (plId && !pl && mode === 'full') fail(`Packing List ${dc.packingListNo || plId} not found`);
+    const plLineRefs = plId ? (await getDocs(collection(this.firestore, `packingLists/${plId}/lines`))).docs : [];
+    let packedQty = 0;
+    if (pl) {
+      if (pl.invoiceId) fail(`Packing List ${pl.packingListNo} has an Invoice`);
+      const others = (await this.getDCsByPackingListIdOnce(plId)).filter((o) => o.id !== dcId);
+      if (others.length) fail(`Packing List ${pl.packingListNo} also holds DC ${others.map((o) => o.dcNo).join(', ')}`);
+      if (pl.stockDeducted) {
+        const lines = plLineRefs.map((d) => d.data());
+        const barcodes = lines.filter((l) => Number(l['packedQty']) > 0 && !l['inventoryId'] && l['barcode']).map((l) => String(l['barcode']));
+        const found = barcodes.length ? await this.inventoryService.getInventoryByBarcodes([...new Set(barcodes)]) : [];
+        for (const line of lines) {
+          const qty = Number(line['packedQty']) || 0;
+          if (qty <= 0) continue;
+          const inventoryId = line['inventoryId'] || found.find((i) => i.barcode === line['barcode'] && i.id)?.id;
+          if (inventoryId) { addReturn(inventoryId, qty); packedQty += qty; }
+          else unreturned.push(describe(line, qty));
+        }
+      }
+    }
+
+    // Pick List(s) — 'full' only. A Pick List that fed only this Packing List
+    // is deleted whole. One that also fed other Packing Lists (Party-wise
+    // lists are packed in many batches) keeps the other Packing Lists' part:
+    // only the qty this Packing List claimed — PackingListLine.sources — is
+    // taken off its lines (requiredQty, pickedQty, packedIntoPackingListsQty),
+    // a line left with nothing required is deleted, and that picked qty goes
+    // back to stock. That frees the Sales Order qty for a new Pick List,
+    // exactly as deleting a whole Pick List does.
+    const pickLists: { id: string; pickListNo: string; salesOrderIds: string[]; lineRefs: typeof plLineRefs }[] = [];
+    const sharedPickLists: { id: string; pickListNo: string }[] = [];
+    const sharedLineCuts = new Map<string, { ref: ReturnType<typeof doc>; qty: number; salesOrderId: string }>();
+    let pickedQty = 0;
+    if (mode === 'full' && pl) {
+      const pickListIds = [...new Set([...(pl.pickListIds ?? []), pl.pickListId].filter(Boolean))];
+      const plLines = plLineRefs.map((d) => d.data());
+      for (const pickListId of pickListIds) {
+        const pick = await this.pickListService.getPickListByIdOnce(pickListId);
+        if (!pick) continue;
+        const lineRefs = (await getDocs(collection(this.firestore, `pickLists/${pickListId}/lines`))).docs;
+        const feeding = (await this.packingListService.getPackingListsReferencingPickListOnce(pickListId)).filter((p) => p.id !== plId);
+        if (!feeding.length) {
+          if (!pick.inventoryReserved) {
+            for (const d of lineRefs) {
+              const line = d.data();
+              const qty = Number(line['pickedQty']) || 0;
+              if (qty <= 0) continue;
+              if (line['inventoryId']) { addReturn(line['inventoryId'], qty); pickedQty += qty; }
+              else unreturned.push(describe(line, qty));
+            }
+          }
+          pickLists.push({ id: pickListId, pickListNo: pick.pickListNo, salesOrderIds: pick.salesOrderIds ?? [], lineRefs });
+          continue;
+        }
+
+        // Shared — work out this Packing List's claim per Pick List line.
+        const claimByLineId = new Map<string, number>();
+        for (const line of plLines) {
+          const sources: any[] = Array.isArray(line['sources']) ? line['sources'] : [];
+          if (sources.length) {
+            for (const s of sources) {
+              if (s?.pickListId !== pickListId || !s?.pickListLineId) continue;
+              claimByLineId.set(s.pickListLineId, (claimByLineId.get(s.pickListLineId) ?? 0) + (Number(s.qty) || 0));
+            }
+          } else if (pickListIds.length === 1 && line['pickListLineId']) {
+            // Legacy line written before `sources` existed — single source Pick List.
+            const qty = Number(line['requiredQty']) || Number(line['packedQty']) || 0;
+            claimByLineId.set(line['pickListLineId'], (claimByLineId.get(line['pickListLineId']) ?? 0) + qty);
+          }
+        }
+        if (!claimByLineId.size) fail(`cannot tell which part of shared Pick List ${pick.pickListNo} belongs to this Packing List`);
+        for (const [lineId, qty] of claimByLineId) {
+          if (qty <= 0) continue;
+          const lineSnap = lineRefs.find((d) => d.id === lineId);
+          if (!lineSnap) continue;
+          const line = lineSnap.data();
+          sharedLineCuts.set(`${pickListId}/${lineId}`, { ref: lineSnap.ref, qty, salesOrderId: String(line['salesOrderId'] ?? '') });
+          const returnQty = Math.min(qty, Number(line['pickedQty']) || 0);
+          if (pick.inventoryReserved || returnQty <= 0) continue;
+          if (line['inventoryId']) { addReturn(line['inventoryId'], returnQty); pickedQty += returnQty; }
+          else unreturned.push(describe(line, returnQty));
+        }
+        sharedPickLists.push({ id: pickListId, pickListNo: pick.pickListNo });
+      }
+    }
+
+    const invEntries = [...returns.entries()];
+    const sharedCuts = [...sharedLineCuts.values()];
+    if (invEntries.length + pickLists.length + sharedCuts.length + 2 > 490) fail('too many items to update in one step — contact support');
+
+    const dcDocRef = doc(this.dcRef, dcId);
+    let returnedQty = 0;
+    let missingInventory: string[] = [];
+    await runTransaction(this.firestore, async (transaction) => {
+      const [dcSnap, plSnap, ...restSnaps] = await Promise.all([
+        transaction.get(dcDocRef),
+        plRef ? transaction.get(plRef) : Promise.resolve(null),
+        ...invEntries.map(([id]) => transaction.get(doc(this.firestore, `inventory/${id}`))),
+        ...sharedCuts.map((cut) => transaction.get(cut.ref)),
+      ]);
+      const invSnaps = restSnaps.slice(0, invEntries.length);
+      const cutSnaps = restSnaps.slice(invEntries.length);
+      if (!dcSnap.exists()) throw new Error('dc_not_found');
+      const live = this.normalize({ id: dcSnap.id, ...dcSnap.data() });
+      if (live.invoiceId || (live.deliveries ?? []).length || live.balanceClosure) fail('was invoiced or delivered just now — refresh and check');
+      if (plSnap?.exists() && (plSnap.data()?.['stockDeducted'] === true) !== !!pl?.stockDeducted) fail('Packing List changed just now — try again');
+
+      returnedQty = 0;
+      missingInventory = [];
+      invEntries.forEach(([id, qty], i) => {
+        if (!invSnaps[i].exists()) { missingInventory.push(`inventory record ${id} × ${qty}`); return; }
+        transaction.update(invSnaps[i].ref, { currentStock: increment(qty), updatedAt: serverTimestamp() });
+        returnedQty += qty;
+      });
+      transaction.delete(dcDocRef);
+      if (plSnap?.exists()) {
+        if (mode === 'full') transaction.delete(plSnap.ref);
+        else transaction.update(plSnap.ref, {
+          dcGeneratedKeys: [],
+          stockDeducted: false,
+          restockedByDcDelete: !!pl?.stockDeducted,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      for (const pick of pickLists) transaction.delete(doc(this.firestore, `pickLists/${pick.id}`));
+      sharedCuts.forEach((cut, i) => {
+        if (!cutSnaps[i].exists()) return;
+        const line = cutSnaps[i].data()!;
+        const requiredQty = Math.max(0, (Number(line['requiredQty']) || 0) - cut.qty);
+        // requiredQty 0 would read back as orderedQty - pendingQty (see
+        // PickListService.normalizeLine) — drop the line instead.
+        if (requiredQty <= 0) { transaction.delete(cut.ref); return; }
+        const pickedQty = Math.max(0, (Number(line['pickedQty']) || 0) - cut.qty);
+        const remainingQty = Math.max(0, requiredQty - pickedQty);
+        const keepStatus = line['status'] === 'blocked' || line['status'] === 'pending_stock';
+        transaction.update(cut.ref, {
+          requiredQty,
+          pickedQty,
+          remainingQty,
+          balanceQty: remainingQty + Math.max(0, Number(line['pendingQty']) || 0),
+          packedIntoPackingListsQty: Math.max(0, (Number(line['packedIntoPackingListsQty']) || 0) - cut.qty),
+          ...(keepStatus ? {} : { status: remainingQty <= 0 ? 'completed' : pickedQty > 0 ? 'in_progress' : 'ready' }),
+          updatedAt: serverTimestamp(),
+        });
+      });
+    });
+
+    if (mode === 'full') {
+      const lineRefs = [...plLineRefs, ...pickLists.flatMap((p) => p.lineRefs)].map((d) => d.ref);
+      for (let i = 0; i < lineRefs.length; i += 450) {
+        const batch = writeBatch(this.firestore);
+        for (const ref of lineRefs.slice(i, i + 450)) batch.delete(ref);
+        await batch.commit();
+      }
+      for (const pick of sharedPickLists) await this.pickListService.recalculatePickListStatus(pick.id);
+      const salesOrderIds = [...pickLists.flatMap((p) => p.salesOrderIds), ...sharedCuts.map((c) => c.salesOrderId)].filter(Boolean);
+      for (const salesOrderId of new Set(salesOrderIds)) {
+        await this.pickListService.syncSalesOrderShipment('', salesOrderId).catch(() => undefined);
+      }
+    }
+
+    this.dcsCache.removeOne(dcId);
+    removeFromRangeCaches(this.dcsRangeCache, dcId);
+    if (mode === 'full' && plId) this.packingListService.removeFromCache(plId);
+    else this.packingListService.invalidateCache();
+    for (const pick of pickLists) this.pickListService.removeFromCache(pick.id);
+    if (returnedQty > 0) this.inventoryService.invalidateCache();
+
+    return {
+      dcNo: dc.dcNo,
+      returnedQty,
+      packedQty,
+      pickedQty,
+      packingListNo: mode === 'full' && pl ? pl.packingListNo : undefined,
+      pickListNos: pickLists.map((p) => p.pickListNo),
+      reducedPickListNos: sharedPickLists.map((p) => p.pickListNo),
+      unreturned: [...unreturned, ...missingInventory],
+    };
   }
 
   // Corrects data-quality gaps (e.g. sleeveType missing on DCs generated

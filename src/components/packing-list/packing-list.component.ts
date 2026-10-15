@@ -20,7 +20,7 @@ import { PackingListService } from '../../services/packing-list.service';
 import { ClientService } from '../../services/client.service';
 import { Transport } from '../../models/transport.model';
 import { TransportService } from '../../services/transport.service';
-import { DeliveryChallanService } from '../../services/delivery-challan.service';
+import { DeleteDCError, DeleteDCResult, DeliveryChallanService } from '../../services/delivery-challan.service';
 import { SalesOrderService } from '../../services/sales-order.service';
 import { Invoice } from '../../models/invoice.model';
 import { FREIGHT_SAC, resolveHsnCode } from '../../models/hsn-code.model';
@@ -2090,6 +2090,63 @@ export class PackingListComponent implements OnInit, OnDestroy {
       icon: outcome.unreturned.length ? 'warning' : 'success',
       title: 'Balance Closed',
       html: '<p style="font-size:13px">' + outcome.returnedQty + ' pcs returned to inventory.</p>'
+        + (outcome.unreturned.length
+          ? '<p style="font-size:12px;color:#b45309;text-align:left;margin-top:6px">Could not find an inventory record for (adjust stock manually):<br>' + outcome.unreturned.join('<br>') + '</p>'
+          : ''),
+    });
+  }
+
+  // Two delete options (DeliveryChallanService.deleteDC): DC only — stock
+  // back, Packing List kept and unlocked for a new DC — or DC + Packing List +
+  // Pick List, all deleted with both packed and picked stock returned.
+  async deleteDC(dc: DeliveryChallan): Promise<void> {
+    if (!dc.id) return;
+    const choice = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete DC — ' + dc.dcNo,
+      html: '<p style="font-size:13px;text-align:left">' + dc.clientName + ' · ' + dc.totalQty + ' pcs · Packing List ' + (dc.packingListNo || '-') + '</p>'
+        + '<p style="font-size:13px;text-align:left;margin-top:8px"><strong>DC Only</strong> — deletes only this DC and returns its qty to inventory. '
+        + 'The Packing List stays and a new DC can be generated from it.</p>'
+        + '<p style="font-size:13px;text-align:left;margin-top:6px"><strong>DC + Packing + Pick List</strong> — deletes this DC, its Packing List and Pick List, '
+        + 'and returns all packed/picked qty to inventory.</p>'
+        + '<p style="font-size:12px;color:#b91c1c;margin-top:8px">This cannot be undone.</p>',
+      showConfirmButton: true,
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: 'DC Only',
+      denyButtonText: 'DC + Packing + Pick List',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#d97706',
+      denyButtonColor: '#dc2626',
+    });
+    if (!choice.isConfirmed && !choice.isDenied) return;
+    const mode = choice.isDenied ? 'full' : 'dc_only';
+
+    let outcome: DeleteDCResult | null = null;
+    let error = '';
+    try {
+      outcome = await this.loadingService.run(() => this.dcService.deleteDC(dc.id!, mode));
+    } catch (err: any) {
+      error = err instanceof DeleteDCError ? `${dc.dcNo} cannot be deleted: ${err.message}.`
+        : err?.message === 'dc_not_found' ? 'This DC no longer exists.'
+        : err?.message ?? 'Unable to delete the DC.';
+    }
+    await Promise.all([this.refreshDeliveryChallans(), this.refreshPickListsAndPackingLists()]);
+    if (!outcome) {
+      await Swal.fire({ icon: 'error', title: 'Delete DC Failed', text: error });
+      return;
+    }
+    const deleted = [outcome.dcNo, outcome.packingListNo, ...outcome.pickListNos].filter(Boolean).join(', ');
+    await Swal.fire({
+      icon: outcome.unreturned.length ? 'warning' : 'success',
+      title: 'DC Deleted',
+      html: '<p style="font-size:13px">Deleted: <strong>' + deleted + '</strong></p>'
+        + '<p style="font-size:13px;margin-top:4px">' + outcome.returnedQty + ' pcs returned to inventory'
+        + (mode === 'full' ? ' (packed ' + outcome.packedQty + ' + picked ' + outcome.pickedQty + ')' : '') + '.</p>'
+        + (outcome.reducedPickListNos.length
+          ? '<p style="font-size:12px;color:#4b5563;margin-top:4px">Pick List <strong>' + outcome.reducedPickListNos.join(', ')
+            + '</strong> is shared with other Packing Lists, so it was kept — only this DC\'s qty was removed from it.</p>'
+          : '')
         + (outcome.unreturned.length
           ? '<p style="font-size:12px;color:#b45309;text-align:left;margin-top:6px">Could not find an inventory record for (adjust stock manually):<br>' + outcome.unreturned.join('<br>') + '</p>'
           : ''),
