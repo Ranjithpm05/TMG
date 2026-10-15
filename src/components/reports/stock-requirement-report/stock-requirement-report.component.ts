@@ -20,7 +20,7 @@ const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL
 
 type ViewMode = 'items' | 'orders';
 type StatusFilter = '' | 'needsStock' | StockStatus | 'excess';
-type SortKey = 'shortage' | 'pending' | 'stock' | 'excess' | 'style';
+type SortKey = 'shortage' | 'pending' | 'stock' | 'value' | 'excess' | 'style';
 type OrderCoverage = 'Covered by Stock' | 'Partially Covered' | 'Waiting for Stock' | 'Picked, Awaiting DC';
 
 export const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
@@ -36,8 +36,9 @@ export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'shortage', label: 'Additional Required (high → low)' },
   { value: 'pending', label: 'Pending SO Qty (high → low)' },
   { value: 'stock', label: 'Current Stock (high → low)' },
+  { value: 'value', label: 'Stock Value (high → low)' },
   { value: 'excess', label: 'Excess Stock (high → low)' },
-  { value: 'style', label: 'Style No.' },
+  { value: 'style', label: 'Style No. / Product (A → Z)' },
 ];
 
 function sizeRank(size: string): number {
@@ -45,8 +46,11 @@ function sizeRank(size: string): number {
   return index === -1 ? SIZE_ORDER.length : index;
 }
 
+const LEVEL_LABELS: Record<ItemLevel, string> = { sku: 'Item (Size)', style: 'Style & Color', group: 'Product / Group' };
+
 function compareItems(a: StockItemRow, b: StockItemRow): number {
   return a.styleNo.localeCompare(b.styleNo, undefined, { numeric: true })
+    || a.group.localeCompare(b.group)
     || a.color.localeCompare(b.color)
     || a.sleeveType.localeCompare(b.sleeveType)
     || sizeRank(a.size) - sizeRank(b.size)
@@ -74,6 +78,8 @@ export class StockRequirementReportComponent {
   private readonly loadingService = inject(LoadingService);
 
   protected readonly statusFilterOptions = STATUS_FILTER_OPTIONS;
+  protected readonly levelLabels = LEVEL_LABELS;
+  protected readonly levels: ItemLevel[] = ['sku', 'style', 'group'];
   protected readonly sortOptions = SORT_OPTIONS;
 
   constructor() {
@@ -101,6 +107,8 @@ export class StockRequirementReportComponent {
   protected readonly expanded = signal<ReadonlySet<string>>(new Set());
 
   protected setItemLevel(level: ItemLevel): void {
+    // Product / Group reads like a summary — alphabetical, like the Product Wise report.
+    if (level === 'group') this.sortKey.set('style');
     this.stock.itemLevel.set(level);
     this.expanded.set(new Set());
   }
@@ -130,10 +138,12 @@ export class StockRequirementReportComponent {
         case 'shortage': return row.additionalRequiredQty;
         case 'pending': return row.pendingQty;
         case 'stock': return row.currentStock;
+        case 'value': return row.stockValue;
         case 'excess': return row.excessQty;
         default: return 0;
       }
     };
+    if (sortKey === 'style') return rows.sort(compareItems);
     return rows.sort((a, b) => metric(b) - metric(a) || b.pendingQty - a.pendingQty || compareItems(a, b));
   });
 
@@ -233,7 +243,7 @@ export class StockRequirementReportComponent {
 
   protected filterSummary(): string {
     const parts = [this.data.filterSummary()];
-    parts.push(`Level: ${this.stock.itemLevel() === 'style' ? 'Style & Color' : 'Item (Size)'}`);
+    parts.push(`Level: ${LEVEL_LABELS[this.stock.itemLevel()]}`);
     if (this.stock.itemSearch().trim()) parts.push(`Item: ${this.stock.itemSearch().trim()}`);
     if (this.stock.salesOrderSearch().trim()) parts.push(`SO No: ${this.stock.salesOrderSearch().trim()}`);
     if (this.viewMode() === 'items') {
@@ -283,6 +293,7 @@ export class StockRequirementReportComponent {
         summary: {
           'Items': t.itemCount, 'Current Stock': t.currentStock, 'Reserved': t.reservedQty, 'Pending SO Qty': t.pendingQty,
           'Additional Required': t.additionalRequiredQty, 'Excess': t.excessQty,
+          'Stock Value': this.round2(t.stockValue), 'Pending SO Value': this.round2(t.pendingValue),
         },
       };
     }
@@ -293,22 +304,39 @@ export class StockRequirementReportComponent {
     };
   }
 
+  private round2(value: number): number {
+    return Math.round(value * 100) / 100;
+  }
+
   private buildItemExportRows(): any[][] {
+    const t = this.totals();
+    if (this.stock.itemLevel() === 'group') {
+      const header = ['#', 'Product / Group', 'Current Stock', 'Reserved (Picked, Not Dispatched)', 'Pending SO Qty',
+        'Additional Required', 'Excess Stock', 'Stock Value', 'Pending SO Value'];
+      const body = this.itemRows().map((row, i) => [
+        i + 1, row.group, row.currentStock, row.reservedQty, row.pendingQty, row.additionalRequiredQty, row.excessQty,
+        this.round2(row.stockValue), this.round2(row.pendingValue),
+      ]);
+      const total = ['', 'Grand Total', t.currentStock, t.reservedQty, t.pendingQty, t.additionalRequiredQty, t.excessQty,
+        this.round2(t.stockValue), this.round2(t.pendingValue)];
+      return [header, ...body, total];
+    }
     const sku = this.stock.itemLevel() === 'sku';
     const header = [
-      ...(sku ? ['Item Code (Barcode)'] : []), 'Style No', 'Product', 'Color', 'Sleeve', ...(sku ? ['Size'] : []),
+      ...(sku ? ['Item Code (Barcode)'] : []), 'Style No', 'Product', 'Color', 'Sleeve', ...(sku ? ['Size', 'Rate (WSP)'] : []),
       'Current Stock', 'Reserved (Picked, Not Dispatched)', 'Available Stock', 'Pending SO Qty', 'Required from Stock',
-      'Additional Required', 'Excess Stock', 'Status', 'Pending SOs',
+      'Additional Required', 'Excess Stock', 'Stock Value', 'Pending SO Value', 'Status', 'Pending SOs',
     ];
     const body = this.itemRows().map((row) => [
-      ...(sku ? [row.barcode] : []), row.styleNo, row.group, row.color, row.sleeveType, ...(sku ? [row.size] : []),
+      ...(sku ? [row.barcode] : []), row.styleNo, row.group, row.color, row.sleeveType, ...(sku ? [row.size, row.rate] : []),
       row.currentStock, row.reservedQty, row.availableQty, row.pendingQty, row.requiredFromStockQty,
-      row.additionalRequiredQty, row.excessQty, row.status, new Set(row.orders.map((o) => o.salesOrderId)).size,
+      row.additionalRequiredQty, row.excessQty, this.round2(row.stockValue), this.round2(row.pendingValue),
+      row.status, new Set(row.orders.map((o) => o.salesOrderId)).size,
     ]);
-    const t = this.totals();
-    const labelCols = sku ? 6 : 4;
+    const labelCols = sku ? 7 : 4;
     const total = ['Grand Total', ...Array(labelCols - 1).fill(''),
-      t.currentStock, t.reservedQty, t.availableQty, t.pendingQty, t.requiredFromStockQty, t.additionalRequiredQty, t.excessQty, '', ''];
+      t.currentStock, t.reservedQty, t.availableQty, t.pendingQty, t.requiredFromStockQty, t.additionalRequiredQty, t.excessQty,
+      this.round2(t.stockValue), this.round2(t.pendingValue), '', ''];
     return [header, ...body, total];
   }
 
