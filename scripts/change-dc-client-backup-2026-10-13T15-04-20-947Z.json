@@ -1,0 +1,2245 @@
+{
+  "dc": {
+    "name": "projects/tmg-clothings/databases/(default)/documents/deliveryChallans/DcG8PJQZFYadGgkAwL9k",
+    "fields": {
+      "packingListId": {
+        "stringValue": "cVqvRwrdOM5oRhgqTNlr"
+      },
+      "packingListNo": {
+        "stringValue": "PK-1791464874189"
+      },
+      "salesOrderIds": {
+        "arrayValue": {
+          "values": [
+            {
+              "stringValue": "BosGR3FCoV5ACsWktEqo"
+            }
+          ]
+        }
+      },
+      "salesNos": {
+        "arrayValue": {
+          "values": [
+            {
+              "stringValue": "SO-1785590347043"
+            }
+          ]
+        }
+      },
+      "orderNo": {
+        "stringValue": ""
+      },
+      "clientId": {
+        "stringValue": "JZU010AqQJO2wylaxTjJ"
+      },
+      "clientName": {
+        "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+      },
+      "billingAddress": {
+        "stringValue": "140-A, EAST CAR STREET,\nDINDIGUL - 624001"
+      },
+      "place": {
+        "stringValue": "DINDIGUL"
+      },
+      "state": {
+        "stringValue": "33"
+      },
+      "zipCode": {
+        "stringValue": "624001"
+      },
+      "clientPhone": {
+        "stringValue": "9677702004"
+      },
+      "clientGstin": {
+        "stringValue": "33AABFN3571G1ZJ"
+      },
+      "totalQty": {
+        "integerValue": "12"
+      },
+      "totalAmount": {
+        "doubleValue": 11128.32
+      },
+      "boxCount": {
+        "integerValue": "1"
+      },
+      "agentName": {
+        "stringValue": "N Ramesh"
+      },
+      "transport": {
+        "stringValue": "KMP SPEED PARCEL SERVICE"
+      },
+      "transportId": {
+        "stringValue": "05mBE0zfq7O3NXKPaEbn"
+      },
+      "transportAddress": {
+        "stringValue": "AVARAMPALAYAM,\nCOIMBATORE"
+      },
+      "transportGstNo": {
+        "stringValue": "33AAUFK1187A1ZF"
+      },
+      "items": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "color": {
+                    "stringValue": "02-KHAKI"
+                  },
+                  "sizeQty": {
+                    "mapValue": {
+                      "fields": {
+                        "32": {
+                          "integerValue": "1"
+                        },
+                        "34": {
+                          "integerValue": "1"
+                        },
+                        "36": {
+                          "integerValue": "1"
+                        },
+                        "38": {
+                          "integerValue": "1"
+                        }
+                      }
+                    }
+                  },
+                  "mrpBySize": {
+                    "mapValue": {
+                      "fields": {
+                        "32": {
+                          "integerValue": "1449"
+                        },
+                        "34": {
+                          "integerValue": "1449"
+                        },
+                        "36": {
+                          "integerValue": "1449"
+                        },
+                        "38": {
+                          "integerValue": "1449"
+                        }
+                      }
+                    }
+                  },
+                  "total": {
+                    "integerValue": "4"
+                  },
+                  "mrp": {
+                    "integerValue": "1449"
+                  },
+                  "price": {
+                    "doubleValue": 927.36
+                  },
+                  "amount": {
+                    "doubleValue": 3709.44
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "color": {
+                    "stringValue": "04-OLIVE"
+                  },
+                  "sizeQty": {
+                    "mapValue": {
+                      "fields": {
+                        "32": {
+                          "integerValue": "1"
+                        },
+                        "34": {
+                          "integerValue": "1"
+                        },
+                        "36": {
+                          "integerValue": "1"
+                        },
+                        "38": {
+                          "integerValue": "1"
+                        }
+                      }
+                    }
+                  },
+                  "mrpBySize": {
+                    "mapValue": {
+                      "fields": {
+                        "32": {
+                          "integerValue": "1449"
+                        },
+                        "34": {
+                          "integerValue": "1449"
+                        },
+                        "36": {
+                          "integerValue": "1449"
+                        },
+                        "38": {
+                          "integerValue": "1449"
+                        }
+                      }
+                    }
+                  },
+                  "total": {
+                    "integerValue": "4"
+                  },
+                  "mrp": {
+                    "integerValue": "1449"
+                  },
+                  "price": {
+                    "doubleValue": 927.36
+                  },
+                  "amount": {
+                    "doubleValue": 3709.44
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "color": {
+                    "stringValue": "05-NAVY"
+                  },
+                  "sizeQty": {
+                    "mapValue": {
+                      "fields": {
+                        "32": {
+                          "integerValue": "1"
+                        },
+                        "34": {
+                          "integerValue": "1"
+                        },
+                        "36": {
+                          "integerValue": "1"
+                        },
+                        "38": {
+                          "integerValue": "1"
+                        }
+                      }
+                    }
+                  },
+                  "mrpBySize": {
+                    "mapValue": {
+                      "fields": {
+                        "32": {
+                          "integerValue": "1449"
+                        },
+                        "34": {
+                          "integerValue": "1449"
+                        },
+                        "36": {
+                          "integerValue": "1449"
+                        },
+                        "38": {
+                          "integerValue": "1449"
+                        }
+                      }
+                    }
+                  },
+                  "total": {
+                    "integerValue": "4"
+                  },
+                  "mrp": {
+                    "integerValue": "1449"
+                  },
+                  "price": {
+                    "doubleValue": 927.36
+                  },
+                  "amount": {
+                    "doubleValue": 3709.44
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "sizes": {
+        "arrayValue": {
+          "values": [
+            {
+              "stringValue": "32"
+            },
+            {
+              "stringValue": "34"
+            },
+            {
+              "stringValue": "36"
+            },
+            {
+              "stringValue": "38"
+            }
+          ]
+        }
+      },
+      "dcNo": {
+        "stringValue": "DCC2627-1838"
+      },
+      "dcSeq": {
+        "integerValue": "1838"
+      },
+      "createdAt": {
+        "timestampValue": "2026-10-09T04:01:46.945Z"
+      },
+      "packedOn": {
+        "timestampValue": "2026-10-09T04:01:46.945Z"
+      },
+      "updatedAt": {
+        "timestampValue": "2026-10-09T04:01:46.945Z"
+      }
+    },
+    "createTime": "2026-10-09T04:01:46.994669Z",
+    "updateTime": "2026-10-09T04:01:46.994669Z"
+  },
+  "packingList": {
+    "name": "projects/tmg-clothings/databases/(default)/documents/packingLists/cVqvRwrdOM5oRhgqTNlr",
+    "fields": {
+      "partyProgress": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "requiredQty": {
+                    "integerValue": "12"
+                  },
+                  "salesOrderId": {
+                    "stringValue": "BosGR3FCoV5ACsWktEqo"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  },
+                  "salesNo": {
+                    "stringValue": "SO-1785590347043"
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "pendingQty": {
+                    "integerValue": "11"
+                  },
+                  "packedQty": {
+                    "integerValue": "1"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "packingMode": {
+        "stringValue": "customer"
+      },
+      "pickListNo": {
+        "stringValue": "PL-1786806870394"
+      },
+      "packingListNo": {
+        "stringValue": "PK-1791464874189"
+      },
+      "pickListIds": {
+        "arrayValue": {
+          "values": [
+            {
+              "stringValue": "Syog3ewbRrrZTxTL6bI6"
+            }
+          ]
+        }
+      },
+      "createdAt": {
+        "timestampValue": "2026-10-08T13:07:54.883Z"
+      },
+      "transportAddress": {
+        "stringValue": "AVARAMPALAYAM,\nCOIMBATORE"
+      },
+      "clientId": {
+        "stringValue": "JZU010AqQJO2wylaxTjJ"
+      },
+      "transportId": {
+        "stringValue": "05mBE0zfq7O3NXKPaEbn"
+      },
+      "stockDeducted": {
+        "booleanValue": true
+      },
+      "completedLineCount": {
+        "integerValue": "12"
+      },
+      "totalPackedQty": {
+        "integerValue": "12"
+      },
+      "agentName": {
+        "stringValue": "N Ramesh"
+      },
+      "clientName": {
+        "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+      },
+      "items": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  },
+                  "size": {
+                    "stringValue": "32"
+                  },
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130232"
+                              },
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-02-khaki-casual-trouser-32-1"
+                  },
+                  "requiredQty": {
+                    "integerValue": "1"
+                  },
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "designId": {
+                    "stringValue": "74wt62WKPiFYG0xZLopK"
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130232"
+                  },
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130232"
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "color": {
+                    "stringValue": "02-KHAKI"
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "inventoryId": {
+                    "stringValue": "UFUxKE7j6GYYJUBrSfbp"
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130234"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "designId": {
+                    "stringValue": "74wt62WKPiFYG0xZLopK"
+                  },
+                  "requiredQty": {
+                    "integerValue": "1"
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-02-khaki-casual-trouser-34-2"
+                  },
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130234"
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130234"
+                  },
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "color": {
+                    "stringValue": "02-KHAKI"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "size": {
+                    "stringValue": "34"
+                  },
+                  "inventoryId": {
+                    "stringValue": "RyXejHjt3dh9NIdsaZOM"
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130236"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  },
+                  "designId": {
+                    "stringValue": "74wt62WKPiFYG0xZLopK"
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130236"
+                  },
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "inventoryId": {
+                    "stringValue": "Wj2VTNIBVvlcapOf978D"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  },
+                  "size": {
+                    "stringValue": "36"
+                  },
+                  "requiredQty": {
+                    "integerValue": "1"
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-02-khaki-casual-trouser-36-3"
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130236"
+                  },
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "color": {
+                    "stringValue": "02-KHAKI"
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "requiredQty": {
+                    "integerValue": "1"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130238"
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  },
+                  "size": {
+                    "stringValue": "38"
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130238"
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-02-khaki-casual-trouser-38-4"
+                  },
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "color": {
+                    "stringValue": "02-KHAKI"
+                  },
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130238"
+                              },
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "inventoryId": {
+                    "stringValue": "Ip8SxkKO7rt7zVbRiuL3"
+                  },
+                  "designId": {
+                    "stringValue": "74wt62WKPiFYG0xZLopK"
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-04-olive-casual-trouser-32-5"
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130432"
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  },
+                  "inventoryId": {
+                    "stringValue": "o5aBdVdMjFFNIA2F3Sq6"
+                  },
+                  "color": {
+                    "stringValue": "04-OLIVE"
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130432"
+                  },
+                  "requiredQty": {
+                    "integerValue": "1"
+                  },
+                  "designId": {
+                    "stringValue": "eSOjrNs7qpAblhHdx3WZ"
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  },
+                  "size": {
+                    "stringValue": "32"
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130432"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "requiredQty": {
+                    "integerValue": "1"
+                  },
+                  "color": {
+                    "stringValue": "04-OLIVE"
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130434"
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "size": {
+                    "stringValue": "34"
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130434"
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  },
+                  "designId": {
+                    "stringValue": "eSOjrNs7qpAblhHdx3WZ"
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-04-olive-casual-trouser-34-6"
+                  },
+                  "inventoryId": {
+                    "stringValue": "td3GyefANZkXePNGAOS5"
+                  },
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130434"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "requiredQty": {
+                    "integerValue": "1"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130436"
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  },
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130436"
+                  },
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130436"
+                              },
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "color": {
+                    "stringValue": "04-OLIVE"
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-04-olive-casual-trouser-36-7"
+                  },
+                  "size": {
+                    "stringValue": "36"
+                  },
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "inventoryId": {
+                    "stringValue": "2mDgn7XUyRIsTp6rkzHS"
+                  },
+                  "designId": {
+                    "stringValue": "eSOjrNs7qpAblhHdx3WZ"
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130438"
+                  },
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "inventoryId": {
+                    "stringValue": "107Ugsipq49pIR4KzgcC"
+                  },
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130438"
+                              },
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-04-olive-casual-trouser-38-8"
+                  },
+                  "requiredQty": {
+                    "integerValue": "1"
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "designId": {
+                    "stringValue": "eSOjrNs7qpAblhHdx3WZ"
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  },
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "color": {
+                    "stringValue": "04-OLIVE"
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "size": {
+                    "stringValue": "38"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  },
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130438"
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "designId": {
+                    "stringValue": "mJYFV1uRpXZWHIVBXp0N"
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  },
+                  "requiredQty": {
+                    "integerValue": "1"
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "size": {
+                    "stringValue": "32"
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  },
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130532"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-05-navy-casual-trouser-32-9"
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130532"
+                  },
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130532"
+                  },
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "inventoryId": {
+                    "stringValue": "n98hcIswHAe9fPvZh4Km"
+                  },
+                  "color": {
+                    "stringValue": "05-NAVY"
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130534"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "size": {
+                    "stringValue": "34"
+                  },
+                  "inventoryId": {
+                    "stringValue": "25ArJtCxJLMwWCHvWF1T"
+                  },
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130534"
+                  },
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130534"
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  },
+                  "requiredQty": {
+                    "integerValue": "1"
+                  },
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-05-navy-casual-trouser-34-10"
+                  },
+                  "color": {
+                    "stringValue": "05-NAVY"
+                  },
+                  "designId": {
+                    "stringValue": "mJYFV1uRpXZWHIVBXp0N"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130536"
+                  },
+                  "designId": {
+                    "stringValue": "mJYFV1uRpXZWHIVBXp0N"
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130536"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "color": {
+                    "stringValue": "05-NAVY"
+                  },
+                  "inventoryId": {
+                    "stringValue": "E6ZjRIhmmlsMcFAtr92Q"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-05-navy-casual-trouser-36-11"
+                  },
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130536"
+                  },
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  },
+                  "requiredQty": {
+                    "integerValue": "1"
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "size": {
+                    "stringValue": "36"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "pickedQty": {
+                    "integerValue": "1"
+                  },
+                  "styleNo": {
+                    "stringValue": "RTA213"
+                  },
+                  "inventoryId": {
+                    "stringValue": "HEYxDcwyoK8rKcEh1LZm"
+                  },
+                  "clientName": {
+                    "stringValue": "N.PARVATHI TEXTILES - DINDIGUL"
+                  },
+                  "remainingQty": {
+                    "integerValue": "1"
+                  },
+                  "salesNos": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "SO-1785590347043"
+                        }
+                      ]
+                    }
+                  },
+                  "salesOrderIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "BosGR3FCoV5ACsWktEqo"
+                        }
+                      ]
+                    }
+                  },
+                  "sortOrder": {
+                    "integerValue": "1000000"
+                  },
+                  "pickListLineId": {
+                    "stringValue": "ADD-RTA2130538"
+                  },
+                  "barcode": {
+                    "stringValue": "RTA2130538"
+                  },
+                  "clientId": {
+                    "stringValue": "JZU010AqQJO2wylaxTjJ"
+                  },
+                  "color": {
+                    "stringValue": "05-NAVY"
+                  },
+                  "size": {
+                    "stringValue": "38"
+                  },
+                  "lineId": {
+                    "stringValue": "pk-rta213-05-navy-casual-trouser-38-12"
+                  },
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "sources": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130538"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "pickListId": {
+                                "stringValue": "Syog3ewbRrrZTxTL6bI6"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "packedQty": {
+                    "integerValue": "0"
+                  },
+                  "status": {
+                    "stringValue": "ready"
+                  },
+                  "designId": {
+                    "stringValue": "mJYFV1uRpXZWHIVBXp0N"
+                  },
+                  "requiredQty": {
+                    "integerValue": "1"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "cartons": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "updatedAt": {
+                    "integerValue": "1791518271576"
+                  },
+                  "cartonStatus": {
+                    "stringValue": "open"
+                  },
+                  "cartonNo": {
+                    "stringValue": "1"
+                  },
+                  "entries": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "lineId": {
+                                "stringValue": "pk-rta213-02-khaki-casual-trouser-32-1"
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              },
+                              "barcode": {
+                                "stringValue": "RTA2130232"
+                              },
+                              "color": {
+                                "stringValue": "02-KHAKI"
+                              },
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "size": {
+                                "stringValue": "32"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130232"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "color": {
+                                "stringValue": "04-OLIVE"
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130434"
+                              },
+                              "barcode": {
+                                "stringValue": "RTA2130434"
+                              },
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "size": {
+                                "stringValue": "34"
+                              },
+                              "lineId": {
+                                "stringValue": "pk-rta213-04-olive-casual-trouser-34-6"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130234"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "color": {
+                                "stringValue": "02-KHAKI"
+                              },
+                              "lineId": {
+                                "stringValue": "pk-rta213-02-khaki-casual-trouser-34-2"
+                              },
+                              "barcode": {
+                                "stringValue": "RTA2130234"
+                              },
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              },
+                              "size": {
+                                "stringValue": "34"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "color": {
+                                "stringValue": "04-OLIVE"
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "barcode": {
+                                "stringValue": "RTA2130436"
+                              },
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "size": {
+                                "stringValue": "36"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130436"
+                              },
+                              "lineId": {
+                                "stringValue": "pk-rta213-04-olive-casual-trouser-36-7"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "size": {
+                                "stringValue": "38"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              },
+                              "color": {
+                                "stringValue": "02-KHAKI"
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              },
+                              "lineId": {
+                                "stringValue": "pk-rta213-02-khaki-casual-trouser-38-4"
+                              },
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130238"
+                              },
+                              "barcode": {
+                                "stringValue": "RTA2130238"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130236"
+                              },
+                              "color": {
+                                "stringValue": "02-KHAKI"
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "barcode": {
+                                "stringValue": "RTA2130236"
+                              },
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              },
+                              "size": {
+                                "stringValue": "36"
+                              },
+                              "lineId": {
+                                "stringValue": "pk-rta213-02-khaki-casual-trouser-36-3"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "barcode": {
+                                "stringValue": "RTA2130438"
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              },
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "lineId": {
+                                "stringValue": "pk-rta213-04-olive-casual-trouser-38-8"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130438"
+                              },
+                              "color": {
+                                "stringValue": "04-OLIVE"
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              },
+                              "size": {
+                                "stringValue": "38"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "color": {
+                                "stringValue": "05-NAVY"
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130532"
+                              },
+                              "lineId": {
+                                "stringValue": "pk-rta213-05-navy-casual-trouser-32-9"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "size": {
+                                "stringValue": "32"
+                              },
+                              "barcode": {
+                                "stringValue": "RTA2130532"
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              },
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "barcode": {
+                                "stringValue": "RTA2130432"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              },
+                              "lineId": {
+                                "stringValue": "pk-rta213-04-olive-casual-trouser-32-5"
+                              },
+                              "size": {
+                                "stringValue": "32"
+                              },
+                              "color": {
+                                "stringValue": "04-OLIVE"
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130432"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "color": {
+                                "stringValue": "05-NAVY"
+                              },
+                              "lineId": {
+                                "stringValue": "pk-rta213-05-navy-casual-trouser-34-10"
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130534"
+                              },
+                              "size": {
+                                "stringValue": "34"
+                              },
+                              "barcode": {
+                                "stringValue": "RTA2130534"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "size": {
+                                "stringValue": "36"
+                              },
+                              "lineId": {
+                                "stringValue": "pk-rta213-05-navy-casual-trouser-36-11"
+                              },
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130536"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "color": {
+                                "stringValue": "05-NAVY"
+                              },
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "barcode": {
+                                "stringValue": "RTA2130536"
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "pickListLineId": {
+                                "stringValue": "ADD-RTA2130538"
+                              },
+                              "barcode": {
+                                "stringValue": "RTA2130538"
+                              },
+                              "qty": {
+                                "integerValue": "1"
+                              },
+                              "styleNo": {
+                                "stringValue": "RTA213"
+                              },
+                              "partName": {
+                                "stringValue": "CASUAL TROUSER"
+                              },
+                              "lineId": {
+                                "stringValue": "pk-rta213-05-navy-casual-trouser-38-12"
+                              },
+                              "color": {
+                                "stringValue": "05-NAVY"
+                              },
+                              "salesNos": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "SO-1785590347043"
+                                    }
+                                  ]
+                                }
+                              },
+                              "size": {
+                                "stringValue": "38"
+                              },
+                              "salesOrderIds": {
+                                "arrayValue": {
+                                  "values": [
+                                    {
+                                      "stringValue": "BosGR3FCoV5ACsWktEqo"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "createdAt": {
+                    "integerValue": "1791518160071"
+                  },
+                  "totalQty": {
+                    "integerValue": "12"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "status": {
+        "stringValue": "Completed"
+      },
+      "updatedAt": {
+        "timestampValue": "2026-10-09T04:01:46.945Z"
+      },
+      "pickListNos": {
+        "arrayValue": {
+          "values": [
+            {
+              "stringValue": "PL-1786806870394"
+            }
+          ]
+        }
+      },
+      "pickListId": {
+        "stringValue": "Syog3ewbRrrZTxTL6bI6"
+      },
+      "cartonCount": {
+        "integerValue": "1"
+      },
+      "lineCount": {
+        "integerValue": "12"
+      },
+      "dcGeneratedKeys": {
+        "arrayValue": {
+          "values": [
+            {
+              "stringValue": "DC"
+            }
+          ]
+        }
+      },
+      "salesNos": {
+        "arrayValue": {
+          "values": [
+            {
+              "stringValue": "SO-1785590347043"
+            }
+          ]
+        }
+      },
+      "salesOrderIds": {
+        "arrayValue": {
+          "values": [
+            {
+              "stringValue": "BosGR3FCoV5ACsWktEqo"
+            }
+          ]
+        }
+      },
+      "transportGstNo": {
+        "stringValue": "33AAUFK1187A1ZF"
+      },
+      "partSummaries": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "partName": {
+                    "stringValue": "CASUAL TROUSER"
+                  },
+                  "requiredQty": {
+                    "integerValue": "12"
+                  },
+                  "packedQty": {
+                    "integerValue": "12"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "transport": {
+        "stringValue": "KMP SPEED PARCEL SERVICE"
+      },
+      "totalRequiredQty": {
+        "integerValue": "12"
+      }
+    },
+    "createTime": "2026-10-08T13:07:55.129262Z",
+    "updateTime": "2026-10-09T04:01:46.994669Z"
+  }
+}

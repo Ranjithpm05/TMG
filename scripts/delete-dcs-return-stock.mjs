@@ -124,12 +124,22 @@ async function listDocs(path) {
 async function commit(writes) {
   const url = new URL(`${BASE_URL}:commit`);
   url.searchParams.set("key", API_KEY);
-  const res = await fetchWithRetry(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ writes }),
-  });
-  if (!res.ok) throw new Error(`Commit failed: ${res.status} ${await res.text()}`);
+  // 429 = write-bandwidth exhausted; the commit is atomic, so retrying is safe.
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetchWithRetry(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ writes }),
+    });
+    if (res.ok) return;
+    if (res.status === 429 && attempt < 8) {
+      const waitMs = Math.min(60000, 2000 * 2 ** (attempt - 1));
+      console.log(`  ...429 write limit, retry ${attempt}/7 in ${waitMs / 1000}s`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      continue;
+    }
+    throw new Error(`Commit failed: ${res.status} ${await res.text()}`);
+  }
 }
 
 async function main() {
@@ -142,6 +152,7 @@ async function main() {
   const dupes = dcNos.filter((no) => dcs.filter((dc) => dc.dcNo === no).length > 1);
   if (missing.length) console.log(`NOT FOUND: ${missing.join(", ")}`);
   if (dupes.length) console.log(`DUPLICATE DC NO.: ${dupes.join(", ")}`);
+  if (!dcs.length) return;
 
   const dcIds = dcs.map((dc) => dc.id);
   const invoices = [
