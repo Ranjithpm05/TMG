@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "ng serve",
     "build": "ng build --configuration=production",
-    "preview": "ng serve --configuration=production"
+    "preview": "ng serve --configuration=production",
+    "test:stock-adjustment": "node --test scripts/tests/stock-adjustment.engine.test.mjs"
   },
   "dependencies": {
     "@angular/build": "^21.0.0",

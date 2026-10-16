@@ -11,6 +11,7 @@ import { AuthService } from './services/auth.service';
 import { LoadingService } from './services/loading.service';
 import { AppScreen } from './models/user-group.model';
 import { InventoryComponent } from './components/inventory/inventory.component';
+import { StockAdjustmentComponent } from './components/stock-adjustment/stock-adjustment.component';
 import { PickListComponent } from './components/pick-list/pick-list.component';
 import { PackingListComponent } from './components/packing-list/packing-list.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
@@ -31,7 +32,7 @@ import { HsnGstWiseReportComponent } from './components/reports/hsn-gst-wise-rep
 import { StockRequirementReportComponent } from './components/reports/stock-requirement-report/stock-requirement-report.component';
 import { setMeterPage } from './services/firestore-read-meter';
 
-type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'transportMaster' | 'users' | 'goodsInward' | 'inventory' | 'pickList' | 'packingList' | 'einvoice' | 'ewayBill'
+type View = 'dashboard' | 'sales' | 'clients' | 'designs' | 'transportMaster' | 'users' | 'goodsInward' | 'inventory' | 'stockAdjustment' | 'pickList' | 'packingList' | 'einvoice' | 'ewayBill'
   | 'salesReportProductWise1' | 'salesReportProductWise2' | 'salesOrderSupplyPendingReport' | 'pendingOrderCustomerWiseReport'
   | 'customerWiseReport' | 'agentWiseReport' | 'productWiseReport' | 'exceedOrderReport' | 'styleWiseReport' | 'styleCustomerWiseReport' | 'pickListWiseReport' | 'hsnGstWiseReport' | 'stockRequirementReport';
 type ViewHistoryState = { view: View };
@@ -53,7 +54,7 @@ interface NavGroup {
 const VIEW_STORAGE_KEY = 'gom.activeView';
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'gom.sidebarCollapsed';
 const VIEW_SEQUENCE: View[] = [
-  'dashboard', 'sales', 'clients', 'designs', 'transportMaster', 'goodsInward', 'users', 'inventory', 'pickList', 'packingList', 'einvoice', 'ewayBill',
+  'dashboard', 'sales', 'clients', 'designs', 'transportMaster', 'goodsInward', 'users', 'inventory', 'stockAdjustment', 'pickList', 'packingList', 'einvoice', 'ewayBill',
   'customerWiseReport', 'agentWiseReport', 'salesReportProductWise1', 'salesReportProductWise2', 'productWiseReport', 'salesOrderSupplyPendingReport',
   'pendingOrderCustomerWiseReport', 'exceedOrderReport', 'styleWiseReport', 'styleCustomerWiseReport', 'pickListWiseReport', 'hsnGstWiseReport', 'stockRequirementReport',
 ];
@@ -114,6 +115,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { view: 'goodsInward', label: 'Goods Inward', screen: 'goodsInward', iconPaths: ['M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'] },
       { view: 'inventory', label: 'Inventory', screen: 'inventory', iconPaths: ['M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'] },
+      { view: 'stockAdjustment', label: 'Stock Adjustment', screen: 'stockAdjustment', iconPaths: ['M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01'] },
       { view: 'pickList', label: 'Pick List', screen: 'pickList', iconPaths: ['M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4'] },
       { view: 'packingList', label: 'Packing List', screen: 'packingList', iconPaths: ['M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M8 9l8 4'] },
     ],
@@ -155,6 +157,7 @@ const NAV_GROUPS: NavGroup[] = [
     UserManagementComponent,
     GoodsInwardComponent,
     InventoryComponent,
+    StockAdjustmentComponent,
     PickListComponent,
     PackingListComponent,
     DashboardComponent,

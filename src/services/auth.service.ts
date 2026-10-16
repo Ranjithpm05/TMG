@@ -89,6 +89,11 @@ export class AuthService {
       return false;
     }
 
+    // Super Admin is unrestricted — including screens added after its permissions were saved.
+    if (this.currentUserGroup()?.isSuperAdmin) {
+      return true;
+    }
+
     if (screen === 'packingList') {
       return this.currentUserGroup()?.permissions.packingList
         ?? this.currentUserGroup()?.permissions.pickList

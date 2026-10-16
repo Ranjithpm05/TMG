@@ -81,6 +81,11 @@ export class UserManagementComponent implements OnInit {
   // create the Super Admin group and/or assign the first user to it. Once a Super
   // Admin user exists, only a real Super Admin may manage Super Admin groups/accounts.
   readonly canManageSuperAdmins = computed(() => this.isCurrentUserSuperAdmin() || !this.hasAnySuperAdminUser());
+  // Only one group may hold the Super Admin role: the existing one other than the group being edited.
+  readonly otherSuperAdminGroup = computed(() => {
+    const editingId = (this.editableGroup() as Partial<UserGroup>).id;
+    return this.userGroups().find(g => g.isSuperAdmin && g.id !== editingId) ?? null;
+  });
   readonly selectableGroupsForUserForm = computed(() => {
     const groups = this.userGroups();
     return this.canManageSuperAdmins() ? groups : groups.filter(g => !g.isSuperAdmin);
@@ -355,6 +360,12 @@ export class UserManagementComponent implements OnInit {
             });
             return;
         }
+        // Only one group may hold the Super Admin role — block turning it on for a second group.
+        const wasSuperAdmin = this.userGroups().some(g => g.id === (groupData as UserGroup).id && g.isSuperAdmin);
+        if (groupData.isSuperAdmin && !wasSuperAdmin && this.otherSuperAdminGroup()) {
+            this.showSuperAdminTakenError();
+            return;
+        }
         try
         {
             Swal.fire({
@@ -475,12 +486,24 @@ export class UserManagementComponent implements OnInit {
     }
 
     toggleSuperAdmin() {
+        if (!this.editableGroup().isSuperAdmin && this.otherSuperAdminGroup()) {
+            this.showSuperAdminTakenError();
+            return;
+        }
         this.editableGroup.update(group => {
             const isSuperAdmin = !group.isSuperAdmin;
             const permissions = isSuperAdmin
                 ? Object.fromEntries(this.allScreens.map(s => [s.id, true])) as Partial<Record<AppScreen, boolean>>
                 : group.permissions;
             return { ...group, isSuperAdmin, permissions };
+        });
+    }
+
+    private showSuperAdminTakenError() {
+        Swal.fire({
+            icon: 'error',
+            title: 'Not Allowed',
+            text: `"${this.otherSuperAdminGroup()?.name}" is already the Super Admin group. Only one group can have Super Admin access.`
         });
     }
 
