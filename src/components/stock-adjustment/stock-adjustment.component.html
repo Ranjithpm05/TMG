@@ -1,425 +1,685 @@
-<div class="animate-fade-in">
+<section class="space-y-5 animate-fade-in">
 
-  <!-- Completion progress overlay -->
+  <!-- ================================================================ -->
+  <!-- Completion progress overlay                                       -->
+  <!-- ================================================================ -->
   @if (completing(); as c) {
-    <div class="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/50 backdrop-blur-sm">
-      <div class="bg-white rounded-2xl px-8 py-6 shadow-2xl w-[22rem] max-w-[90vw] text-center">
-        <svg class="animate-spin h-8 w-8 text-emerald-600 mx-auto" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-        <p class="mt-3 font-semibold text-slate-800">Updating inventory…</p>
-        <p class="text-sm text-slate-500 mt-1">{{ c.total ? c.done + ' of ' + c.total + ' part(s) applied' : 'Locking the adjustment' }}</p>
-        <div class="mt-3 h-2 rounded-full bg-slate-100 overflow-hidden">
-          <div class="h-full bg-emerald-500 transition-all" [style.width.%]="c.total ? (c.done / c.total) * 100 : 5"></div>
+    <div class="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+      <div class="w-full max-w-sm rounded-[1.6rem] bg-white p-7 text-center shadow-2xl">
+        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50">
+          <svg class="h-7 w-7 animate-spin text-emerald-600" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
         </div>
-        <p class="text-xs text-slate-400 mt-3">Keep this tab open until it finishes.</p>
+        <p class="mt-4 text-lg font-black text-slate-900">Updating inventory</p>
+        <p class="mt-1 text-sm text-slate-500">{{ c.total ? c.done + ' of ' + c.total + ' part(s) applied' : 'Locking the adjustment…' }}</p>
+        <div class="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-100">
+          <div class="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all duration-500" [style.width.%]="c.total ? (c.done / c.total) * 100 : 4"></div>
+        </div>
+        <p class="mt-4 text-xs font-medium text-slate-400">Keep this tab open until it finishes.</p>
       </div>
     </div>
   }
 
-  <!-- Reusable product grid (setup preview + counting) -->
+  <!-- ================================================================ -->
+  <!-- Reusable: product grid (setup preview + counting)                 -->
+  <!-- ================================================================ -->
   <ng-template #gridTpl let-counting="counting">
-    <div class="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3 mb-3">
-      <div class="flex flex-wrap gap-1 bg-gray-100 rounded-lg p-1 self-start">
+    <div class="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div class="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
         @for (f of (counting
-            ? [{k:'all',l:'All'},{k:'pending',l:'Not Scanned'},{k:'scanned',l:'Scanned'},{k:'variance',l:'Variance'},{k:'zero-confirmed',l:'Confirmed Zero'},{k:'no-stock',l:'No Stock'}]
+            ? [{k:'all',l:'All'},{k:'pending',l:'Not Scanned'},{k:'scanned',l:'Scanned'},{k:'variance',l:'Variance'},{k:'zero-confirmed',l:'Zero'},{k:'no-stock',l:'No Stock'}]
             : [{k:'all',l:'All'},{k:'pending',l:'With Stock'},{k:'no-stock',l:'No Stock'}]); track f.k) {
-          <button (click)="setFilter($any(f.k))" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                  [class]="rowFilter() === f.k ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-800'">{{ f.l }}</button>
+          <button (click)="setFilter($any(f.k))" class="rounded-lg px-3 py-1.5 text-xs font-bold transition-colors"
+                  [class]="rowFilter() === f.k ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'">{{ f.l }}</button>
         }
       </div>
-      <input type="text" placeholder="Filter by item code, style, color, size…"
-             class="w-full lg:w-72 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-             [ngModel]="rowSearch()" (ngModelChange)="setSearch($event)">
+      <div class="relative w-full lg:w-72">
+        <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/></svg>
+        <input type="text" placeholder="Item code, style, color, size…"
+               class="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+               [ngModel]="rowSearch()" (ngModelChange)="setSearch($event)">
+      </div>
     </div>
 
-    <div class="overflow-x-auto rounded-lg border border-gray-200">
+    <!-- Desktop table -->
+    <div class="hidden overflow-x-auto rounded-2xl border border-slate-200 md:block">
       <table class="min-w-full text-sm">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Code</th>
-            <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Name</th>
-            <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Existing Stock</th>
+        <thead class="bg-slate-50">
+          <tr class="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+            <th class="px-4 py-3 text-left">Item Code</th>
+            <th class="px-4 py-3 text-left">Item Name</th>
+            <th class="px-4 py-3 text-right">Existing Stock</th>
             @if (counting) {
-              <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Scanned Qty</th>
-              <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Variance</th>
-              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scan Status</th>
-              <th class="px-3 py-3"></th>
+              <th class="px-4 py-3 text-right">Scanned Qty</th>
+              <th class="px-4 py-3 text-right">Variance</th>
+              <th class="px-4 py-3 text-left">Scan Status</th>
+              <th class="px-4 py-3"><span class="sr-only">Actions</span></th>
             }
           </tr>
         </thead>
-        <tbody class="bg-white divide-y divide-gray-100">
+        <tbody class="divide-y divide-slate-100 bg-white">
           @for (row of pagedRows(); track row.item.id) {
-            <tr [class.bg-amber-50]="counting && row.status === 'pending'"
-                [class.bg-rose-50]="counting && !!row.variance && row.variance < 0"
-                [class.bg-emerald-50]="counting && !!row.variance && row.variance > 0">
-              <td class="px-3 py-2 font-mono text-xs text-gray-700 whitespace-nowrap">{{ row.item.barcode }}</td>
-              <td class="px-3 py-2">
-                <div class="font-semibold text-gray-800">{{ row.item.styleNo }}</div>
-                <div class="text-xs text-gray-500">{{ row.item.color }} · {{ row.item.size }}
-                  @if (row.item.sleeveType) { <span class="ml-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">{{ row.item.sleeveType }}</span> }
-                </div>
+            <tr class="transition-colors hover:bg-slate-50/80"
+                [class.bg-amber-50/60]="counting && row.status === 'pending'"
+                [class.bg-rose-50/60]="counting && !!row.variance && row.variance < 0"
+                [class.bg-emerald-50/60]="counting && !!row.variance && row.variance > 0">
+              <td class="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-600">{{ row.item.barcode }}</td>
+              <td class="px-4 py-2.5">
+                <p class="font-bold text-slate-800">{{ row.item.styleNo }}</p>
+                <p class="text-xs text-slate-500">{{ row.item.color }} · {{ row.item.size }}
+                  @if (row.item.sleeveType) { <span class="ml-1 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">{{ row.item.sleeveType }}</span> }
+                </p>
               </td>
-              <td class="px-3 py-2 text-right font-medium" [class.text-rose-700]="row.existingStock < 0">{{ row.existingStock }}</td>
+              <td class="px-4 py-2.5 text-right font-semibold tabular-nums" [class.text-rose-600]="row.existingStock < 0" [class.text-slate-700]="row.existingStock >= 0">{{ row.existingStock }}</td>
               @if (counting) {
-                <td class="px-3 py-2 text-right font-bold text-gray-900">{{ row.countedQty ?? '–' }}</td>
-                <td class="px-3 py-2 text-right font-semibold"
-                    [class.text-emerald-700]="(row.variance ?? 0) > 0" [class.text-rose-700]="(row.variance ?? 0) < 0" [class.text-gray-400]="!row.variance">
-                  {{ signed(row.variance) }}
-                </td>
-                <td class="px-3 py-2">
-                  <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
-                        [class]="row.status === 'scanned' ? (row.variance ? 'bg-orange-100 text-orange-800' : 'bg-emerald-100 text-emerald-800')
-                               : row.status === 'pending' ? 'bg-amber-100 text-amber-800'
-                               : row.status === 'zero-confirmed' ? 'bg-rose-100 text-rose-800' : 'bg-gray-100 text-gray-500'">
-                    {{ statusLabel[row.status] }}{{ row.status === 'scanned' && row.variance ? ' · Mismatch' : '' }}
-                  </span>
-                </td>
-                <td class="px-3 py-2">
-                  @if (session()?.status === 'Counting') {
-                    <div class="flex justify-end gap-1 whitespace-nowrap">
-                      @if (row.status === 'scanned') {
-                        <button (click)="adjustCount(row, -1)" title="Remove one scan" class="w-7 h-7 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 font-bold">−</button>
-                      }
-                      <button (click)="setCount(row)" title="Set scanned quantity" class="px-2 h-7 rounded border border-gray-300 text-xs text-gray-700 hover:bg-gray-50">Qty</button>
-                      @if (row.status === 'pending') {
-                        <button (click)="confirmZero([row], true)" class="px-2 h-7 rounded border border-rose-300 text-xs text-rose-700 hover:bg-rose-50">Zero</button>
-                      }
-                      @if (row.status === 'zero-confirmed') {
-                        <button (click)="confirmZero([row], false)" class="px-2 h-7 rounded border border-gray-300 text-xs text-gray-700 hover:bg-gray-50">Undo Zero</button>
-                      }
-                    </div>
-                  }
-                </td>
+                <td class="px-4 py-2.5 text-right text-base font-black tabular-nums text-slate-900">{{ row.countedQty ?? '–' }}</td>
+                <td class="px-4 py-2.5 text-right font-bold tabular-nums"
+                    [class.text-emerald-600]="(row.variance ?? 0) > 0" [class.text-rose-600]="(row.variance ?? 0) < 0" [class.text-slate-300]="!row.variance">{{ signed(row.variance) }}</td>
+                <td class="px-4 py-2.5"><ng-container *ngTemplateOutlet="statusPill; context: { $implicit: row }"></ng-container></td>
+                <td class="px-4 py-2.5"><ng-container *ngTemplateOutlet="rowActions; context: { $implicit: row }"></ng-container></td>
               }
             </tr>
           } @empty {
-            <tr><td [attr.colspan]="counting ? 7 : 3" class="px-4 py-10 text-center text-sm text-gray-400">No products match.</td></tr>
+            <tr><td [attr.colspan]="counting ? 7 : 3" class="px-4 py-12 text-center text-sm text-slate-400">No products match.</td></tr>
           }
         </tbody>
       </table>
     </div>
 
+    <!-- Mobile / handheld cards -->
+    <div class="space-y-2 md:hidden">
+      @for (row of pagedRows(); track row.item.id) {
+        <div class="rounded-2xl border bg-white p-3"
+             [class]="counting && row.status === 'pending' ? 'border-amber-200 bg-amber-50/50'
+                    : counting && !!row.variance ? (row.variance! > 0 ? 'border-emerald-200 bg-emerald-50/50' : 'border-rose-200 bg-rose-50/50') : 'border-slate-200'">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <p class="truncate font-bold text-slate-800">{{ row.item.styleNo }}</p>
+              <p class="truncate text-xs text-slate-500">{{ row.item.color }} · {{ row.item.size }}@if (row.item.sleeveType) { · {{ row.item.sleeveType }} }</p>
+              <p class="mt-0.5 font-mono text-[11px] text-slate-400">{{ row.item.barcode }}</p>
+            </div>
+            @if (counting) { <ng-container *ngTemplateOutlet="statusPill; context: { $implicit: row }"></ng-container> }
+          </div>
+          <div class="mt-2 grid grid-cols-3 gap-2 text-center">
+            <div class="rounded-lg bg-slate-50 py-1.5"><p class="text-[10px] font-bold uppercase text-slate-400">Stock</p><p class="font-bold tabular-nums text-slate-700">{{ row.existingStock }}</p></div>
+            @if (counting) {
+              <div class="rounded-lg bg-slate-50 py-1.5"><p class="text-[10px] font-bold uppercase text-slate-400">Scanned</p><p class="font-black tabular-nums text-slate-900">{{ row.countedQty ?? '–' }}</p></div>
+              <div class="rounded-lg bg-slate-50 py-1.5"><p class="text-[10px] font-bold uppercase text-slate-400">Variance</p>
+                <p class="font-bold tabular-nums" [class.text-emerald-600]="(row.variance ?? 0) > 0" [class.text-rose-600]="(row.variance ?? 0) < 0" [class.text-slate-300]="!row.variance">{{ signed(row.variance) }}</p></div>
+            }
+          </div>
+          @if (counting) { <div class="mt-2"><ng-container *ngTemplateOutlet="rowActions; context: { $implicit: row }"></ng-container></div> }
+        </div>
+      } @empty {
+        <p class="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">No products match.</p>
+      }
+    </div>
+
     @if (totalPages() > 1) {
-      <div class="mt-3 flex items-center justify-between">
-        <p class="text-xs text-gray-500">{{ filteredRows().length }} product(s)</p>
-        <div class="flex gap-1">
-          <button (click)="changePage(page()-1)" [disabled]="page()===1" class="px-3 py-1 border rounded text-sm disabled:opacity-40">←</button>
-          <span class="px-3 py-1 text-sm">{{ page() }} / {{ totalPages() }}</span>
-          <button (click)="changePage(page()+1)" [disabled]="page()===totalPages()" class="px-3 py-1 border rounded text-sm disabled:opacity-40">→</button>
+      <div class="mt-4 flex items-center justify-between">
+        <p class="text-xs font-medium text-slate-500">{{ filteredRows().length }} product(s)</p>
+        <div class="flex items-center gap-1">
+          <button (click)="changePage(page()-1)" [disabled]="page()===1" class="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">‹</button>
+          <span class="px-2 text-sm font-semibold text-slate-600">{{ page() }} / {{ totalPages() }}</span>
+          <button (click)="changePage(page()+1)" [disabled]="page()===totalPages()" class="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">›</button>
         </div>
       </div>
     }
   </ng-template>
 
+  <ng-template #statusPill let-row>
+    <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold"
+          [class]="row.status === 'scanned' ? (row.variance ? 'bg-orange-100 text-orange-800' : 'bg-emerald-100 text-emerald-800')
+                 : row.status === 'pending' ? 'bg-amber-100 text-amber-800'
+                 : row.status === 'zero-confirmed' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'">
+      <span class="h-1.5 w-1.5 rounded-full"
+            [class]="row.status === 'scanned' ? (row.variance ? 'bg-orange-500' : 'bg-emerald-500')
+                   : row.status === 'pending' ? 'bg-amber-500' : row.status === 'zero-confirmed' ? 'bg-rose-500' : 'bg-slate-400'"></span>
+      {{ row.status === 'scanned' && row.variance ? 'Mismatch' : row.status === 'scanned' ? 'Matched' : statusLabel[$any(row.status)] }}
+    </span>
+  </ng-template>
+
+  <ng-template #rowActions let-row>
+    @if (session()?.status === 'Counting') {
+      <div class="flex justify-end gap-1 whitespace-nowrap">
+        @if (row.status === 'scanned') {
+          <button (click)="adjustCount(row, -1)" title="Remove one scan" class="h-8 w-8 rounded-lg border border-slate-200 bg-white font-black text-slate-600 hover:border-slate-300 hover:bg-slate-50">−</button>
+        }
+        <button (click)="setCount(row)" title="Set scanned quantity" class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-700">Qty</button>
+        @if (row.status === 'pending') {
+          <button (click)="confirmZero([row], true)" title="Confirm none on hand" class="h-8 rounded-lg border border-rose-200 bg-white px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50">Zero</button>
+        }
+        @if (row.status === 'zero-confirmed') {
+          <button (click)="confirmZero([row], false)" class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50">Undo</button>
+        }
+      </div>
+    }
+  </ng-template>
+
   <!-- ================================================================ -->
-  <!-- SETUP: select group, preview stock, start                         -->
+  <!-- Main card                                                         -->
   <!-- ================================================================ -->
-  @if (mode() === 'setup') {
-  <div class="bg-white shadow-lg rounded-xl p-5 sm:p-8">
-    <div class="border-b pb-4 mb-5">
-      <h2 class="text-2xl sm:text-3xl font-bold text-gray-800">Stock Adjustment</h2>
-      <p class="text-sm text-gray-500 mt-1">Count a product group by scanning, review the variances, then update inventory in one step.</p>
+  <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_24px_70px_-52px_rgba(15,23,42,0.28)]">
+
+    <!-- Hero + step tracker -->
+    <div class="relative overflow-hidden bg-[linear-gradient(110deg,#0f172a,#1e3a8a_58%,#312e81)] px-5 py-5 sm:px-7">
+      <div class="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/5"></div>
+      <div class="pointer-events-none absolute -bottom-20 right-40 h-40 w-40 rounded-full bg-indigo-400/10"></div>
+      <div class="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="flex items-center gap-3">
+          <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/15 text-white">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+          </div>
+          <div>
+            <p class="text-xl font-black text-white sm:text-2xl">Stock Adjustment</p>
+            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-100/75">Physical stock audit by product group</p>
+          </div>
+        </div>
+        <ol class="flex items-center gap-1.5 sm:gap-2">
+          @for (label of steps; track label; let i = $index) {
+            @let n = i + 1;
+            <li class="flex items-center gap-1.5 sm:gap-2">
+              <span class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-black transition-colors"
+                    [class]="n < step() ? 'bg-emerald-400 text-emerald-950' : n === step() ? 'bg-white text-indigo-800 ring-4 ring-white/20' : 'bg-white/10 text-white/50'">
+                @if (n < step()) { ✓ } @else { {{ n }} }
+              </span>
+              <span class="hidden text-xs font-bold sm:inline" [class]="n <= step() ? 'text-white' : 'text-white/45'">{{ label }}</span>
+              @if (n < steps.length) { <span class="h-px w-4 sm:w-6" [class]="n < step() ? 'bg-emerald-400' : 'bg-white/20'"></span> }
+            </li>
+          }
+        </ol>
+      </div>
     </div>
 
-    @if (activeSessions().length) {
-      <div class="mb-5 space-y-2">
-        @for (s of activeSessions(); track s.id) {
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border px-4 py-3"
-               [class]="s.status === 'Completing' ? 'border-amber-300 bg-amber-50' : 'border-indigo-200 bg-indigo-50'">
-            <div class="text-sm">
-              <span class="font-semibold text-gray-900">{{ s.adjustmentNo }}</span> · {{ s.group }}
-              <span class="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold"
-                    [class]="s.status === 'Completing' ? 'bg-amber-200 text-amber-900' : 'bg-indigo-200 text-indigo-900'">{{ s.status }}</span>
-              <span class="text-gray-500"> · started by {{ s.startedBy || '–' }}@if (toDate(s.startedAt); as d) { {{ d | date:'dd MMM, h:mm a' }} }</span>
-              @if (s.lastError) { <div class="text-xs text-rose-700 mt-1">Last attempt failed: {{ s.lastError }}</div> }
-            </div>
-            <button (click)="continueSession(s)" class="px-4 py-2 rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 self-start sm:self-auto">
-              {{ s.status === 'Completing' ? 'Open & Resume' : 'Continue Counting' }}
+    <!-- ============================================================== -->
+    <!-- SETUP                                                           -->
+    <!-- ============================================================== -->
+    @if (mode() === 'setup') {
+      <div class="px-4 py-5 sm:px-7 sm:py-6">
+
+        <div class="mb-5 flex items-center justify-between gap-3">
+          <div class="flex gap-1 rounded-xl bg-slate-100 p-1">
+            <button (click)="setupTab.set('new')" class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
+                    [class]="setupTab() === 'new' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'">New Count</button>
+            <button (click)="setupTab.set('history')" class="rounded-lg px-4 py-2 text-sm font-bold transition-colors"
+                    [class]="setupTab() === 'history' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'">
+              History <span class="ml-1 rounded-full bg-slate-200 px-1.5 text-[11px] text-slate-600">{{ sessions().length }}</span>
             </button>
           </div>
+          <button (click)="refreshStock()" [disabled]="inventoryLoading()"
+                  class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+            <svg class="h-4 w-4" [class.animate-spin]="inventoryLoading()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span class="hidden sm:inline">Refresh Stock</span>
+          </button>
+        </div>
+
+        <!-- Active sessions -->
+        @if (activeSessions().length) {
+          <div class="mb-5 grid gap-3 lg:grid-cols-2">
+            @for (s of activeSessions(); track s.id) {
+              <div class="flex items-center justify-between gap-3 rounded-2xl border p-4"
+                   [class]="s.status === 'Completing' ? 'border-amber-200 bg-amber-50' : 'border-indigo-200 bg-indigo-50'">
+                <div class="flex min-w-0 items-center gap-3">
+                  <span class="relative flex h-2.5 w-2.5 flex-shrink-0">
+                    <span class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" [class]="s.status === 'Completing' ? 'bg-amber-400' : 'bg-indigo-400'"></span>
+                    <span class="relative inline-flex h-2.5 w-2.5 rounded-full" [class]="s.status === 'Completing' ? 'bg-amber-500' : 'bg-indigo-500'"></span>
+                  </span>
+                  <div class="min-w-0">
+                    <p class="truncate text-sm font-black text-slate-900">{{ s.group }} <span class="font-semibold text-slate-500">· {{ s.adjustmentNo }}</span></p>
+                    <p class="truncate text-xs text-slate-500">
+                      {{ s.status === 'Completing' ? 'Completion interrupted' : 'Counting in progress' }} · {{ s.startedBy || '–' }}@if (toDate(s.startedAt); as d) { · {{ d | date:'dd MMM, h:mm a' }} }
+                    </p>
+                    @if (s.lastError) { <p class="mt-0.5 truncate text-xs font-medium text-rose-600" [title]="s.lastError">{{ s.lastError }}</p> }
+                  </div>
+                </div>
+                <button (click)="continueSession(s)" class="flex-shrink-0 rounded-xl px-4 py-2 text-sm font-bold text-white"
+                        [class]="s.status === 'Completing' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'">
+                  {{ s.status === 'Completing' ? 'Resume' : 'Continue' }}
+                </button>
+              </div>
+            }
+          </div>
+        }
+
+        @if (setupTab() === 'new') {
+          <!-- Group picker -->
+          <p class="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Choose a product group</p>
+          @if (inventoryLoading() && !groups().length) {
+            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              @for (i of [1,2,3,4]; track i) { <div class="h-28 animate-pulse rounded-2xl bg-slate-100"></div> }
+            </div>
+          } @else {
+            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              @for (g of groups(); track g.name) {
+                @let active = activeSessionFor(g.name);
+                @let selected = selectedGroup() === g.name;
+                <button type="button" (click)="selectGroup(g.name)"
+                        class="group relative rounded-2xl border p-4 text-left transition-all"
+                        [class]="selected ? 'border-indigo-500 bg-indigo-50/70 ring-2 ring-indigo-500/30 shadow-sm' : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-sm'">
+                  <div class="flex items-start justify-between gap-2">
+                    <p class="text-sm font-black leading-tight text-slate-900">{{ g.name }}</p>
+                    @if (active) {
+                      <span class="flex-shrink-0 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white">{{ active.status === 'Completing' ? 'Completing' : 'Counting' }}</span>
+                    } @else if (selected) {
+                      <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-black text-white">✓</span>
+                    }
+                  </div>
+                  <div class="mt-3 grid grid-cols-3 gap-2">
+                    <div><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Products</p><p class="text-base font-black tabular-nums text-slate-800">{{ g.products | number }}</p></div>
+                    <div><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">To count</p><p class="text-base font-black tabular-nums text-indigo-700">{{ g.withStock | number }}</p></div>
+                    <div><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Pcs</p><p class="text-base font-black tabular-nums text-slate-800">{{ g.stock | number }}</p></div>
+                  </div>
+                </button>
+              } @empty {
+                <p class="col-span-full rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">No product groups found in inventory.</p>
+              }
+            </div>
+          }
+
+          @if (selectedGroup()) {
+            @let s = summary();
+            <div class="mt-6 rounded-[1.6rem] border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+              <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Current inventory</p>
+                  <p class="text-lg font-black text-slate-900">{{ selectedGroup() }}</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <span class="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">{{ s.totalProducts | number }} products</span>
+                  <span class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">{{ s.pending | number }} to count</span>
+                  <span class="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">{{ s.noStock | number }} no stock</span>
+                  <span class="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">{{ s.existingTotal | number }} pcs</span>
+                </div>
+              </div>
+              <div class="rounded-2xl bg-white p-3 sm:p-4">
+                <ng-container *ngTemplateOutlet="gridTpl; context: { counting: false }"></ng-container>
+              </div>
+            </div>
+
+            <!-- Start bar -->
+            <div class="sticky bottom-0 z-10 -mx-4 mt-5 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-7 sm:px-7">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm text-slate-500">
+                  Inventory is <b class="text-slate-700">not changed</b> while scanning — only when you complete the adjustment.
+                </p>
+                <button (click)="startAdjustment()" [disabled]="inventoryLoading()"
+                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 disabled:bg-slate-300 disabled:shadow-none">
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+                  {{ activeSessionForSelectedGroup() ? 'Continue Stock Adjustment' : 'Start Stock Adjustment' }}
+                </button>
+              </div>
+            </div>
+          } @else if (groups().length) {
+            <div class="mt-6 rounded-2xl border border-dashed border-slate-200 py-10 text-center">
+              <p class="text-sm font-semibold text-slate-500">Select a product group to see its current stock.</p>
+            </div>
+          }
+        }
+
+        @if (setupTab() === 'history') {
+          @if (sessionsLoading()) {
+            <div class="space-y-2">@for (i of [1,2,3]; track i) { <div class="h-14 animate-pulse rounded-xl bg-slate-100"></div> }</div>
+          } @else if (sessions().length) {
+            <div class="overflow-x-auto rounded-2xl border border-slate-200">
+              <table class="min-w-full text-sm">
+                <thead class="bg-slate-50">
+                  <tr class="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                    <th class="px-4 py-3 text-left">Adjustment</th>
+                    <th class="px-4 py-3 text-left">Started</th>
+                    <th class="px-4 py-3 text-left">Completed</th>
+                    <th class="px-4 py-3 text-right">Updated</th>
+                    <th class="px-4 py-3 text-right">Increase / Decrease</th>
+                    <th class="px-4 py-3 text-left">Status</th>
+                    <th class="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 bg-white">
+                  @for (s of sessions(); track s.id) {
+                    <tr class="hover:bg-slate-50/80">
+                      <td class="px-4 py-3"><p class="font-black text-slate-900">{{ s.adjustmentNo }}</p><p class="text-xs text-slate-500">{{ s.group }}</p></td>
+                      <td class="px-4 py-3 text-xs text-slate-500"><p class="font-semibold text-slate-700">{{ s.startedBy || '–' }}</p>@if (toDate(s.startedAt); as d) { {{ d | date:'dd MMM yyyy, h:mm a' }} }</td>
+                      <td class="px-4 py-3 text-xs text-slate-500">
+                        @if (s.status === 'Completed') { <p class="font-semibold text-slate-700">{{ s.completedBy || '–' }}</p>@if (toDate(s.completedAt); as d) { {{ d | date:'dd MMM yyyy, h:mm a' }} } }
+                        @else if (s.status === 'Cancelled') { Cancelled by {{ s.cancelledBy || '–' }} } @else { – }
+                      </td>
+                      <td class="px-4 py-3 text-right font-bold tabular-nums text-slate-700">{{ s.status === 'Completed' ? (s.result?.changedLines ?? 0) : '–' }}</td>
+                      <td class="whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums">
+                        @if (s.status === 'Completed') { <span class="text-emerald-600">+{{ s.result?.increaseQty ?? 0 }}</span> <span class="text-slate-300">/</span> <span class="text-rose-600">−{{ s.result?.decreaseQty ?? 0 }}</span> } @else { <span class="text-slate-300">–</span> }
+                      </td>
+                      <td class="px-4 py-3">
+                        <span class="rounded-full px-2.5 py-1 text-[11px] font-bold"
+                              [class]="s.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : s.status === 'Cancelled' ? 'bg-slate-100 text-slate-500'
+                                     : s.status === 'Completing' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'">{{ s.status }}</span>
+                      </td>
+                      <td class="px-4 py-3 text-right">
+                        @if (s.status === 'Counting' || s.status === 'Completing') {
+                          <button (click)="continueSession(s)" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700">Open</button>
+                        } @else {
+                          <button (click)="openHistory(s)" class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">View</button>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else {
+            <p class="rounded-2xl border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">No stock adjustments yet.</p>
+          }
         }
       </div>
     }
 
-    <div class="grid grid-cols-1 md:grid-cols-[minmax(0,22rem)_1fr] gap-4 items-end mb-5">
-      <div>
-        <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Product Group</label>
-        <select class="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                [disabled]="inventoryLoading()" [ngModel]="selectedGroup()" (ngModelChange)="selectGroup($event)">
-          <option value="">{{ inventoryLoading() ? 'Loading inventory…' : '— Select product group —' }}</option>
-          @for (g of groups(); track g.name) { <option [value]="g.name">{{ g.name }} ({{ g.products }} products · {{ g.stock }} pcs)</option> }
-        </select>
-      </div>
-      <div class="flex flex-wrap gap-2 md:justify-end">
-        <button (click)="refreshStock()" [disabled]="inventoryLoading()" class="px-3 py-2.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">Refresh Stock</button>
-        <button (click)="startAdjustment()" [disabled]="!selectedGroup() || inventoryLoading()"
-                class="px-5 py-2.5 rounded-md text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-          {{ activeSessionForSelectedGroup() ? 'Continue Stock Adjustment' : 'Start Stock Adjustment' }}
-        </button>
-      </div>
-    </div>
-
-    @if (selectedGroup()) {
+    <!-- ============================================================== -->
+    <!-- COUNT / REVIEW                                                  -->
+    <!-- ============================================================== -->
+    @if (mode() === 'count' && session(); as sess) {
       @let s = summary();
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <div class="rounded-lg border border-gray-200 px-3 py-2"><p class="text-xs text-gray-500 uppercase">Products</p><p class="text-xl font-bold text-gray-800">{{ s.totalProducts }}</p></div>
-        <div class="rounded-lg border border-gray-200 px-3 py-2"><p class="text-xs text-gray-500 uppercase">With Stock (to scan)</p><p class="text-xl font-bold text-indigo-700">{{ s.pending }}</p></div>
-        <div class="rounded-lg border border-gray-200 px-3 py-2"><p class="text-xs text-gray-500 uppercase">No Stock</p><p class="text-xl font-bold text-gray-500">{{ s.noStock }}</p></div>
-        <div class="rounded-lg border border-gray-200 px-3 py-2"><p class="text-xs text-gray-500 uppercase">Stock (pcs)</p><p class="text-xl font-bold text-gray-800">{{ s.existingTotal }}</p></div>
+      @let p = progress();
+      @let canScan = sess.status === 'Counting' && !reviewing();
+
+      <!-- Session bar -->
+      <div class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-7">
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div class="flex min-w-0 items-center gap-3">
+            <button (click)="leaveSession()" title="Back (counts are kept)" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            <div class="min-w-0">
+              <p class="flex flex-wrap items-center gap-2 text-base font-black text-slate-900">
+                {{ sess.group }}
+                <span class="text-xs font-semibold text-slate-400">{{ sess.adjustmentNo }}</span>
+                <span class="rounded-full px-2.5 py-0.5 text-[11px] font-bold"
+                      [class]="sess.status === 'Completing' ? 'bg-amber-100 text-amber-800' : reviewing() ? 'bg-violet-100 text-violet-800' : 'bg-indigo-100 text-indigo-800'">
+                  {{ sess.status === 'Completing' ? 'Completion interrupted' : reviewing() ? 'Reviewing' : 'Counting' }}
+                </span>
+              </p>
+              <p class="text-xs text-slate-500">
+                @if (unsavedCount()) {
+                  <span class="inline-flex items-center gap-1 font-semibold text-amber-600"><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500"></span>Saving {{ unsavedCount() }}…</span>
+                } @else {
+                  <span class="inline-flex items-center gap-1 font-semibold text-emerald-600"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>All scans saved</span>
+                }
+                · {{ sess.startedBy || '–' }}@if (toDate(sess.startedAt); as d) { · {{ d | date:'dd MMM, h:mm a' }} }
+              </p>
+            </div>
+          </div>
+
+          <div class="flex flex-1 items-center gap-3 xl:max-w-xs">
+            <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+              <div class="h-full rounded-full transition-all duration-500" [style.width.%]="p.percent"
+                   [class]="p.percent === 100 ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : 'bg-gradient-to-r from-indigo-400 to-indigo-600'"></div>
+            </div>
+            <p class="whitespace-nowrap text-xs font-bold tabular-nums text-slate-600">{{ p.counted | number }} / {{ p.toCount | number }} · {{ p.percent }}%</p>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            @if (sess.status === 'Counting') {
+              <button (click)="cancelAdjustment()" class="rounded-xl border border-rose-200 px-3 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50">Cancel</button>
+              @if (reviewing()) {
+                <button (click)="backToScanning()" class="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Back to Scanning</button>
+              } @else {
+                <button (click)="openReview()" class="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-bold text-violet-700 hover:bg-violet-100">Review</button>
+              }
+            }
+            <button (click)="completeAdjustment()" [disabled]="s.pending > 0 && sess.status === 'Counting'"
+                    [title]="s.pending > 0 ? 'Scan or confirm zero for every product with stock first' : ''"
+                    class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:cursor-not-allowed">
+              {{ sess.status === 'Completing' ? 'Resume Completion' : 'Complete Adjustment' }}
+            </button>
+          </div>
+        </div>
       </div>
-      <ng-container *ngTemplateOutlet="gridTpl; context: { counting: false }"></ng-container>
+
+      <div class="px-4 py-5 sm:px-7 sm:py-6">
+        @if (sess.lastError) {
+          <div class="mb-4 flex gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            <span class="font-black">!</span><span><b>Last completion attempt failed.</b> {{ sess.lastError }}</span>
+          </div>
+        }
+        @if (sess.status === 'Completing') {
+          <div class="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            A previous completion was interrupted. Click <b>Resume Completion</b> to finish — products already updated are never applied twice.
+          </div>
+        }
+        @if (syncError()) {
+          <div class="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">{{ syncError() }}</div>
+        }
+
+        <div class="grid gap-5 xl:grid-cols-[23rem_minmax(0,1fr)]">
+
+          <!-- ── Left rail: scanner or review panel ── -->
+          <aside class="space-y-4 xl:sticky xl:top-28 xl:self-start">
+            @if (canScan) {
+              <!-- Scanner -->
+              <div class="rounded-[1.6rem] p-4 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.5)] transition-colors"
+                   [class]="feedback().kind === 'error' ? 'bg-gradient-to-br from-rose-600 to-rose-800' : feedback().kind === 'ok' ? 'bg-gradient-to-br from-slate-900 to-emerald-900' : 'bg-gradient-to-br from-slate-900 to-indigo-900'">
+                <p class="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">Scan barcode / item code</p>
+                <div class="flex gap-2">
+                  <input #scanInput type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+                         placeholder="Ready to scan…" aria-label="Scan barcode"
+                         class="min-w-0 flex-1 rounded-xl border-2 border-white/10 bg-white/10 px-4 py-3.5 font-mono text-lg font-bold text-white placeholder-white/40 focus:border-white/60 focus:bg-white/15 focus:outline-none"
+                         [ngModel]="scanValue()" (ngModelChange)="scanValue.set($event)" (keydown)="onScanKey($event)">
+                  <button (click)="submitScan(); focusScan()" class="rounded-xl bg-white px-4 text-sm font-black text-slate-900 hover:bg-slate-100">Add</button>
+                </div>
+                <p class="mt-3 flex items-start gap-2 text-sm font-semibold text-white">
+                  @if (feedback().kind === 'ok') { <span class="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-emerald-400 text-[10px] text-emerald-950">✓</span> }
+                  @if (feedback().kind === 'error') { <span class="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-white text-[10px] font-black text-rose-700">!</span> }
+                  <span [class.text-white/70]="feedback().kind === 'idle'">{{ feedback().message }}</span>
+                </p>
+              </div>
+
+              <!-- Last scanned -->
+              @if (lastScan(); as last) {
+                @let count = countOf(last.item);
+                @let stock = (+(last.item.currentStock) || 0);
+                @let diff = count - stock;
+                <div class="rounded-[1.6rem] border border-slate-200 bg-white p-4">
+                  <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Last scanned</p>
+                  <p class="mt-1 text-lg font-black text-slate-900">{{ last.item.styleNo }}</p>
+                  <p class="text-sm text-slate-500">{{ last.item.color }} · {{ last.item.size }}@if (last.item.sleeveType) { · {{ last.item.sleeveType }} }</p>
+                  <p class="font-mono text-[11px] text-slate-400">{{ last.item.barcode }}</p>
+                  <div class="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div class="rounded-xl bg-slate-50 py-2"><p class="text-[10px] font-bold uppercase text-slate-400">Stock</p><p class="text-2xl font-black tabular-nums text-slate-700">{{ stock }}</p></div>
+                    <div class="rounded-xl bg-indigo-50 py-2"><p class="text-[10px] font-bold uppercase text-indigo-500">Scanned</p><p class="text-2xl font-black tabular-nums text-indigo-700">{{ count }}</p></div>
+                    <div class="rounded-xl py-2" [class]="diff > 0 ? 'bg-emerald-50' : diff < 0 ? 'bg-rose-50' : 'bg-emerald-50'">
+                      <p class="text-[10px] font-bold uppercase text-slate-400">Variance</p>
+                      <p class="text-2xl font-black tabular-nums" [class]="diff > 0 ? 'text-emerald-600' : diff < 0 ? 'text-rose-600' : 'text-emerald-600'">{{ diff === 0 ? '✓' : signed(diff) }}</p>
+                    </div>
+                  </div>
+                </div>
+              }
+
+              <!-- Recent scans -->
+              @if (recentScans().length) {
+                <div class="rounded-[1.6rem] border border-slate-200 bg-white p-4">
+                  <p class="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Recent scans</p>
+                  <ul class="space-y-1.5">
+                    @for (r of recentScans(); track r.at) {
+                      <li class="flex items-start gap-2 text-xs">
+                        <span class="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-black"
+                              [class]="r.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'">{{ r.ok ? '✓' : '✕' }}</span>
+                        <span class="min-w-0">
+                          <span class="font-mono font-bold text-slate-700">{{ r.code }}</span>
+                          <span class="block truncate text-slate-400" [title]="r.message">{{ r.message }}</span>
+                        </span>
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
+            } @else {
+              <!-- Review panel -->
+              <div class="rounded-[1.6rem] border border-violet-200 bg-gradient-to-b from-violet-50 to-white p-5">
+                <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-600">Ready to complete?</p>
+                <ul class="mt-3 space-y-2.5 text-sm">
+                  <li class="flex items-center gap-2.5">
+                    <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-black"
+                          [class]="s.pending ? 'bg-amber-100 text-amber-700' : 'bg-emerald-500 text-white'">{{ s.pending ? '!' : '✓' }}</span>
+                    <span [class]="s.pending ? 'font-semibold text-amber-800' : 'text-slate-700'">
+                      @if (s.pending) { {{ s.pending }} product(s) not scanned yet } @else { All products counted }
+                    </span>
+                  </li>
+                  <li class="flex items-center gap-2.5">
+                    <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-black"
+                          [class]="unsavedCount() ? 'bg-amber-100 text-amber-700' : 'bg-emerald-500 text-white'">{{ unsavedCount() ? '…' : '✓' }}</span>
+                    <span class="text-slate-700">{{ unsavedCount() ? 'Saving scans…' : 'All scans saved' }}</span>
+                  </li>
+                  <li class="flex items-center gap-2.5">
+                    <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-black text-slate-600">{{ s.varianceProducts }}</span>
+                    <span class="text-slate-700">product(s) will change</span>
+                  </li>
+                </ul>
+
+                <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <div class="rounded-xl bg-emerald-50 py-2.5"><p class="text-[10px] font-bold uppercase text-emerald-600">Increase</p><p class="text-xl font-black tabular-nums text-emerald-700">+{{ s.increaseQty }}</p></div>
+                  <div class="rounded-xl bg-rose-50 py-2.5"><p class="text-[10px] font-bold uppercase text-rose-600">Decrease</p><p class="text-xl font-black tabular-nums text-rose-700">−{{ s.decreaseQty }}</p></div>
+                  <div class="rounded-xl bg-slate-100 py-2.5"><p class="text-[10px] font-bold uppercase text-slate-500">Net</p><p class="text-xl font-black tabular-nums text-slate-800">{{ signed(s.netVariance) }}</p></div>
+                </div>
+
+                @if (topVariances().length) {
+                  <p class="mb-2 mt-5 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Largest variances</p>
+                  <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+                    @for (r of topVariances(); track r.item.id) {
+                      <li class="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                        <span class="min-w-0"><span class="block truncate font-bold text-slate-800">{{ r.item.styleNo }}</span><span class="block truncate text-slate-400">{{ r.item.color }} · {{ r.item.size }} · {{ r.existingStock }} → {{ r.countedQty }}</span></span>
+                        <span class="flex-shrink-0 text-sm font-black tabular-nums" [class.text-emerald-600]="r.variance! > 0" [class.text-rose-600]="r.variance! < 0">{{ signed(r.variance) }}</span>
+                      </li>
+                    }
+                  </ul>
+                }
+
+                <button (click)="completeAdjustment()" [disabled]="s.pending > 0 && sess.status === 'Counting'"
+                        class="mt-5 w-full rounded-xl bg-emerald-600 py-3 text-sm font-black text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:cursor-not-allowed">
+                  {{ sess.status === 'Completing' ? 'Resume Completion' : 'Complete Stock Adjustment' }}
+                </button>
+                @if (s.pending && isSuperAdmin() && sess.status === 'Counting') {
+                  <button (click)="confirmAllPendingZero()" class="mt-2 w-full rounded-xl border border-rose-200 bg-white py-2 text-xs font-bold text-rose-600 hover:bg-rose-50">
+                    Confirm all {{ s.pending }} pending as zero · Super Admin
+                  </button>
+                }
+                @if (sess.status === 'Counting') {
+                  <button (click)="backToScanning()" class="mt-2 w-full rounded-xl py-2 text-xs font-bold text-slate-500 hover:text-slate-800">← Back to scanning</button>
+                }
+              </div>
+            }
+          </aside>
+
+          <!-- ── Right: stats + product grid ── -->
+          <div class="min-w-0">
+            <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-6">
+              @for (t of [
+                  { f: 'all', label: 'Products', value: s.totalProducts, cls: 'text-slate-800', ring: 'ring-slate-300' },
+                  { f: 'scanned', label: 'Scanned', value: s.scanned, cls: 'text-emerald-600', ring: 'ring-emerald-300' },
+                  { f: 'pending', label: 'Pending', value: s.pending, cls: 'text-amber-600', ring: 'ring-amber-300' },
+                  { f: 'variance', label: 'Variances', value: s.varianceProducts, cls: 'text-orange-600', ring: 'ring-orange-300' },
+                  { f: 'zero-confirmed', label: 'Confirmed Zero', value: s.zeroConfirmed, cls: 'text-rose-600', ring: 'ring-rose-300' },
+                  { f: 'no-stock', label: 'No Stock', value: s.noStock, cls: 'text-slate-400', ring: 'ring-slate-300' }
+                ]; track t.f) {
+                <button (click)="setFilter($any(t.f))" class="rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left transition-all hover:border-slate-300"
+                        [class]="rowFilter() === t.f ? 'ring-2 ' + t.ring : ''">
+                  <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">{{ t.label }}</p>
+                  <p class="text-xl font-black tabular-nums" [class]="t.cls">{{ t.value | number }}</p>
+                </button>
+              }
+            </div>
+            <ng-container *ngTemplateOutlet="gridTpl; context: { counting: true }"></ng-container>
+          </div>
+        </div>
+      </div>
     }
 
-    <!-- History -->
-    <div class="mt-8">
-      <h3 class="text-lg font-semibold text-gray-800 mb-3">Adjustment History</h3>
-      @if (sessionsLoading()) {
-        <p class="text-sm text-gray-400">Loading…</p>
-      } @else if (sessions().length) {
-        <div class="overflow-x-auto rounded-lg border border-gray-200">
+    <!-- ============================================================== -->
+    <!-- HISTORY DETAIL                                                  -->
+    <!-- ============================================================== -->
+    @if (mode() === 'history' && historySession(); as h) {
+      <div class="px-4 py-5 sm:px-7 sm:py-6">
+        <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-center gap-3">
+            <button (click)="closeHistory()" title="Back" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            <div>
+              <p class="flex flex-wrap items-center gap-2 text-lg font-black text-slate-900">
+                {{ h.adjustmentNo }} <span class="text-sm font-semibold text-slate-400">· {{ h.group }}</span>
+                <span class="rounded-full px-2.5 py-0.5 text-[11px] font-bold" [class]="h.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'">{{ h.status }}</span>
+              </p>
+              <p class="text-xs text-slate-500">
+                Started by {{ h.startedBy || '–' }}@if (toDate(h.startedAt); as d) { · {{ d | date:'dd MMM yyyy, h:mm a' }} }
+                @if (h.status === 'Completed') { · Completed by {{ h.completedBy || '–' }}@if (toDate(h.completedAt); as d) { · {{ d | date:'dd MMM yyyy, h:mm a' }} } }
+                @if (h.status === 'Cancelled') { · Cancelled by {{ h.cancelledBy || '–' }} — inventory was not changed }
+              </p>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button (click)="exportHistory()" class="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Export Excel</button>
+            <button (click)="printHistory()" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800">Print</button>
+          </div>
+        </div>
+
+        @if (h.status === 'Completed' && h.result; as r) {
+          <div class="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            @for (card of [
+                { label: 'Products Counted', value: r.appliedLines, accent: 'from-slate-700 to-slate-900' },
+                { label: 'Products Updated', value: r.changedLines, accent: 'from-indigo-500 to-indigo-700' },
+                { label: 'Stock Increase', value: '+' + r.increaseQty, accent: 'from-emerald-500 to-emerald-700' },
+                { label: 'Stock Decrease', value: '−' + r.decreaseQty, accent: 'from-rose-500 to-rose-700' }
+              ]; track card.label) {
+              <div class="relative overflow-hidden rounded-[1.4rem] bg-gradient-to-br p-4 text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.45)]" [class]="card.accent">
+                <div class="absolute -bottom-6 -right-5 h-24 w-24 rounded-full bg-white/10"></div>
+                <p class="relative text-xs font-semibold uppercase tracking-[0.12em] text-white/80">{{ card.label }}</p>
+                <p class="relative mt-1 text-3xl font-black leading-none tabular-nums">{{ card.value }}</p>
+              </div>
+            }
+          </div>
+        }
+
+        <div class="mb-3 flex w-fit gap-1 rounded-xl bg-slate-100 p-1">
+          <button (click)="historyFilter.set('variance'); historyPage.set(1)" class="rounded-lg px-3 py-1.5 text-xs font-bold" [class]="historyFilter() === 'variance' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'">Variance only</button>
+          <button (click)="historyFilter.set('all'); historyPage.set(1)" class="rounded-lg px-3 py-1.5 text-xs font-bold" [class]="historyFilter() === 'all' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'">All counted ({{ historyLines().length }})</button>
+        </div>
+
+        <div class="overflow-x-auto rounded-2xl border border-slate-200">
           <table class="min-w-full text-sm">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Adj No</th>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Product Group</th>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Started</th>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Completed</th>
-                <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500 uppercase">Updated</th>
-                <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500 uppercase">+ / −</th>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th class="px-3 py-2.5"></th>
+            <thead class="bg-slate-50">
+              <tr class="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                <th class="px-4 py-3 text-left">Item Code</th>
+                <th class="px-4 py-3 text-left">Item Name</th>
+                <th class="px-4 py-3 text-right">Previous Stock</th>
+                <th class="px-4 py-3 text-right">Scanned Qty</th>
+                <th class="px-4 py-3 text-right">Variance</th>
+                <th class="px-4 py-3 text-left">Status</th>
               </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-100">
-              @for (s of sessions(); track s.id) {
-                <tr class="hover:bg-gray-50">
-                  <td class="px-3 py-2 font-semibold text-gray-800">{{ s.adjustmentNo }}</td>
-                  <td class="px-3 py-2 text-gray-700">{{ s.group }}</td>
-                  <td class="px-3 py-2 text-xs text-gray-500">{{ s.startedBy || '–' }}@if (toDate(s.startedAt); as d) {<br>{{ d | date:'dd MMM yyyy, h:mm a' }}}</td>
-                  <td class="px-3 py-2 text-xs text-gray-500">
-                    @if (s.status === 'Completed') { {{ s.completedBy || '–' }}@if (toDate(s.completedAt); as d) {<br>{{ d | date:'dd MMM yyyy, h:mm a' }}} }
-                    @else if (s.status === 'Cancelled') { cancelled by {{ s.cancelledBy || '–' }} } @else { – }
-                  </td>
-                  <td class="px-3 py-2 text-right text-gray-700">{{ s.status === 'Completed' ? (s.result?.changedLines ?? 0) : '–' }}</td>
-                  <td class="px-3 py-2 text-right whitespace-nowrap">
-                    @if (s.status === 'Completed') {
-                      <span class="text-emerald-700">+{{ s.result?.increaseQty ?? 0 }}</span> / <span class="text-rose-700">−{{ s.result?.decreaseQty ?? 0 }}</span>
-                    } @else { – }
-                  </td>
-                  <td class="px-3 py-2">
-                    <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold"
-                          [class]="s.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : s.status === 'Cancelled' ? 'bg-gray-100 text-gray-500'
-                                 : s.status === 'Completing' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'">{{ s.status }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-right">
-                    @if (s.status === 'Counting' || s.status === 'Completing') {
-                      <button (click)="continueSession(s)" class="px-2.5 py-1 text-xs font-medium rounded border border-indigo-300 text-indigo-700 hover:bg-indigo-50">Open</button>
-                    } @else {
-                      <button (click)="openHistory(s)" class="px-2.5 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-50">View</button>
-                    }
+            <tbody class="divide-y divide-slate-100 bg-white">
+              @for (l of pagedHistoryLines(); track l.id) {
+                @let v = historyVariance(l);
+                <tr class="hover:bg-slate-50/80">
+                  <td class="px-4 py-2.5 font-mono text-xs text-slate-600">{{ l.barcode }}</td>
+                  <td class="px-4 py-2.5"><p class="font-bold text-slate-800">{{ l.styleNo }}</p><p class="text-xs text-slate-500">{{ l.color }} · {{ l.size }}@if (l.sleeveType) { · {{ l.sleeveType }} }</p></td>
+                  <td class="px-4 py-2.5 text-right font-semibold tabular-nums text-slate-700">{{ l.applied ? l.previousStock : l.startStock }}</td>
+                  <td class="px-4 py-2.5 text-right font-black tabular-nums text-slate-900">{{ l.applied ? l.countedQty : l.scannedQty }}</td>
+                  <td class="px-4 py-2.5 text-right font-bold tabular-nums" [class.text-emerald-600]="v > 0" [class.text-rose-600]="v < 0" [class.text-slate-300]="!v">{{ l.applied ? signed(v) : '–' }}</td>
+                  <td class="px-4 py-2.5">
+                    <span class="rounded-full px-2.5 py-1 text-[11px] font-bold"
+                          [class]="l.applied ? 'bg-emerald-100 text-emerald-800' : l.zeroConfirmed ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'">
+                      {{ l.applied ? 'Applied' : l.zeroConfirmed ? 'Confirmed Zero' : 'Counted' }}
+                    </span>
                   </td>
                 </tr>
+              } @empty {
+                <tr><td colspan="6" class="px-4 py-12 text-center text-sm text-slate-400">No lines.</td></tr>
               }
             </tbody>
           </table>
         </div>
-      } @else {
-        <p class="text-sm text-gray-400">No stock adjustments yet.</p>
-      }
-    </div>
-  </div>
-  }
-
-  <!-- ================================================================ -->
-  <!-- COUNT / REVIEW                                                    -->
-  <!-- ================================================================ -->
-  @if (mode() === 'count' && session(); as sess) {
-  @let s = summary();
-  <div class="bg-white shadow-lg rounded-xl p-4 sm:p-6">
-    <!-- Header -->
-    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 border-b pb-4 mb-4">
-      <div class="flex items-center gap-3">
-        <button (click)="leaveSession()" class="text-gray-400 hover:text-gray-700" title="Back to list (counts are kept)">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-        </button>
-        <div>
-          <h2 class="text-xl sm:text-2xl font-bold text-gray-800 flex flex-wrap items-center gap-2">
-            {{ sess.group }}
-            <span class="text-sm font-medium text-gray-500">{{ sess.adjustmentNo }}</span>
-            <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold"
-                  [class]="sess.status === 'Completing' ? 'bg-amber-100 text-amber-800' : reviewing() ? 'bg-violet-100 text-violet-800' : 'bg-indigo-100 text-indigo-800'">
-              {{ sess.status === 'Completing' ? 'Completing (interrupted)' : reviewing() ? 'Reviewing' : 'Counting' }}
-            </span>
-          </h2>
-          <p class="text-xs text-gray-500 mt-0.5">
-            Started by {{ sess.startedBy || '–' }}@if (toDate(sess.startedAt); as d) { · {{ d | date:'dd MMM yyyy, h:mm a' }} }
-            · @if (unsavedCount()) { <span class="text-amber-700">{{ unsavedCount() }} product(s) saving…</span> } @else { <span class="text-emerald-700">All scans saved</span> }
-          </p>
-        </div>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        @if (sess.status === 'Counting') {
-          <button (click)="cancelAdjustment()" class="px-3 py-2 border border-rose-300 rounded-md text-sm font-medium text-rose-700 bg-white hover:bg-rose-50">Cancel</button>
-        }
-        @if (reviewing()) {
-          @if (sess.status === 'Counting') {
-            <button (click)="backToScanning()" class="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Back to Scanning</button>
-          }
-        } @else {
-          <button (click)="openReview()" class="px-3 py-2 border border-violet-300 rounded-md text-sm font-medium text-violet-700 bg-white hover:bg-violet-50">Review</button>
-        }
-        <button (click)="completeAdjustment()" [disabled]="s.pending > 0 && sess.status === 'Counting'"
-                [title]="s.pending > 0 ? 'Scan or confirm zero for every product with stock first' : ''"
-                class="px-4 py-2 rounded-md text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-          {{ sess.status === 'Completing' ? 'Resume Completion' : 'Complete Stock Adjustment' }}
-        </button>
-      </div>
-    </div>
-
-    @if (sess.lastError) {
-      <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">Last completion attempt failed: {{ sess.lastError }}</div>
-    }
-    @if (sess.status === 'Completing') {
-      <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        A previous completion was interrupted. Click <b>Resume Completion</b> to finish — products already updated are not applied again.
-      </div>
-    }
-    @if (syncError()) {
-      <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">{{ syncError() }}</div>
-    }
-
-    <!-- Summary -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-4">
-      <button (click)="setFilter('all')" class="text-left rounded-lg border border-gray-200 px-3 py-2 hover:border-indigo-300"><p class="text-[11px] text-gray-500 uppercase">Total Products</p><p class="text-xl font-bold text-gray-800">{{ s.totalProducts }}</p></button>
-      <button (click)="setFilter('scanned')" class="text-left rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 hover:border-emerald-400"><p class="text-[11px] text-emerald-700 uppercase">Scanned</p><p class="text-xl font-bold text-emerald-700">{{ s.scanned }} <span class="text-xs font-normal">({{ s.scannedUnits }} pcs)</span></p></button>
-      <button (click)="setFilter('pending')" class="text-left rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 hover:border-amber-400"><p class="text-[11px] text-amber-700 uppercase">Pending</p><p class="text-xl font-bold text-amber-700">{{ s.pending }}</p></button>
-      <button (click)="setFilter('zero-confirmed')" class="text-left rounded-lg border border-gray-200 px-3 py-2 hover:border-rose-300"><p class="text-[11px] text-gray-500 uppercase">Confirmed Zero</p><p class="text-xl font-bold text-rose-700">{{ s.zeroConfirmed }}</p></button>
-      <button (click)="setFilter('variance')" class="text-left rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 hover:border-orange-400"><p class="text-[11px] text-orange-700 uppercase">Variances</p><p class="text-xl font-bold text-orange-700">{{ s.varianceProducts }}</p></button>
-      <div class="rounded-lg border border-gray-200 px-3 py-2"><p class="text-[11px] text-gray-500 uppercase">+ / − pcs</p><p class="text-xl font-bold"><span class="text-emerald-700">+{{ s.increaseQty }}</span> <span class="text-rose-700">−{{ s.decreaseQty }}</span></p></div>
-    </div>
-
-    @if (!reviewing() && sess.status === 'Counting') {
-      <!-- Scanner -->
-      <div class="rounded-xl border-2 p-3 sm:p-4 mb-4 transition-colors"
-           [class]="feedback().kind === 'error' ? 'border-rose-400 bg-rose-50' : feedback().kind === 'ok' ? 'border-emerald-400 bg-emerald-50' : 'border-indigo-200 bg-indigo-50/40'">
-        <div class="flex gap-2">
-          <input #scanInput type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
-                 placeholder="Scan barcode / item code…" aria-label="Scan barcode"
-                 class="flex-1 min-w-0 border-2 border-white focus:border-indigo-500 rounded-xl px-4 py-3.5 text-lg font-mono focus:outline-none bg-white shadow-sm"
-                 [ngModel]="scanValue()" (ngModelChange)="scanValue.set($event)" (keydown)="onScanKey($event)">
-          <button (click)="submitScan(); focusScan()" class="px-5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700">Add</button>
-        </div>
-        <p class="mt-2 text-sm font-medium"
-           [class.text-gray-600]="feedback().kind === 'idle'" [class.text-emerald-800]="feedback().kind === 'ok'" [class.text-rose-800]="feedback().kind === 'error'">
-          {{ feedback().message }}
-        </p>
-        @if (recentScans().length) {
-          <div class="mt-2 flex flex-wrap gap-1.5">
-            @for (r of recentScans(); track r.at) {
-              <span class="text-[11px] font-mono px-2 py-0.5 rounded-full" [title]="r.message"
-                    [class]="r.ok ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800 line-through'">{{ r.code }}</span>
-            }
+        @if (historyTotalPages() > 1) {
+          <div class="mt-4 flex items-center justify-end gap-1">
+            <button (click)="historyPage.set(historyPage()-1)" [disabled]="historyPage()===1" class="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">‹</button>
+            <span class="px-2 text-sm font-semibold text-slate-600">{{ historyPage() }} / {{ historyTotalPages() }}</span>
+            <button (click)="historyPage.set(historyPage()+1)" [disabled]="historyPage()===historyTotalPages()" class="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">›</button>
           </div>
         }
       </div>
     }
-
-    @if (reviewing()) {
-      <div class="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <span>
-          @if (s.pending) { <b>{{ s.pending }}</b> product(s) with stock are not scanned yet — scan them or confirm zero. }
-          @else { All products are counted. {{ s.varianceProducts }} product(s) will change: <b class="text-emerald-700">+{{ s.increaseQty }}</b> / <b class="text-rose-700">−{{ s.decreaseQty }}</b> pcs. }
-        </span>
-        @if (s.pending && isSuperAdmin() && sess.status === 'Counting') {
-          <button (click)="confirmAllPendingZero()" class="px-3 py-1.5 rounded-md text-xs font-semibold border border-rose-300 text-rose-700 bg-white hover:bg-rose-50 self-start">
-            Confirm all {{ s.pending }} pending as zero (Super Admin)
-          </button>
-        }
-      </div>
-    }
-
-    <ng-container *ngTemplateOutlet="gridTpl; context: { counting: true }"></ng-container>
   </div>
-  }
-
-  <!-- ================================================================ -->
-  <!-- HISTORY DETAIL                                                    -->
-  <!-- ================================================================ -->
-  @if (mode() === 'history' && historySession(); as h) {
-  <div class="bg-white shadow-lg rounded-xl p-5 sm:p-8">
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4 mb-4">
-      <div class="flex items-center gap-3">
-        <button (click)="closeHistory()" class="text-gray-400 hover:text-gray-700" title="Back">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-        </button>
-        <div>
-          <h2 class="text-xl sm:text-2xl font-bold text-gray-800 flex flex-wrap items-center gap-2">
-            {{ h.adjustmentNo }} <span class="text-base font-medium text-gray-500">· {{ h.group }}</span>
-            <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold"
-                  [class]="h.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-500'">{{ h.status }}</span>
-          </h2>
-          <p class="text-xs text-gray-500 mt-0.5">
-            Started by {{ h.startedBy || '–' }}@if (toDate(h.startedAt); as d) { on {{ d | date:'dd MMM yyyy, h:mm a' }} }
-            @if (h.status === 'Completed') { · Completed by {{ h.completedBy || '–' }}@if (toDate(h.completedAt); as d) { on {{ d | date:'dd MMM yyyy, h:mm a' }} } }
-            @if (h.status === 'Cancelled') { · Cancelled by {{ h.cancelledBy || '–' }} — inventory was not changed }
-          </p>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <button (click)="exportHistory()" class="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Export Excel</button>
-        <button (click)="printHistory()" class="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Print</button>
-      </div>
-    </div>
-
-    @if (h.status === 'Completed' && h.result; as r) {
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <div class="rounded-lg border border-gray-200 px-3 py-2"><p class="text-xs text-gray-500 uppercase">Products Counted</p><p class="text-xl font-bold text-gray-800">{{ r.appliedLines }}</p></div>
-        <div class="rounded-lg border border-gray-200 px-3 py-2"><p class="text-xs text-gray-500 uppercase">Products Updated</p><p class="text-xl font-bold text-gray-800">{{ r.changedLines }}</p></div>
-        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2"><p class="text-xs text-emerald-700 uppercase">Increase</p><p class="text-xl font-bold text-emerald-700">+{{ r.increaseQty }}</p></div>
-        <div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2"><p class="text-xs text-rose-700 uppercase">Decrease</p><p class="text-xl font-bold text-rose-700">−{{ r.decreaseQty }}</p></div>
-      </div>
-    }
-
-    <div class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-3 w-fit">
-      <button (click)="historyFilter.set('variance'); historyPage.set(1)" class="px-3 py-1.5 rounded-md text-xs font-semibold" [class]="historyFilter() === 'variance' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500'">Variance only</button>
-      <button (click)="historyFilter.set('all'); historyPage.set(1)" class="px-3 py-1.5 rounded-md text-xs font-semibold" [class]="historyFilter() === 'all' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500'">All counted ({{ historyLines().length }})</button>
-    </div>
-
-    <div class="overflow-x-auto rounded-lg border border-gray-200">
-      <table class="min-w-full text-sm">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Item Code</th>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Item Name</th>
-            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500 uppercase">Previous Stock</th>
-            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500 uppercase">Scanned Qty</th>
-            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500 uppercase">Variance</th>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-100">
-          @for (l of pagedHistoryLines(); track l.id) {
-            @let v = historyVariance(l);
-            <tr>
-              <td class="px-3 py-2 font-mono text-xs text-gray-700">{{ l.barcode }}</td>
-              <td class="px-3 py-2"><span class="font-semibold text-gray-800">{{ l.styleNo }}</span> <span class="text-xs text-gray-500">· {{ l.color }} · {{ l.size }}@if (l.sleeveType) { · {{ l.sleeveType }} }</span></td>
-              <td class="px-3 py-2 text-right">{{ l.applied ? l.previousStock : l.startStock }}</td>
-              <td class="px-3 py-2 text-right font-semibold">{{ l.applied ? l.countedQty : l.scannedQty }}</td>
-              <td class="px-3 py-2 text-right font-semibold" [class.text-emerald-700]="v > 0" [class.text-rose-700]="v < 0" [class.text-gray-400]="!v">{{ l.applied ? signed(v) : '–' }}</td>
-              <td class="px-3 py-2 text-xs">{{ l.applied ? 'Applied' : l.zeroConfirmed ? 'Confirmed Zero' : 'Counted' }}</td>
-            </tr>
-          } @empty {
-            <tr><td colspan="6" class="px-4 py-10 text-center text-sm text-gray-400">No lines.</td></tr>
-          }
-        </tbody>
-      </table>
-    </div>
-    @if (historyTotalPages() > 1) {
-      <div class="mt-3 flex justify-end gap-1">
-        <button (click)="historyPage.set(historyPage()-1)" [disabled]="historyPage()===1" class="px-3 py-1 border rounded text-sm disabled:opacity-40">←</button>
-        <span class="px-3 py-1 text-sm">{{ historyPage() }} / {{ historyTotalPages() }}</span>
-        <button (click)="historyPage.set(historyPage()+1)" [disabled]="historyPage()===historyTotalPages()" class="px-3 py-1 border rounded text-sm disabled:opacity-40">→</button>
-      </div>
-    }
-  </div>
-  }
-</div>
+</section>

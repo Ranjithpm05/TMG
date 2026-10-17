@@ -63,18 +63,27 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
   selectedGroup = signal('');
 
   readonly groups = computed(() => {
-    const byName = new Map<string, { name: string; products: number; stock: number }>();
+    const byName = new Map<string, { name: string; products: number; stock: number; withStock: number }>();
     for (const item of this.inventory()) {
       const name = normalizeGroup(item.group);
       if (!name) continue;
       const key = name.toUpperCase();
-      const g = byName.get(key) ?? { name, products: 0, stock: 0 };
+      const g = byName.get(key) ?? { name, products: 0, stock: 0, withStock: 0 };
+      const stock = Number(item.currentStock) || 0;
       g.products++;
-      g.stock += Number(item.currentStock) || 0;
+      g.stock += stock;
+      if (stock !== 0) g.withStock++;
       byName.set(key, g);
     }
     return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
+
+  /** 'new' = group picker, 'history' = past adjustments (setup mode only). */
+  setupTab = signal<'new' | 'history'>('new');
+
+  activeSessionFor(group: string): StockAdjustmentSession | null {
+    return this.activeSessions().find((s) => sameGroup(s.group, group)) ?? null;
+  }
 
   readonly activeSessions = computed(() =>
     this.sessions().filter((s) => s.status === 'Counting' || s.status === 'Completing'));
@@ -119,6 +128,31 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
   });
 
   readonly summary = computed(() => summarize(this.rows()));
+
+  /** Counted share of the products that need counting (everything except untouched zero-stock products). */
+  readonly progress = computed(() => {
+    const s = this.summary();
+    const counted = s.scanned + s.zeroConfirmed;
+    const toCount = counted + s.pending;
+    return { counted, toCount, percent: toCount ? Math.round((counted / toCount) * 100) : 100 };
+  });
+
+  readonly topVariances = computed(() =>
+    this.rows()
+      .filter((r) => r.variance)
+      .sort((a, b) => Math.abs(b.variance!) - Math.abs(a.variance!))
+      .slice(0, 6));
+
+  /** 1 Select group · 2 Count · 3 Review · 4 Done */
+  readonly step = computed(() => {
+    if (this.mode() === 'history') return this.historySession()?.status === 'Completed' ? 4 : 1;
+    if (this.mode() === 'count') return this.reviewing() || this.session()?.status === 'Completing' ? 3 : 2;
+    return 1;
+  });
+
+  readonly steps = ['Select Group', 'Count', 'Review', 'Complete'];
+
+  lastScan = signal<{ item: InventoryItem; count: number } | null>(null);
 
   rowFilter = signal<RowFilter>('all');
   rowSearch = signal('');
@@ -288,6 +322,7 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
     this.rowSearch.set('');
     this.page.set(1);
     this.recentScans.set([]);
+    this.lastScan.set(null);
     this.syncError.set('');
     this.feedback.set({ kind: 'idle', message: 'Ready — scan a barcode.' });
     this.mode.set('count');
@@ -385,6 +420,7 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
     const stock = Number(item.currentStock) || 0;
     const message = `${item.styleNo} · ${item.color} · ${item.size}${item.sleeveType ? ' · ' + item.sleeveType : ''} — scanned ${count} / stock ${stock}`;
     this.feedback.set({ kind: 'ok', message });
+    this.lastScan.set({ item, count });
     this.pushRecent({ at: Date.now(), code, ok: true, message });
     this.beep(true);
   }
@@ -401,8 +437,16 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
 
   async adjustCount(row: GroupRow, delta: number): Promise<void> {
     if (this.session()?.status !== 'Counting') return;
-    if (this.ledger.add(row.item.id!, delta) === null) return;
+    const count = this.ledger.add(row.item.id!, delta);
+    if (count === null) return;
     this.bump();
+    if (this.lastScan()?.item.id === row.item.id) this.lastScan.set({ item: row.item, count });
+  }
+
+  /** Live count for the last-scanned card (it changes when −1 / Qty are used on that row). */
+  countOf(item: InventoryItem): number {
+    this.ledgerVersion();
+    return this.ledger.count(item.id!);
   }
 
   /** For cartons counted in bulk — sets the scanned qty directly. */
@@ -637,6 +681,7 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
   closeHistory(): void {
     this.historySession.set(null);
     this.historyLines.set([]);
+    this.setupTab.set('history');
     this.mode.set('setup');
   }
 
