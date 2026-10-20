@@ -323,17 +323,17 @@ export class StockRequirementReportComponent {
     }
     const sku = this.stock.itemLevel() === 'sku';
     const header = [
-      ...(sku ? ['Item Code (Barcode)'] : []), 'Style No', 'Product', 'Color', 'Sleeve', ...(sku ? ['Size', 'Rate (WSP)'] : []),
+      ...(sku ? ['Item Code (Barcode)'] : []), 'Style No', 'Product', 'Color', 'Sleeve', ...(sku ? ['Size', 'Rate (WSP)', 'Cost Price'] : []),
       'Current Stock', 'Reserved (Picked, Not Dispatched)', 'Available Stock', 'Pending SO Qty', 'Required from Stock',
       'Additional Required', 'Excess Stock', 'Stock Value', 'Pending SO Value', 'Status', 'Pending SOs',
     ];
     const body = this.itemRows().map((row) => [
-      ...(sku ? [row.barcode] : []), row.styleNo, row.group, row.color, row.sleeveType, ...(sku ? [row.size, row.rate] : []),
+      ...(sku ? [row.barcode] : []), row.styleNo, row.group, row.color, row.sleeveType, ...(sku ? [row.size, row.rate, row.costPrice] : []),
       row.currentStock, row.reservedQty, row.availableQty, row.pendingQty, row.requiredFromStockQty,
       row.additionalRequiredQty, row.excessQty, this.round2(row.stockValue), this.round2(row.pendingValue),
       row.status, new Set(row.orders.map((o) => o.salesOrderId)).size,
     ]);
-    const labelCols = sku ? 7 : 4;
+    const labelCols = sku ? 8 : 4;
     const total = ['Grand Total', ...Array(labelCols - 1).fill(''),
       t.currentStock, t.reservedQty, t.availableQty, t.pendingQty, t.requiredFromStockQty, t.additionalRequiredQty, t.excessQty,
       this.round2(t.stockValue), this.round2(t.pendingValue), '', ''];

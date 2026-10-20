@@ -95,7 +95,7 @@
         <li><b>Additional Required</b> = Required from Stock − Available (if positive). <b>Excess</b> = Available − Required from Stock (if positive) — stock free for new orders.</li>
         <li>Stock is allocated to pending orders oldest order date first; the Sales Order breakdown shows which orders are covered and which are short.</li>
         <li>Status: <b>Zero Stock</b> when nothing is available, <b>Insufficient</b> when available stock does not cover the requirement, otherwise <b>Sufficient</b>. At Style &amp; Color level, shortages and excess are summed per size — surplus in one size never covers another.</li>
-        <li><b>Stock Value</b> = Current Stock × WSP, <b>Pending SO Value</b> = Pending SO Qty × WSP, per item (size). WSP is the Design Master rate for the size, else the rate on the inventory record. Style &amp; Color and Product / Group values are the sums of their sizes.</li>
+        <li><b>Stock Value</b> = Current Stock × Cost Price (Design Master cost price for the size), <b>Pending SO Value</b> = Pending SO Qty × WSP, per item (size). WSP is the Design Master rate for the size, else the rate on the inventory record. Items with no cost price in Design Master show 0 stock value. Style &amp; Color and Product / Group values are the sums of their sizes.</li>
         <li>There is a single stock location in the system (no warehouse field on inventory), so the report is not split by warehouse.</li>
       </ul>
     </details>
@@ -151,7 +151,7 @@
           <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
             <p class="text-xs font-medium text-blue-600 uppercase tracking-wide">Stock Value</p>
             <p class="mt-1 text-2xl font-semibold text-blue-900">{{ t.stockValue | number: '1.2-2' }}</p>
-            <p class="text-xs text-blue-700">current stock × WSP</p>
+            <p class="text-xs text-blue-700">current stock × cost price</p>
           </div>
           <div class="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
             <p class="text-xs font-medium text-violet-600 uppercase tracking-wide">Pending SO Value</p>
@@ -228,6 +228,7 @@
                   @if (sku) {
                     <th class="px-3 py-3 text-center font-medium">Size</th>
                     <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Rate (WSP)</th>
+                    <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Cost Price</th>
                   }
                   <th class="px-3 py-3 text-right font-medium whitespace-nowrap">Current Stock</th>
                   <th class="px-3 py-3 text-right font-medium whitespace-nowrap" title="Picked for a pending order, not yet on a DC (already deducted from Current Stock)">Reserved</th>
@@ -263,6 +264,7 @@
                     @if (sku) {
                       <td class="px-3 py-2 text-center text-gray-700">{{ row.size }}</td>
                       <td class="px-3 py-2 text-right text-gray-700">{{ row.rate ? (row.rate | number: '1.2-2') : '-' }}</td>
+                      <td class="px-3 py-2 text-right text-gray-700">{{ row.costPrice ? (row.costPrice | number: '1.2-2') : '-' }}</td>
                     }
                     <td class="px-3 py-2 text-right" [class.text-rose-700]="row.currentStock < 0" [class.text-gray-900]="row.currentStock >= 0">{{ row.currentStock | number }}</td>
                     <td class="px-3 py-2 text-right text-sky-700">{{ row.reservedQty ? (row.reservedQty | number) : '-' }}</td>
@@ -279,7 +281,7 @@
                   </tr>
                   @if (open) {
                     <tr>
-                      <td [attr.colspan]="sku ? 18 : 15" class="bg-gray-50 px-4 py-3">
+                      <td [attr.colspan]="sku ? 19 : 15" class="bg-gray-50 px-4 py-3">
                         <p class="text-xs font-semibold text-gray-600 mb-2">Pending Sales Orders — stock allocated oldest order first</p>
                         <div class="overflow-x-auto">
                           <table class="min-w-full text-xs border border-gray-200 bg-white">
@@ -331,7 +333,7 @@
               </tbody>
               <tfoot class="bg-gray-100 font-bold">
                 <tr>
-                  <td [attr.colspan]="sku ? 8 : 5" class="px-3 py-3 text-gray-900">Grand Total ({{ t.itemCount | number }} items)</td>
+                  <td [attr.colspan]="sku ? 9 : 5" class="px-3 py-3 text-gray-900">Grand Total ({{ t.itemCount | number }} items)</td>
                   <td class="px-3 py-3 text-right text-gray-900">{{ t.currentStock | number }}</td>
                   <td class="px-3 py-3 text-right text-gray-900">{{ t.reservedQty | number }}</td>
                   <td class="px-3 py-3 text-right text-gray-900">{{ t.availableQty | number }}</td>

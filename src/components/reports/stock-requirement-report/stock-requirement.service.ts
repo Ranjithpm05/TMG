@@ -48,6 +48,8 @@ export interface StockItemRow {
   fabricType: string;
   /** Wholesale rate (WSP) per piece — Design Master size price, else the inventory record's. 0 when unknown; blank at Style / Group level. */
   rate: number;
+  /** Cost price per piece — Design Master size cost price. 0 when unknown; blank at Style / Group level. */
+  costPrice: number;
   /** False when the item exists only in inventory or on a Sales Order, not in Design Master. */
   inMaster: boolean;
   currentStock: number;
@@ -58,7 +60,7 @@ export interface StockItemRow {
   additionalRequiredQty: number;
   excessQty: number;
   status: StockStatus;
-  /** currentStock × rate (summed per size at Style / Group level). */
+  /** currentStock × costPrice (summed per size at Style / Group level). */
   stockValue: number;
   /** pendingQty × rate (summed per size at Style / Group level). */
   pendingValue: number;
@@ -250,7 +252,7 @@ export class StockRequirementService {
       let row = rows.get(key);
       if (!row) {
         row = {
-          key, barcode: '', styleNo, color, group: '', sleeveType, size, fabricType: '', rate: 0, inMaster: false,
+          key, barcode: '', styleNo, color, group: '', sleeveType, size, fabricType: '', rate: 0, costPrice: 0, inMaster: false,
           currentStock: 0, reservedQty: 0, availableQty: 0, pendingQty: 0, requiredFromStockQty: 0,
           additionalRequiredQty: 0, excessQty: 0, status: 'Zero Stock', stockValue: 0, pendingValue: 0, orders: [],
           ...init,
@@ -281,6 +283,7 @@ export class StockRequirementService {
         });
         if (!row.barcode) row.barcode = this.data.toText(entry.BARCODE);
         if (!row.rate) row.rate = Number(entry.WSP) || 0;
+        if (!row.costPrice) row.costPrice = Number(entry.costPrice) || 0;
       }
     }
 
@@ -354,7 +357,7 @@ export class StockRequirementService {
       row.additionalRequiredQty = Math.max(0, row.requiredFromStockQty - row.availableQty);
       row.excessQty = Math.max(0, row.availableQty - row.requiredFromStockQty);
       row.status = statusOf(row.availableQty, row.additionalRequiredQty);
-      row.stockValue = row.currentStock * row.rate;
+      row.stockValue = row.currentStock * row.costPrice;
       row.pendingValue = row.pendingQty * row.rate;
       result.push(row);
     }
@@ -383,7 +386,7 @@ export class StockRequirementService {
       let row = groups.get(key);
       if (!row) {
         row = {
-          ...sku, ...identity(sku), key, barcode: '', rate: 0,
+          ...sku, ...identity(sku), key, barcode: '', rate: 0, costPrice: 0,
           currentStock: 0, reservedQty: 0, availableQty: 0, pendingQty: 0, requiredFromStockQty: 0,
           additionalRequiredQty: 0, excessQty: 0, stockValue: 0, pendingValue: 0, orders: [],
         };

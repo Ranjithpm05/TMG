@@ -566,12 +566,16 @@
 
           <!-- ── Right: stats + product grid ── -->
           <div class="min-w-0">
-            <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-6">
+            <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4 2xl:grid-cols-7">
+              <div class="rounded-2xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-left">
+                <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-indigo-500">Total Scanned Qty</p>
+                <p class="text-xl font-black tabular-nums text-indigo-700">{{ s.scannedUnits | number }}</p>
+              </div>
               @for (t of [
                   { f: 'all', label: 'Products', value: s.totalProducts, cls: 'text-slate-800', ring: 'ring-slate-300' },
-                  { f: 'scanned', label: 'Scanned', value: s.scanned, cls: 'text-emerald-600', ring: 'ring-emerald-300' },
+                  { f: 'scanned', label: 'Scanned', value: s.scanned, sub: (s.scannedUnits | number) + ' pcs', cls: 'text-emerald-600', ring: 'ring-emerald-300' },
                   { f: 'pending', label: 'Pending', value: s.pending, cls: 'text-amber-600', ring: 'ring-amber-300' },
-                  { f: 'variance', label: 'Variances', value: s.varianceProducts, cls: 'text-orange-600', ring: 'ring-orange-300' },
+                  { f: 'variance', label: 'Variances', value: s.varianceProducts, sub: '+' + (s.increaseQty | number) + ' / −' + (s.decreaseQty | number) + ' pcs', cls: 'text-orange-600', ring: 'ring-orange-300' },
                   { f: 'zero-confirmed', label: 'Confirmed Zero', value: s.zeroConfirmed, cls: 'text-rose-600', ring: 'ring-rose-300' },
                   { f: 'no-stock', label: 'No Stock', value: s.noStock, cls: 'text-slate-400', ring: 'ring-slate-300' }
                 ]; track t.f) {
@@ -579,6 +583,7 @@
                         [class]="rowFilter() === t.f ? 'ring-2 ' + t.ring : ''">
                   <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">{{ t.label }}</p>
                   <p class="text-xl font-black tabular-nums" [class]="t.cls">{{ t.value | number }}</p>
+                  @if ($any(t).sub) { <p class="text-[11px] font-semibold tabular-nums text-slate-500">{{ $any(t).sub }}</p> }
                 </button>
               }
             </div>
