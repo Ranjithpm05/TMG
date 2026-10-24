@@ -1,7 +1,8 @@
-export type AppScreen = 'sales' | 'clients' | 'designs' | 'transportMaster' | 'goodsInward' | 'inventory' | 'stockAdjustment' | 'pickList' | 'packingList' | 'users' | 'einvoice' | 'ewayBill' | 'salesReportProductWise1' | 'salesReportProductWise2' | 'salesOrderSupplyPendingReport' | 'pendingOrderCustomerWiseReport' | 'customerWiseReport' | 'agentWiseReport' | 'productWiseReport' | 'exceedOrderReport' | 'styleWiseReport' | 'styleCustomerWiseReport' | 'pickListWiseReport' | 'hsnGstWiseReport' | 'stockRequirementReport';
+export type AppScreen = 'sales' | 'salesReturn' | 'clients' | 'designs' | 'transportMaster' | 'goodsInward' | 'inventory' | 'stockAdjustment' | 'pickList' | 'packingList' | 'users' | 'einvoice' | 'ewayBill' | 'salesReportProductWise1' | 'salesReportProductWise2' | 'salesOrderSupplyPendingReport' | 'pendingOrderCustomerWiseReport' | 'customerWiseReport' | 'agentWiseReport' | 'productWiseReport' | 'exceedOrderReport' | 'styleWiseReport' | 'styleCustomerWiseReport' | 'pickListWiseReport' | 'hsnGstWiseReport' | 'stockRequirementReport';
 
 export const ALL_SCREENS: { id: AppScreen, name: string }[] = [
   { id: 'sales',       name: 'Sales Order' },
+  { id: 'salesReturn', name: 'Sales Return' },
   { id: 'clients',     name: 'Client Master' },
   { id: 'designs',     name: 'Design Master' },
   { id: 'transportMaster', name: 'Transport Master' },

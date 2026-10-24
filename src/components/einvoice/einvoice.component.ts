@@ -264,15 +264,28 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
         this.transports.set(transports.filter((t) => t.status !== 'Inactive'));
       })
     );
-    this.subs.push(
-      this.lrEntryService.getLrEntries().subscribe((lrEntries) => {
-        this.lrEntries.set(lrEntries);
-      })
-    );
+    this.loadLrEntries();
   }
 
   ngOnDestroy(): void {
     this.subs.forEach((s) => s.unsubscribe());
+    this.lrSub?.unsubscribe();
+  }
+
+  // getLrEntries() emits once per load cycle and every map/unmap/create
+  // invalidates the cache, which starts a NEW stream — a subscription taken
+  // once in ngOnInit never sees those writes, so the picker kept offering an
+  // LR just mapped to another invoice (mapping then failed) and hid one just
+  // unmapped. Re-subscribe after each LR write and whenever the picker opens
+  // (fresh = delta-sync first, so LRs entered on the Packing List screen or
+  // another device show up).
+  private lrSub?: Subscription;
+  private loadLrEntries(fresh = false): void {
+    if (fresh) this.lrEntryService.invalidateCache();
+    this.lrSub?.unsubscribe();
+    this.lrSub = this.lrEntryService.getLrEntries().subscribe((lrEntries) => {
+      this.lrEntries.set(lrEntries);
+    });
   }
 
   viewInvoice(invoice: Invoice): void {
@@ -620,6 +633,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   openLrModal(): void {
     this.showNewLrForm.set(false);
     this.showLrModal.set(true);
+    this.loadLrEntries(true);
   }
 
   // Lets the list view open the mapping modal for a row directly (mode stays
@@ -660,6 +674,22 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
     if (!invoice?.id || this.isCreatingLr()) return;
     if (!form.lrNo.trim()) {
       Swal.fire('Required', 'Please enter the LR No.', 'warning');
+      return;
+    }
+
+    // Same LR No. under the same transporter is the same physical LR — map
+    // the existing entry instead of creating a duplicate one.
+    const lrNoKey = form.lrNo.trim().toLowerCase();
+    const transportKey = (invoice.transport || '').trim().toLowerCase();
+    const existing = this.lrEntries().find((lr) =>
+      lr.lrNo.trim().toLowerCase() === lrNoKey && (lr.transport || '').trim().toLowerCase() === transportKey);
+    if (existing) {
+      if (existing.invoiceIds.length && !existing.invoiceIds.includes(invoice.id)) {
+        Swal.fire('LR Already Used', `LR No. ${existing.lrNo} already exists and is mapped to invoice ${existing.invoiceNos.join(', ') || 'another invoice'}.`, 'warning');
+        return;
+      }
+      this.showNewLrForm.set(false);
+      await this.mapLrEntry(existing);
       return;
     }
 
@@ -706,6 +736,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       Swal.fire('Error', err?.message || 'Failed to map LR Entry.', 'error');
     } finally {
       this.isMappingLr.set(false);
+      this.loadLrEntries();
     }
   }
 
@@ -733,6 +764,7 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       Swal.fire('Error', err?.message || 'Failed to unmap LR Entry.', 'error');
     } finally {
       this.isMappingLr.set(false);
+      this.loadLrEntries();
     }
   }
 

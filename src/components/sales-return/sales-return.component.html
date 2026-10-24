@@ -1,0 +1,512 @@
+<section class="space-y-5 animate-fade-in">
+
+  <!-- ================================================================ -->
+  <!-- View return modal                                                 -->
+  <!-- ================================================================ -->
+  @if (viewing(); as v) {
+    <div class="fixed inset-0 z-[9990] flex items-start justify-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm sm:items-center" (click)="viewing.set(null)">
+      <div class="w-full max-w-5xl rounded-[1.6rem] bg-white shadow-2xl" (click)="$event.stopPropagation()">
+        <div class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
+          <div>
+            <p class="text-lg font-black text-slate-900">{{ v.returnNo }}
+              <ng-container *ngTemplateOutlet="statusPill; context: { $implicit: v.status }"></ng-container>
+            </p>
+            <p class="text-sm text-slate-500">{{ v.clientName }} · {{ v.returnDate | date:'dd MMM yyyy' }} · {{ v.mode === 'single' ? 'Single Bill' : 'Multiple Bills' }}</p>
+          </div>
+          <button (click)="viewing.set(null)" class="h-9 w-9 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close">✕</button>
+        </div>
+        <div class="max-h-[70vh] overflow-y-auto px-5 py-4 sm:px-6">
+          <div class="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <div class="rounded-xl bg-slate-50 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Bills</p><p class="font-semibold text-slate-800">{{ (v.invoiceNos ?? []).join(', ') }}</p></div>
+            <div class="rounded-xl bg-emerald-50 p-3"><p class="text-[10px] font-bold uppercase text-emerald-600">Fresh PCS</p><p class="text-lg font-black text-emerald-700">{{ v.totals.freshQty }}</p></div>
+            <div class="rounded-xl bg-rose-50 p-3"><p class="text-[10px] font-bold uppercase text-rose-600">Damage PCS</p><p class="text-lg font-black text-rose-700">{{ v.totals.damageQty }}</p></div>
+            <div class="rounded-xl bg-slate-50 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Return Value</p><p class="text-lg font-black text-slate-900">₹{{ v.totals.totalAmount | number:'1.2-2' }}</p></div>
+          </div>
+          <div class="overflow-x-auto rounded-2xl border border-slate-200">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-50">
+                <tr class="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                  <th class="px-3 py-2.5 text-left">Invoice</th>
+                  <th class="px-3 py-2.5 text-left">Item Code</th>
+                  <th class="px-3 py-2.5 text-left">Item</th>
+                  <th class="px-3 py-2.5 text-left">Condition</th>
+                  <th class="px-3 py-2.5 text-right">Qty</th>
+                  <th class="px-3 py-2.5 text-left">Location</th>
+                  <th class="px-3 py-2.5 text-left">Remarks</th>
+                  <th class="px-3 py-2.5 text-right">Value</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                @for (l of v.lines; track $index) {
+                  <tr>
+                    <td class="whitespace-nowrap px-3 py-2 font-semibold text-slate-700">{{ l.invoiceNo }}</td>
+                    <td class="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-600">{{ l.barcode }}</td>
+                    <td class="px-3 py-2"><p class="font-bold text-slate-800">{{ l.styleNo }}</p><p class="text-xs text-slate-500">{{ l.color }} · {{ l.size }}@if (l.sleeveType) { · {{ l.sleeveType }} }</p></td>
+                    <td class="px-3 py-2"><ng-container *ngTemplateOutlet="conditionPill; context: { $implicit: l.condition }"></ng-container></td>
+                    <td class="px-3 py-2 text-right font-black tabular-nums">{{ l.qty }}</td>
+                    <td class="px-3 py-2 text-slate-600">{{ l.location || '–' }}</td>
+                    <td class="px-3 py-2 text-slate-600">{{ l.remarks || '–' }}</td>
+                    <td class="px-3 py-2 text-right tabular-nums">₹{{ l.totalAmount | number:'1.2-2' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+            <p>Created by <b class="text-slate-700">{{ v.createdBy || '–' }}</b>@if (toDate(v.createdAt); as d) { · {{ d | date:'dd MMM yyyy, h:mm a' }} }</p>
+            @if (v.postedBy) { <p>Posted by <b class="text-slate-700">{{ v.postedBy }}</b>@if (toDate(v.postedAt); as d) { · {{ d | date:'dd MMM yyyy, h:mm a' }} }</p> }
+            @if (v.cancelledBy) { <p>Cancelled by <b class="text-slate-700">{{ v.cancelledBy }}</b>@if (toDate(v.cancelledAt); as d) { · {{ d | date:'dd MMM yyyy, h:mm a' }} }@if (v.cancelReason) { — {{ v.cancelReason }} }</p> }
+            @if (v.remarks) { <p class="sm:col-span-2">Remarks: <span class="text-slate-700">{{ v.remarks }}</span></p> }
+          </div>
+        </div>
+        <div class="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-5 py-4 sm:px-6">
+          @if (v.status === 'Draft') {
+            <button (click)="editDraft(v)" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Update</button>
+            <button (click)="postDraft(v)" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700">Post</button>
+          }
+          @if (v.status !== 'Cancelled') {
+            <button (click)="cancelEntry(v)" class="rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50">Cancel Return</button>
+          }
+          <button (click)="viewing.set(null)" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800">Close</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <ng-template #statusPill let-status>
+    <span class="ml-1 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 align-middle text-[11px] font-bold"
+          [class]="status === 'Posted' ? 'bg-emerald-100 text-emerald-800' : status === 'Draft' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'">
+      <span class="h-1.5 w-1.5 rounded-full" [class]="status === 'Posted' ? 'bg-emerald-500' : status === 'Draft' ? 'bg-amber-500' : 'bg-slate-400'"></span>{{ status }}
+    </span>
+  </ng-template>
+
+  <ng-template #conditionPill let-condition>
+    <span class="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold"
+          [class]="condition === 'Damage' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'">{{ condition }}</span>
+  </ng-template>
+
+  <!-- ================================================================ -->
+  <!-- Main card                                                         -->
+  <!-- ================================================================ -->
+  <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_24px_70px_-52px_rgba(15,23,42,0.28)]">
+
+    <!-- Hero -->
+    <div class="relative overflow-hidden bg-[linear-gradient(110deg,#0f172a,#1e3a8a_58%,#312e81)] px-5 py-5 sm:px-7">
+      <div class="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/5"></div>
+      <div class="pointer-events-none absolute -bottom-20 right-40 h-40 w-40 rounded-full bg-indigo-400/10"></div>
+      <div class="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="flex items-center gap-3">
+          <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/15 text-white">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+          </div>
+          <div>
+            <p class="text-xl font-black text-white sm:text-2xl">Sales Return</p>
+            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-100/75">Bill-wise returns · Fresh & Damage PCS inward</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex gap-1 rounded-xl bg-white/10 p-1">
+            @for (t of [{k:'entry',l: editing() ? 'Update Return' : 'New Return'},{k:'returns',l:'Returns'},{k:'damage',l:'Damage Stock'}]; track t.k) {
+              <button (click)="setTab($any(t.k))" class="rounded-lg px-3 py-2 text-sm font-bold transition-colors"
+                      [class]="tab() === t.k ? 'bg-white text-indigo-800 shadow-sm' : 'text-white/70 hover:text-white'">
+                {{ t.l }}
+                @if (t.k === 'returns' && statusCounts().Draft) { <span class="ml-1 rounded-full bg-amber-400 px-1.5 text-[11px] text-amber-950">{{ statusCounts().Draft }}</span> }
+              </button>
+            }
+          </div>
+          <button (click)="refresh()" title="Refresh" class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20">
+            <svg class="h-4 w-4" [class.animate-spin]="invoicesLoading() || billsLoading()" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- ENTRY                                                           -->
+    <!-- ============================================================== -->
+    @if (tab() === 'entry') {
+      <div class="space-y-5 px-4 py-5 sm:px-7 sm:py-6">
+
+        @if (editing(); as e) {
+          <div class="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p class="text-sm text-amber-900">Updating draft <b>{{ e.returnNo }}</b> — stock is changed only when it is posted.</p>
+            <button (click)="discardEntry()" class="text-sm font-bold text-amber-800 hover:underline">New Return</button>
+          </div>
+        }
+
+        <!-- Options -->
+        <div class="grid gap-4 lg:grid-cols-2">
+          <div>
+            <p class="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Return Type</p>
+            <div class="grid grid-cols-2 gap-2">
+              @for (m of [{k:'single',l:'Single Bill Return',d:'Return against one invoice'},{k:'multiple',l:'Multiple Bills Return',d:'Several invoices in one entry'}]; track m.k) {
+                <button type="button" (click)="setMode($any(m.k))" class="rounded-2xl border p-3 text-left transition-all"
+                        [class]="mode() === m.k ? 'border-indigo-500 bg-indigo-50/70 ring-2 ring-indigo-500/30' : 'border-slate-200 bg-white hover:border-indigo-300'">
+                  <p class="text-sm font-black text-slate-900">{{ m.l }}</p>
+                  <p class="text-xs text-slate-500">{{ m.d }}</p>
+                </button>
+              }
+            </div>
+          </div>
+          <div>
+            <p class="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Inward Type <span class="normal-case tracking-normal text-slate-400">(used by "Return All" and scanning)</span></p>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" (click)="inwardType.set('Fresh')" class="rounded-2xl border p-3 text-left transition-all"
+                      [class]="inwardType() === 'Fresh' ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/30' : 'border-slate-200 bg-white hover:border-emerald-300'">
+                <p class="text-sm font-black text-emerald-800">Fresh PCS Inward</p>
+                <p class="text-xs text-slate-500">Back into sellable inventory</p>
+              </button>
+              <button type="button" (click)="inwardType.set('Damage')" class="rounded-2xl border p-3 text-left transition-all"
+                      [class]="inwardType() === 'Damage' ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-500/30' : 'border-slate-200 bg-white hover:border-rose-300'">
+                <p class="text-sm font-black text-rose-800">Damage PCS Inward</p>
+                <p class="text-xs text-slate-500">Held in damage stock, not sellable</p>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Header fields -->
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <label class="block xl:col-span-2">
+            <span class="mb-1 block text-xs font-bold text-slate-600">Customer *</span>
+            <select #clientSelect class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    [value]="clientId()" (change)="selectClient(clientSelect.value, clientSelect)" [disabled]="invoicesLoading() || !!editing()">
+              <option value="">{{ invoicesLoading() ? 'Loading customers…' : 'Select customer' }}</option>
+              @for (c of clients(); track c.id) {
+                <option [value]="c.id" [selected]="c.id === clientId()">{{ c.name }}{{ c.gstin ? ' · ' + c.gstin : '' }} ({{ c.invoices }} bills)</option>
+              }
+            </select>
+          </label>
+          <label class="block">
+            <span class="mb-1 block text-xs font-bold text-slate-600">Return Date *</span>
+            <input type="date" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                   [ngModel]="returnDate()" (ngModelChange)="returnDate.set($event)">
+          </label>
+          <label class="block">
+            <span class="mb-1 block text-xs font-bold text-slate-600">Warehouse / Location</span>
+            <input type="text" placeholder="Default for all lines" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                   [ngModel]="defaultLocation()" (ngModelChange)="defaultLocation.set($event)">
+          </label>
+          <label class="block sm:col-span-2 xl:col-span-4">
+            <span class="mb-1 block text-xs font-bold text-slate-600">Remarks</span>
+            <input type="text" placeholder="Reason for return, LR / courier details…" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                   [ngModel]="remarks()" (ngModelChange)="remarks.set($event)">
+          </label>
+        </div>
+
+        <!-- Bill picker -->
+        @if (clientId()) {
+          <div class="rounded-2xl border border-slate-200">
+            <div class="flex flex-col gap-2 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p class="text-sm font-black text-slate-900">
+                {{ mode() === 'single' ? 'Select the bill' : 'Select bills' }}
+                <span class="font-semibold text-slate-400">· {{ selectedInvoiceIds().length }} selected of {{ customerInvoices().length }}</span>
+              </p>
+              <input type="text" placeholder="Search invoice / DC no…" class="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none sm:w-64"
+                     [ngModel]="billSearch()" (ngModelChange)="billSearch.set($event)">
+            </div>
+            <div class="max-h-64 divide-y divide-slate-100 overflow-y-auto">
+              @for (inv of listedInvoices(); track inv.id) {
+                @let reason = notReturnable(inv);
+                <button type="button" (click)="toggleInvoice(inv)" [disabled]="!!reason"
+                        class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        [class]="isSelected(inv) ? 'bg-indigo-50' : 'hover:bg-slate-50'" [title]="reason ?? ''">
+                  <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center border-2 text-[11px] font-black text-white"
+                        [class]="(mode() === 'single' ? 'rounded-full ' : 'rounded-md ') + (isSelected(inv) ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300 bg-white')">@if (isSelected(inv)) { ✓ }</span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate text-sm font-bold text-slate-800">{{ inv.invoiceNo }} <span class="font-normal text-slate-400">· DC {{ inv.dcNo || '–' }}</span></span>
+                    <span class="block truncate text-xs text-slate-500">{{ toDate(inv.invoiceDate) | date:'dd MMM yyyy' }}@if (reason) { · <span class="font-semibold text-rose-600">Cancelled</span> }</span>
+                  </span>
+                  <span class="text-right text-sm font-semibold tabular-nums text-slate-700">₹{{ inv.totalAmount | number:'1.2-2' }}</span>
+                </button>
+              } @empty {
+                <p class="px-4 py-8 text-center text-sm text-slate-400">No invoices for this customer{{ billSearch() ? ' match the search' : '' }}.</p>
+              }
+              @if (customerInvoices().length > listedInvoices().length) {
+                <p class="px-4 py-2 text-center text-xs text-slate-400">Showing the latest {{ listedInvoices().length }} — search to find older bills.</p>
+              }
+            </div>
+          </div>
+        } @else {
+          <p class="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">Select a customer to list their bills.</p>
+        }
+
+        <!-- Items -->
+        @if (billsLoading()) {
+          <div class="space-y-2">@for (i of [1,2,3]; track i) { <div class="h-14 animate-pulse rounded-2xl bg-slate-100"></div> }</div>
+        } @else if (bills().length) {
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input type="text" placeholder="Scan item code to add 1 {{ inwardType() }} pc…" autocomplete="off"
+                   class="w-full rounded-xl border-2 px-3 py-2.5 font-mono text-sm focus:outline-none sm:w-80"
+                   [class]="inwardType() === 'Damage' ? 'border-rose-200 focus:border-rose-400' : 'border-emerald-200 focus:border-emerald-400'"
+                   (keydown)="onScanKey($event)">
+            <p class="text-sm font-medium"
+               [class]="feedback().kind === 'error' ? 'text-rose-600' : feedback().kind === 'ok' ? 'text-emerald-700' : 'text-slate-400'">{{ feedback().message }}</p>
+          </div>
+
+          @for (bill of bills(); track bill.invoice.id) {
+            @let q = billQty(bill);
+            <div class="overflow-hidden rounded-2xl border border-slate-200">
+              <div class="flex flex-col gap-2 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p class="text-sm font-black text-slate-900">{{ bill.invoice.invoiceNo }}
+                    <span class="font-semibold text-slate-500">· {{ toDate(bill.invoice.invoiceDate) | date:'dd MMM yyyy' }} · {{ bill.invoice.clientName }}</span>
+                  </p>
+                  <p class="text-xs text-slate-500">Sold {{ q.sold }} · Returned earlier {{ q.returned }} · Eligible {{ q.eligible }} · <b class="text-slate-800">Entered {{ q.entered }}</b></p>
+                </div>
+                <div class="flex gap-2">
+                  <button (click)="returnAllOfBill(bill)" [disabled]="!q.eligible" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:border-indigo-300 disabled:opacity-40">Return All as {{ inwardType() }}</button>
+                  <button (click)="clearBill(bill)" [disabled]="!q.entered" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-40">Clear</button>
+                </div>
+              </div>
+              @if (bill.missingDcIds.length) {
+                <p class="border-t border-rose-100 bg-rose-50 px-4 py-2 text-xs font-medium text-rose-700">The delivery challan of this invoice no longer exists, so its items cannot be listed for return.</p>
+              }
+
+              <!-- Desktop -->
+              <div class="hidden overflow-x-auto md:block">
+                <table class="min-w-full text-sm">
+                  <thead>
+                    <tr class="border-t border-slate-100 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                      <th class="px-3 py-2.5 text-left">Item Code</th>
+                      <th class="px-3 py-2.5 text-left">Item</th>
+                      <th class="px-3 py-2.5 text-right">MRP / Rate</th>
+                      <th class="px-3 py-2.5 text-right">Sold</th>
+                      <th class="px-3 py-2.5 text-right">Prev. Ret.</th>
+                      <th class="px-3 py-2.5 text-right">Eligible</th>
+                      <th class="px-3 py-2.5 text-center text-emerald-700">Fresh</th>
+                      <th class="px-3 py-2.5 text-center text-rose-700">Damage</th>
+                      <th class="px-3 py-2.5 text-left">Location</th>
+                      <th class="px-3 py-2.5 text-left">Remarks</th>
+                      <th class="px-3 py-2.5"><span class="sr-only">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    @for (row of bill.rows; track row.lineKey) {
+                      @let e = entry(row);
+                      <tr [class.bg-rose-50]="isOver(row)" [class.bg-indigo-50/40]="!isOver(row) && (e.fresh + e.damage) > 0" [class.opacity-50]="!row.eligibleQty && !(e.fresh + e.damage)">
+                        <td class="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-600">{{ row.barcode || '–' }}</td>
+                        <td class="px-3 py-2">
+                          <p class="font-bold text-slate-800">{{ row.styleNo }} <span class="font-normal text-slate-400">{{ row.description }}</span></p>
+                          <p class="text-xs text-slate-500">{{ row.color }} · {{ row.size }}
+                            @if (row.sleeveType) { <span class="ml-1 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">{{ row.sleeveType }}</span> }
+                          </p>
+                          @if (!row.inventoryId) { <p class="text-[11px] font-semibold text-rose-600">No matching inventory record — cannot be returned</p> }
+                        </td>
+                        <td class="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-600">{{ row.mrp }} / {{ row.price | number:'1.2-2' }}</td>
+                        <td class="px-3 py-2 text-right tabular-nums">{{ row.soldQty }}</td>
+                        <td class="px-3 py-2 text-right tabular-nums text-slate-500">{{ row.returnedQty }}</td>
+                        <td class="px-3 py-2 text-right font-bold tabular-nums" [class.text-rose-600]="isOver(row)">{{ row.eligibleQty }}</td>
+                        <td class="px-2 py-2">
+                          <input type="number" min="0" step="1" [disabled]="!row.inventoryId"
+                                 class="w-16 rounded-lg border border-emerald-200 px-2 py-1 text-right text-sm font-bold tabular-nums focus:border-emerald-400 focus:outline-none disabled:bg-slate-50"
+                                 [ngModel]="e.fresh || null" (ngModelChange)="setQty(row, 'fresh', $event)">
+                        </td>
+                        <td class="px-2 py-2">
+                          <input type="number" min="0" step="1" [disabled]="!row.inventoryId"
+                                 class="w-16 rounded-lg border border-rose-200 px-2 py-1 text-right text-sm font-bold tabular-nums focus:border-rose-400 focus:outline-none disabled:bg-slate-50"
+                                 [ngModel]="e.damage || null" (ngModelChange)="setQty(row, 'damage', $event)">
+                        </td>
+                        <td class="px-2 py-2">
+                          <input type="text" [placeholder]="defaultLocation() || 'Location'" class="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none"
+                                 [ngModel]="e.location" (ngModelChange)="setText(row, 'location', $event)">
+                        </td>
+                        <td class="px-2 py-2">
+                          <input type="text" placeholder="Remarks" class="w-32 rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none"
+                                 [ngModel]="e.remarks" (ngModelChange)="setText(row, 'remarks', $event)">
+                        </td>
+                        <td class="px-2 py-2 text-right">
+                          <button (click)="returnAll(row)" [disabled]="remaining(row) <= 0 || !row.inventoryId" title="Return all remaining as {{ inwardType() }}"
+                                  class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-700 disabled:opacity-40">All</button>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr><td colspan="11" class="px-4 py-8 text-center text-sm text-slate-400">No billed items found for this invoice.</td></tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Mobile -->
+              <div class="space-y-2 p-3 md:hidden">
+                @for (row of bill.rows; track row.lineKey) {
+                  @let e = entry(row);
+                  <div class="rounded-xl border p-3" [class]="isOver(row) ? 'border-rose-300 bg-rose-50' : 'border-slate-200'">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <p class="truncate font-bold text-slate-800">{{ row.styleNo }}</p>
+                        <p class="truncate text-xs text-slate-500">{{ row.color }} · {{ row.size }}@if (row.sleeveType) { · {{ row.sleeveType }} } · <span class="font-mono">{{ row.barcode || '–' }}</span></p>
+                      </div>
+                      <button (click)="returnAll(row)" [disabled]="remaining(row) <= 0 || !row.inventoryId" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-600 disabled:opacity-40">All</button>
+                    </div>
+                    <p class="mt-1 text-xs text-slate-500">Sold {{ row.soldQty }} · Prev. {{ row.returnedQty }} · <b [class.text-rose-600]="isOver(row)">Eligible {{ row.eligibleQty }}</b></p>
+                    @if (!row.inventoryId) { <p class="text-[11px] font-semibold text-rose-600">No matching inventory record</p> }
+                    <div class="mt-2 grid grid-cols-2 gap-2">
+                      <input type="number" min="0" placeholder="Fresh" [disabled]="!row.inventoryId" class="rounded-lg border border-emerald-200 px-2 py-1.5 text-sm font-bold"
+                             [ngModel]="e.fresh || null" (ngModelChange)="setQty(row, 'fresh', $event)">
+                      <input type="number" min="0" placeholder="Damage" [disabled]="!row.inventoryId" class="rounded-lg border border-rose-200 px-2 py-1.5 text-sm font-bold"
+                             [ngModel]="e.damage || null" (ngModelChange)="setQty(row, 'damage', $event)">
+                      <input type="text" [placeholder]="defaultLocation() || 'Location'" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                             [ngModel]="e.location" (ngModelChange)="setText(row, 'location', $event)">
+                      <input type="text" placeholder="Remarks" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                             [ngModel]="e.remarks" (ngModelChange)="setText(row, 'remarks', $event)">
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        }
+
+        @if (errors().length) {
+          <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
+            <p class="text-sm font-black text-rose-800">Please fix the following:</p>
+            <ul class="mt-1 list-disc space-y-0.5 pl-5 text-sm text-rose-700">
+              @for (err of errors(); track $index) { <li>{{ err }}</li> }
+            </ul>
+          </div>
+        }
+
+        <!-- Totals + actions -->
+        <div class="sticky bottom-0 -mx-4 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-7 sm:px-7">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+              <span class="font-semibold text-emerald-700">Fresh <b class="text-lg font-black tabular-nums">{{ totals().freshQty }}</b></span>
+              <span class="font-semibold text-rose-700">Damage <b class="text-lg font-black tabular-nums">{{ totals().damageQty }}</b></span>
+              <span class="font-semibold text-slate-500">Taxable <b class="tabular-nums text-slate-800">₹{{ totals().taxableValue | number:'1.2-2' }}</b></span>
+              <span class="font-semibold text-slate-500">GST <b class="tabular-nums text-slate-800">₹{{ totals().taxAmount | number:'1.2-2' }}</b></span>
+              <span class="font-semibold text-slate-500">Total <b class="text-lg font-black tabular-nums text-slate-900">₹{{ totals().totalAmount | number:'1.2-2' }}</b></span>
+            </div>
+            <div class="flex flex-wrap justify-end gap-2">
+              <button (click)="discardEntry()" [disabled]="saving()" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+              <button (click)="saveDraft()" [disabled]="saving() || !lines().length" class="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
+                {{ editing() ? 'Update Draft' : 'Save Draft' }}
+              </button>
+              <button (click)="saveAndPost()" [disabled]="saving() || !lines().length" class="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50">
+                {{ saving() ? 'Saving…' : 'Save & Post' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- ============================================================== -->
+    <!-- RETURNS                                                         -->
+    <!-- ============================================================== -->
+    @if (tab() === 'returns') {
+      <div class="px-4 py-5 sm:px-7 sm:py-6">
+        <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div class="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+            @for (f of ['all', 'Draft', 'Posted', 'Cancelled']; track f) {
+              <button (click)="statusFilter.set($any(f))" class="rounded-lg px-3 py-1.5 text-xs font-bold transition-colors"
+                      [class]="statusFilter() === f ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'">
+                {{ f === 'all' ? 'All' : f }} <span class="ml-0.5 text-slate-400">{{ statusCounts()[$any(f)] }}</span>
+              </button>
+            }
+          </div>
+          <input type="text" placeholder="Return no, customer, invoice no…" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none lg:w-72"
+                 [ngModel]="returnSearch()" (ngModelChange)="returnSearch.set($event)">
+        </div>
+
+        @if (returnsLoading() && !returns().length) {
+          <div class="space-y-2">@for (i of [1,2,3]; track i) { <div class="h-14 animate-pulse rounded-2xl bg-slate-100"></div> }</div>
+        } @else {
+          <div class="overflow-x-auto rounded-2xl border border-slate-200">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-50">
+                <tr class="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                  <th class="px-4 py-3 text-left">Return No</th>
+                  <th class="px-4 py-3 text-left">Date</th>
+                  <th class="px-4 py-3 text-left">Customer</th>
+                  <th class="px-4 py-3 text-left">Bills</th>
+                  <th class="px-4 py-3 text-right">Fresh</th>
+                  <th class="px-4 py-3 text-right">Damage</th>
+                  <th class="px-4 py-3 text-right">Value</th>
+                  <th class="px-4 py-3 text-left">Status</th>
+                  <th class="px-4 py-3"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white">
+                @for (r of filteredReturns(); track r.id) {
+                  <tr class="hover:bg-slate-50/80">
+                    <td class="whitespace-nowrap px-4 py-2.5 font-bold text-slate-800">{{ r.returnNo }}</td>
+                    <td class="whitespace-nowrap px-4 py-2.5 text-slate-600">{{ r.returnDate | date:'dd MMM yyyy' }}</td>
+                    <td class="px-4 py-2.5 text-slate-700">{{ r.clientName }}</td>
+                    <td class="px-4 py-2.5 text-xs text-slate-600">{{ (r.invoiceNos ?? []).join(', ') }}</td>
+                    <td class="px-4 py-2.5 text-right font-bold tabular-nums text-emerald-700">{{ r.totals?.freshQty ?? 0 }}</td>
+                    <td class="px-4 py-2.5 text-right font-bold tabular-nums text-rose-700">{{ r.totals?.damageQty ?? 0 }}</td>
+                    <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">₹{{ (r.totals?.totalAmount ?? 0) | number:'1.2-2' }}</td>
+                    <td class="px-4 py-2.5"><ng-container *ngTemplateOutlet="statusPill; context: { $implicit: r.status }"></ng-container></td>
+                    <td class="whitespace-nowrap px-4 py-2.5 text-right">
+                      <div class="flex justify-end gap-1">
+                        <button (click)="view(r)" class="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50">View</button>
+                        @if (r.status === 'Draft') {
+                          <button (click)="editDraft(r)" class="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-700">Update</button>
+                          <button (click)="postDraft(r)" class="h-8 rounded-lg bg-emerald-600 px-2.5 text-xs font-bold text-white hover:bg-emerald-700">Post</button>
+                        }
+                        @if (r.status !== 'Cancelled') {
+                          <button (click)="cancelEntry(r)" class="h-8 rounded-lg border border-rose-200 px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50">Cancel</button>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="9" class="px-4 py-12 text-center text-sm text-slate-400">No sales returns{{ statusFilter() !== 'all' || returnSearch() ? ' match' : ' yet' }}.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- ============================================================== -->
+    <!-- DAMAGE STOCK                                                    -->
+    <!-- ============================================================== -->
+    @if (tab() === 'damage') {
+      <div class="px-4 py-5 sm:px-7 sm:py-6">
+        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-sm text-slate-500">Damaged pieces received through Sales Return — held separately and <b>not</b> included in inventory stock.
+            <span class="ml-1 font-black text-rose-700">{{ damageTotal() }} pcs</span></p>
+          <input type="text" placeholder="Item code, style, color…" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none sm:w-72"
+                 [ngModel]="damageSearch()" (ngModelChange)="damageSearch.set($event)">
+        </div>
+        @if (damageLoading() && !damageStock().length) {
+          <div class="space-y-2">@for (i of [1,2,3]; track i) { <div class="h-12 animate-pulse rounded-2xl bg-slate-100"></div> }</div>
+        } @else {
+          <div class="overflow-x-auto rounded-2xl border border-slate-200">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-50">
+                <tr class="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                  <th class="px-4 py-3 text-left">Item Code</th>
+                  <th class="px-4 py-3 text-left">Item</th>
+                  <th class="px-4 py-3 text-left">By Location</th>
+                  <th class="px-4 py-3 text-right">Damage Qty</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white">
+                @for (d of filteredDamage(); track d.id) {
+                  <tr>
+                    <td class="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-600">{{ d.barcode }}</td>
+                    <td class="px-4 py-2.5"><p class="font-bold text-slate-800">{{ d.styleNo }}</p><p class="text-xs text-slate-500">{{ d.color }} · {{ d.size }}@if (d.sleeveType) { · {{ d.sleeveType }} }</p></td>
+                    <td class="px-4 py-2.5">
+                      <div class="flex flex-wrap gap-1">
+                        @for (loc of locations(d); track loc.name) {
+                          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{{ loc.name }}: {{ loc.qty }}</span>
+                        }
+                      </div>
+                    </td>
+                    <td class="px-4 py-2.5 text-right text-base font-black tabular-nums text-rose-700">{{ d.qty }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="4" class="px-4 py-12 text-center text-sm text-slate-400">No damage stock.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</section>

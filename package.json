@@ -8,7 +8,8 @@
     "build": "ng build --configuration=production",
     "preview": "ng serve --configuration=production",
     "test:stock-adjustment": "node --test scripts/tests/stock-adjustment.engine.test.mjs",
-    "test:einvoice-ewb": "node --test scripts/tests/einvoice-ewb.engine.test.mjs"
+    "test:einvoice-ewb": "node --test scripts/tests/einvoice-ewb.engine.test.mjs",
+    "test:sales-return": "node --test scripts/tests/sales-return.engine.test.mjs"
   },
   "dependencies": {
     "@angular/build": "^21.0.0",

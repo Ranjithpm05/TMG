@@ -3112,6 +3112,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
       lrVehicleNo = value?.vehicleNo || '';
     }
 
+    let lrSaveError = '';
     this.isGeneratingDC.set(true);
     try {
       await this.loadingService.run(async () => {
@@ -3147,26 +3148,36 @@ export class PackingListComponent implements OnInit, OnDestroy {
         const dc = await this.createDCForPackingList(loaded, lines, client, salesOrderIds, salesNos, orderNo, loaded.clientName, agentName, transport, transportId, transportAddress, transportGstNo, allowDuplicate);
         const generatedDCs: DeliveryChallan[] = [dc];
 
+        // The DC is already saved here — an LR save failure must not be
+        // reported as "DC Generation Failed" (the user would regenerate a
+        // duplicate DC). Report it separately; the LR can then be entered
+        // from the Invoice screen's "Create New LR Entry".
         if (lrNo) {
-          await this.lrEntryService.createLrEntry({
-            lrNo,
-            lrDate: lrDate ? new Date(lrDate) : new Date(),
-            transport,
-            transportId: transportId || undefined,
-            vehicleNo: lrVehicleNo || undefined,
-            packingListId: loaded.id!,
-            packingListNo: loaded.packingListNo,
-            dcId: dc.id!,
-            dcNo: dc.dcNo,
-            clientId: loaded.clientId,
-            clientName: loaded.clientName,
-          });
+          try {
+            await this.lrEntryService.createLrEntry({
+              lrNo,
+              lrDate: lrDate ? new Date(lrDate) : new Date(),
+              transport,
+              transportId: transportId || undefined,
+              vehicleNo: lrVehicleNo || undefined,
+              packingListId: loaded.id!,
+              packingListNo: loaded.packingListNo,
+              dcId: dc.id!,
+              dcNo: dc.dcNo,
+              clientId: loaded.clientId,
+              clientName: loaded.clientName,
+            });
+          } catch (lrErr: any) {
+            lrSaveError = `DC ${dc.dcNo} was generated, but LR No. ${lrNo} could not be saved (${lrErr?.message ?? 'unknown error'}). ` +
+              'Enter it from the Invoice screen using "Map LR" → "Create New LR Entry".';
+          }
         }
 
         await this.refreshDeliveryChallans();
         await this.printDCsWithLabels(generatedDCs, loaded, win);
         this.cancel();
       });
+      if (lrSaveError) await Swal.fire({ icon: 'warning', title: 'LR Not Saved', text: lrSaveError });
     } catch (err: any) {
       win?.close();
       const text = err?.message === 'already_has_dc'
