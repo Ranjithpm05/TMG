@@ -113,6 +113,7 @@ export class ClientService {
       shipToState: String(raw?.shipToState ?? raw?.state ?? ''),
       shipToCountry: raw?.shipToCountry ? String(raw.shipToCountry) : (raw?.country ? String(raw.country) : undefined),
       shipToSameAsBilling: raw?.shipToSameAsBilling !== undefined ? !!raw.shipToSameAsBilling : !raw?.shipToAddress,
+      destination: raw?.destination ? String(raw.destination) : undefined,
       gstNo: String(raw?.gstNo ?? raw?.gst_no ?? raw?.gstin ?? raw?.gstNumber ?? ''),
       mobile: String(raw?.mobile ?? raw?.phone ?? raw?.mobileNo ?? raw?.contact ?? ''),
       contactPerson: raw?.contactPerson ? String(raw.contactPerson) : undefined,

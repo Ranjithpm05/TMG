@@ -946,7 +946,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Vehicle No.</label>'
         + '<input id="minv-vehicle" class="swal2-input" style="margin:0;width:100%" value=""></div>'
         + '<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Destination</label>'
-        + '<input id="minv-dest" class="swal2-input" style="margin:0;width:100%" value="' + (primaryDc?.place || primaryDc.clientName || '') + '"></div>'
+        + '<input id="minv-dest" class="swal2-input" style="margin:0;width:100%" value="' + (invoiceClient?.destination || primaryDc?.place || primaryDc.clientName || '') + '"></div>'
         + '</div>',
       showCancelButton: true,
       confirmButtonText: 'Generate Invoice',
@@ -1672,7 +1672,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Vehicle No.</label>'
         + '<input id="inv-vehicle" class="swal2-input" style="margin:0;width:100%" value=""></div>'
         + '<div><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Destination</label>'
-        + '<input id="inv-dest" class="swal2-input" style="margin:0;width:100%" value="' + (primaryDc?.place || packingList.clientName || '') + '"></div>'
+        + '<input id="inv-dest" class="swal2-input" style="margin:0;width:100%" value="' + (invoiceClient?.destination || primaryDc?.place || packingList.clientName || '') + '"></div>'
         + '</div>',
       showCancelButton: true,
       confirmButtonText: 'Generate Invoice',

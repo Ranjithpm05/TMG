@@ -23,6 +23,7 @@ import { InvoiceService } from '../../services/invoice.service';
 import { EwayBillService } from '../../services/eway-bill.service';
 import { CompanySettingsService } from '../../services/company-settings.service';
 import { TransportService } from '../../services/transport.service';
+import { ClientService } from '../../services/client.service';
 import { LoadingService } from '../../services/loading.service';
 import { fetchLogoDataUri } from '../../services/company-logo.util';
 import { buildEwbQrContent, generateQrDataUrl, generateBarcodeDataUrl } from '../../services/eway-bill-pdf.util';
@@ -41,6 +42,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   private ewayBillService = inject(EwayBillService);
   private companySettingsService = inject(CompanySettingsService);
   private transportService = inject(TransportService);
+  private clientService = inject(ClientService);
   protected loadingService = inject(LoadingService);
   private subs: Subscription[] = [];
 
@@ -78,6 +80,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
     vehicleType: 'R',
     transDocNo: '',
     transDocDt: '',
+    destination: '',
   });
 
   cancelReasonCode = signal('');
@@ -159,8 +162,16 @@ export class EwayBillComponent implements OnInit, OnDestroy {
     this.filterTab.set(tab);
   }
 
-  openGenerateModal(): void {
+  async openGenerateModal(): Promise<void> {
     const invoice = this.selectedInvoice();
+    // Destination comes from the live Client Master record — read directly
+    // because syncClientFromMaster() is skipped once an IRN exists, which is
+    // always the case by the time an E-Way Bill can be generated.
+    const client = invoice?.clientId
+      ? await this.clientService.getClientForDC(invoice.clientId, invoice.clientName).catch(() => null)
+      : null;
+    const destination = client?.destination?.trim()
+      || invoice?.clientShipToPlace || invoice?.clientPlace || invoice?.destination || '';
     // Pre-fill the transporter from Transport Master — first by the exact
     // record the invoice/DC already used (transportId), falling back to a
     // name match, so the user isn't forced to retype it every time.
@@ -177,6 +188,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
       // used as the Transport Doc No. (not needed on the E-Way Bill).
       transDocNo: '',
       transDocDt: '',
+      destination,
     });
     this.showGenerateModal.set(true);
   }
@@ -226,7 +238,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const form = this.generateForm();
+    const form = { ...this.generateForm(), destination: this.generateForm().destination?.trim() || '' };
 
     this.isGenerating.set(true);
     try {
@@ -244,7 +256,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
           settings.gstin,
           {
             addr1: invoice.clientShipToAddress || invoice.clientAddress,
-            loc: invoice.clientShipToPlace || invoice.clientPlace || invoice.destination,
+            loc: form.destination || invoice.clientShipToPlace || invoice.clientPlace || invoice.destination,
             pin: parseInt(invoice.clientShipToZipCode || invoice.clientZipCode) || undefined,
             stcd: stateCode,
           },
@@ -460,7 +472,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
     const dispatchPlace = company
       ? `${esc(company.place || '-')}, ${this.stateNameFromCode(company.stateCode)}-${esc(company.pinCode || '-')}`
       : '-';
-    const deliveryPlace = `${esc(invoice.clientShipToPlace || invoice.clientPlace || '-')}, ${(invoice.clientShipToState || invoice.clientState || '-').toUpperCase()}${(invoice.clientShipToZipCode || invoice.clientZipCode) ? '-' + esc(invoice.clientShipToZipCode || invoice.clientZipCode) : ''}`;
+    const deliveryPlace = `${esc(td_?.destination || invoice.clientShipToPlace || invoice.clientPlace || '-')}, ${(invoice.clientShipToState || invoice.clientState || '-').toUpperCase()}${(invoice.clientShipToZipCode || invoice.clientZipCode) ? '-' + esc(invoice.clientShipToZipCode || invoice.clientZipCode) : ''}`;
 
     const items = invoice.items || [];
     const primaryItem = items[0];

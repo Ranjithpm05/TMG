@@ -23,6 +23,10 @@ export interface Client {
   shipToCountry?: string;
   shipToSameAsBilling?: boolean;
 
+  // Destination — the delivery location sent as ShipTo_Loc on the E-Way Bill
+  // and pre-filled as the Invoice's Destination. Falls back to Ship To Place.
+  destination?: string;
+
   gstNo?: string;
   mobile?: string;
   contactPerson?: string;

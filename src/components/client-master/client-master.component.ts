@@ -6,9 +6,9 @@ import { ClientService } from '../../services/client.service';
 import { INDIA_STATE_CODES } from '../../models/einvoice.model';
 import Swal from 'sweetalert2';
 
-const EXCEL_HEADERS = ['ClientName', 'ClientShortName', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'ShipToAddress', 'ShipToZipCode', 'ShipToPlace', 'ShipToState', 'ShipToCountry', 'GSTNo', 'Mobile', 'ContactPerson', 'MarginPct', 'DiscountPct', 'Status'];
+const EXCEL_HEADERS = ['ClientName', 'ClientShortName', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'ShipToAddress', 'ShipToZipCode', 'ShipToPlace', 'ShipToState', 'ShipToCountry', 'Destination', 'GSTNo', 'Mobile', 'ContactPerson', 'MarginPct', 'DiscountPct', 'Status'];
 const REQUIRED_HEADERS = ['ClientName', 'ClientType'];
-const EXPORT_HEADERS = ['ID', 'ClientName', 'ClientShortName', 'ClientCode', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'ShipToAddress', 'ShipToZipCode', 'ShipToPlace', 'ShipToState', 'ShipToCountry', 'GSTNo', 'Mobile', 'ContactPerson', 'MarginPct', 'DiscountPct', 'Status', 'CreatedAt', 'UpdatedAt'];
+const EXPORT_HEADERS = ['ID', 'ClientName', 'ClientShortName', 'ClientCode', 'ClientType', 'AgentName', 'BillingAddress', 'ZipCode', 'Place', 'State', 'Country', 'ShipToAddress', 'ShipToZipCode', 'ShipToPlace', 'ShipToState', 'ShipToCountry', 'Destination', 'GSTNo', 'Mobile', 'ContactPerson', 'MarginPct', 'DiscountPct', 'Status', 'CreatedAt', 'UpdatedAt'];
 
 type ViewMode = 'list' | 'form';
 
@@ -27,6 +27,7 @@ const EMPTY_CLIENT: Omit<Client, 'id' | 'clientCode'> = {
   shipToState: '',
   shipToPlace: '',
   shipToSameAsBilling: true,
+  destination: '',
   gstNo: '',
   mobile: '',
   contactPerson: '',
@@ -77,6 +78,7 @@ export class ClientMasterComponent implements OnInit {
       this.safeLower(client.mobile).includes(term) ||
       this.safeLower(client.gstNo).includes(term) ||
       this.safeLower(client.place).includes(term) ||
+      this.safeLower(client.destination).includes(term) ||
       this.safeLower(client.state).includes(term)
     );
   });
@@ -245,8 +247,8 @@ export class ClientMasterComponent implements OnInit {
       const XLSX = await import('xlsx');
       const rows = [
         EXCEL_HEADERS,
-        ['Acme Garments', 'Acme', 'Direct', '', '123 Market Street', '400001', 'Mumbai', 'Maharashtra', 'India', '123 Market Street', '400001', 'Mumbai', 'Maharashtra', 'India', '27AAAAA0000A1Z5', '9876543210', 'John Doe', '10', '5', 'Active'],
-        ['Best Traders', 'Best', 'Agent', 'Agent Rahul', '45 MG Road', '560001', 'Bengaluru', 'Karnataka', 'India', '78 Warehouse Lane', '560002', 'Bengaluru', 'Karnataka', 'India', '29BBBBB1111B1Z6', '9123456780', 'Jane Smith', '12', '0', 'Active'],
+        ['Acme Garments', 'Acme', 'Direct', '', '123 Market Street', '400001', 'Mumbai', 'Maharashtra', 'India', '123 Market Street', '400001', 'Mumbai', 'Maharashtra', 'India', 'Mumbai', '27AAAAA0000A1Z5', '9876543210', 'John Doe', '10', '5', 'Active'],
+        ['Best Traders', 'Best', 'Agent', 'Agent Rahul', '45 MG Road', '560001', 'Bengaluru', 'Karnataka', 'India', '78 Warehouse Lane', '560002', 'Bengaluru', 'Karnataka', 'India', 'Bengaluru', '29BBBBB1111B1Z6', '9123456780', 'Jane Smith', '12', '0', 'Active'],
       ];
       const ws = XLSX.utils.aoa_to_sheet(rows);
       ws['!cols'] = EXCEL_HEADERS.map(() => ({ wch: 18 }));
@@ -287,6 +289,7 @@ export class ClientMasterComponent implements OnInit {
           client.shipToPlace ?? '',
           client.shipToState ?? '',
           client.shipToCountry ?? '',
+          client.destination ?? '',
           client.gstNo ?? '',
           client.mobile ?? '',
           client.contactPerson ?? '',
@@ -414,6 +417,7 @@ export class ClientMasterComponent implements OnInit {
     const iType = col('ClientType'), iAgent = col('AgentName'), iAddress = col('BillingAddress');
     const iZip = col('ZipCode'), iPlace = col('Place'), iState = col('State'), iCountry = col('Country');
     const iShipAddress = col('ShipToAddress'), iShipZip = col('ShipToZipCode'), iShipPlace = col('ShipToPlace'), iShipState = col('ShipToState'), iShipCountry = col('ShipToCountry');
+    const iDestination = col('Destination');
     const iGst = col('GSTNo'), iMobile = col('Mobile'), iContact = col('ContactPerson'), iStatus = col('Status');
     const iMargin = col('MarginPct'), iDiscount = col('DiscountPct');
 
@@ -493,6 +497,7 @@ export class ClientMasterComponent implements OnInit {
         shipToState,
         shipToCountry,
         shipToSameAsBilling: iShipAddress < 0,
+        destination: iDestination >= 0 ? String(row[iDestination] ?? '').trim() : '',
         gstNo,
         mobile: iMobile >= 0 ? String(row[iMobile] ?? '').trim() : '',
         contactPerson: iContact >= 0 ? String(row[iContact] ?? '').trim() : '',

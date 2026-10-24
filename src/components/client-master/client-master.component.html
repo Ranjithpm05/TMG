@@ -186,6 +186,10 @@
                 <div><label for="shipToCountry" class="block text-sm font-medium text-gray-700">Country</label><input type="text" name="shipToCountry" [(ngModel)]="client.shipToCountry" id="shipToCountry" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div>
               </div>
             }
+            <div>
+              <label for="destination" class="block text-sm font-medium text-gray-700">Destination</label>
+              <input type="text" name="destination" [(ngModel)]="client.destination" id="destination" placeholder="Used as the delivery location on E-Way Bills" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
           </div>
           <div class="space-y-4 p-4 border rounded-lg md:col-span-2">
             <h3 class="text-lg font-semibold text-gray-700">Commercial & Contact</h3>

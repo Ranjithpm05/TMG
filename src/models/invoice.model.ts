@@ -165,4 +165,7 @@ export interface EwayBillTransportDetails {
   vehicleType?: 'R' | 'O'; // Regular / Over-Dimensional-Cargo
   transDocNo?: string;
   transDocDt?: string;
+  // Delivery location sent as ShipTo_Loc — pre-filled from Client Master's
+  // Destination (falling back to the invoice's Ship To Place).
+  destination?: string;
 }
