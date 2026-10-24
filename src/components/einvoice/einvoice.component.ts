@@ -11,7 +11,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription, firstValueFrom } from 'rxjs';
 import Swal from 'sweetalert2';
-import { Invoice } from '../../models/invoice.model';
+import { Invoice, EwayBillTransportDetails } from '../../models/invoice.model';
 import { PackingListLine } from '../../models/packing-list.model';
 import { CANCEL_REASONS, CompanySettings, INDIA_STATE_CODES } from '../../models/einvoice.model';
 import { Transport } from '../../models/transport.model';
@@ -29,6 +29,10 @@ import { exportInvoicesToTally } from './tally-export.util';
 import { exportInvoicesToPtFile, invoicePackingListIds, PtFileSizeMaps } from './pt-file-export.util';
 import { fetchLogoDataUri } from '../../services/company-logo.util';
 import { IncrementalList } from '../../services/incremental-list.util';
+import { EwayBillService } from '../../services/eway-bill.service';
+import { CombinedGenerationService } from '../../services/combined-generation.service';
+import { CombinedGenerationError, CombinedStatus, StepState, StepStatus } from '../../services/einvoice-ewb.engine';
+import { EwbTransportFormComponent } from '../eway-bill/ewb-transport-form.component';
 
 interface TransportDetailsForm {
   transportId: string;
@@ -50,7 +54,7 @@ const INVOICE_COPY_LABELS = ['Original-For Buyer', 'Duplicate-For Transport', 'T
 @Component({
   selector: 'app-einvoice',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, EwbTransportFormComponent],
   templateUrl: './einvoice.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -63,6 +67,8 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   private lrEntryService = inject(LrEntryService);
   private packingListService = inject(PackingListService);
   private designService = inject(DesignService);
+  private ewayBillService = inject(EwayBillService);
+  private combinedGenerationService = inject(CombinedGenerationService);
   protected loadingService = inject(LoadingService);
   private subs: Subscription[] = [];
 
@@ -100,6 +106,15 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
   showNewLrForm = signal(false);
   isCreatingLr = signal(false);
   newLrForm = signal({ lrNo: '', lrDate: '', vehicleNo: '' });
+
+  showCombinedModal = signal(false);
+  isCombinedRunning = signal(false);
+  combinedForm = signal<EwayBillTransportDetails>({ distance: 0, transMode: '1' });
+  combinedTransportId = signal('');
+  combinedStatus = signal<CombinedStatus | null>(null);
+  combinedErrors = signal<string[]>([]);
+  // Same Transport Master subset the E-Way Bill screen offers.
+  ewbTransports = computed(() => this.transports().filter((t) => t.status === 'Active'));
 
   cancelReason = signal('');
   cancelReasonOther = signal('');
@@ -277,21 +292,10 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
 
   async generateEInvoice(): Promise<void> {
     const invoice = this.selectedInvoice();
-    if (!invoice?.id) return;
+    if (!invoice?.id || this.isGenerating()) return;
 
-    const settings = this.companySettings();
-    if (!settings?.gstin?.trim()) {
-      const result = await Swal.fire({
-        title: 'Company Settings Required',
-        text: 'Please configure your company GSTIN and details before generating an e-Invoice.',
-        icon: 'warning',
-        confirmButtonText: 'Configure Now',
-        showCancelButton: true,
-        confirmButtonColor: '#f59e0b',
-      });
-      if (result.isConfirmed) this.openSettingsModal();
-      return;
-    }
+    if (!(await this.ensureCompanySettings())) return;
+    const settings = this.companySettings()!;
 
     const confirm = await Swal.fire({
       title: 'Generate E-Invoice?',
@@ -311,35 +315,15 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       // closed. Awaiting Swal.fire() while still inside run() stacked the
       // overlay on top of the dialog and swallowed the OK click, so the
       // overlay never closed — a deadlock, not just a slow request.
-      const { result, payload } = await this.loadingService.run(async () => {
-        // Buyer name/address must come from the Client Master, not the
-        // snapshot taken when the invoice was created.
-        const synced = await this.invoiceService.syncClientFromMaster(invoice);
-        const { result, payload } = await this.einvoiceService.submitToIRP(synced, settings);
-        await this.einvoiceService.saveEInvoice(invoice.id!, result, payload);
-        return { result, payload };
-      });
-
-      const updated: Invoice = {
-        ...invoice,
-        eInvoiceStatus: 'generated',
-        irn: result.irn,
-        ackNo: result.ackNo,
-        ackDt: result.ackDt,
-        signedQrCode: result.signedQrCode,
-        signedInvoice: result.signedInvoice,
-        eInvoicePayload: payload,
-        eInvoiceErrorMessage: undefined,
-        eInvoiceErrorCode: undefined,
-      };
-      this.selectedInvoice.set(updated);
-      this.invoices.update((list) =>
-        list.map((i) => (i.id === invoice.id ? updated : i))
-      );
+      // Sync from Client Master, IRP submit, save, and the failure record all
+      // live in EInvoiceService.generateAndSave (shared with the combined
+      // E-Invoice & E-Way Bill flow).
+      const updated = await this.loadingService.run(() => this.einvoiceService.generateAndSave(invoice, settings));
+      this.applyInvoiceUpdate(updated);
 
       await Swal.fire({
         title: 'E-Invoice Generated!',
-        html: `<b>IRN:</b><br><code style="word-break:break-all;font-size:10px;display:block;background:#f1f5f9;padding:8px;border-radius:6px;margin-top:4px">${result.irn}</code>`,
+        html: `<b>IRN:</b><br><code style="word-break:break-all;font-size:10px;display:block;background:#f1f5f9;padding:8px;border-radius:6px;margin-top:4px">${updated.irn}</code>`,
         icon: 'success',
         confirmButtonColor: '#10b981',
       });
@@ -350,19 +334,149 @@ export class EInvoiceComponent implements OnInit, OnDestroy {
       await this.printEInvoicePdf(updated);
     } catch (err: any) {
       const message = err?.message || 'Could not generate e-Invoice. Please try again.';
-      try {
-        await this.einvoiceService.saveEInvoiceFailure(invoice.id!, message);
-        const updated: Invoice = { ...invoice, eInvoiceStatus: 'failed', eInvoiceErrorMessage: message };
-        this.selectedInvoice.set(updated);
-        this.invoices.update((list) => list.map((i) => (i.id === invoice.id ? updated : i)));
-      } catch {
-        // Firestore write for the failure record itself failed — surface the
-        // original error below regardless.
+      // Re-read rather than assume 'failed': if the IRP did issue an IRN
+      // (only the save failed), the invoice must not be shown as retryable.
+      if (!(await this.refreshInvoice(invoice.id!))) {
+        this.applyInvoiceUpdate({ ...invoice, eInvoiceStatus: 'failed', eInvoiceErrorMessage: message });
       }
       Swal.fire('Generation Failed', message, 'error');
     } finally {
       this.isGenerating.set(false);
     }
+  }
+
+  private applyInvoiceUpdate(updated: Invoice): void {
+    if (this.selectedInvoice()?.id === updated.id) this.selectedInvoice.set(updated);
+    this.invoices.update((list) => list.map((i) => (i.id === updated.id ? updated : i)));
+  }
+
+  // Pulls the invoice's persisted state after a generation attempt so the
+  // screen shows exactly what Firestore recorded (failed / generated).
+  private async refreshInvoice(invoiceId: string): Promise<boolean> {
+    const latest = await this.invoiceService.getInvoiceByIdOnce(invoiceId).catch(() => null);
+    if (latest) this.applyInvoiceUpdate(latest);
+    return !!latest;
+  }
+
+  // ─── Combined E-Invoice & E-Way Bill (single click) ───────────────────────
+  // Collects the E-Way Bill transport details up front, validates everything,
+  // then runs both existing generation workflows in sequence (see
+  // CombinedGenerationService). Status of each document is shown live in the
+  // modal; after a partial success, re-running resumes at the failed step.
+
+  canRunCombined(inv: Invoice): boolean {
+    if (inv.eInvoiceStatus === 'cancelled') return false;
+    return inv.eInvoiceStatus !== 'generated' || inv.ewbStatus !== 'generated';
+  }
+
+  async openCombinedModal(): Promise<void> {
+    const invoice = this.selectedInvoice();
+    if (!invoice?.id || this.isGenerating()) return;
+    if (!(await this.ensureCompanySettings())) return;
+
+    // A run for this invoice may still be going from before this screen was
+    // reopened — never start a second one alongside it.
+    if (this.combinedGenerationService.isRunning(invoice.id)) {
+      Swal.fire('Generation In Progress', 'E-Invoice & E-Way Bill generation is already running for this invoice. Reopen it in a moment to see the result.', 'info');
+      return;
+    }
+
+    const { form, transportId } = await this.ewayBillService.buildDefaultTransportDetails(invoice, this.ewbTransports());
+    this.combinedForm.set(form);
+    this.combinedTransportId.set(transportId);
+    this.combinedErrors.set([]);
+    this.combinedStatus.set(this.initialCombinedStatus(invoice));
+    this.showCombinedModal.set(true);
+  }
+
+  closeCombinedModal(): void {
+    if (this.isCombinedRunning()) return;
+    this.showCombinedModal.set(false);
+  }
+
+  async startCombined(): Promise<void> {
+    const invoice = this.selectedInvoice();
+    const settings = this.companySettings();
+    if (!invoice?.id || !settings || this.isCombinedRunning()) return;
+
+    this.isCombinedRunning.set(true);
+    this.isGenerating.set(true);
+    this.combinedErrors.set([]);
+    const invoiceId = invoice.id;
+    try {
+      const { status } = await this.combinedGenerationService.run(invoiceId, settings, this.combinedForm(), (s) =>
+        this.combinedStatus.set(s)
+      );
+      this.combinedStatus.set(status);
+    } catch (err: any) {
+      // Validation / plan error — nothing was sent to either API.
+      const errors: string[] = err instanceof CombinedGenerationError
+        ? err.errors
+        : [err?.message || 'Could not start generation. Please try again.'];
+      this.combinedErrors.set(errors);
+    } finally {
+      await this.refreshInvoice(invoiceId);
+      // Status rows for documents that already existed reflect the refreshed invoice.
+      const latest = this.selectedInvoice();
+      if (latest?.id === invoiceId && this.combinedErrors().length) this.combinedStatus.set(this.initialCombinedStatus(latest));
+      this.isCombinedRunning.set(false);
+      this.isGenerating.set(false);
+    }
+  }
+
+  combinedHasFailure(): boolean {
+    const s = this.combinedStatus();
+    return !!s && (s.einvoice.state === 'failed' || s.ewb.state === 'failed');
+  }
+
+  combinedFinished(): boolean {
+    const s = this.combinedStatus();
+    if (!s || this.isCombinedRunning()) return false;
+    return s.einvoice.state !== 'pending' && s.ewb.state !== 'pending';
+  }
+
+  stepStateClass(state: StepState): string {
+    const map: Record<StepState, string> = {
+      pending: 'bg-slate-100 text-slate-500 border border-slate-200',
+      running: 'bg-indigo-100 text-indigo-700 border border-indigo-200',
+      success: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+      skipped: 'bg-sky-100 text-sky-700 border border-sky-200',
+      failed: 'bg-red-100 text-red-700 border border-red-200',
+    };
+    return map[state];
+  }
+
+  stepStateLabel(step: StepStatus): string {
+    if (step.state === 'skipped') return step.docNo ? 'Already Generated' : 'Not Attempted';
+    return { pending: 'Pending', running: 'Generating…', success: 'Generated', failed: 'Failed' }[step.state];
+  }
+
+  private initialCombinedStatus(inv: Invoice): CombinedStatus {
+    const einvoiceDone = inv.eInvoiceStatus === 'generated' && !!inv.irn;
+    const ewbDone = inv.ewbStatus === 'generated' && !!inv.ewbNo;
+    return {
+      einvoice: einvoiceDone
+        ? { state: 'skipped', message: 'Already generated — existing IRN will be reused.', docNo: inv.irn }
+        : { state: 'pending', message: inv.eInvoiceStatus === 'failed' ? `Previous attempt failed: ${inv.eInvoiceErrorMessage || 'unknown error'}` : undefined },
+      ewb: ewbDone
+        ? { state: 'skipped', message: 'Already generated.', docNo: inv.ewbNo }
+        : { state: 'pending', message: inv.ewbStatus === 'failed' ? `Previous attempt failed: ${inv.ewbErrorMessage || 'unknown error'}` : undefined },
+    };
+  }
+
+  // Same prompt the individual Generate E-Invoice button shows.
+  private async ensureCompanySettings(): Promise<boolean> {
+    if (this.companySettings()?.gstin?.trim()) return true;
+    const result = await Swal.fire({
+      title: 'Company Settings Required',
+      text: 'Please configure your company GSTIN and details before generating an e-Invoice.',
+      icon: 'warning',
+      confirmButtonText: 'Configure Now',
+      showCancelButton: true,
+      confirmButtonColor: '#f59e0b',
+    });
+    if (result.isConfirmed) this.openSettingsModal();
+    return false;
   }
 
   openCancelModal(): void {

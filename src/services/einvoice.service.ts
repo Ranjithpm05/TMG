@@ -16,6 +16,7 @@ import { CompanySettingsService } from './company-settings.service';
 import { InvoiceService } from './invoice.service';
 import { ClientService } from './client.service';
 import { resolveGstPlaceOfSupply, stateCodeFromName } from './gst-state.util';
+import { retryAsync } from './einvoice-ewb.engine';
 
 // Appendix-5 (E-Invoice sandbox doc) — Cancel Reasons numeric codes. The UI
 // (CANCEL_REASONS in einvoice.model.ts) shows the labels; this maps a chosen
@@ -357,6 +358,51 @@ export class EInvoiceService {
     } catch (err: any) {
       throw new Error(this.extractCallableErrorMessage(err));
     }
+  }
+
+  // Full generate → persist cycle shared by the E-Invoice screen's own
+  // "Generate E-Invoice" button and the combined E-Invoice & E-Way Bill flow.
+  // Resolves with the invoice as it now stands (eInvoiceStatus 'generated').
+  // A failure *before* the IRP issues an IRN is recorded as 'failed' (the
+  // user can retry); once an IRN exists it is never recorded as failed — a
+  // retry would only be rejected by NIC as a duplicate IRN.
+  async generateAndSave(invoice: Invoice, company: CompanySettings): Promise<Invoice> {
+    if (!invoice.id) throw new Error('Invoice must be saved before generating an e-Invoice.');
+    let synced: Invoice;
+    let submitted: { result: EInvoiceSubmitResult; payload: EInvoicePayload };
+    try {
+      // Buyer name/address must come from the Client Master, not the
+      // snapshot taken when the invoice was created.
+      synced = await this.invoiceService.syncClientFromMaster(invoice);
+      submitted = await this.submitToIRP(synced, company);
+    } catch (err: any) {
+      const message = err?.message || 'Could not generate e-Invoice. Please try again.';
+      // The failure record is best-effort — surface the original error regardless.
+      await this.saveEInvoiceFailure(invoice.id, message).catch(() => undefined);
+      throw new Error(message);
+    }
+
+    const { result, payload } = submitted;
+    try {
+      await retryAsync(() => this.saveEInvoice(invoice.id!, result, payload));
+    } catch {
+      throw new Error(
+        `The IRP issued IRN ${result.irn} (Ack No. ${result.ackNo}) but it could not be saved to this invoice. ` +
+        `Do NOT generate the e-Invoice again — note this IRN and contact support so it can be recorded.`
+      );
+    }
+    return {
+      ...synced,
+      eInvoiceStatus: 'generated',
+      irn: result.irn,
+      ackNo: result.ackNo,
+      ackDt: result.ackDt,
+      signedQrCode: result.signedQrCode,
+      signedInvoice: result.signedInvoice,
+      eInvoicePayload: payload,
+      eInvoiceErrorMessage: undefined,
+      eInvoiceErrorCode: undefined,
+    };
   }
 
   async saveEInvoice(invoiceId: string, result: EInvoiceSubmitResult, payload: EInvoicePayload): Promise<void> {

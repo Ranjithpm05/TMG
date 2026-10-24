@@ -15,7 +15,6 @@ import { Invoice, EwayBillTransportDetails } from '../../models/invoice.model';
 import {
   EWAY_BILL_CANCEL_REASONS,
   EWAY_BILL_TRANSPORT_MODES,
-  EWAY_BILL_VEHICLE_TYPES,
 } from '../../models/eway-bill.model';
 import { CompanySettings, INDIA_STATE_CODES } from '../../models/einvoice.model';
 import { Transport } from '../../models/transport.model';
@@ -23,9 +22,9 @@ import { InvoiceService } from '../../services/invoice.service';
 import { EwayBillService } from '../../services/eway-bill.service';
 import { CompanySettingsService } from '../../services/company-settings.service';
 import { TransportService } from '../../services/transport.service';
-import { ClientService } from '../../services/client.service';
 import { LoadingService } from '../../services/loading.service';
 import { fetchLogoDataUri } from '../../services/company-logo.util';
+import { EwbTransportFormComponent } from './ewb-transport-form.component';
 import { buildEwbQrContent, generateQrDataUrl, generateBarcodeDataUrl } from '../../services/eway-bill-pdf.util';
 
 type FilterTab = 'all' | 'pending' | 'generated' | 'failed' | 'cancelled';
@@ -33,7 +32,7 @@ type FilterTab = 'all' | 'pending' | 'generated' | 'failed' | 'cancelled';
 @Component({
   selector: 'app-eway-bill',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, EwbTransportFormComponent],
   templateUrl: './eway-bill.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -42,7 +41,6 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   private ewayBillService = inject(EwayBillService);
   private companySettingsService = inject(CompanySettingsService);
   private transportService = inject(TransportService);
-  private clientService = inject(ClientService);
   protected loadingService = inject(LoadingService);
   private subs: Subscription[] = [];
 
@@ -68,7 +66,6 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   showCancelModal = signal(false);
 
   readonly transportModes = EWAY_BILL_TRANSPORT_MODES;
-  readonly vehicleTypes = EWAY_BILL_VEHICLE_TYPES;
   readonly cancelReasons = EWAY_BILL_CANCEL_REASONS;
 
   generateForm = signal<EwayBillTransportDetails>({
@@ -163,33 +160,12 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   }
 
   async openGenerateModal(): Promise<void> {
-    const invoice = this.selectedInvoice();
-    // Destination comes from the live Client Master record — read directly
-    // because syncClientFromMaster() is skipped once an IRN exists, which is
-    // always the case by the time an E-Way Bill can be generated.
-    const client = invoice?.clientId
-      ? await this.clientService.getClientForDC(invoice.clientId, invoice.clientName).catch(() => null)
-      : null;
-    const destination = client?.destination?.trim()
-      || invoice?.clientShipToPlace || invoice?.clientPlace || invoice?.destination || '';
-    // Pre-fill the transporter from Transport Master — first by the exact
-    // record the invoice/DC already used (transportId), falling back to a
-    // name match, so the user isn't forced to retype it every time.
-    const matched = this.findTransportForInvoice(invoice);
-    this.selectedTransportId.set(matched?.id || '');
-    this.generateForm.set({
-      distance: 0,
-      transMode: '1',
-      transporterId: matched?.gstNo || '',
-      transporterName: matched?.transportName || '',
-      vehicleNo: '',
-      vehicleType: 'R',
-      // No transport document reference is sent — the DC No. is no longer
-      // used as the Transport Doc No. (not needed on the E-Way Bill).
-      transDocNo: '',
-      transDocDt: '',
-      destination,
-    });
+    const { form, transportId } = await this.ewayBillService.buildDefaultTransportDetails(
+      this.selectedInvoice(),
+      this.transports()
+    );
+    this.selectedTransportId.set(transportId);
+    this.generateForm.set(form);
     this.showGenerateModal.set(true);
   }
 
@@ -197,39 +173,9 @@ export class EwayBillComponent implements OnInit, OnDestroy {
     this.showGenerateModal.set(false);
   }
 
-  updateGenerateField<K extends keyof EwayBillTransportDetails>(field: K, value: EwayBillTransportDetails[K]): void {
-    this.generateForm.update((f) => ({ ...f, [field]: value }));
-  }
-
-  // Selecting a Transport Master record fills transporterId/transporterName
-  // from it (gstNo doubles as the GSTIN/TRANSIN Webtel's TransId expects);
-  // selecting "— Enter manually —" (empty value) leaves whatever is already
-  // typed untouched rather than clearing it.
-  onTransportSelected(transportId: string): void {
-    this.selectedTransportId.set(transportId);
-    if (!transportId) return;
-    const transport = this.transports().find((t) => t.id === transportId);
-    if (!transport) return;
-    this.generateForm.update((f) => ({
-      ...f,
-      transporterId: transport.gstNo || '',
-      transporterName: transport.transportName,
-    }));
-  }
-
-  private findTransportForInvoice(invoice: Invoice | null): Transport | undefined {
-    if (!invoice) return undefined;
-    const list = this.transports();
-    if (invoice.transportId) {
-      const byId = list.find((t) => t.id === invoice.transportId);
-      if (byId) return byId;
-    }
-    return invoice.transport ? list.find((t) => t.transportName === invoice.transport) : undefined;
-  }
-
   async submitGenerate(): Promise<void> {
     let invoice = this.selectedInvoice();
-    if (!invoice?.id) return;
+    if (!invoice?.id || this.isGenerating()) return;
     invoice = await this.invoiceService.syncClientFromMaster(invoice);
 
     const settings = this.companySettings();
@@ -237,8 +183,6 @@ export class EwayBillComponent implements OnInit, OnDestroy {
       Swal.fire('Company Settings Required', 'Configure company GSTIN in the E-Invoice screen first.', 'warning');
       return;
     }
-
-    const form = { ...this.generateForm(), destination: this.generateForm().destination?.trim() || '' };
 
     this.isGenerating.set(true);
     try {
@@ -248,38 +192,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
       // click and the dialog never advances (see printEInvoicePdf's identical
       // fix in einvoice.component.ts).
       const updated: Invoice = await this.loadingService.run(async () => {
-        const stateCode = this.extractStateCodeFromGstin(invoice.clientGstin) || settings.stateCode;
-        const dispatchStateCode = settings.stateCode;
-        const result = await this.ewayBillService.generateEWayBill(
-          invoice,
-          form,
-          settings.gstin,
-          {
-            addr1: invoice.clientShipToAddress || invoice.clientAddress,
-            loc: form.destination || invoice.clientShipToPlace || invoice.clientPlace || invoice.destination,
-            pin: parseInt(invoice.clientShipToZipCode || invoice.clientZipCode) || undefined,
-            stcd: stateCode,
-          },
-          {
-            addr1: settings.address1,
-            addr2: settings.address2,
-            loc: settings.place,
-            pin: parseInt(settings.pinCode) || undefined,
-            stcd: dispatchStateCode,
-          }
-        );
-
-        const next: Invoice = {
-          ...invoice,
-          ewbStatus: 'generated',
-          ewbNo: result.ewbNo,
-          ewbDate: result.ewbDate,
-          ewbValidTill: result.ewbValidTill,
-          ewbGstin: result.gstin,
-          ewbTransportDetails: form,
-          ewbErrorMessage: undefined,
-          ewbErrorCode: undefined,
-        };
+        const next = await this.ewayBillService.generateForInvoice(invoice, this.generateForm(), settings);
         this.selectedInvoice.set(next);
         this.allInvoices.update((list) => list.map((i) => (i.id === invoice.id ? next : i)));
         this.showGenerateModal.set(false);
@@ -381,11 +294,6 @@ export class EwayBillComponent implements OnInit, OnDestroy {
 
   transportModeLabel(code: string): string {
     return this.transportModes.find((m) => m.code === code)?.label || code;
-  }
-
-  private extractStateCodeFromGstin(gstin: string): string {
-    if (!gstin || gstin.length < 2) return '';
-    return gstin.substring(0, 2);
   }
 
   private stateNameFromCode(code: string | undefined): string {

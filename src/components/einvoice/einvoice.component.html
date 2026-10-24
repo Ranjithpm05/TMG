@@ -363,6 +363,24 @@
       </button>
       }
 
+      @if (canRunCombined(inv)) {
+      <button (click)="openCombinedModal()" [disabled]="isGenerating() && !isCombinedRunning()"
+        class="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 disabled:opacity-60 transition-colors shadow-sm">
+        @if (isCombinedRunning()) {
+          <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+          Generating…
+        } @else {
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          {{ inv.eInvoiceStatus === 'generated' ? 'Generate E-Way Bill (IRN ready)' : 'Generate E-Invoice & E-Way Bill' }}
+        }
+      </button>
+      }
+
       @if (inv.eInvoiceStatus === 'generated') {
       <button (click)="openCancelModal()"
         class="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors shadow-sm">
@@ -686,10 +704,17 @@
           </li>
           <li class="flex gap-2.5 text-sm">
             <span class="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
-              [class]="inv.eInvoiceStatus === 'generated' ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'">2</span>
+              [class]="inv.ewbStatus === 'generated' ? 'bg-emerald-500 text-white' : inv.ewbStatus === 'failed' ? 'bg-red-500 text-white' : inv.eInvoiceStatus === 'generated' ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-500'">2</span>
             <div>
               <p class="font-semibold text-slate-700">Generate E-Way Bill</p>
-              <p class="text-xs text-slate-400">Once an IRN exists, go to the E-Way Bill screen to generate it using this invoice's IRN.</p>
+              <p class="text-xs text-slate-400">Once an IRN exists, go to the E-Way Bill screen to generate it using this invoice's IRN — or use <strong>Generate E-Invoice &amp; E-Way Bill</strong> to do both in one step.</p>
+              @if (inv.ewbStatus === 'generated' && inv.ewbNo) {
+              <p class="text-xs text-emerald-600 font-semibold mt-1">E-Way Bill No. {{ inv.ewbNo }}</p>
+              } @else if (inv.ewbStatus === 'failed') {
+              <p class="text-xs text-red-600 mt-1">Failed: {{ inv.ewbErrorMessage || 'The sandbox rejected the request.' }}</p>
+              } @else if (inv.ewbStatus === 'cancelled') {
+              <p class="text-xs text-rose-600 mt-1">E-Way Bill cancelled</p>
+              }
             </div>
           </li>
           <li class="flex gap-2.5 text-sm">
@@ -854,6 +879,93 @@
         class="px-5 py-2 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60 transition-colors">
         {{ isSavingSettings() ? 'Saving…' : 'Save Settings' }}
       </button>
+    </div>
+  </div>
+</div>
+}
+
+<!-- ── Combined E-Invoice & E-Way Bill Modal ───────────────────── -->
+@if (showCombinedModal() && selectedInvoice(); as cInv) {
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" (click)="closeCombinedModal()"></div>
+  <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div class="px-6 py-5 border-b border-slate-100">
+      <h2 class="text-lg font-black text-slate-800">Generate E-Invoice &amp; E-Way Bill</h2>
+      <p class="text-xs text-slate-400 mt-0.5">{{ cInv.invoiceNo }} · The E-Invoice (IRN) is generated first, then the E-Way Bill from that IRN.</p>
+    </div>
+
+    <div class="p-6 space-y-5">
+      <!-- Status of both documents -->
+      @if (combinedStatus(); as st) {
+      <div class="space-y-2">
+        @for (row of [{ label: '1. E-Invoice (IRN)', step: st.einvoice }, { label: '2. E-Way Bill', step: st.ewb }]; track row.label) {
+        <div class="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-sm font-semibold text-slate-700">{{ row.label }}</p>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold {{ stepStateClass(row.step.state) }}">
+              @if (row.step.state === 'running') {
+                <svg class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+              }
+              {{ stepStateLabel(row.step) }}
+            </span>
+          </div>
+          @if (row.step.docNo) {
+          <p class="text-[11px] font-mono text-slate-600 mt-1.5 break-all">{{ row.step.docNo }}</p>
+          }
+          @if (row.step.message) {
+          <p class="text-xs mt-1 whitespace-pre-line" [class]="row.step.state === 'failed' ? 'text-red-600' : 'text-slate-500'">{{ row.step.message }}</p>
+          }
+        </div>
+        }
+      </div>
+      }
+
+      @if (combinedErrors().length) {
+      <div class="rounded-2xl border border-red-200 bg-red-50 p-3">
+        <p class="text-sm font-semibold text-red-800">Nothing was generated — please fix the following:</p>
+        <ul class="list-disc pl-5 mt-1 space-y-0.5">
+          @for (e of combinedErrors(); track $index) {
+          <li class="text-xs text-red-700 whitespace-pre-line">{{ e }}</li>
+          }
+        </ul>
+      </div>
+      }
+
+      @if (combinedStatus()?.ewb?.state !== 'skipped' || !combinedStatus()?.ewb?.docNo) {
+      <div>
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">E-Way Bill Transport Details</h3>
+        <app-ewb-transport-form [(form)]="combinedForm" [(selectedTransportId)]="combinedTransportId"
+          [transports]="ewbTransports()" [disabled]="isCombinedRunning() || combinedStatus()?.ewb?.state === 'success'" />
+      </div>
+      }
+    </div>
+
+    <div class="flex flex-wrap justify-end gap-3 px-6 py-4 border-t border-slate-100">
+      <button (click)="closeCombinedModal()" [disabled]="isCombinedRunning()"
+        class="px-5 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 transition-colors">
+        {{ combinedFinished() && !combinedErrors().length ? 'Close' : 'Cancel' }}
+      </button>
+      @if (combinedFinished() && cInv.eInvoiceStatus === 'generated') {
+      <button (click)="printEInvoicePdf()"
+        class="px-5 py-2 rounded-xl bg-teal-700 text-white text-sm font-semibold hover:bg-teal-600 transition-colors">
+        Print E-Invoice
+      </button>
+      }
+      @if (canRunCombined(cInv) && (!combinedFinished() || combinedHasFailure() || combinedErrors().length)) {
+      <button (click)="startCombined()" [disabled]="isCombinedRunning()"
+        class="px-5 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 disabled:opacity-60 transition-colors">
+        @if (isCombinedRunning()) {
+          Generating…
+        } @else if (combinedHasFailure()) {
+          Retry Failed Step
+        } @else {
+          {{ cInv.eInvoiceStatus === 'generated' ? 'Generate E-Way Bill' : 'Generate Both' }}
+        }
+      </button>
+      }
     </div>
   </div>
 </div>

@@ -3,7 +3,11 @@ import { Firestore, doc, updateDoc, serverTimestamp } from '@angular/fire/firest
 import { Functions, httpsCallable } from '@angular/fire/functions';
 import { EwayBillGenerateResult, EwayBillTransportDetails } from '../models/eway-bill.model';
 import { Invoice } from '../models/invoice.model';
+import { CompanySettings } from '../models/einvoice.model';
+import { Transport } from '../models/transport.model';
 import { InvoiceService } from './invoice.service';
+import { ClientService } from './client.service';
+import { retryAsync } from './einvoice-ewb.engine';
 
 export interface EwayBillShipTo {
   addr1?: string;
@@ -18,6 +22,92 @@ export class EwayBillService {
   private firestore = inject(Firestore);
   private functions = inject(Functions);
   private invoiceService = inject(InvoiceService);
+  private clientService = inject(ClientService);
+
+  // Pre-filled E-Way Bill transport form for an invoice — shared by the E-Way
+  // Bill screen and the combined E-Invoice & E-Way Bill flow. Destination
+  // comes from the live Client Master record — read directly because
+  // syncClientFromMaster() is skipped once an IRN exists. The transporter is
+  // matched from Transport Master — first by the exact record the invoice/DC
+  // already used (transportId), falling back to a name match.
+  async buildDefaultTransportDetails(
+    invoice: Invoice | null,
+    transports: Transport[]
+  ): Promise<{ form: EwayBillTransportDetails; transportId: string }> {
+    const client = invoice?.clientId
+      ? await this.clientService.getClientForDC(invoice.clientId, invoice.clientName).catch(() => null)
+      : null;
+    const destination = client?.destination?.trim()
+      || invoice?.clientShipToPlace || invoice?.clientPlace || invoice?.destination || '';
+    const matched = this.findTransportForInvoice(invoice, transports);
+    return {
+      transportId: matched?.id || '',
+      form: {
+        distance: 0,
+        transMode: '1',
+        transporterId: matched?.gstNo || '',
+        transporterName: matched?.transportName || '',
+        vehicleNo: '',
+        vehicleType: 'R',
+        // No transport document reference is sent — the DC No. is no longer
+        // used as the Transport Doc No. (not needed on the E-Way Bill).
+        transDocNo: '',
+        transDocDt: '',
+        destination,
+      },
+    };
+  }
+
+  private findTransportForInvoice(invoice: Invoice | null, list: Transport[]): Transport | undefined {
+    if (!invoice) return undefined;
+    if (invoice.transportId) {
+      const byId = list.find((t) => t.id === invoice.transportId);
+      if (byId) return byId;
+    }
+    return invoice.transport ? list.find((t) => t.transportName === invoice.transport) : undefined;
+  }
+
+  // Generates the E-Way Bill for an invoice using its ship-to (buyer) and
+  // ship-from (company) addresses, and resolves with the invoice as it now
+  // stands (ewbStatus 'generated').
+  async generateForInvoice(invoice: Invoice, details: EwayBillTransportDetails, settings: CompanySettings): Promise<Invoice> {
+    const form = { ...details, destination: details.destination?.trim() || '' };
+    const stateCode = this.extractStateCodeFromGstin(invoice.clientGstin) || settings.stateCode;
+    const result = await this.generateEWayBill(
+      invoice,
+      form,
+      settings.gstin,
+      {
+        addr1: invoice.clientShipToAddress || invoice.clientAddress,
+        loc: form.destination || invoice.clientShipToPlace || invoice.clientPlace || invoice.destination,
+        pin: parseInt(invoice.clientShipToZipCode || invoice.clientZipCode) || undefined,
+        stcd: stateCode,
+      },
+      {
+        addr1: settings.address1,
+        addr2: settings.address2,
+        loc: settings.place,
+        pin: parseInt(settings.pinCode) || undefined,
+        stcd: settings.stateCode,
+      }
+    );
+    return {
+      ...invoice,
+      ewbStatus: 'generated',
+      ewbNo: result.ewbNo,
+      ewbDate: result.ewbDate,
+      ewbValidTill: result.ewbValidTill,
+      ewbGstin: result.gstin,
+      ewbTransportDetails: form,
+      ewbErrorMessage: undefined,
+      ewbErrorCode: undefined,
+    };
+  }
+
+  private extractStateCodeFromGstin(gstin: string): string {
+    if (!gstin || gstin.length < 2) return '';
+    return gstin.substring(0, 2);
+  }
 
   // Generates an E-Way Bill from an already-registered e-Invoice's IRN via
   // the generateEwayBillByIrn Cloud Function (Webtel E-Way Bill sandbox —
@@ -50,6 +140,7 @@ export class EwayBillService {
       EwayBillGenerateResult
     >(this.functions, 'generateEwayBillByIrn');
 
+    let result: EwayBillGenerateResult;
     try {
       const response = await callable({
         irn: invoice.irn,
@@ -65,14 +156,25 @@ export class EwayBillService {
         shipFrom,
         shipTo,
       });
-      const result = response.data;
-      await this.saveEWayBill(invoice.id!, result, input);
-      return result;
+      result = response.data;
     } catch (err: any) {
       const message = this.extractCallableErrorMessage(err);
-      await this.saveEWayBillFailure(invoice.id!, message, err?.details?.errorCode);
+      // The failure record is best-effort — surface the original error regardless.
+      await this.saveEWayBillFailure(invoice.id!, message, err?.details?.errorCode).catch(() => undefined);
       throw new Error(message);
     }
+
+    // The E-Way Bill now exists on the portal — a Firestore hiccup must not
+    // record it as 'failed' (a retry would only be rejected as a duplicate).
+    try {
+      await retryAsync(() => this.saveEWayBill(invoice.id!, result, input));
+    } catch {
+      throw new Error(
+        `E-Way Bill ${result.ewbNo} was generated on the portal but could not be saved to this invoice. ` +
+        `Do NOT generate it again — note this E-Way Bill No. and contact support so it can be recorded.`
+      );
+    }
+    return result;
   }
 
   async cancelEWayBill(invoice: Invoice, reasonCode: string, reasonLabel: string, remark: string, gstin: string): Promise<void> {
