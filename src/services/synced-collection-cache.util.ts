@@ -415,35 +415,74 @@ function reviveTimestamps(_key: string, value: any): any {
   return value;
 }
 
+// Every cached screen awaits IndexedDB BEFORE its first Firestore query, so a
+// request that never settles stalls the screen on its loading state forever.
+// Mobile browsers do exactly that: iOS Safari / WKWebView (WebKit bug 226547)
+// and some Android in-app browsers can leave indexedDB.open() — or a get() on
+// a connection the OS dropped while the tab was backgrounded — without ever
+// firing success/error/blocked. Each step therefore gives up after a timeout
+// and the cache carries on without the local copy (straight to Firestore).
+const IDB_OPEN_TIMEOUT_MS = 3000;
+const IDB_READ_TIMEOUT_MS = 5000;
+
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 
 function openDb(): Promise<IDBDatabase | null> {
   if (!dbPromise) {
     dbPromise = new Promise((resolve) => {
+      let settled = false;
+      const settle = (db: IDBDatabase | null) => {
+        if (settled) {
+          // Open finished after we already gave up — don't leak the connection.
+          db?.close();
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        if (db) {
+          // The OS can close the connection under us (backgrounded tab on
+          // iOS) — reopen on next use instead of reusing a dead handle.
+          db.onclose = () => { dbPromise = null; };
+          db.onversionchange = () => { db.close(); dbPromise = null; };
+        }
+        resolve(db);
+      };
+      const timer = setTimeout(() => {
+        console.warn(`[sync] IndexedDB did not open within ${IDB_OPEN_TIMEOUT_MS / 1000}s — continuing without the local copy`);
+        settle(null);
+      }, IDB_OPEN_TIMEOUT_MS);
       try {
-        if (typeof indexedDB === 'undefined') return resolve(null);
+        if (typeof indexedDB === 'undefined') return settle(null);
         const request = indexedDB.open(DB_NAME, 1);
         request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => resolve(null);
-        request.onblocked = () => resolve(null);
+        request.onsuccess = () => settle(request.result);
+        request.onerror = () => settle(null);
+        request.onblocked = () => settle(null);
       } catch {
-        resolve(null);
+        settle(null);
       }
     });
   }
   return dbPromise;
 }
 
+/** One-key get with a timeout — rejects instead of hanging when the browser never answers. */
+function getStored<V>(db: IDBDatabase, key: string): Promise<V | undefined> {
+  return new Promise<V | undefined>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('IndexedDB read timed out')), IDB_READ_TIMEOUT_MS);
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const request = tx.objectStore(STORE_NAME).get(key);
+    request.onsuccess = () => { clearTimeout(timer); resolve(request.result as V | undefined); };
+    request.onerror = () => { clearTimeout(timer); reject(request.error); };
+    tx.onabort = () => { clearTimeout(timer); reject(tx.error); };
+  });
+}
+
 async function readSnapshot<T>(key: string): Promise<{ items: T[]; cursor: Timestamp | null; fullLoadedAt: number } | null> {
   const db = await openDb();
   if (!db) return null;
   try {
-    const stored = await new Promise<StoredSnapshot | undefined>((resolve, reject) => {
-      const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(key);
-      request.onsuccess = () => resolve(request.result as StoredSnapshot | undefined);
-      request.onerror = () => reject(request.error);
-    });
+    const stored = await getStored<StoredSnapshot>(db, key);
     if (!stored || stored.version !== SYNC_CACHE_VERSION || typeof stored.itemsJson !== 'string') return null;
     const items = JSON.parse(stored.itemsJson, reviveTimestamps) as T[];
     if (!Array.isArray(items)) return null;
@@ -481,11 +520,7 @@ export async function readStoredEntry<T>(key: string): Promise<{ tag: string; it
   const db = await openDb();
   if (!db) return null;
   try {
-    const stored = await new Promise<StoredEntry | undefined>((resolve, reject) => {
-      const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(key);
-      request.onsuccess = () => resolve(request.result as StoredEntry | undefined);
-      request.onerror = () => reject(request.error);
-    });
+    const stored = await getStored<StoredEntry>(db, key);
     if (!stored || stored.version !== SYNC_CACHE_VERSION || typeof stored.itemsJson !== 'string') return null;
     return { tag: stored.tag, items: JSON.parse(stored.itemsJson, reviveTimestamps) as T };
   } catch {
