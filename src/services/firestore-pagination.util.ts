@@ -1,6 +1,25 @@
 import { limit, query, startAfter, CollectionReference, QueryConstraint, QueryDocumentSnapshot } from '@angular/fire/firestore';
 import { getDocs } from './firestore-reads';
 
+/**
+ * Docs per Firestore request for paged reads. Was 5000: a cold device then
+ * pulled ~11 MB through the single Listen stream within seconds and Firestore
+ * dropped the stream with resource-exhausted (see sync.engine.ts). 500 keeps
+ * each response ~0.5 MB. Tunable per device for measurement:
+ * localStorage['tmg:syncPageSize'] = '300' (clamped to 100–1000).
+ */
+export const DEFAULT_PAGE_SIZE = 500;
+
+export function syncPageSize(): number {
+  try {
+    const override = Number(localStorage.getItem('tmg:syncPageSize'));
+    if (Number.isFinite(override) && override > 0) return Math.min(1000, Math.max(100, Math.round(override)));
+  } catch {
+    // localStorage unavailable — use the default.
+  }
+  return DEFAULT_PAGE_SIZE;
+}
+
 // A fixed `limit()` with no follow-up page silently truncates a collection's
 // results once it grows past that number — several services here originally
 // did exactly that (see project memory on the Design Master export bug).
@@ -15,11 +34,9 @@ export async function fetchAllDocs<T>(
   mapDoc: (doc: QueryDocumentSnapshot) => T,
   // Each page is an awaited round trip before the next starts (cursor
   // pagination can't be parallelized — page N+1's cursor depends on page N's
-  // last doc). Firestore has no server-side cap on `limit()` beyond overall
-  // response size, so a larger page size directly cuts round-trip count for
-  // large collections (e.g. ~11k-doc inventory: ~12 pages at 1000 -> ~3 at
-  // 5000) with no change in total data transferred.
-  pageSize = 5000
+  // last doc). Large pages looked cheaper in round trips but got the Listen
+  // stream dropped mid-download — see DEFAULT_PAGE_SIZE.
+  pageSize = syncPageSize()
 ): Promise<T[]> {
   const results: T[] = [];
   let cursor: QueryDocumentSnapshot | undefined;

@@ -1,4 +1,5 @@
 import {
+  AggregateSpec,
   DocumentData,
   DocumentReference,
   DocumentSnapshot,
@@ -7,6 +8,7 @@ import {
   QuerySnapshot,
   Transaction,
   TransactionOptions,
+  getAggregateFromServer as sdkGetAggregateFromServer,
   getCountFromServer as sdkGetCountFromServer,
   getDocFromServer,
   getDocsFromServer,
@@ -67,6 +69,20 @@ export async function getCountFromServer<T = DocumentData>(q: Query<T>) {
     const snap = await withRetry(() => sdkGetCountFromServer(q));
     noteFirestoreSuccess();
     recordRead('count', label, Math.max(1, Math.ceil(snap.data().count / 1000)), performance.now() - t0, 0);
+    return snap;
+  } catch (err) {
+    fail('count', label, err);
+  }
+}
+
+/** sum()/average()/count() computed server-side — billed like count() (1 read per 1000 index entries scanned), no documents downloaded. */
+export async function getAggregateFromServer<T = DocumentData, S extends AggregateSpec = AggregateSpec>(q: Query<T>, spec: S) {
+  const label = describeQuery(q);
+  const t0 = performance.now();
+  try {
+    const snap = await withRetry(() => sdkGetAggregateFromServer(q, spec));
+    noteFirestoreSuccess();
+    recordRead('count', `${label} [aggregate ${Object.keys(spec).join(', ')}]`, 1, performance.now() - t0, 0);
     return snap;
   } catch (err) {
     fail('count', label, err);

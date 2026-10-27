@@ -10,6 +10,7 @@ import { UserManagementComponent } from './components/user-management/user-manag
 import { GoodsInwardComponent } from './components/goods-inward/goods-inward.component';
 import { AuthService } from './services/auth.service';
 import { LoadingService } from './services/loading.service';
+import { activeSyncs, failedSyncs, oldestSyncAt, retryFailedSyncs } from './services/sync-status';
 import { AppScreen } from './models/user-group.model';
 import { InventoryComponent } from './components/inventory/inventory.component';
 import { StockAdjustmentComponent } from './components/stock-adjustment/stock-adjustment.component';
@@ -186,6 +187,19 @@ export class AppComponent {
   protected loadingService = inject(LoadingService);
 
   isAuthenticated = computed(() => this.authService.isAuthenticated());
+
+  // Sync bar: what is downloading, what failed (with Retry), and how fresh the data is.
+  protected readonly activeSyncs = activeSyncs;
+  protected readonly failedSyncs = failedSyncs;
+  protected readonly oldestSyncAt = oldestSyncAt;
+  protected readonly retryFailedSyncs = retryFailedSyncs;
+  protected syncErrorText(code: string | undefined): string {
+    return code === 'resource-exhausted' ? 'server busy'
+      : code === 'unavailable' || code === 'deadline-exceeded' ? 'no connection'
+      : code === 'permission-denied' ? 'access denied'
+      : 'error';
+  }
+
   currentView = signal<View>('dashboard');
   isSidebarOpen = signal(false);
   isDesktopSidebarCollapsed = signal(this.readSidebarCollapsed());

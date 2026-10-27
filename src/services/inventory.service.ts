@@ -1,16 +1,30 @@
 import { Injectable, inject } from '@angular/core';
 import {
   Firestore, collection, doc,
-  updateDoc, query, orderBy, where, serverTimestamp, writeBatch, WriteBatch, increment
+  updateDoc, query, orderBy, where, serverTimestamp, writeBatch, WriteBatch, increment, limit, sum
 } from '@angular/fire/firestore';
-import { getDocs } from './firestore-reads';
+import { getAggregateFromServer, getCountFromServer, getDocs } from './firestore-reads';
 import { Observable } from 'rxjs';
 import type { InventoryItem } from '../models/inventory.model';
 import type { GoodsInwardItem } from '../models/goods-inward.model';
 import { fetchAllDocs } from './firestore-pagination.util';
 import { SyncedCollectionCache } from './synced-collection-cache.util';
+import { withTimeout } from './sync.engine';
 
 export type InventoryBatchOp = (batch: WriteBatch) => void;
+
+/** Dashboard stock figures computed server-side — no inventory download needed. */
+export interface InventorySummary {
+  totalUnits: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  /** Up to 6 lowest-stock items with 1–10 units, lowest first. */
+  lowStockItems: InventoryItem[];
+  computedAt: number;
+}
+
+const INVENTORY_SUMMARY_STORAGE_KEY = 'tmg:inventorySummary:v1';
+const LOW_STOCK_MAX = 10;
 
 export interface CommitChunksOptions {
   /** Adds extra writes (e.g. a GRN progress bump) into the SAME batch as a chunk's inventory writes. */
@@ -48,6 +62,50 @@ export class InventoryService {
   /** Read-only displays (Dashboard): this device's last-known inventory at once, then the synced list — see SyncedCollectionCache.getCachedFirst$(). */
   getInventoryCachedFirst(): Observable<InventoryItem[]> {
     return this.inventoryCache.getCachedFirst$();
+  }
+
+  /** True when this device already holds the full inventory list (so reading it costs only a delta sync). */
+  hasLocalInventory(): Promise<boolean> {
+    return this.inventoryCache.hasLocalCopy();
+  }
+
+  /**
+   * Dashboard figures without downloading ~11k inventory docs on a new
+   * device: sum()/count() aggregations (≈1 read per 1000 docs each) plus the
+   * 6 lowest-stock docs — ~40 reads in total. Emits the last summary saved on
+   * this device first (instant / offline), then the fresh one.
+   *
+   * Server-side semantics: docs whose currentStock is missing or not a number
+   * are left out of the counts (the in-app list treated them as 0, i.e. out
+   * of stock). Every write path stores currentStock as a number.
+   */
+  getInventorySummary$(): Observable<InventorySummary> {
+    return new Observable<InventorySummary>((subscriber) => {
+      const saved = readStoredSummary();
+      if (saved) subscriber.next(saved);
+      const lowStock = [where('currentStock', '>', 0), where('currentStock', '<=', LOW_STOCK_MAX)];
+      withTimeout(Promise.all([
+        getAggregateFromServer(this.invRef, { units: sum('currentStock') }),
+        getCountFromServer(query(this.invRef, ...lowStock)),
+        getCountFromServer(query(this.invRef, where('currentStock', '<=', 0))),
+        getDocs(query(this.invRef, ...lowStock, orderBy('currentStock', 'asc'), limit(6))),
+      ]), 60_000).then(([totals, low, out, lowRows]) => {
+        const summary: InventorySummary = {
+          totalUnits: Number(totals.data().units) || 0,
+          lowStockCount: low.data().count,
+          outOfStockCount: out.data().count,
+          lowStockItems: lowRows.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryItem)),
+          computedAt: Date.now(),
+        };
+        writeStoredSummary(summary);
+        subscriber.next(summary);
+        subscriber.complete();
+      }).catch((err) => {
+        // Keep showing the saved figures; the dashboard falls back to "—".
+        console.warn(`[sync] inventory summary: ${(err as { code?: string })?.code ?? 'error'} — ${saved ? 'showing the figures saved on this device' : 'no saved figures'}`);
+        subscriber.complete();
+      });
+    });
   }
 
   invalidateCache(): void {
@@ -150,6 +208,25 @@ export class InventoryService {
       snap.docs.forEach(d => results.push({ id: d.id, ...d.data() } as InventoryItem));
     }
     return results;
+  }
+}
+
+function readStoredSummary(): InventorySummary | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(INVENTORY_SUMMARY_STORAGE_KEY) ?? 'null');
+    return parsed && typeof parsed.computedAt === 'number' && Array.isArray(parsed.lowStockItems) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSummary(summary: InventorySummary): void {
+  try {
+    // Only the fields the dashboard shows — keeps the entry tiny.
+    const lowStockItems = summary.lowStockItems.map(({ id, styleNo, color, size, currentStock }) => ({ id, styleNo, color, size, currentStock }));
+    localStorage.setItem(INVENTORY_SUMMARY_STORAGE_KEY, JSON.stringify({ ...summary, lowStockItems }));
+  } catch {
+    // Storage unavailable — the dashboard just waits for the fresh figures.
   }
 }
 

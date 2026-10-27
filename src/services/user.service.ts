@@ -16,7 +16,7 @@ import { getDoc, getDocs } from './firestore-reads';
 
 import type { User } from '../models/user.model';
 import { defer, map, Observable, retry, shareReplay, throwError, timer } from 'rxjs';
-import { backgroundRetryDelayMs, isTransientFirestoreError } from './firestore-health';
+import { MAX_BACKGROUND_RETRIES, backgroundRetryDelayMs, isTransientFirestoreError } from './firestore-health';
 
 @Injectable({ providedIn: 'root' })
 export class UserService {
@@ -32,8 +32,8 @@ export class UserService {
         if (!this.usersCache$) {
             this.usersCache$ = defer(() => getDocs(this.userRef)).pipe(
                 map((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as User))),
-                // Quota exceeded / unreachable: retry in the background instead of replaying the error forever.
-                retry({ delay: (err, count) => (isTransientFirestoreError(err) ? timer(backgroundRetryDelayMs(count - 1)) : throwError(() => err)) }),
+                // Quota exceeded / unreachable: a few spaced-out background retries, never an endless loop.
+                retry({ count: MAX_BACKGROUND_RETRIES, delay: (err, count) => (isTransientFirestoreError(err) ? timer(backgroundRetryDelayMs(count - 1)) : throwError(() => err)) }),
                 shareReplay(1)
             );
         }

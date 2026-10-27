@@ -160,6 +160,26 @@
     </div>
     }
 
+    @if (failedSyncs().length) {
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 sm:text-sm" role="status">
+        <span class="font-semibold">Couldn't update:</span>
+        <span class="min-w-0 flex-1">
+          @for (s of failedSyncs(); track s.key) {
+            <span class="mr-2 inline-block">{{ s.label }} ({{ syncErrorText(s.errorCode) }}{{ s.servingSavedCopy ? ', showing saved copy' : '' }})</span>
+          }
+          @if (oldestSyncAt(); as at) { <span class="text-amber-700">· Last synced {{ at | date: 'd MMM, h:mm a' }}</span> }
+        </span>
+        <button type="button" (click)="retryFailedSyncs()" class="rounded-lg bg-amber-600 px-3 py-1 font-semibold text-white hover:bg-amber-700">Retry</button>
+      </div>
+    } @else if (activeSyncs().length) {
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-sky-200 bg-sky-50 px-4 py-2 text-xs text-sky-900 sm:text-sm" role="status">
+        <svg class="h-4 w-4 animate-spin text-sky-600" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+        @for (s of activeSyncs(); track s.key) {
+          <span>{{ s.state === 'retrying' ? 'Retrying' : 'Downloading' }} {{ s.label }}@if (s.docs) { — {{ s.docs | number }} records saved }</span>
+        }
+      </div>
+    }
+
     <main class="flex-1 overflow-y-auto">
       <div class="p-4 sm:p-6 md:p-8">
         @switch (currentView()) {

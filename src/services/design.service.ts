@@ -96,6 +96,7 @@ import {
   serverTimestamp,
 } from '@angular/fire/firestore';
 import { getDocs } from './firestore-reads';
+import { syncPageSize } from './firestore-pagination.util';
 import { Storage, ref, uploadBytes, getDownloadURL, deleteObject } from '@angular/fire/storage';
 import { firstValueFrom, Observable } from 'rxjs';
 import type { Design, SizePrice } from '../models/design.model';
@@ -125,10 +126,10 @@ export class DesignService {
     // page comes back short, so the full collection is always returned no
     // matter how large it grows (a prior fixed limit() here silently
     // truncated the list once the collection passed that count). Each page is
-    // an awaited round trip before the next starts, so a larger page size
-    // directly cuts round-trip count for a large catalog (matches
-    // firestore-pagination.util.ts's fetchAllDocs()).
-    private static readonly PAGE_SIZE = 5000;
+    // an awaited round trip before the next starts. Shared with
+    // fetchAllDocs() — large pages get the Listen stream dropped (see
+    // firestore-pagination.util.ts DEFAULT_PAGE_SIZE).
+    private static readonly PAGE_SIZE = syncPageSize();
 
     // 🔹 GET ALL DESIGNS (cached one-time read)
     // No `orderBy('createdAt')` on the query itself: Firestore silently drops any

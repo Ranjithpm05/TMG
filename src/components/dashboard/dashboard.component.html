@@ -184,6 +184,9 @@
 
       <div class="mt-6 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 sm:p-5">
         <div class="flex min-h-[220px] items-end justify-between gap-3">
+          @if (!hasLocalInventory() && !inventoryCategoryRows().length) {
+            <p class="m-auto max-w-xs text-center text-sm text-slate-500">The category breakdown appears once this device has loaded the Inventory screen.</p>
+          }
           @for (item of inventoryCategoryRows(); track item.label) {
             <div class="flex min-w-0 flex-1 flex-col items-center gap-3">
               <div class="flex h-40 w-full items-end justify-center rounded-2xl bg-white px-2 py-3">

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { Observable, defer, finalize, switchMap } from 'rxjs';
+import { Observable, defer, finalize, from, of, switchMap } from 'rxjs';
 import { ClientService } from '../../services/client.service';
 import { SalesOrderService } from '../../services/sales-order.service';
 import { GoodsInwardService } from '../../services/goods-inward.service';
@@ -108,7 +108,19 @@ export class DashboardComponent {
     });
   }
 
-  private readonly inventory = toSignal(this.trackLoad(this.inventoryService.getInventoryCachedFirst()), { initialValue: [] });
+  // Stock figures come from server-side aggregates (~40 reads) instead of
+  // the full ~11k-doc inventory — on a new phone that download was what kept
+  // the dashboard on its loading state. The full list is still used for the
+  // category breakdown, but only where this device already has it (a delta
+  // sync); the dashboard never triggers the first full download itself.
+  private readonly inventorySummary = toSignal(this.trackLoad(this.inventoryService.getInventorySummary$()), { initialValue: null });
+  readonly hasLocalInventory = toSignal(from(this.inventoryService.hasLocalInventory()), { initialValue: false });
+  private readonly inventory = toSignal(
+    from(this.inventoryService.hasLocalInventory()).pipe(
+      switchMap((has) => (has ? this.trackLoad(this.inventoryService.getInventoryCachedFirst()) : of([])))
+    ),
+    { initialValue: [] }
+  );
 
   readonly currentUser = computed(() => this.authService.currentUser());
   readonly currentUserName = computed(() => this.currentUser()?.username || 'Warehouse User');
@@ -208,7 +220,7 @@ export class DashboardComponent {
   /** Nothing to show yet (no local copy on this device, sync still running) — render skeletons instead of misleading zeros. */
   readonly showSkeleton = computed(() =>
     this.isSyncing()
-    && !this.inventory().length && !this.salesOrders().length && !this.goodsInwards().length
+    && !this.inventorySummary() && !this.inventory().length && !this.salesOrders().length && !this.goodsInwards().length
     && !this.pickLists().length && !this.packingLists().length
     && !this.deliveryChallans().length && !this.invoices().length
   );
@@ -245,18 +257,21 @@ export class DashboardComponent {
   );
 
   readonly currentInventoryUnits = computed(() =>
-    this.inventory().reduce((sum, item) => sum + (Number(item.currentStock) || 0), 0)
+    this.inventorySummary()?.totalUnits
+      ?? this.inventory().reduce((sum, item) => sum + (Number(item.currentStock) || 0), 0)
   );
 
   readonly lowStockCount = computed(() =>
-    this.inventory().filter((item) => {
-      const stock = Number(item.currentStock) || 0;
-      return stock > 0 && stock <= 10;
-    }).length
+    this.inventorySummary()?.lowStockCount
+      ?? this.inventory().filter((item) => {
+        const stock = Number(item.currentStock) || 0;
+        return stock > 0 && stock <= 10;
+      }).length
   );
 
   readonly outOfStockCount = computed(() =>
-    this.inventory().filter((item) => (Number(item.currentStock) || 0) <= 0).length
+    this.inventorySummary()?.outOfStockCount
+      ?? this.inventory().filter((item) => (Number(item.currentStock) || 0) <= 0).length
   );
 
   readonly totalPickedQty = computed(() =>
@@ -355,12 +370,12 @@ export class DashboardComponent {
   );
 
   readonly lowStockRows = computed<LowStockRow[]>(() =>
-    this.inventory()
+    (this.inventorySummary()?.lowStockItems ?? this.inventory()
       .filter((item) => {
         const stock = Number(item.currentStock) || 0;
         return stock > 0 && stock <= 10;
       })
-      .sort((a, b) => (Number(a.currentStock) || 0) - (Number(b.currentStock) || 0))
+      .sort((a, b) => (Number(a.currentStock) || 0) - (Number(b.currentStock) || 0)))
       .slice(0, 6)
       .map((item) => ({
         name: item.styleNo || 'Unknown',

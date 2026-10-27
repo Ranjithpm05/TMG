@@ -1,5 +1,5 @@
 import { Observable, ReplaySubject } from 'rxjs';
-import { backgroundRetryDelayMs, isTransientFirestoreError } from './firestore-health';
+import { MAX_BACKGROUND_RETRIES, backgroundRetryDelayMs, isTransientFirestoreError } from './firestore-health';
 
 /**
  * Full-collection cache like PatchableCollectionCache, but also persists the
@@ -76,6 +76,12 @@ export class PersistentCollectionCache<T> {
           return;
         }
 
+        if (attempt >= MAX_BACKGROUND_RETRIES) {
+          // Bounded: stop here; the next get$() (screen revisit) starts over.
+          console.warn(`[sync] ${this.storageKey}: Firestore ${(err as { code?: string })?.code} — giving up after ${attempt + 1} attempts`);
+          if (this.subject === subject) this.subject = null;
+          return;
+        }
         const delayMs = backgroundRetryDelayMs(attempt);
         console.warn(`[sync] ${this.storageKey}: Firestore ${(err as { code?: string })?.code} — retrying automatically in ${delayMs / 1000}s`);
         setTimeout(() => {

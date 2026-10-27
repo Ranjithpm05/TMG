@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { onLog } from 'firebase/app';
+import { backoffDelayMs } from './sync.engine';
 
 /**
  * Tracks whether Firestore is currently refusing requests, and decides which
@@ -27,10 +28,13 @@ export function isTransientFirestoreError(err: unknown): boolean {
   return TRANSIENT_CODES.has((err as { code?: string })?.code ?? '');
 }
 
-/** Background retry schedule for list loads: 5 s, 10 s, 20 s, 40 s, then every 60 s until Firestore answers. */
+/** Background retry schedule for small list loads: ~5 s, 10 s, 20 s, 40 s (jittered, capped at 60 s). */
 export function backgroundRetryDelayMs(attempt: number): number {
-  return Math.min(60_000, 5_000 * 2 ** attempt);
+  return backoffDelayMs(attempt, 5_000, 60_000);
 }
+
+/** Background retries before a small list load gives up until its next get$() — never retried forever. */
+export const MAX_BACKGROUND_RETRIES = 4;
 
 export function noteFirestoreError(err: unknown): void {
   const code = (err as { code?: string })?.code;
