@@ -52,8 +52,15 @@ export interface SalesReturnTotals {
   damageQty: number;
   taxableValue: number;
   taxAmount: number;
+  /** taxableValue + taxAmount, before rounding to the rupee. */
   totalAmount: number;
+  /** netAmount − totalAmount. Absent on returns saved before round-off existed — see returnNetAmount(). */
+  roundOff?: number;
+  /** totalAmount rounded to the rupee — the credit value of the return. */
+  netAmount?: number;
 }
+
+export type SalesReturnEInvoiceStatus = 'generated' | 'failed' | 'cancelled';
 
 export interface SalesReturn {
   id?: string;
@@ -71,6 +78,8 @@ export interface SalesReturn {
   totals: SalesReturnTotals;
   status: SalesReturnStatus;
   remarks?: string;
+  /** Customer's own reference for the return (e.g. their debit note no.) — printed as "Reference". */
+  referenceNo?: string;
   createdBy: string;
   updatedBy?: string;
   postedBy?: string;
@@ -80,6 +89,20 @@ export interface SalesReturn {
   cancelReason?: string;
   /** True once Post applied stock; set back to false when a cancel reversed it. */
   stockApplied?: boolean;
+  // Credit Note e-Invoice (Doc type CRN) for a Posted return — written only by
+  // SalesReturnEInvoiceService, never by the stock engine. Same fields as the
+  // Invoice's own e-Invoice block.
+  eInvoiceStatus?: SalesReturnEInvoiceStatus;
+  irn?: string;
+  ackNo?: string;
+  ackDt?: string;
+  signedQrCode?: string;
+  signedInvoice?: string;
+  eInvoicePayload?: any;
+  irnGeneratedAt?: any;
+  eInvoiceErrorMessage?: string;
+  eInvoiceCancelReason?: string;
+  eInvoiceCancelledAt?: any;
   createdAt?: any;
   updatedAt?: any;
 }

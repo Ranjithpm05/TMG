@@ -9,10 +9,13 @@ import type {
 } from '../../models/sales-return.model';
 import { InvoiceService } from '../../services/invoice.service';
 import { SalesReturnService, type InvoiceBill } from '../../services/sales-return.service';
+import { SalesReturnEInvoiceService } from '../../services/sales-return-einvoice.service';
+import { downloadSalesReturnPdf } from '../../services/sales-return-pdf.util';
+import { CANCEL_REASONS } from '../../models/einvoice.model';
 import { AuthService } from '../../services/auth.service';
 import { LoadingService } from '../../services/loading.service';
 import {
-  BillRow, ReturnDraftInput, invoiceNotReturnableReason, lineLabel, makeLine, rowRef, summarizeLines, validateDraft,
+  BillRow, ReturnDraftInput, invoiceNotReturnableReason, lineLabel, makeLine, returnNetAmount, rowRef, summarizeLines, validateDraft,
 } from '../../services/sales-return.engine';
 
 type Tab = 'entry' | 'returns' | 'damage';
@@ -31,6 +34,7 @@ const EMPTY_ENTRY: Entry = { fresh: 0, damage: 0, location: '', remarks: '' };
 })
 export class SalesReturnComponent implements OnInit {
   private salesReturnService = inject(SalesReturnService);
+  private salesReturnEInvoiceService = inject(SalesReturnEInvoiceService);
   private invoiceService = inject(InvoiceService);
   private authService = inject(AuthService);
   private loadingService = inject(LoadingService);
@@ -61,6 +65,7 @@ export class SalesReturnComponent implements OnInit {
   returnDate = signal(this.today());
   defaultLocation = signal('');
   remarks = signal('');
+  referenceNo = signal('');
   billSearch = signal('');
   selectedInvoiceIds = signal<string[]>([]);
   bills = signal<InvoiceBill[]>([]);
@@ -369,6 +374,7 @@ export class SalesReturnComponent implements OnInit {
       clientName: c?.name ?? '',
       ...(c?.gstin ? { clientGstin: c.gstin } : {}),
       remarks: this.remarks(),
+      referenceNo: this.referenceNo(),
       lines: this.lines(),
     };
   }
@@ -414,7 +420,7 @@ export class SalesReturnComponent implements OnInit {
       title: 'Post this sales return?',
       html: `<p><b>${this.escape(input.clientName)}</b> · ${this.lines().length} line(s) from ${new Set(this.lines().map((l) => l.invoiceId)).size} bill(s)</p>` +
         `<p class="mt-2"><b class="text-emerald-700">${t.freshQty} Fresh</b> pcs back into inventory · <b class="text-rose-700">${t.damageQty} Damage</b> pcs to damage stock</p>` +
-        `<p class="mt-1">Return value ₹${t.totalAmount.toFixed(2)}</p>` +
+        `<p class="mt-1">Return value ₹${returnNetAmount(t).toFixed(2)}</p>` +
         `<p class="mt-3 text-sm text-gray-500">Stock is updated now. A posted return can only be reversed by cancelling it.</p>`,
       showCancelButton: true,
       confirmButtonText: 'Post Return',
@@ -462,6 +468,7 @@ export class SalesReturnComponent implements OnInit {
     this.returnDate.set(this.today());
     this.defaultLocation.set('');
     this.remarks.set('');
+    this.referenceNo.set('');
     this.billSearch.set('');
     this.selectedInvoiceIds.set([]);
     this.bills.set([]);
@@ -495,6 +502,7 @@ export class SalesReturnComponent implements OnInit {
     this.clientId.set(latest.clientId);
     this.returnDate.set(latest.returnDate);
     this.remarks.set(latest.remarks ?? '');
+    this.referenceNo.set(latest.referenceNo ?? '');
     this.selectedInvoiceIds.set(latest.invoiceIds ?? []);
     this.viewing.set(null);
     this.tab.set('entry');
@@ -556,6 +564,93 @@ export class SalesReturnComponent implements OnInit {
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Cannot Cancel', html: this.errorHtml(this.messageLines(err)) });
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PDF / Credit Note e-Invoice
+  // ═══════════════════════════════════════════════════════════════════════════
+  readonly netAmount = returnNetAmount;
+  /** Return id whose PDF / e-Invoice call is in flight — blocks a second click. */
+  busyId = signal<string | null>(null);
+
+  async downloadPdf(ret: SalesReturn): Promise<void> {
+    if (this.busyId()) return;
+    this.busyId.set(ret.id!);
+    try {
+      await this.loadingService.run(async () => {
+        const latest = (await this.salesReturnService.getReturnOnce(ret.id!)) ?? ret;
+        const ctx = await this.salesReturnEInvoiceService.loadContext(latest);
+        await downloadSalesReturnPdf(latest, ctx.creditNote, ctx.invoices, ctx.company);
+      });
+    } catch (err: any) {
+      Swal.fire({ icon: 'error', title: 'PDF Failed', text: err?.message ?? 'Could not build the Sales Return PDF.' });
+    } finally {
+      this.busyId.set(null);
+    }
+  }
+
+  async generateCreditNote(ret: SalesReturn): Promise<void> {
+    if (this.busyId()) return;
+    const r = await Swal.fire({
+      icon: 'question',
+      title: `Generate Credit Note e-Invoice for ${ret.returnNo}?`,
+      html: `<p>Registers <b>${this.escape(ret.returnNo)}</b> with the GST portal (IRP) as a Credit Note against ` +
+        `<b>${this.escape((ret.invoiceNos ?? []).join(', '))}</b> for ₹${returnNetAmount(ret.totals).toFixed(2)}.</p>` +
+        `<p class="mt-2 text-sm text-gray-500">Once generated it can only be cancelled within 24 hours, and the same return number cannot be registered again.</p>`,
+      showCancelButton: true,
+      confirmButtonText: 'Generate',
+      confirmButtonColor: '#4f46e5',
+    });
+    if (!r.isConfirmed) return;
+    this.busyId.set(ret.id!);
+    let generated: SalesReturn | null = null;
+    let error = '';
+    try {
+      generated = await this.loadingService.run(() => this.salesReturnEInvoiceService.generate(ret.id!));
+    } catch (err: any) {
+      error = err?.message ?? 'Could not generate the Credit Note e-Invoice.';
+    } finally {
+      this.busyId.set(null);
+      this.reloadReturns();
+      this.refreshViewing(ret.id!);
+    }
+    // Dialogs open only after loadingService.run() has finished — its overlay sits above Swal.
+    if (generated) {
+      Swal.fire({ icon: 'success', title: 'Credit Note e-Invoice Generated', html: `IRN <code class="break-all text-xs">${this.escape(generated.irn ?? '')}</code><br>Ack No. ${this.escape(generated.ackNo ?? '')}` });
+    } else {
+      Swal.fire({ icon: 'error', title: 'e-Invoice Failed', html: this.errorHtml(error.split('\n').filter(Boolean)) });
+    }
+  }
+
+  async cancelCreditNote(ret: SalesReturn): Promise<void> {
+    if (this.busyId()) return;
+    const r = await Swal.fire({
+      icon: 'warning',
+      title: `Cancel Credit Note e-Invoice of ${ret.returnNo}?`,
+      html: '<p>The IRN is cancelled on the GST portal (allowed only within 24 hours of generation). Stock is not affected — cancel the return separately if needed.</p>',
+      input: 'select',
+      inputOptions: Object.fromEntries(CANCEL_REASONS.map((reason) => [reason, reason])),
+      inputPlaceholder: 'Select a reason',
+      inputValidator: (value) => (value ? null : 'Select a reason.'),
+      showCancelButton: true,
+      confirmButtonText: 'Cancel e-Invoice',
+      cancelButtonText: 'Keep',
+      confirmButtonColor: '#e11d48',
+    });
+    if (!r.isConfirmed) return;
+    this.busyId.set(ret.id!);
+    let error = '';
+    try {
+      await this.loadingService.run(() => this.salesReturnEInvoiceService.cancel(ret, String(r.value)));
+    } catch (err: any) {
+      error = err?.message ?? 'Could not cancel the Credit Note e-Invoice.';
+    } finally {
+      this.busyId.set(null);
+      this.reloadReturns();
+      this.refreshViewing(ret.id!);
+    }
+    if (error) Swal.fire({ icon: 'error', title: 'Cancel Failed', text: error });
+    else Swal.fire({ icon: 'success', title: 'e-Invoice Cancelled', timer: 1800, showConfirmButton: false });
   }
 
   private refreshViewing(id: string): void {

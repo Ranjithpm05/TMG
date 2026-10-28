@@ -20,8 +20,29 @@
             <div class="rounded-xl bg-slate-50 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Bills</p><p class="font-semibold text-slate-800">{{ (v.invoiceNos ?? []).join(', ') }}</p></div>
             <div class="rounded-xl bg-emerald-50 p-3"><p class="text-[10px] font-bold uppercase text-emerald-600">Fresh PCS</p><p class="text-lg font-black text-emerald-700">{{ v.totals.freshQty }}</p></div>
             <div class="rounded-xl bg-rose-50 p-3"><p class="text-[10px] font-bold uppercase text-rose-600">Damage PCS</p><p class="text-lg font-black text-rose-700">{{ v.totals.damageQty }}</p></div>
-            <div class="rounded-xl bg-slate-50 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Return Value</p><p class="text-lg font-black text-slate-900">₹{{ v.totals.totalAmount | number:'1.2-2' }}</p></div>
+            <div class="rounded-xl bg-slate-50 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Return Value</p><p class="text-lg font-black text-slate-900">₹{{ netAmount(v.totals) | number:'1.2-2' }}</p><p class="text-[11px] text-slate-500">Taxable ₹{{ v.totals.taxableValue | number:'1.2-2' }} · GST ₹{{ v.totals.taxAmount | number:'1.2-2' }} · R/O {{ (netAmount(v.totals) - v.totals.totalAmount) | number:'1.2-2' }}</p></div>
           </div>
+          @if (v.status === 'Posted' || v.eInvoiceStatus) {
+            <div class="mb-4 rounded-2xl border p-3 text-sm"
+                 [class]="v.eInvoiceStatus === 'generated' ? 'border-indigo-200 bg-indigo-50/60' : v.eInvoiceStatus === 'failed' ? 'border-rose-200 bg-rose-50/60' : 'border-slate-200 bg-slate-50'">
+              <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Credit Note e-Invoice</p>
+              @switch (v.eInvoiceStatus) {
+                @case ('generated') {
+                  <p class="mt-1 break-all font-mono text-xs text-slate-800">IRN {{ v.irn }}</p>
+                  <p class="text-xs text-slate-600">Ack No. <b>{{ v.ackNo }}</b> · {{ v.ackDt }}</p>
+                }
+                @case ('cancelled') {
+                  <p class="mt-1 text-slate-700">Cancelled@if (v.eInvoiceCancelReason) { — {{ v.eInvoiceCancelReason }} } · IRN <span class="break-all font-mono text-xs">{{ v.irn }}</span></p>
+                }
+                @case ('failed') {
+                  <p class="mt-1 whitespace-pre-line text-rose-700">Last attempt failed: {{ v.eInvoiceErrorMessage }}</p>
+                }
+                @default {
+                  <p class="mt-1 text-slate-600">Not generated yet.</p>
+                }
+              }
+            </div>
+          }
           <div class="overflow-x-auto rounded-2xl border border-slate-200">
             <table class="min-w-full text-sm">
               <thead class="bg-slate-50">
@@ -64,9 +85,16 @@
             <button (click)="editDraft(v)" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Update</button>
             <button (click)="postDraft(v)" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700">Post</button>
           }
-          @if (v.status !== 'Cancelled') {
+          @if (v.status === 'Posted' && (!v.eInvoiceStatus || v.eInvoiceStatus === 'failed')) {
+            <button (click)="generateCreditNote(v)" [disabled]="busyId() === v.id" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50">Generate e-Invoice (Credit Note)</button>
+          }
+          @if (v.eInvoiceStatus === 'generated') {
+            <button (click)="cancelCreditNote(v)" [disabled]="busyId() === v.id" class="rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50">Cancel e-Invoice</button>
+          }
+          @if (v.status !== 'Cancelled' && v.eInvoiceStatus !== 'generated') {
             <button (click)="cancelEntry(v)" class="rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50">Cancel Return</button>
           }
+          <button (click)="downloadPdf(v)" [disabled]="busyId() === v.id" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Download PDF</button>
           <button (click)="viewing.set(null)" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800">Close</button>
         </div>
       </div>
@@ -187,7 +215,12 @@
             <input type="text" placeholder="Default for all lines" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                    [ngModel]="defaultLocation()" (ngModelChange)="defaultLocation.set($event)">
           </label>
-          <label class="block sm:col-span-2 xl:col-span-4">
+          <label class="block">
+            <span class="mb-1 block text-xs font-bold text-slate-600">Reference</span>
+            <input type="text" placeholder="Customer's debit note no." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                   [ngModel]="referenceNo()" (ngModelChange)="referenceNo.set($event)">
+          </label>
+          <label class="block sm:col-span-2 xl:col-span-3">
             <span class="mb-1 block text-xs font-bold text-slate-600">Remarks</span>
             <input type="text" placeholder="Reason for return, LR / courier details…" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                    [ngModel]="remarks()" (ngModelChange)="remarks.set($event)">
@@ -375,7 +408,8 @@
               <span class="font-semibold text-rose-700">Damage <b class="text-lg font-black tabular-nums">{{ totals().damageQty }}</b></span>
               <span class="font-semibold text-slate-500">Taxable <b class="tabular-nums text-slate-800">₹{{ totals().taxableValue | number:'1.2-2' }}</b></span>
               <span class="font-semibold text-slate-500">GST <b class="tabular-nums text-slate-800">₹{{ totals().taxAmount | number:'1.2-2' }}</b></span>
-              <span class="font-semibold text-slate-500">Total <b class="text-lg font-black tabular-nums text-slate-900">₹{{ totals().totalAmount | number:'1.2-2' }}</b></span>
+              <span class="font-semibold text-slate-500">Round Off <b class="tabular-nums text-slate-800">{{ (totals().roundOff ?? 0) | number:'1.2-2' }}</b></span>
+              <span class="font-semibold text-slate-500">Total <b class="text-lg font-black tabular-nums text-slate-900">₹{{ netAmount(totals()) | number:'1.2-2' }}</b></span>
             </div>
             <div class="flex flex-wrap justify-end gap-2">
               <button (click)="discardEntry()" [disabled]="saving()" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
@@ -424,6 +458,7 @@
                   <th class="px-4 py-3 text-right">Damage</th>
                   <th class="px-4 py-3 text-right">Value</th>
                   <th class="px-4 py-3 text-left">Status</th>
+                  <th class="px-4 py-3 text-left">e-Invoice</th>
                   <th class="px-4 py-3"><span class="sr-only">Actions</span></th>
                 </tr>
               </thead>
@@ -436,8 +471,16 @@
                     <td class="px-4 py-2.5 text-xs text-slate-600">{{ (r.invoiceNos ?? []).join(', ') }}</td>
                     <td class="px-4 py-2.5 text-right font-bold tabular-nums text-emerald-700">{{ r.totals?.freshQty ?? 0 }}</td>
                     <td class="px-4 py-2.5 text-right font-bold tabular-nums text-rose-700">{{ r.totals?.damageQty ?? 0 }}</td>
-                    <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">₹{{ (r.totals?.totalAmount ?? 0) | number:'1.2-2' }}</td>
+                    <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">₹{{ netAmount(r.totals) | number:'1.2-2' }}</td>
                     <td class="px-4 py-2.5"><ng-container *ngTemplateOutlet="statusPill; context: { $implicit: r.status }"></ng-container></td>
+                    <td class="whitespace-nowrap px-4 py-2.5 text-xs font-bold">
+                      @switch (r.eInvoiceStatus) {
+                        @case ('generated') { <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-indigo-700" [title]="r.irn ?? ''">Generated</span> }
+                        @case ('failed') { <span class="rounded-full bg-rose-100 px-2 py-0.5 text-rose-700" [title]="r.eInvoiceErrorMessage ?? ''">Failed</span> }
+                        @case ('cancelled') { <span class="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">Cancelled</span> }
+                        @default { <span class="text-slate-300">–</span> }
+                      }
+                    </td>
                     <td class="whitespace-nowrap px-4 py-2.5 text-right">
                       <div class="flex justify-end gap-1">
                         <button (click)="view(r)" class="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50">View</button>
@@ -445,14 +488,18 @@
                           <button (click)="editDraft(r)" class="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-700">Update</button>
                           <button (click)="postDraft(r)" class="h-8 rounded-lg bg-emerald-600 px-2.5 text-xs font-bold text-white hover:bg-emerald-700">Post</button>
                         }
-                        @if (r.status !== 'Cancelled') {
+                        <button (click)="downloadPdf(r)" [disabled]="busyId() === r.id" class="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">PDF</button>
+                        @if (r.status === 'Posted' && (!r.eInvoiceStatus || r.eInvoiceStatus === 'failed')) {
+                          <button (click)="generateCreditNote(r)" [disabled]="busyId() === r.id" class="h-8 rounded-lg bg-indigo-600 px-2.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50">e-Invoice</button>
+                        }
+                        @if (r.status !== 'Cancelled' && r.eInvoiceStatus !== 'generated') {
                           <button (click)="cancelEntry(r)" class="h-8 rounded-lg border border-rose-200 px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50">Cancel</button>
                         }
                       </div>
                     </td>
                   </tr>
                 } @empty {
-                  <tr><td colspan="9" class="px-4 py-12 text-center text-sm text-slate-400">No sales returns{{ statusFilter() !== 'all' || returnSearch() ? ' match' : ' yet' }}.</td></tr>
+                  <tr><td colspan="10" class="px-4 py-12 text-center text-sm text-slate-400">No sales returns{{ statusFilter() !== 'all' || returnSearch() ? ' match' : ' yet' }}.</td></tr>
                 }
               </tbody>
             </table>

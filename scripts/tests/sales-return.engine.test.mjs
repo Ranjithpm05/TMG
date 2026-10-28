@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SalesReturnError, billLineKey, billedLines, buildBillRows, cancelReturn, makeLine, paths, postReturn,
-  rowRef, saveDraft, summarizeLines, validateDraft,
+  returnNetAmount, rowRef, saveDraft, summarizeLines, validateDraft,
 } from '../../src/services/sales-return.engine.ts';
 
 const INC = Symbol('inc');
@@ -310,4 +310,28 @@ test('cancel of a Posted return is refused once its Fresh pieces left stock agai
   await assert.rejects(cancelReturn(s, 'R1', 'u', 'oops'), (e) => e.code === 'stock-consumed' && /only 1 left in stock/.test(e.message));
   assert.equal(s.read(paths.salesReturn('R1')).status, 'Posted');
   assert.equal(returned(s, 'A')[billLineKey('DC1', 0, 'M')], 3);
+});
+
+test('summarizeLines rounds the return value to the rupee', () => {
+  const t = summarizeLines([
+    { qty: 1, condition: 'Fresh', taxableValue: 18474.24, taxAmount: 923.78, totalAmount: 19398.02 },
+    { qty: 1, condition: 'Fresh', taxableValue: 0.4, taxAmount: 0.02, totalAmount: 0.42 },
+  ]);
+  assert.equal(t.totalAmount, 19398.44);
+  assert.equal(t.netAmount, 19398);
+  assert.equal(t.roundOff, -0.44);
+  assert.equal(returnNetAmount({ totalAmount: 56775.5 }), 56776); // returns saved before netAmount existed
+});
+
+test('cancel is refused while the return has an active Credit Note e-Invoice', async () => {
+  const s = seed();
+  const m = row(rowsOf(invA), 'S1', 'M');
+  await draft(s, 'R1', [makeLine(m, invA, 'Fresh', 1, '')]);
+  await postReturn(s, 'R1', 'u');
+  s.put(paths.salesReturn('R1'), { ...s.read(paths.salesReturn('R1')), eInvoiceStatus: 'generated', irn: 'IRN1' });
+  await assert.rejects(cancelReturn(s, 'R1', 'u', 'wrong'), (e) => e.code === 'einvoice-active');
+  assert.equal(stock(s, 'invS1M'), 3);
+  s.put(paths.salesReturn('R1'), { ...s.read(paths.salesReturn('R1')), eInvoiceStatus: 'cancelled' });
+  assert.equal(await cancelReturn(s, 'R1', 'u', 'wrong'), 'cancelled');
+  assert.equal(stock(s, 'invS1M'), 2);
 });

@@ -253,6 +253,7 @@ export interface ReturnDraftInput {
   clientName: string;
   clientGstin?: string;
   remarks?: string;
+  referenceNo?: string;
   lines: SalesReturnLine[];
 }
 
@@ -270,7 +271,15 @@ export function summarizeLines(lines: Pick<SalesReturnLine, 'qty' | 'condition' 
   t.taxableValue = round2(t.taxableValue);
   t.taxAmount = round2(t.taxAmount);
   t.totalAmount = round2(t.totalAmount);
+  t.netAmount = Math.round(t.totalAmount);
+  t.roundOff = round2(t.netAmount - t.totalAmount);
   return t;
+}
+
+/** Credit value rounded to the rupee — also for returns saved before totals carried netAmount. */
+export function returnNetAmount(totals: Pick<SalesReturnTotals, 'totalAmount' | 'netAmount'> | undefined): number {
+  if (!totals) return 0;
+  return totals.netAmount ?? Math.round(Number(totals.totalAmount) || 0);
 }
 
 export function uniqueInvoices(lines: Pick<SalesReturnLine, 'invoiceId' | 'invoiceNo'>[]): { invoiceIds: string[]; invoiceNos: string[] } {
@@ -358,6 +367,7 @@ export async function saveDraft(
     clientName: input.clientName,
     ...(input.clientGstin ? { clientGstin: input.clientGstin } : {}),
     remarks: (input.remarks ?? '').trim(),
+    referenceNo: (input.referenceNo ?? '').trim(),
     ...uniqueInvoices(lines),
     lines,
     totals: summarizeLines(lines),
@@ -528,6 +538,9 @@ export async function cancelReturn(store: ReturnStore, id: string, user: string,
       return 'cancelled' as const;
     }
     if (!reason.trim()) fail('reason-required', 'Enter a reason for cancelling a posted return.');
+    if (ret!.eInvoiceStatus === 'generated') {
+      fail('einvoice-active', `${ret!.returnNo} has an active Credit Note e-Invoice (IRN ${ret!.irn ?? ''}) — cancel the e-Invoice first, then cancel the return.`);
+    }
 
     const lines = ret!.lines ?? [];
     const { invoiceIds } = uniqueInvoices(lines);
