@@ -1,0 +1,2132 @@
+[
+  {
+    "invoice": {
+      "name": "projects/tmg-clothings/databases/(default)/documents/invoices/g7X9G1pySjin3PaXIvMj",
+      "fields": {
+        "dcIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "q3RLqPnfdlVI9gurxUYx"
+              }
+            ]
+          }
+        },
+        "dcId": {
+          "stringValue": "q3RLqPnfdlVI9gurxUYx"
+        },
+        "dcNo": {
+          "stringValue": "DCC2627-2523"
+        },
+        "packingListId": {
+          "stringValue": "uOXTB4TVnnYQPOLtYLw3"
+        },
+        "packingListNo": {
+          "stringValue": "PK-1793422223854"
+        },
+        "salesOrderIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "fn4R9Rz9C0FhLN4fZLc1"
+              }
+            ]
+          }
+        },
+        "salesNos": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "SO-1788248851703"
+              }
+            ]
+          }
+        },
+        "orderNo": {
+          "stringValue": ""
+        },
+        "clientId": {
+          "stringValue": "cXdDzwEdJTze87xRs7lA"
+        },
+        "clientName": {
+          "stringValue": "TMG TEXTILES & GARMENTS"
+        },
+        "clientAddress": {
+          "stringValue": "1/155/32, N.P.S NAGAR,\nNEELAMBUR,"
+        },
+        "clientPlace": {
+          "stringValue": "COIMBATORE"
+        },
+        "clientState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientZipCode": {
+          "stringValue": "641062"
+        },
+        "clientPhone": {
+          "stringValue": "9940002837"
+        },
+        "clientGstin": {
+          "stringValue": "33AAFFT6905L1ZY"
+        },
+        "clientShipToAddress": {
+          "stringValue": "1/155/32, N.P.S NAGAR,\nNEELAMBUR,"
+        },
+        "clientShipToPlace": {
+          "stringValue": "COIMBATORE"
+        },
+        "clientShipToState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientShipToZipCode": {
+          "stringValue": "641062"
+        },
+        "destination": {
+          "stringValue": "COIMBATORE"
+        },
+        "transport": {
+          "stringValue": "KMP SPEED PARCEL SERVICE"
+        },
+        "transportId": {
+          "stringValue": "05mBE0zfq7O3NXKPaEbn"
+        },
+        "transportAddress": {
+          "stringValue": "AVARAMPALAYAM,\nCOIMBATORE"
+        },
+        "transportGstNo": {
+          "stringValue": "33AAUFK1187A1ZF"
+        },
+        "vehicleNo": {
+          "stringValue": ""
+        },
+        "docNo": {
+          "stringValue": ""
+        },
+        "shipmentDate": {
+          "timestampValue": "2026-10-31T04:51:24.534Z"
+        },
+        "totalPkgs": {
+          "integerValue": "1"
+        },
+        "agentName": {
+          "stringValue": "DIRECT"
+        },
+        "items": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL SHIRTS"
+                    },
+                    "styleNo": {
+                      "stringValue": "CASUALSHIRTS ASS"
+                    },
+                    "sleeveType": {
+                      "stringValue": "Full"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62052000"
+                    },
+                    "discountPct": {
+                      "integerValue": "0"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "495"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "270"
+                    },
+                    "price": {
+                      "integerValue": "495"
+                    },
+                    "amount": {
+                      "integerValue": "133650"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "grossAmount": {
+          "integerValue": "133650"
+        },
+        "discountPct": {
+          "integerValue": "0"
+        },
+        "discountAmount": {
+          "integerValue": "0"
+        },
+        "freightAmount": {
+          "integerValue": "0"
+        },
+        "taxableValue": {
+          "integerValue": "133650"
+        },
+        "cgstRate": {
+          "doubleValue": 2.5
+        },
+        "cgstAmount": {
+          "doubleValue": 3341.25
+        },
+        "sgstRate": {
+          "doubleValue": 2.5
+        },
+        "sgstAmount": {
+          "doubleValue": 3341.25
+        },
+        "igstRate": {
+          "integerValue": "0"
+        },
+        "igstAmount": {
+          "integerValue": "0"
+        },
+        "totalTaxAmount": {
+          "doubleValue": 6682.5
+        },
+        "roundOff": {
+          "doubleValue": 0.5
+        },
+        "totalAmount": {
+          "integerValue": "140333"
+        },
+        "amountInWords": {
+          "stringValue": "ONE LAKH FORTY THOUSAND THREE HUNDRED THIRTY THREE RUPEES ONLY"
+        },
+        "taxSummary": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "hsnSac": {
+                      "stringValue": "62052000"
+                    },
+                    "taxableValue": {
+                      "integerValue": "133650"
+                    },
+                    "cgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "cgstAmount": {
+                      "doubleValue": 3341.25
+                    },
+                    "sgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "sgstAmount": {
+                      "doubleValue": 3341.25
+                    },
+                    "igstRate": {
+                      "integerValue": "0"
+                    },
+                    "igstAmount": {
+                      "integerValue": "0"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "packingListIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "uOXTB4TVnnYQPOLtYLw3"
+              }
+            ]
+          }
+        },
+        "invoiceNo": {
+          "stringValue": "TMGC2627-3071"
+        },
+        "invoiceSeq": {
+          "integerValue": "3071"
+        },
+        "createdAt": {
+          "timestampValue": "2026-10-31T04:54:05.385Z"
+        },
+        "invoiceDate": {
+          "timestampValue": "2026-10-31T04:54:05.385Z"
+        },
+        "updatedAt": {
+          "timestampValue": "2026-10-31T04:54:05.385Z"
+        }
+      },
+      "createTime": "2026-10-31T04:54:05.429688Z",
+      "updateTime": "2026-10-31T04:54:05.429688Z"
+    },
+    "deliveryChallans": [
+      {
+        "name": "projects/tmg-clothings/databases/(default)/documents/deliveryChallans/q3RLqPnfdlVI9gurxUYx",
+        "fields": {
+          "packingListId": {
+            "stringValue": "uOXTB4TVnnYQPOLtYLw3"
+          },
+          "packingListNo": {
+            "stringValue": "PK-1793422223854"
+          },
+          "salesOrderIds": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "fn4R9Rz9C0FhLN4fZLc1"
+                }
+              ]
+            }
+          },
+          "salesNos": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "SO-1788248851703"
+                }
+              ]
+            }
+          },
+          "orderNo": {
+            "stringValue": ""
+          },
+          "clientId": {
+            "stringValue": "cXdDzwEdJTze87xRs7lA"
+          },
+          "clientName": {
+            "stringValue": "TMG TEXTILES & GARMENTS"
+          },
+          "billingAddress": {
+            "stringValue": "1/155/32, N.P.S NAGAR,\nNEELAMBUR,"
+          },
+          "place": {
+            "stringValue": "COIMBATORE"
+          },
+          "state": {
+            "stringValue": "Tamil Nadu"
+          },
+          "zipCode": {
+            "stringValue": "641062"
+          },
+          "clientPhone": {
+            "stringValue": "9940002837"
+          },
+          "clientGstin": {
+            "stringValue": "33AAFFT6905L1ZY"
+          },
+          "totalQty": {
+            "integerValue": "270"
+          },
+          "totalAmount": {
+            "integerValue": "133650"
+          },
+          "boxCount": {
+            "integerValue": "1"
+          },
+          "agentName": {
+            "stringValue": "DIRECT"
+          },
+          "transport": {
+            "stringValue": "KMP SPEED PARCEL SERVICE"
+          },
+          "transportId": {
+            "stringValue": "05mBE0zfq7O3NXKPaEbn"
+          },
+          "transportAddress": {
+            "stringValue": "AVARAMPALAYAM,\nCOIMBATORE"
+          },
+          "transportGstNo": {
+            "stringValue": "33AAUFK1187A1ZF"
+          },
+          "items": {
+            "arrayValue": {
+              "values": [
+                {
+                  "mapValue": {
+                    "fields": {
+                      "partName": {
+                        "stringValue": "CASUAL SHIRTS"
+                      },
+                      "styleNo": {
+                        "stringValue": "CASUALSHIRTS ASS"
+                      },
+                      "color": {
+                        "stringValue": "-"
+                      },
+                      "sleeveType": {
+                        "stringValue": "Full"
+                      },
+                      "sizeQty": {
+                        "mapValue": {
+                          "fields": {
+                            "40": {
+                              "integerValue": "270"
+                            }
+                          }
+                        }
+                      },
+                      "mrpBySize": {
+                        "mapValue": {
+                          "fields": {
+                            "40": {
+                              "integerValue": "495"
+                            }
+                          }
+                        }
+                      },
+                      "total": {
+                        "integerValue": "270"
+                      },
+                      "mrp": {
+                        "integerValue": "495"
+                      },
+                      "price": {
+                        "integerValue": "495"
+                      },
+                      "amount": {
+                        "integerValue": "133650"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "sizes": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "40"
+                }
+              ]
+            }
+          },
+          "dcNo": {
+            "stringValue": "DCC2627-2523"
+          },
+          "dcSeq": {
+            "integerValue": "2523"
+          },
+          "createdAt": {
+            "timestampValue": "2026-10-31T04:51:24.534Z"
+          },
+          "packedOn": {
+            "timestampValue": "2026-10-31T04:51:24.534Z"
+          },
+          "deliveredQty": {
+            "integerValue": "270"
+          },
+          "balanceQty": {
+            "integerValue": "0"
+          },
+          "invoiceId": {
+            "stringValue": "g7X9G1pySjin3PaXIvMj"
+          },
+          "invoiceNo": {
+            "stringValue": "TMGC2627-3071"
+          },
+          "deliveryStatus": {
+            "stringValue": "delivered"
+          },
+          "deliveries": {
+            "arrayValue": {
+              "values": [
+                {
+                  "mapValue": {
+                    "fields": {
+                      "deliveryId": {
+                        "stringValue": "g7X9G1pySjin3PaXIvMj"
+                      },
+                      "deliveryNo": {
+                        "integerValue": "1"
+                      },
+                      "deliveryDate": {
+                        "timestampValue": "2026-10-31T04:54:05.597Z"
+                      },
+                      "items": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "mapValue": {
+                                "fields": {
+                                  "partName": {
+                                    "stringValue": "CASUAL SHIRTS"
+                                  },
+                                  "styleNo": {
+                                    "stringValue": "CASUALSHIRTS ASS"
+                                  },
+                                  "color": {
+                                    "stringValue": "-"
+                                  },
+                                  "sleeveType": {
+                                    "stringValue": "Full"
+                                  },
+                                  "sizeQty": {
+                                    "mapValue": {
+                                      "fields": {
+                                        "40": {
+                                          "integerValue": "270"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "total": {
+                                    "integerValue": "270"
+                                  },
+                                  "mrp": {
+                                    "integerValue": "495"
+                                  },
+                                  "mrpBySize": {
+                                    "mapValue": {
+                                      "fields": {
+                                        "40": {
+                                          "integerValue": "495"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "price": {
+                                    "integerValue": "495"
+                                  },
+                                  "amount": {
+                                    "integerValue": "133650"
+                                  },
+                                  "itemIndex": {
+                                    "integerValue": "0"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "totalQty": {
+                        "integerValue": "270"
+                      },
+                      "totalAmount": {
+                        "integerValue": "133650"
+                      },
+                      "boxCount": {
+                        "integerValue": "1"
+                      },
+                      "invoiceId": {
+                        "stringValue": "g7X9G1pySjin3PaXIvMj"
+                      },
+                      "invoiceNo": {
+                        "stringValue": "TMGC2627-3071"
+                      },
+                      "createdAt": {
+                        "timestampValue": "2026-10-31T04:54:05.597Z"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "updatedAt": {
+            "timestampValue": "2026-10-31T04:54:05.385Z"
+          }
+        },
+        "createTime": "2026-10-31T04:51:24.583594Z",
+        "updateTime": "2026-10-31T04:54:05.429688Z"
+      }
+    ],
+    "lrEntries": [],
+    "salesReturns": [],
+    "salesReturnLedger": null
+  },
+  {
+    "invoice": {
+      "name": "projects/tmg-clothings/databases/(default)/documents/invoices/Wldjflf0wz3SvkcJLJIT",
+      "fields": {
+        "dcIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "B5stp6i2FMFRpBevIX4a"
+              }
+            ]
+          }
+        },
+        "dcId": {
+          "stringValue": "B5stp6i2FMFRpBevIX4a"
+        },
+        "dcNo": {
+          "stringValue": "DCC2627-2522"
+        },
+        "packingListId": {
+          "stringValue": "vyXEbfQvc2YakWDcVjGx"
+        },
+        "packingListNo": {
+          "stringValue": "PK-1793421926830"
+        },
+        "salesOrderIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "81C3fxUHITxtTBYYX8gg"
+              }
+            ]
+          }
+        },
+        "salesNos": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "SO-1793421887271"
+              }
+            ]
+          }
+        },
+        "orderNo": {
+          "stringValue": "MIXED (MDU, SNKL)"
+        },
+        "clientId": {
+          "stringValue": "cXdDzwEdJTze87xRs7lA"
+        },
+        "clientName": {
+          "stringValue": "TMG TEXTILES & GARMENTS"
+        },
+        "clientAddress": {
+          "stringValue": "1/155/32, N.P.S NAGAR,\nNEELAMBUR,"
+        },
+        "clientPlace": {
+          "stringValue": "COIMBATORE"
+        },
+        "clientState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientZipCode": {
+          "stringValue": "641062"
+        },
+        "clientPhone": {
+          "stringValue": "9940002837"
+        },
+        "clientGstin": {
+          "stringValue": "33AAFFT6905L1ZY"
+        },
+        "clientShipToAddress": {
+          "stringValue": "1/155/32, N.P.S NAGAR,\nNEELAMBUR,"
+        },
+        "clientShipToPlace": {
+          "stringValue": "COIMBATORE"
+        },
+        "clientShipToState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientShipToZipCode": {
+          "stringValue": "641062"
+        },
+        "destination": {
+          "stringValue": "COIMBATORE"
+        },
+        "transport": {
+          "stringValue": "DOOR DELIVERY"
+        },
+        "transportId": {
+          "stringValue": "5zv9pyRICcEg4HYKJsOU"
+        },
+        "vehicleNo": {
+          "stringValue": ""
+        },
+        "docNo": {
+          "stringValue": ""
+        },
+        "shipmentDate": {
+          "timestampValue": "2026-10-31T04:48:19.896Z"
+        },
+        "totalPkgs": {
+          "integerValue": "1"
+        },
+        "agentName": {
+          "stringValue": "DIRECT"
+        },
+        "items": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL SHIRTS"
+                    },
+                    "styleNo": {
+                      "stringValue": "CASUALSHIRTS ASS"
+                    },
+                    "sleeveType": {
+                      "stringValue": "Full"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62052000"
+                    },
+                    "discountPct": {
+                      "integerValue": "0"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "495"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "300"
+                    },
+                    "price": {
+                      "integerValue": "495"
+                    },
+                    "amount": {
+                      "integerValue": "148500"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "grossAmount": {
+          "integerValue": "148500"
+        },
+        "discountPct": {
+          "integerValue": "0"
+        },
+        "discountAmount": {
+          "integerValue": "0"
+        },
+        "freightAmount": {
+          "integerValue": "0"
+        },
+        "taxableValue": {
+          "integerValue": "148500"
+        },
+        "cgstRate": {
+          "doubleValue": 2.5
+        },
+        "cgstAmount": {
+          "doubleValue": 3712.5
+        },
+        "sgstRate": {
+          "doubleValue": 2.5
+        },
+        "sgstAmount": {
+          "doubleValue": 3712.5
+        },
+        "igstRate": {
+          "integerValue": "0"
+        },
+        "igstAmount": {
+          "integerValue": "0"
+        },
+        "totalTaxAmount": {
+          "integerValue": "7425"
+        },
+        "roundOff": {
+          "integerValue": "0"
+        },
+        "totalAmount": {
+          "integerValue": "155925"
+        },
+        "amountInWords": {
+          "stringValue": "ONE LAKH FIFTY FIVE THOUSAND NINE HUNDRED TWENTY FIVE RUPEES ONLY"
+        },
+        "taxSummary": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "hsnSac": {
+                      "stringValue": "62052000"
+                    },
+                    "taxableValue": {
+                      "integerValue": "148500"
+                    },
+                    "cgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "cgstAmount": {
+                      "doubleValue": 3712.5
+                    },
+                    "sgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "sgstAmount": {
+                      "doubleValue": 3712.5
+                    },
+                    "igstRate": {
+                      "integerValue": "0"
+                    },
+                    "igstAmount": {
+                      "integerValue": "0"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "packingListIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "vyXEbfQvc2YakWDcVjGx"
+              }
+            ]
+          }
+        },
+        "invoiceNo": {
+          "stringValue": "TMGC2627-3070"
+        },
+        "invoiceSeq": {
+          "integerValue": "3070"
+        },
+        "createdAt": {
+          "timestampValue": "2026-10-31T04:53:38.316Z"
+        },
+        "invoiceDate": {
+          "timestampValue": "2026-10-31T04:53:38.316Z"
+        },
+        "updatedAt": {
+          "timestampValue": "2026-10-31T04:53:38.316Z"
+        }
+      },
+      "createTime": "2026-10-31T04:53:38.361589Z",
+      "updateTime": "2026-10-31T04:53:38.361589Z"
+    },
+    "deliveryChallans": [
+      {
+        "name": "projects/tmg-clothings/databases/(default)/documents/deliveryChallans/B5stp6i2FMFRpBevIX4a",
+        "fields": {
+          "packingListId": {
+            "stringValue": "vyXEbfQvc2YakWDcVjGx"
+          },
+          "packingListNo": {
+            "stringValue": "PK-1793421926830"
+          },
+          "salesOrderIds": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "81C3fxUHITxtTBYYX8gg"
+                }
+              ]
+            }
+          },
+          "salesNos": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "SO-1793421887271"
+                }
+              ]
+            }
+          },
+          "orderNo": {
+            "stringValue": "MIXED (MDU,SNKL)"
+          },
+          "clientId": {
+            "stringValue": "cXdDzwEdJTze87xRs7lA"
+          },
+          "clientName": {
+            "stringValue": "TMG TEXTILES & GARMENTS"
+          },
+          "billingAddress": {
+            "stringValue": "1/155/32, N.P.S NAGAR,\nNEELAMBUR,"
+          },
+          "place": {
+            "stringValue": "COIMBATORE"
+          },
+          "state": {
+            "stringValue": "Tamil Nadu"
+          },
+          "zipCode": {
+            "stringValue": "641062"
+          },
+          "clientPhone": {
+            "stringValue": "9940002837"
+          },
+          "clientGstin": {
+            "stringValue": "33AAFFT6905L1ZY"
+          },
+          "totalQty": {
+            "integerValue": "300"
+          },
+          "totalAmount": {
+            "integerValue": "148500"
+          },
+          "boxCount": {
+            "integerValue": "1"
+          },
+          "agentName": {
+            "stringValue": "DIRECT"
+          },
+          "transport": {
+            "stringValue": "DOOR DELIVERY"
+          },
+          "transportId": {
+            "stringValue": "5zv9pyRICcEg4HYKJsOU"
+          },
+          "items": {
+            "arrayValue": {
+              "values": [
+                {
+                  "mapValue": {
+                    "fields": {
+                      "partName": {
+                        "stringValue": "CASUAL SHIRTS"
+                      },
+                      "styleNo": {
+                        "stringValue": "CASUALSHIRTS ASS"
+                      },
+                      "color": {
+                        "stringValue": "-"
+                      },
+                      "sleeveType": {
+                        "stringValue": "Full"
+                      },
+                      "sizeQty": {
+                        "mapValue": {
+                          "fields": {
+                            "40": {
+                              "integerValue": "300"
+                            }
+                          }
+                        }
+                      },
+                      "mrpBySize": {
+                        "mapValue": {
+                          "fields": {
+                            "40": {
+                              "integerValue": "495"
+                            }
+                          }
+                        }
+                      },
+                      "total": {
+                        "integerValue": "300"
+                      },
+                      "mrp": {
+                        "integerValue": "495"
+                      },
+                      "price": {
+                        "integerValue": "495"
+                      },
+                      "amount": {
+                        "integerValue": "148500"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "sizes": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "40"
+                }
+              ]
+            }
+          },
+          "dcNo": {
+            "stringValue": "DCC2627-2522"
+          },
+          "dcSeq": {
+            "integerValue": "2522"
+          },
+          "createdAt": {
+            "timestampValue": "2026-10-31T04:48:19.896Z"
+          },
+          "packedOn": {
+            "timestampValue": "2026-10-31T04:48:19.896Z"
+          },
+          "deliveredQty": {
+            "integerValue": "300"
+          },
+          "balanceQty": {
+            "integerValue": "0"
+          },
+          "invoiceId": {
+            "stringValue": "Wldjflf0wz3SvkcJLJIT"
+          },
+          "invoiceNo": {
+            "stringValue": "TMGC2627-3070"
+          },
+          "deliveryStatus": {
+            "stringValue": "delivered"
+          },
+          "deliveries": {
+            "arrayValue": {
+              "values": [
+                {
+                  "mapValue": {
+                    "fields": {
+                      "deliveryId": {
+                        "stringValue": "Wldjflf0wz3SvkcJLJIT"
+                      },
+                      "deliveryNo": {
+                        "integerValue": "1"
+                      },
+                      "deliveryDate": {
+                        "timestampValue": "2026-10-31T04:53:38.524Z"
+                      },
+                      "items": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "mapValue": {
+                                "fields": {
+                                  "partName": {
+                                    "stringValue": "CASUAL SHIRTS"
+                                  },
+                                  "styleNo": {
+                                    "stringValue": "CASUALSHIRTS ASS"
+                                  },
+                                  "color": {
+                                    "stringValue": "-"
+                                  },
+                                  "sleeveType": {
+                                    "stringValue": "Full"
+                                  },
+                                  "sizeQty": {
+                                    "mapValue": {
+                                      "fields": {
+                                        "40": {
+                                          "integerValue": "300"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "total": {
+                                    "integerValue": "300"
+                                  },
+                                  "mrp": {
+                                    "integerValue": "495"
+                                  },
+                                  "mrpBySize": {
+                                    "mapValue": {
+                                      "fields": {
+                                        "40": {
+                                          "integerValue": "495"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "price": {
+                                    "integerValue": "495"
+                                  },
+                                  "amount": {
+                                    "integerValue": "148500"
+                                  },
+                                  "itemIndex": {
+                                    "integerValue": "0"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "totalQty": {
+                        "integerValue": "300"
+                      },
+                      "totalAmount": {
+                        "integerValue": "148500"
+                      },
+                      "boxCount": {
+                        "integerValue": "1"
+                      },
+                      "invoiceId": {
+                        "stringValue": "Wldjflf0wz3SvkcJLJIT"
+                      },
+                      "invoiceNo": {
+                        "stringValue": "TMGC2627-3070"
+                      },
+                      "createdAt": {
+                        "timestampValue": "2026-10-31T04:53:38.524Z"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "updatedAt": {
+            "timestampValue": "2026-10-31T04:53:38.316Z"
+          }
+        },
+        "createTime": "2026-10-31T04:48:20.049878Z",
+        "updateTime": "2026-10-31T04:53:38.361589Z"
+      }
+    ],
+    "lrEntries": [],
+    "salesReturns": [],
+    "salesReturnLedger": null
+  },
+  {
+    "invoice": {
+      "name": "projects/tmg-clothings/databases/(default)/documents/invoices/iMg5fuOqoo6V1vqS6Plx",
+      "fields": {
+        "dcIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "GbqzW2R1edKS7iP8UgW2"
+              }
+            ]
+          }
+        },
+        "dcId": {
+          "stringValue": "GbqzW2R1edKS7iP8UgW2"
+        },
+        "dcNo": {
+          "stringValue": "DCC2627-2520"
+        },
+        "packingListId": {
+          "stringValue": "SelCTo5kiaChlwCuoSX7"
+        },
+        "packingListNo": {
+          "stringValue": "PK-1793421524760"
+        },
+        "salesOrderIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "xZBFVXPkYYJLqfnDQeW3"
+              }
+            ]
+          }
+        },
+        "salesNos": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "SO-1793364529637"
+              }
+            ]
+          }
+        },
+        "orderNo": {
+          "stringValue": "MIXED"
+        },
+        "clientId": {
+          "stringValue": "tTM7SquvGoiEtAOEqMjL"
+        },
+        "clientName": {
+          "stringValue": "REGENT TEXTILES & GARMENTS - KOVILPATTI"
+        },
+        "clientAddress": {
+          "stringValue": "3113,PLOT NO.2 SIDCO INDUSTRIAL ESTATE, \nTHITTANKULAM, \nETTAIYAPURAM ROAD"
+        },
+        "clientPlace": {
+          "stringValue": "KOVILPATTI"
+        },
+        "clientState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientZipCode": {
+          "stringValue": "628501"
+        },
+        "clientPhone": {
+          "stringValue": "9344374340"
+        },
+        "clientGstin": {
+          "stringValue": "33AAJFR9463M1ZJ"
+        },
+        "clientShipToAddress": {
+          "stringValue": "3113,PLOT NO.2 SIDCO INDUSTRIAL ESTATE, \nTHITTANKULAM, \nETTAIYAPURAM ROAD"
+        },
+        "clientShipToPlace": {
+          "stringValue": "KOVILPATTI"
+        },
+        "clientShipToState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientShipToZipCode": {
+          "stringValue": "628501"
+        },
+        "destination": {
+          "stringValue": "KOVILPATTI"
+        },
+        "transport": {
+          "stringValue": ""
+        },
+        "vehicleNo": {
+          "stringValue": ""
+        },
+        "docNo": {
+          "stringValue": ""
+        },
+        "shipmentDate": {
+          "timestampValue": "2026-10-31T04:46:26.931Z"
+        },
+        "totalPkgs": {
+          "integerValue": "1"
+        },
+        "agentName": {
+          "stringValue": "DIRECT"
+        },
+        "items": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL SHIRTS"
+                    },
+                    "styleNo": {
+                      "stringValue": "CASUALSHIRTS ASS"
+                    },
+                    "sleeveType": {
+                      "stringValue": "Full"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62052000"
+                    },
+                    "discountPct": {
+                      "integerValue": "0"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "495"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "1139"
+                    },
+                    "price": {
+                      "integerValue": "495"
+                    },
+                    "amount": {
+                      "integerValue": "563805"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "grossAmount": {
+          "integerValue": "563805"
+        },
+        "discountPct": {
+          "integerValue": "0"
+        },
+        "discountAmount": {
+          "integerValue": "0"
+        },
+        "freightAmount": {
+          "integerValue": "0"
+        },
+        "taxableValue": {
+          "integerValue": "563805"
+        },
+        "cgstRate": {
+          "doubleValue": 2.5
+        },
+        "cgstAmount": {
+          "doubleValue": 14095.13
+        },
+        "sgstRate": {
+          "doubleValue": 2.5
+        },
+        "sgstAmount": {
+          "doubleValue": 14095.13
+        },
+        "igstRate": {
+          "integerValue": "0"
+        },
+        "igstAmount": {
+          "integerValue": "0"
+        },
+        "totalTaxAmount": {
+          "doubleValue": 28190.26
+        },
+        "roundOff": {
+          "doubleValue": -0.26
+        },
+        "totalAmount": {
+          "integerValue": "591995"
+        },
+        "amountInWords": {
+          "stringValue": "FIVE LAKH NINETY ONE THOUSAND NINE HUNDRED NINETY FIVE RUPEES ONLY"
+        },
+        "taxSummary": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "hsnSac": {
+                      "stringValue": "62052000"
+                    },
+                    "taxableValue": {
+                      "integerValue": "563805"
+                    },
+                    "cgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "cgstAmount": {
+                      "doubleValue": 14095.13
+                    },
+                    "sgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "sgstAmount": {
+                      "doubleValue": 14095.13
+                    },
+                    "igstRate": {
+                      "integerValue": "0"
+                    },
+                    "igstAmount": {
+                      "integerValue": "0"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "packingListIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "SelCTo5kiaChlwCuoSX7"
+              }
+            ]
+          }
+        },
+        "invoiceNo": {
+          "stringValue": "TMGC2627-3069"
+        },
+        "invoiceSeq": {
+          "integerValue": "3069"
+        },
+        "createdAt": {
+          "timestampValue": "2026-10-31T04:53:13.317Z"
+        },
+        "invoiceDate": {
+          "timestampValue": "2026-10-31T04:53:13.317Z"
+        },
+        "updatedAt": {
+          "timestampValue": "2026-10-31T04:53:13.317Z"
+        }
+      },
+      "createTime": "2026-10-31T04:53:13.386847Z",
+      "updateTime": "2026-10-31T04:53:13.386847Z"
+    },
+    "deliveryChallans": [
+      {
+        "name": "projects/tmg-clothings/databases/(default)/documents/deliveryChallans/GbqzW2R1edKS7iP8UgW2",
+        "fields": {
+          "packingListId": {
+            "stringValue": "SelCTo5kiaChlwCuoSX7"
+          },
+          "packingListNo": {
+            "stringValue": "PK-1793421524760"
+          },
+          "salesOrderIds": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "xZBFVXPkYYJLqfnDQeW3"
+                }
+              ]
+            }
+          },
+          "salesNos": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "SO-1793364529637"
+                }
+              ]
+            }
+          },
+          "orderNo": {
+            "stringValue": "MIXED"
+          },
+          "clientId": {
+            "stringValue": "tTM7SquvGoiEtAOEqMjL"
+          },
+          "clientName": {
+            "stringValue": "REGENT TEXTILES & GARMENTS - KOVILPATTI"
+          },
+          "billingAddress": {
+            "stringValue": "3113,PLOT NO.2 SIDCO INDUSTRIAL ESTATE, \nTHITTANKULAM, \nETTAIYAPURAM ROAD"
+          },
+          "place": {
+            "stringValue": "KOVILPATTI"
+          },
+          "state": {
+            "stringValue": "Tamil Nadu"
+          },
+          "zipCode": {
+            "stringValue": "628501"
+          },
+          "clientPhone": {
+            "stringValue": "9344374340"
+          },
+          "clientGstin": {
+            "stringValue": "33AAJFR9463M1ZJ"
+          },
+          "totalQty": {
+            "integerValue": "1139"
+          },
+          "totalAmount": {
+            "integerValue": "563805"
+          },
+          "boxCount": {
+            "integerValue": "1"
+          },
+          "agentName": {
+            "stringValue": "DIRECT"
+          },
+          "transport": {
+            "stringValue": ""
+          },
+          "items": {
+            "arrayValue": {
+              "values": [
+                {
+                  "mapValue": {
+                    "fields": {
+                      "partName": {
+                        "stringValue": "CASUAL SHIRTS"
+                      },
+                      "styleNo": {
+                        "stringValue": "CASUALSHIRTS ASS"
+                      },
+                      "color": {
+                        "stringValue": "-"
+                      },
+                      "sleeveType": {
+                        "stringValue": "Full"
+                      },
+                      "sizeQty": {
+                        "mapValue": {
+                          "fields": {
+                            "40": {
+                              "integerValue": "1139"
+                            }
+                          }
+                        }
+                      },
+                      "mrpBySize": {
+                        "mapValue": {
+                          "fields": {
+                            "40": {
+                              "integerValue": "495"
+                            }
+                          }
+                        }
+                      },
+                      "total": {
+                        "integerValue": "1139"
+                      },
+                      "mrp": {
+                        "integerValue": "495"
+                      },
+                      "price": {
+                        "integerValue": "495"
+                      },
+                      "amount": {
+                        "integerValue": "563805"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "sizes": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "40"
+                }
+              ]
+            }
+          },
+          "dcNo": {
+            "stringValue": "DCC2627-2520"
+          },
+          "dcSeq": {
+            "integerValue": "2520"
+          },
+          "createdAt": {
+            "timestampValue": "2026-10-31T04:46:26.931Z"
+          },
+          "packedOn": {
+            "timestampValue": "2026-10-31T04:46:26.931Z"
+          },
+          "deliveredQty": {
+            "integerValue": "1139"
+          },
+          "balanceQty": {
+            "integerValue": "0"
+          },
+          "invoiceId": {
+            "stringValue": "iMg5fuOqoo6V1vqS6Plx"
+          },
+          "invoiceNo": {
+            "stringValue": "TMGC2627-3069"
+          },
+          "deliveryStatus": {
+            "stringValue": "delivered"
+          },
+          "deliveries": {
+            "arrayValue": {
+              "values": [
+                {
+                  "mapValue": {
+                    "fields": {
+                      "deliveryId": {
+                        "stringValue": "iMg5fuOqoo6V1vqS6Plx"
+                      },
+                      "deliveryNo": {
+                        "integerValue": "1"
+                      },
+                      "deliveryDate": {
+                        "timestampValue": "2026-10-31T04:53:13.532Z"
+                      },
+                      "items": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "mapValue": {
+                                "fields": {
+                                  "partName": {
+                                    "stringValue": "CASUAL SHIRTS"
+                                  },
+                                  "styleNo": {
+                                    "stringValue": "CASUALSHIRTS ASS"
+                                  },
+                                  "color": {
+                                    "stringValue": "-"
+                                  },
+                                  "sleeveType": {
+                                    "stringValue": "Full"
+                                  },
+                                  "sizeQty": {
+                                    "mapValue": {
+                                      "fields": {
+                                        "40": {
+                                          "integerValue": "1139"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "total": {
+                                    "integerValue": "1139"
+                                  },
+                                  "mrp": {
+                                    "integerValue": "495"
+                                  },
+                                  "mrpBySize": {
+                                    "mapValue": {
+                                      "fields": {
+                                        "40": {
+                                          "integerValue": "495"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "price": {
+                                    "integerValue": "495"
+                                  },
+                                  "amount": {
+                                    "integerValue": "563805"
+                                  },
+                                  "itemIndex": {
+                                    "integerValue": "0"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "totalQty": {
+                        "integerValue": "1139"
+                      },
+                      "totalAmount": {
+                        "integerValue": "563805"
+                      },
+                      "boxCount": {
+                        "integerValue": "1"
+                      },
+                      "invoiceId": {
+                        "stringValue": "iMg5fuOqoo6V1vqS6Plx"
+                      },
+                      "invoiceNo": {
+                        "stringValue": "TMGC2627-3069"
+                      },
+                      "createdAt": {
+                        "timestampValue": "2026-10-31T04:53:13.532Z"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "updatedAt": {
+            "timestampValue": "2026-10-31T04:53:13.317Z"
+          }
+        },
+        "createTime": "2026-10-31T04:46:26.980490Z",
+        "updateTime": "2026-10-31T04:53:13.386847Z"
+      }
+    ],
+    "lrEntries": [],
+    "salesReturns": [],
+    "salesReturnLedger": null
+  },
+  {
+    "invoice": {
+      "name": "projects/tmg-clothings/databases/(default)/documents/invoices/9M63XDpdzgNdDDQzc7cY",
+      "fields": {
+        "dcIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "OYgyzOtD1HTnQEEeNG52"
+              }
+            ]
+          }
+        },
+        "dcId": {
+          "stringValue": "OYgyzOtD1HTnQEEeNG52"
+        },
+        "dcNo": {
+          "stringValue": "DCC2627-2521"
+        },
+        "packingListId": {
+          "stringValue": "F5WADre4L3DZjv8K90IZ"
+        },
+        "packingListNo": {
+          "stringValue": "PK-1793421737327"
+        },
+        "salesOrderIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "v79VMFzv0l9XnSQAVIAl"
+              }
+            ]
+          }
+        },
+        "salesNos": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "SO-1793421703924"
+              }
+            ]
+          }
+        },
+        "orderNo": {
+          "stringValue": "MIXED"
+        },
+        "clientId": {
+          "stringValue": "QZTPrAL0Rx74cl85Y6dE"
+        },
+        "clientName": {
+          "stringValue": "REGENT TEXTILES & GARMENTS - ARUPPUKOTTAI"
+        },
+        "clientAddress": {
+          "stringValue": "GANDHI NAGAR,"
+        },
+        "clientPlace": {
+          "stringValue": "ARUPPUKOTTAI"
+        },
+        "clientState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientZipCode": {
+          "stringValue": "626101"
+        },
+        "clientPhone": {
+          "stringValue": "9171932121"
+        },
+        "clientGstin": {
+          "stringValue": "33AAJFR9463M1ZJ"
+        },
+        "clientShipToAddress": {
+          "stringValue": "GANDHI NAGAR,"
+        },
+        "clientShipToPlace": {
+          "stringValue": "ARUPPUKOTTAI"
+        },
+        "clientShipToState": {
+          "stringValue": "Tamil Nadu"
+        },
+        "clientShipToZipCode": {
+          "stringValue": "626101"
+        },
+        "destination": {
+          "stringValue": "ARUPPUKOTTAI"
+        },
+        "transport": {
+          "stringValue": "DOOR DELIVERY"
+        },
+        "transportId": {
+          "stringValue": "5zv9pyRICcEg4HYKJsOU"
+        },
+        "vehicleNo": {
+          "stringValue": ""
+        },
+        "docNo": {
+          "stringValue": ""
+        },
+        "shipmentDate": {
+          "timestampValue": "2026-10-31T04:47:10.531Z"
+        },
+        "totalPkgs": {
+          "integerValue": "1"
+        },
+        "agentName": {
+          "stringValue": "DIRECT"
+        },
+        "items": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "description": {
+                      "stringValue": "CASUAL SHIRTS"
+                    },
+                    "styleNo": {
+                      "stringValue": "CASUALSHIRTS ASS"
+                    },
+                    "sleeveType": {
+                      "stringValue": "Full"
+                    },
+                    "hsnSac": {
+                      "stringValue": "62052000"
+                    },
+                    "discountPct": {
+                      "integerValue": "0"
+                    },
+                    "taxRate": {
+                      "integerValue": "5"
+                    },
+                    "mrp": {
+                      "integerValue": "495"
+                    },
+                    "uom": {
+                      "stringValue": "NOS"
+                    },
+                    "quantity": {
+                      "integerValue": "220"
+                    },
+                    "price": {
+                      "integerValue": "495"
+                    },
+                    "amount": {
+                      "integerValue": "108900"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "grossAmount": {
+          "integerValue": "108900"
+        },
+        "discountPct": {
+          "integerValue": "0"
+        },
+        "discountAmount": {
+          "integerValue": "0"
+        },
+        "freightAmount": {
+          "integerValue": "0"
+        },
+        "taxableValue": {
+          "integerValue": "108900"
+        },
+        "cgstRate": {
+          "doubleValue": 2.5
+        },
+        "cgstAmount": {
+          "doubleValue": 2722.5
+        },
+        "sgstRate": {
+          "doubleValue": 2.5
+        },
+        "sgstAmount": {
+          "doubleValue": 2722.5
+        },
+        "igstRate": {
+          "integerValue": "0"
+        },
+        "igstAmount": {
+          "integerValue": "0"
+        },
+        "totalTaxAmount": {
+          "integerValue": "5445"
+        },
+        "roundOff": {
+          "integerValue": "0"
+        },
+        "totalAmount": {
+          "integerValue": "114345"
+        },
+        "amountInWords": {
+          "stringValue": "ONE LAKH FOURTEEN THOUSAND THREE HUNDRED FORTY FIVE RUPEES ONLY"
+        },
+        "taxSummary": {
+          "arrayValue": {
+            "values": [
+              {
+                "mapValue": {
+                  "fields": {
+                    "hsnSac": {
+                      "stringValue": "62052000"
+                    },
+                    "taxableValue": {
+                      "integerValue": "108900"
+                    },
+                    "cgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "cgstAmount": {
+                      "doubleValue": 2722.5
+                    },
+                    "sgstRate": {
+                      "doubleValue": 2.5
+                    },
+                    "sgstAmount": {
+                      "doubleValue": 2722.5
+                    },
+                    "igstRate": {
+                      "integerValue": "0"
+                    },
+                    "igstAmount": {
+                      "integerValue": "0"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "packingListIds": {
+          "arrayValue": {
+            "values": [
+              {
+                "stringValue": "F5WADre4L3DZjv8K90IZ"
+              }
+            ]
+          }
+        },
+        "invoiceNo": {
+          "stringValue": "TMGC2627-3068"
+        },
+        "invoiceSeq": {
+          "integerValue": "3068"
+        },
+        "createdAt": {
+          "timestampValue": "2026-10-31T04:52:49.554Z"
+        },
+        "invoiceDate": {
+          "timestampValue": "2026-10-31T04:52:49.554Z"
+        },
+        "updatedAt": {
+          "timestampValue": "2026-10-31T04:52:49.554Z"
+        }
+      },
+      "createTime": "2026-10-31T04:52:49.603303Z",
+      "updateTime": "2026-10-31T04:52:49.603303Z"
+    },
+    "deliveryChallans": [
+      {
+        "name": "projects/tmg-clothings/databases/(default)/documents/deliveryChallans/OYgyzOtD1HTnQEEeNG52",
+        "fields": {
+          "packingListId": {
+            "stringValue": "F5WADre4L3DZjv8K90IZ"
+          },
+          "packingListNo": {
+            "stringValue": "PK-1793421737327"
+          },
+          "salesOrderIds": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "v79VMFzv0l9XnSQAVIAl"
+                }
+              ]
+            }
+          },
+          "salesNos": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "SO-1793421703924"
+                }
+              ]
+            }
+          },
+          "orderNo": {
+            "stringValue": "MIXED"
+          },
+          "clientId": {
+            "stringValue": "QZTPrAL0Rx74cl85Y6dE"
+          },
+          "clientName": {
+            "stringValue": "REGENT TEXTILES & GARMENTS - ARUPPUKOTTAI"
+          },
+          "billingAddress": {
+            "stringValue": "GANDHI NAGAR,"
+          },
+          "place": {
+            "stringValue": "ARUPPUKOTTAI"
+          },
+          "state": {
+            "stringValue": "Tamil Nadu"
+          },
+          "zipCode": {
+            "stringValue": "626101"
+          },
+          "clientPhone": {
+            "stringValue": "9171932121"
+          },
+          "clientGstin": {
+            "stringValue": "33AAJFR9463M1ZJ"
+          },
+          "totalQty": {
+            "integerValue": "220"
+          },
+          "totalAmount": {
+            "integerValue": "108900"
+          },
+          "boxCount": {
+            "integerValue": "1"
+          },
+          "agentName": {
+            "stringValue": "DIRECT"
+          },
+          "transport": {
+            "stringValue": "DOOR DELIVERY"
+          },
+          "transportId": {
+            "stringValue": "5zv9pyRICcEg4HYKJsOU"
+          },
+          "items": {
+            "arrayValue": {
+              "values": [
+                {
+                  "mapValue": {
+                    "fields": {
+                      "partName": {
+                        "stringValue": "CASUAL SHIRTS"
+                      },
+                      "styleNo": {
+                        "stringValue": "CASUALSHIRTS ASS"
+                      },
+                      "color": {
+                        "stringValue": "-"
+                      },
+                      "sleeveType": {
+                        "stringValue": "Full"
+                      },
+                      "sizeQty": {
+                        "mapValue": {
+                          "fields": {
+                            "40": {
+                              "integerValue": "220"
+                            }
+                          }
+                        }
+                      },
+                      "mrpBySize": {
+                        "mapValue": {
+                          "fields": {
+                            "40": {
+                              "integerValue": "495"
+                            }
+                          }
+                        }
+                      },
+                      "total": {
+                        "integerValue": "220"
+                      },
+                      "mrp": {
+                        "integerValue": "495"
+                      },
+                      "price": {
+                        "integerValue": "495"
+                      },
+                      "amount": {
+                        "integerValue": "108900"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "sizes": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "40"
+                }
+              ]
+            }
+          },
+          "dcNo": {
+            "stringValue": "DCC2627-2521"
+          },
+          "dcSeq": {
+            "integerValue": "2521"
+          },
+          "createdAt": {
+            "timestampValue": "2026-10-31T04:47:10.531Z"
+          },
+          "packedOn": {
+            "timestampValue": "2026-10-31T04:47:10.531Z"
+          },
+          "deliveredQty": {
+            "integerValue": "220"
+          },
+          "balanceQty": {
+            "integerValue": "0"
+          },
+          "invoiceId": {
+            "stringValue": "9M63XDpdzgNdDDQzc7cY"
+          },
+          "invoiceNo": {
+            "stringValue": "TMGC2627-3068"
+          },
+          "deliveryStatus": {
+            "stringValue": "delivered"
+          },
+          "deliveries": {
+            "arrayValue": {
+              "values": [
+                {
+                  "mapValue": {
+                    "fields": {
+                      "deliveryId": {
+                        "stringValue": "9M63XDpdzgNdDDQzc7cY"
+                      },
+                      "deliveryNo": {
+                        "integerValue": "1"
+                      },
+                      "deliveryDate": {
+                        "timestampValue": "2026-10-31T04:52:49.764Z"
+                      },
+                      "items": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "mapValue": {
+                                "fields": {
+                                  "partName": {
+                                    "stringValue": "CASUAL SHIRTS"
+                                  },
+                                  "styleNo": {
+                                    "stringValue": "CASUALSHIRTS ASS"
+                                  },
+                                  "color": {
+                                    "stringValue": "-"
+                                  },
+                                  "sleeveType": {
+                                    "stringValue": "Full"
+                                  },
+                                  "sizeQty": {
+                                    "mapValue": {
+                                      "fields": {
+                                        "40": {
+                                          "integerValue": "220"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "total": {
+                                    "integerValue": "220"
+                                  },
+                                  "mrp": {
+                                    "integerValue": "495"
+                                  },
+                                  "mrpBySize": {
+                                    "mapValue": {
+                                      "fields": {
+                                        "40": {
+                                          "integerValue": "495"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "price": {
+                                    "integerValue": "495"
+                                  },
+                                  "amount": {
+                                    "integerValue": "108900"
+                                  },
+                                  "itemIndex": {
+                                    "integerValue": "0"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "totalQty": {
+                        "integerValue": "220"
+                      },
+                      "totalAmount": {
+                        "integerValue": "108900"
+                      },
+                      "boxCount": {
+                        "integerValue": "1"
+                      },
+                      "invoiceId": {
+                        "stringValue": "9M63XDpdzgNdDDQzc7cY"
+                      },
+                      "invoiceNo": {
+                        "stringValue": "TMGC2627-3068"
+                      },
+                      "createdAt": {
+                        "timestampValue": "2026-10-31T04:52:49.764Z"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "updatedAt": {
+            "timestampValue": "2026-10-31T04:52:49.554Z"
+          }
+        },
+        "createTime": "2026-10-31T04:47:10.579699Z",
+        "updateTime": "2026-10-31T04:52:49.603303Z"
+      }
+    ],
+    "lrEntries": [],
+    "salesReturns": [],
+    "salesReturnLedger": null
+  }
+]
