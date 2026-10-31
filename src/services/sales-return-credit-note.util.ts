@@ -61,19 +61,23 @@ export function buildCreditNote(ret: Pick<SalesReturn, 'lines'>, invoicesById: M
     const invItem = invoiceItemFor(invoice, line);
     const gstRate = invItem?.taxRate
       ?? ((Number(invoice?.cgstRate) || 0) + (Number(invoice?.sgstRate) || 0) + (Number(invoice?.igstRate) || 0));
+    const rate = Number(gstRate) || 0;
     const grossAmount = round2(line.qty * line.price);
-    const taxAmount = round2(line.taxAmount);
-    const cgstAmount = isInterState ? 0 : round2(taxAmount / 2);
+    // CGST and SGST are each computed at half the rate — the same way the tax
+    // invoice does (einvoice.service.ts preparePayload) — never by halving a
+    // rounded total tax: an odd paisa would make them differ and the IRP
+    // rejects any line where CGST ≠ SGST (code 2227).
+    const halfTax = round2((line.taxableValue * rate) / 2 / 100);
     return {
       line,
       hsnSac: resolveHsnCode(line.description, invItem?.hsnSac ?? invoice?.items?.[0]?.hsnSac ?? ''),
       uom: invItem?.uom || 'NOS',
-      gstRate: Number(gstRate) || 0,
+      gstRate: rate,
       grossAmount,
       discount: round2(grossAmount - line.taxableValue),
-      cgstAmount,
-      sgstAmount: isInterState ? 0 : round2(taxAmount - cgstAmount),
-      igstAmount: isInterState ? taxAmount : 0,
+      cgstAmount: isInterState ? 0 : halfTax,
+      sgstAmount: isInterState ? 0 : halfTax,
+      igstAmount: isInterState ? round2((line.taxableValue * rate) / 100) : 0,
     };
   });
 

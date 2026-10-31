@@ -102,6 +102,7 @@ export async function downloadSalesReturnPdf(
   creditNote: CreditNote,
   invoices: Invoice[],
   company: CompanySettings | null,
+  mode: 'download' | 'print' = 'download',
 ): Promise<void> {
   const { default: JsPDF } = await import('jspdf');
   const doc = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -375,5 +376,15 @@ export async function downloadSalesReturnPdf(
     doc.text(`Page :  ${p} / ${pages}`, pageW - margin, titleY, { align: 'right' });
   }
 
+  if (mode === 'print') {
+    // Same document, opened in a new tab with the browser's print dialog
+    // raised on load (jsPDF autoPrint) — the Credit Note print with IRN/QR.
+    doc.autoPrint();
+    const url = URL.createObjectURL(doc.output('blob'));
+    const win = window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    if (!win) throw new Error('The print window was blocked — allow pop-ups for this site and try again.');
+    return;
+  }
   doc.save(`Sales_Return_${ret.returnNo}.pdf`);
 }

@@ -573,17 +573,17 @@ export class SalesReturnComponent implements OnInit {
   /** Return id whose PDF / e-Invoice call is in flight — blocks a second click. */
   busyId = signal<string | null>(null);
 
-  async downloadPdf(ret: SalesReturn): Promise<void> {
+  async downloadPdf(ret: SalesReturn, mode: 'download' | 'print' = 'download'): Promise<void> {
     if (this.busyId()) return;
     this.busyId.set(ret.id!);
     try {
       await this.loadingService.run(async () => {
         const latest = (await this.salesReturnService.getReturnOnce(ret.id!)) ?? ret;
         const ctx = await this.salesReturnEInvoiceService.loadContext(latest);
-        await downloadSalesReturnPdf(latest, ctx.creditNote, ctx.invoices, ctx.company);
+        await downloadSalesReturnPdf(latest, ctx.creditNote, ctx.invoices, ctx.company, mode);
       });
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'PDF Failed', text: err?.message ?? 'Could not build the Sales Return PDF.' });
+      Swal.fire({ icon: 'error', title: mode === 'print' ? 'Print Failed' : 'PDF Failed', text: err?.message ?? 'Could not build the Sales Return PDF.' });
     } finally {
       this.busyId.set(null);
     }

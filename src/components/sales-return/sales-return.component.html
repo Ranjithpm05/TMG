@@ -94,6 +94,9 @@
           @if (v.status !== 'Cancelled' && v.eInvoiceStatus !== 'generated') {
             <button (click)="cancelEntry(v)" class="rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50">Cancel Return</button>
           }
+          @if (v.eInvoiceStatus === 'generated') {
+            <button (click)="downloadPdf(v, 'print')" [disabled]="busyId() === v.id" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50">Print Credit Note</button>
+          }
           <button (click)="downloadPdf(v)" [disabled]="busyId() === v.id" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Download PDF</button>
           <button (click)="viewing.set(null)" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800">Close</button>
         </div>
@@ -481,14 +484,17 @@
                         @default { <span class="text-slate-300">–</span> }
                       }
                     </td>
-                    <td class="whitespace-nowrap px-4 py-2.5 text-right">
-                      <div class="flex justify-end gap-1">
+                    <td class="whitespace-nowrap px-4 py-2.5">
+                      <div class="flex gap-1">
                         <button (click)="view(r)" class="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50">View</button>
                         @if (r.status === 'Draft') {
                           <button (click)="editDraft(r)" class="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-700">Update</button>
                           <button (click)="postDraft(r)" class="h-8 rounded-lg bg-emerald-600 px-2.5 text-xs font-bold text-white hover:bg-emerald-700">Post</button>
                         }
                         <button (click)="downloadPdf(r)" [disabled]="busyId() === r.id" class="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">PDF</button>
+                        @if (r.eInvoiceStatus === 'generated') {
+                          <button (click)="downloadPdf(r, 'print')" [disabled]="busyId() === r.id" title="Print Credit Note with IRN & QR" class="h-8 rounded-lg bg-indigo-600 px-2.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50">Print</button>
+                        }
                         @if (r.status === 'Posted' && (!r.eInvoiceStatus || r.eInvoiceStatus === 'failed')) {
                           <button (click)="generateCreditNote(r)" [disabled]="busyId() === r.id" class="h-8 rounded-lg bg-indigo-600 px-2.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50">e-Invoice</button>
                         }
