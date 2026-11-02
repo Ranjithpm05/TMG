@@ -20,6 +20,7 @@ import { collectionData, docData, getDoc, getDocs, runTransaction } from './fire
 import { firstValueFrom, Observable, map } from 'rxjs';
 import type { SalesOrder } from '../models/sales-order.model';
 import type {
+  BulkPickMethod,
   PickList,
   PickListClaimUser,
   PickListLine,
@@ -35,6 +36,7 @@ import { SalesOrderService } from './sales-order.service';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 import { VersionedLinesCache } from './versioned-lines-cache.util';
 import { invalidateRangeCaches, removeFromRangeCaches, syncedRangeQuery } from './range-cache.util';
+import { assertBulkPickAllowed, assertBulkUnpickAllowed, bulkPickListStatus, BulkFlowError, parseBulkQty } from './bulk-flow.engine';
 
 type StoredPickList = PickList & {
   orderSummaries?: PickListOrderSummary[];
@@ -305,6 +307,7 @@ export class PickListService {
       this.getPickListLinesOnce(pickListId),
     ]);
     if (!pickList) throw new Error('picklist_not_found');
+    if (pickList.type === 'bulk') throw new Error('bulk_not_editable');
     this.assertPickListEditable(pickList, currentLines);
 
     const currentById = new Map(currentLines.map((line) => [line.lineId, line]));
@@ -933,7 +936,7 @@ export class PickListService {
     ]);
     if (!pickList) return;
 
-    const summary = this.buildSummary(lines, pickList.type);
+    const summary = this.buildSummary(lines, pickList.type, !!pickList.finalizedAt);
     await updateDoc(doc(this.firestore, `pickLists/${pickListId}`), this.stripUndefined({
       status: summary.status,
       totalRequiredQty: summary.totalRequiredQty,
@@ -1390,6 +1393,259 @@ export class PickListService {
     return result;
   }
 
+  // ─── Bulk Picking (no Sales Order) ─────────────────────────────────────────
+  //
+  // A Bulk Pick List starts empty for one customer; every line is created by
+  // scanning, keyed deterministically by barcode (BLK-<barcode>) so two
+  // devices scanning the same item converge on one line. requiredQty always
+  // equals pickedQty — there's no target to fall short of — which is what
+  // lets PackingListService.buildPackableLines() pack it unchanged. Unlike
+  // the Sales-Order pickers, stock never goes negative here: every scan is
+  // checked against the live inventory doc inside the transaction that
+  // deducts it (assertBulkPickAllowed).
+
+  /** The customer's Bulk Pick List still being picked (not yet completed), if any. */
+  async getOpenBulkPickListForClient(clientId: string): Promise<PickList | null> {
+    if (!clientId) return null;
+    const snap = await getDocs(query(this.plRef, where('type', '==', 'bulk'), where('clientId', '==', clientId)));
+    const open = snap.docs
+      .map((docSnap) => this.normalizePickList({ id: docSnap.id, ...docSnap.data() }))
+      .filter((pickList) => !pickList.finalizedAt);
+    return open[0] ?? null;
+  }
+
+  async createBulkPickList(input: {
+    clientId: string;
+    clientName: string;
+    method: BulkPickMethod;
+    remarks?: string;
+  }): Promise<string> {
+    if (!input.clientId) throw new BulkFlowError('client_required', 'Select a customer to start Bulk Picking.');
+    // One open Bulk Pick List per customer — a second one would split the
+    // same customer's goods across two lists for no reason.
+    const existing = await this.getOpenBulkPickListForClient(input.clientId);
+    if (existing) throw new BulkFlowError('bulk_open_exists', `${existing.pickListNo} is already open for this customer — continue that one.`);
+
+    const pickListDoc = doc(this.plRef);
+    const batch = writeBatch(this.firestore);
+    batch.set(pickListDoc, this.stripUndefined({
+      pickListNo: `BPL-${Date.now()}`,
+      type: 'bulk',
+      bulkPickMethod: input.method,
+      salesOrderIds: [],
+      salesNos: [],
+      clientId: input.clientId,
+      clientName: input.clientName,
+      inventoryReserved: false,
+      legacyPickingPending: false,
+      remarks: input.remarks,
+      status: 'Draft',
+      totalRequiredQty: 0,
+      totalPickedQty: 0,
+      totalPendingQty: 0,
+      totalAdditionalPickedQty: 0,
+      totalPackedIntoPackingListsQty: 0,
+      pickableLineCount: 0,
+      completedLineCount: 0,
+      orderSummaries: [],
+      totalRemainingQty: 0,
+      pickedByLineKey: {},
+      partGroups: [],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    await batch.commit();
+    this.invalidatePickListsCache();
+    return pickListDoc.id;
+  }
+
+  /**
+   * Adds `qty` units of `barcode` to a Bulk Pick List — 1 per scan for the
+   * "Scan All Items" method, the typed quantity for "Scan + Quantity".
+   * Validates the barcode against Design Master and the quantity against
+   * live stock, then deducts stock, upserts the line and bumps the list's
+   * aggregates in one transaction.
+   */
+  async processBulkScan(pickListId: string, barcode: string, qtyInput: number, user: PickListClaimUser): Promise<{ line: PickListLine; pickList: PickList }> {
+    const trimmedBarcode = barcode.trim();
+    if (!trimmedBarcode) throw new BulkFlowError('barcode_not_found', 'Scan or enter a barcode.');
+    const qty = parseBulkQty(qtyInput);
+
+    const lineId = `BLK-${this.sanitizeLineIdPart(trimmedBarcode)}`;
+    const lineRef = this.lineDoc(pickListId, lineId);
+    const pickListRef = doc(this.firestore, `pickLists/${pickListId}`);
+
+    // Identity + inventory doc are resolved outside the transaction (they
+    // need queries); the transaction re-reads the inventory doc itself, so
+    // the stock check is never against a stale value.
+    const existingLineSnap = await getDoc(lineRef);
+    const existingLine = existingLineSnap.exists() ? this.normalizeLine({ lineId, ...existingLineSnap.data() }) : null;
+    const designMatch = existingLine ? null : await this.designService.findDesignSizeByBarcode(trimmedBarcode);
+    if (!existingLine && !designMatch) throw new BulkFlowError('barcode_not_found', `Barcode ${trimmedBarcode} is not defined in Design Master.`);
+    const inventoryId = existingLine?.inventoryId
+      || (await this.inventoryService.getInventoryByBarcodes([trimmedBarcode]))[0]?.id;
+    if (!inventoryId) throw new BulkFlowError('no_stock_record', 'This item has no stock in Inventory (never received through Goods Inward).');
+    const inventoryRef = doc(this.firestore, `inventory/${inventoryId}`);
+
+    let patchedInventoryItem: InventoryItem | null = null;
+    let patchedPickList: PickList | null = null;
+
+    const result = await runTransaction(this.firestore, async (transaction) => {
+      const [pickListSnap, lineSnap, inventorySnap] = await Promise.all([
+        transaction.get(pickListRef),
+        transaction.get(lineRef),
+        transaction.get(inventoryRef),
+      ]);
+      if (!pickListSnap.exists()) throw new BulkFlowError('picklist_not_found', 'This Bulk Pick List no longer exists.');
+      const pickList = this.normalizePickList({ id: pickListSnap.id, ...pickListSnap.data() });
+      const currentStock = inventorySnap.exists() ? Number(inventorySnap.data()?.['currentStock']) || 0 : null;
+      assertBulkPickAllowed({ pickList, qty, currentStock });
+
+      const now = Date.now();
+      const liveLine = lineSnap.exists() ? this.normalizeLine({ lineId, ...lineSnap.data() }) : null;
+      const pickedQty = (liveLine?.pickedQty ?? 0) + qty;
+      const line = this.normalizeLine({
+        ...(liveLine ?? {
+          lineId,
+          salesOrderId: '',
+          salesNo: '',
+          clientId: pickList.clientId,
+          clientName: pickList.clientName,
+          designId: designMatch?.design.id ?? '',
+          styleNo: designMatch?.design.styleNo ?? '',
+          color: designMatch?.design.color ?? '',
+          group: designMatch?.design.group ?? '',
+          size: designMatch?.sizeEntry.size ?? '',
+          sleeveType: designMatch?.sizeEntry.sleeveType ?? undefined,
+          barcode: trimmedBarcode,
+          orderedQty: 0,
+          pendingQty: 0,
+          sortOrder: (pickList.pickableLineCount ?? 0),
+        }),
+        inventoryId,
+        requiredQty: pickedQty,
+        pickedQty,
+        remainingQty: 0,
+        balanceQty: 0,
+        status: 'completed',
+        completedAt: now,
+        completedByUserId: user.id,
+        completedByUsername: user.username,
+      });
+
+      transaction.set(lineRef, this.stripUndefined({
+        ...line,
+        createdAt: liveLine ? (lineSnap.data() as any)?.createdAt ?? serverTimestamp() : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+      transaction.update(inventoryRef, { currentStock: currentStock! - qty, updatedAt: serverTimestamp() });
+      patchedInventoryItem = { id: inventoryId, ...(inventorySnap.data() as any), currentStock: currentStock! - qty } as InventoryItem;
+
+      const lineKey = `||${line.styleNo}||${line.color}||${String(line.size)}||${line.sleeveType ?? ''}`;
+      const group = String(line.group ?? '').trim() || 'General';
+      const nextTotal = (pickList.totalPickedQty ?? 0) + qty;
+      const nextLineCount = (pickList.pickableLineCount ?? 0) + (liveLine ? 0 : 1);
+      const aggregates = {
+        totalRequiredQty: nextTotal,
+        totalPickedQty: nextTotal,
+        pickableLineCount: nextLineCount,
+        completedLineCount: nextLineCount,
+        pickedByLineKey: { ...(pickList.pickedByLineKey ?? {}), [lineKey]: ((pickList.pickedByLineKey ?? {})[lineKey] ?? 0) + qty },
+        partGroups: (pickList.partGroups ?? []).includes(group) ? pickList.partGroups ?? [] : [...(pickList.partGroups ?? []), group],
+        status: bulkPickListStatus(false, nextTotal, pickList.totalPackedIntoPackingListsQty ?? 0),
+      };
+      transaction.update(pickListRef, { ...aggregates, updatedAt: serverTimestamp() });
+      patchedPickList = this.normalizePickList({ ...pickList, ...aggregates });
+      return { line, pickList: patchedPickList };
+    });
+
+    if (patchedInventoryItem) this.inventoryService.patchInventoryItem(patchedInventoryItem);
+    if (patchedPickList) this.patchPickListInCache(patchedPickList);
+    return result;
+  }
+
+  /** Takes `qty` picked units of one bulk line back off the list and returns them to stock. */
+  async removeBulkUnits(pickListId: string, lineId: string, qtyInput: number): Promise<PickList> {
+    const qty = parseBulkQty(qtyInput);
+    const lineRef = this.lineDoc(pickListId, lineId);
+    const pickListRef = doc(this.firestore, `pickLists/${pickListId}`);
+
+    let patchedInventoryItem: InventoryItem | null = null;
+    const pickList = await runTransaction(this.firestore, async (transaction) => {
+      const [pickListSnap, lineSnap] = await Promise.all([transaction.get(pickListRef), transaction.get(lineRef)]);
+      if (!pickListSnap.exists()) throw new BulkFlowError('picklist_not_found', 'This Bulk Pick List no longer exists.');
+      if (!lineSnap.exists()) throw new BulkFlowError('line_not_found', 'This item is no longer on the list.');
+      const pickList = this.normalizePickList({ id: pickListSnap.id, ...pickListSnap.data() });
+      if (pickList.type !== 'bulk') throw new BulkFlowError('not_bulk', 'This is not a Bulk Pick List.');
+      const line = this.normalizeLine({ lineId, ...lineSnap.data() });
+      assertBulkUnpickAllowed({ pickList, pickedQty: line.pickedQty, packedIntoPackingListsQty: line.packedIntoPackingListsQty ?? 0, qty });
+
+      const inventoryRef = line.inventoryId ? doc(this.firestore, `inventory/${line.inventoryId}`) : null;
+      const inventorySnap = inventoryRef ? await transaction.get(inventoryRef) : null;
+
+      const pickedQty = line.pickedQty - qty;
+      if (pickedQty <= 0) transaction.delete(lineRef);
+      else transaction.update(lineRef, { pickedQty, requiredQty: pickedQty, remainingQty: 0, balanceQty: 0, updatedAt: serverTimestamp() });
+
+      if (inventoryRef && inventorySnap?.exists()) {
+        const nextStock = (Number(inventorySnap.data()?.['currentStock']) || 0) + qty;
+        transaction.update(inventoryRef, { currentStock: nextStock, updatedAt: serverTimestamp() });
+        patchedInventoryItem = { id: inventoryRef.id, ...(inventorySnap.data() as any), currentStock: nextStock } as InventoryItem;
+      }
+
+      const lineKey = `||${line.styleNo}||${line.color}||${String(line.size)}||${line.sleeveType ?? ''}`;
+      const pickedByLineKey = { ...(pickList.pickedByLineKey ?? {}) };
+      const keyQty = (pickedByLineKey[lineKey] ?? 0) - qty;
+      if (keyQty > 0) pickedByLineKey[lineKey] = keyQty; else delete pickedByLineKey[lineKey];
+      const nextTotal = Math.max(0, (pickList.totalPickedQty ?? 0) - qty);
+      const nextLineCount = Math.max(0, (pickList.pickableLineCount ?? 0) - (pickedQty <= 0 ? 1 : 0));
+      const aggregates = {
+        totalRequiredQty: nextTotal,
+        totalPickedQty: nextTotal,
+        pickableLineCount: nextLineCount,
+        completedLineCount: nextLineCount,
+        pickedByLineKey,
+        status: bulkPickListStatus(false, nextTotal, pickList.totalPackedIntoPackingListsQty ?? 0),
+      };
+      transaction.update(pickListRef, { ...aggregates, updatedAt: serverTimestamp() });
+      return this.normalizePickList({ ...pickList, ...aggregates });
+    });
+
+    if (patchedInventoryItem) this.inventoryService.patchInventoryItem(patchedInventoryItem);
+    this.patchPickListInCache(pickList);
+    return pickList;
+  }
+
+  /**
+   * "Complete Bulk Picking": locks the list against further scans and makes
+   * it eligible for Bulk Packing. Done in a transaction on the list doc so a
+   * scan committing at the same moment either lands before the lock (and is
+   * counted) or is rejected by assertBulkPickAllowed — never lost.
+   */
+  async finalizeBulkPickList(pickListId: string, user: PickListClaimUser): Promise<PickList> {
+    const pickListRef = doc(this.firestore, `pickLists/${pickListId}`);
+    const pickList = await runTransaction(this.firestore, async (transaction) => {
+      const snap = await transaction.get(pickListRef);
+      if (!snap.exists()) throw new BulkFlowError('picklist_not_found', 'This Bulk Pick List no longer exists.');
+      const pickList = this.normalizePickList({ id: snap.id, ...snap.data() });
+      if (pickList.type !== 'bulk') throw new BulkFlowError('not_bulk', 'This is not a Bulk Pick List.');
+      if (pickList.finalizedAt) throw new BulkFlowError('bulk_completed', 'Bulk Picking is already completed for this list.');
+      if ((pickList.totalPickedQty ?? 0) <= 0) throw new BulkFlowError('nothing_picked', 'Scan at least one item before completing Bulk Picking.');
+
+      const now = Date.now();
+      const patch = {
+        status: bulkPickListStatus(true, pickList.totalPickedQty ?? 0, pickList.totalPackedIntoPackingListsQty ?? 0),
+        finalizedAt: now,
+        finalizedByUserId: user.id,
+        finalizedByUsername: user.username,
+      };
+      transaction.update(pickListRef, { ...patch, updatedAt: serverTimestamp() });
+      return this.normalizePickList({ ...pickList, ...patch });
+    });
+    this.invalidatePickListsCache();
+    return pickList;
+  }
+
   async syncSalesOrderShipment(_pickListId: string, salesOrderId: string): Promise<void> {
     if (!salesOrderId) return;
 
@@ -1579,6 +1835,8 @@ export class PickListService {
         ? raw.partGroups.map((g: any) => String(g))
         : this.buildPartGroups(items),
       remarks: raw?.remarks ?? '',
+      bulkPickMethod: raw?.bulkPickMethod === 'scan_qty' ? 'scan_qty' : raw?.bulkPickMethod === 'scan_all' ? 'scan_all' : undefined,
+      bulkPackingListId: raw?.bulkPackingListId ? String(raw.bulkPackingListId) : undefined,
       finalizedAt: raw?.finalizedAt != null ? Number(raw.finalizedAt) || 0 : undefined,
       finalizedByUserId: raw?.finalizedByUserId,
       finalizedByUsername: raw?.finalizedByUsername,
@@ -1693,7 +1951,7 @@ export class PickListService {
     return line.claimedByUserId === userId;
   }
 
-  private buildSummary(lines: PickListLine[], type?: PickListType) {
+  private buildSummary(lines: PickListLine[], type?: PickListType, finalized = false) {
     const normalizedLines = lines.map((line) => this.normalizeLine(line));
     const orderSummaries = this.buildOrderSummaries(normalizedLines);
     const pickableLines = normalizedLines.filter((line) => this.isSummaryPickable(line));
@@ -1721,7 +1979,7 @@ export class PickListService {
       totalRemainingQty,
       pickableLineCount,
       completedLineCount,
-      status: this.computeEffectiveStatus(type, totalRequiredQty, totalPickedQty, totalPackedIntoPackingListsQty, pickableLineCount, completedLineCount),
+      status: this.computeEffectiveStatus(type, totalRequiredQty, totalPickedQty, totalPackedIntoPackingListsQty, pickableLineCount, completedLineCount, finalized),
       orderSummaries,
       pickedByLineKey: this.buildPickedByLineKey(normalizedLines),
       partGroups: this.buildPartGroups(normalizedLines),
@@ -1819,14 +2077,19 @@ export class PickListService {
   // Pending/Draft "nothing happened yet" states). Other pick list types keep
   // the original picking-only status, since they don't support multi-batch
   // packing today.
+  // Bulk lists have their own lifecycle (see bulkPickListStatus): every line's
+  // requiredQty tracks its pickedQty, so the picking-only status would read
+  // 'Completed' after the very first scan.
   private computeEffectiveStatus(
     type: PickListType | undefined,
     totalRequiredQty: number,
     totalPickedQty: number,
     totalPackedIntoPackingListsQty: number,
     pickableLineCount: number,
-    completedLineCount: number
+    completedLineCount: number,
+    finalized = false
   ): PickList['status'] {
+    if (type === 'bulk') return bulkPickListStatus(finalized, totalPickedQty, totalPackedIntoPackingListsQty);
     const pickingStatus = this.computePickListStatus(totalRequiredQty, totalPickedQty, pickableLineCount, completedLineCount);
     if (type !== 'party') return pickingStatus;
     if (pickingStatus === 'Pending' || pickingStatus === 'Draft') return pickingStatus;

@@ -27,6 +27,7 @@ import {
   PackingListLineSource,
   PackingMode,
   PackingPartSummary,
+  PackingType,
   PackingPartyProgress,
   PackingScanResult,
 } from '../models/packing-list.model';
@@ -35,6 +36,7 @@ import { PickListService } from './pick-list.service';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 import { VersionedLinesCache } from './versioned-lines-cache.util';
 import { invalidateRangeCaches, removeFromRangeCaches, syncedRangeQuery } from './range-cache.util';
+import { BulkFlowError, validateBulkPackEntries } from './bulk-flow.engine';
 
 @Injectable({ providedIn: 'root' })
 export class PackingListService {
@@ -221,6 +223,9 @@ export class PackingListService {
     clientId: string;
     clientName: string;
     packingMode: PackingMode;
+    packingType?: PackingType;
+    // Pre-claimed doc id (createBulkPackingList); auto-generated otherwise.
+    packingListId?: string;
     remarks?: string;
     lines: Array<PickListLine & { sourcePickListId: string }>;
   }): Promise<string> {
@@ -233,7 +238,7 @@ export class PackingListService {
     const pickListNos = [...new Set(input.pickListNos.filter(Boolean))];
 
     const summary = this.buildSummary(normalizedLines, [], input.clientName);
-    const packingListDoc = doc(this.packingRef);
+    const packingListDoc = input.packingListId ? doc(this.packingRef, input.packingListId) : doc(this.packingRef);
 
     // How much of each source Pick List line's picked quantity is being
     // claimed into this Packing List, keyed by (pickListId, lineId).
@@ -262,6 +267,7 @@ export class PackingListService {
         clientId: input.clientId,
         clientName: input.clientName,
         packingMode: input.packingMode,
+        packingType: input.packingType === 'bulk' ? 'bulk' : undefined,
         remarks: input.remarks,
         status: summary.status,
         totalRequiredQty: summary.totalRequiredQty,
@@ -614,6 +620,9 @@ export class PackingListService {
       if ((packingList.dcGeneratedKeys ?? []).length > 0 || packingList.invoiceId) {
         throw new Error('dc_already_generated');
       }
+      // Bulk lines mirror exactly what Bulk Picking took out of stock;
+      // adding/editing them here would pack units no picking ever deducted.
+      if (packingList.packingType === 'bulk') throw new Error('bulk_lines_locked');
 
       const nextStyleNo = (changes.styleNo ?? liveLine.styleNo).trim();
       const nextSize = (changes.size ?? liveLine.size).trim();
@@ -824,6 +833,9 @@ export class PackingListService {
       if ((packingList.dcGeneratedKeys ?? []).length > 0 || packingList.invoiceId) {
         throw new Error('dc_already_generated');
       }
+      // Bulk lines mirror exactly what Bulk Picking took out of stock;
+      // adding/editing them here would pack units no picking ever deducted.
+      if (packingList.packingType === 'bulk') throw new Error('bulk_lines_locked');
 
       // Stock is checked (and, below, decremented — possibly negative) but
       // does not gate the add: the item must be allowed in regardless of
@@ -927,6 +939,9 @@ export class PackingListService {
       if ((packingList.dcGeneratedKeys ?? []).length > 0 || packingList.invoiceId) {
         throw new Error('dc_already_generated');
       }
+      // Bulk lines mirror exactly what Bulk Picking took out of stock;
+      // adding/editing them here would pack units no picking ever deducted.
+      if (packingList.packingType === 'bulk') throw new Error('bulk_lines_locked');
 
       let invSnap: DocumentSnapshot | null = null;
       if (packingList.stockDeducted && liveLine.packedQty > 0 && liveLine.inventoryId) {
@@ -1120,6 +1135,150 @@ export class PackingListService {
     });
   }
 
+  /**
+   * Generates the one Bulk Packing List for a completed Bulk Pick List —
+   * idempotent: the Pick List claims the new packing list's id in a
+   * transaction first, so a double click or a second tab returns the same
+   * Packing List instead of packing the same picked units twice. Bulk
+   * Picking is locked once completed, so there is never a "next batch".
+   */
+  async createBulkPackingList(pickListId: string): Promise<string> {
+    const pickListRef = doc(this.firestore, `pickLists/${pickListId}`);
+    const claimed = await runTransaction(this.firestore, async (transaction) => {
+      const snap = await transaction.get(pickListRef);
+      if (!snap.exists()) throw new BulkFlowError('picklist_not_found', 'This Bulk Pick List no longer exists.');
+      const data = snap.data() as any;
+      if (data?.type !== 'bulk') throw new BulkFlowError('not_bulk', 'This is not a Bulk Pick List.');
+      if (!data?.finalizedAt) throw new BulkFlowError('bulk_not_completed', 'Complete Bulk Picking before starting Bulk Packing.');
+      const base = { pickListNo: String(data?.pickListNo ?? ''), clientId: String(data?.clientId ?? ''), clientName: String(data?.clientName ?? '') };
+      const existingId = data?.bulkPackingListId ? String(data.bulkPackingListId) : '';
+      if (existingId) return { ...base, id: existingId, isNew: false, claimedAt: Number(data?.bulkPackingClaimedAt) || 0 };
+      const id = doc(this.packingRef).id;
+      const claimedAt = Date.now();
+      transaction.update(pickListRef, { bulkPackingListId: id, bulkPackingClaimedAt: claimedAt, updatedAt: serverTimestamp() });
+      return { ...base, id, isNew: true, claimedAt };
+    });
+
+    // Only the caller that made the claim creates the list. Anyone else
+    // reuses it once it exists; a claim older than a minute whose list never
+    // appeared (creator closed the tab mid-way) is safe to complete here.
+    if (!claimed.isNew) {
+      if ((await getDoc(doc(this.packingRef, claimed.id))).exists()) return claimed.id;
+      if (Date.now() - claimed.claimedAt < 60_000) {
+        throw new BulkFlowError('bulk_packing_in_progress', 'The Bulk Packing List is being generated right now — try again in a moment.');
+      }
+    }
+
+    const lines = (await this.pickListService.getPickListLinesOnce(pickListId))
+      .filter((line) => !!line.barcode && (line.pickedQty || 0) - (line.packedIntoPackingListsQty || 0) > 0)
+      .map((line) => ({ ...line, sourcePickListId: pickListId }));
+    if (!lines.length) throw new BulkFlowError('no_packable_lines', 'Every picked item on this list has already been packed.');
+
+    return this.createGeneratedPackingList({
+      packingListId: claimed.id,
+      packingListNo: `BPK-${Date.now()}`,
+      pickListIds: [pickListId],
+      pickListNos: [claimed.pickListNo],
+      salesOrderIds: [],
+      salesNos: [],
+      clientId: claimed.clientId,
+      clientName: claimed.clientName,
+      packingMode: 'customer',
+      packingType: 'bulk',
+      lines,
+    });
+  }
+
+  /**
+   * Bulk Packing: packs item-wise quantities into one carton in a single
+   * transaction — every line re-read and re-validated (no over-packing past
+   * its picked qty) before anything is written, so a concurrent scan or a
+   * double-submit can't push a line past its picked quantity. Large
+   * submissions are split into transactions of BULK_PACK_CHUNK lines
+   * (Firestore's per-transaction write cap); each chunk is all-or-nothing.
+   * No inventory is touched: Bulk Picking already deducted it (see
+   * deductInventoryOnCompletion).
+   */
+  async bulkPackLines(
+    packingListId: string,
+    cartonNo: string,
+    entries: Array<{ lineId: string; qty: number }>,
+  ): Promise<PackingList> {
+    const trimmedCartonNo = cartonNo.trim();
+    if (!trimmedCartonNo) throw new BulkFlowError('carton_required', 'Enter a carton / box number first.');
+    const merged = validateBulkPackEntries(
+      entries.map((e) => ({ lineId: e.lineId, requiredQty: Number.MAX_SAFE_INTEGER, packedQty: 0 })),
+      entries,
+    );
+
+    const BULK_PACK_CHUNK = 200;
+    let latest: PackingList | null = null;
+    for (let i = 0; i < merged.length; i += BULK_PACK_CHUNK) {
+      const chunk = merged.slice(i, i + BULK_PACK_CHUNK);
+      latest = await runTransaction(this.firestore, async (transaction) => {
+        const packingListRef = doc(this.firestore, `packingLists/${packingListId}`);
+        const [packingListSnap, ...lineSnaps] = await Promise.all([
+          transaction.get(packingListRef),
+          ...chunk.map((entry) => transaction.get(this.lineDoc(packingListId, entry.lineId))),
+        ]);
+        if (!packingListSnap.exists()) throw new BulkFlowError('packinglist_not_found', 'This Packing List no longer exists.');
+        const packingList = this.normalizePackingList({ id: packingListSnap.id, ...packingListSnap.data() });
+        if (packingList.packingType !== 'bulk') throw new BulkFlowError('not_bulk', 'Bulk Packing is only for Packing Lists generated from a Bulk Pick List.');
+        if ((packingList.dcGeneratedKeys ?? []).length > 0 || packingList.invoiceId) {
+          throw new BulkFlowError('dc_already_generated', 'A DC has already been generated for this Packing List.');
+        }
+
+        const liveLines = lineSnaps.map((snap, idx) => {
+          if (!snap.exists()) throw new BulkFlowError('line_not_found', 'An item in this submission is no longer on the Packing List.');
+          return this.normalizeLine({ lineId: chunk[idx].lineId, ...snap.data() });
+        });
+        validateBulkPackEntries(liveLines, chunk);
+
+        const now = Date.now();
+        let cartons = packingList.cartons ?? [];
+        let partSummaries = packingList.partSummaries ?? [];
+        let partyProgress = packingList.partyProgress ?? [];
+        let totalPackedQty = packingList.totalPackedQty || 0;
+        let completedLineCount = packingList.completedLineCount || 0;
+
+        chunk.forEach((entry, idx) => {
+          const liveLine = liveLines[idx];
+          const packedQty = liveLine.packedQty + entry.qty;
+          const remainingQty = Math.max(0, liveLine.requiredQty - packedQty);
+          const updatedLine = this.normalizeLine({
+            ...liveLine,
+            packedQty,
+            remainingQty,
+            status: remainingQty === 0 ? 'completed' : 'in_progress',
+            lastCartonNo: trimmedCartonNo,
+            updatedAt: now,
+          });
+          cartons = this.upsertCartons(cartons, updatedLine, trimmedCartonNo, entry.qty, now).cartons;
+          partSummaries = this.applyPartSummaryDelta(partSummaries, updatedLine.partName, entry.qty);
+          partyProgress = this.applyPartyProgressDelta(partyProgress, updatedLine, entry.qty, packingList.clientName);
+          totalPackedQty += entry.qty;
+          if (liveLine.remainingQty > 0 && remainingQty === 0) completedLineCount += 1;
+          transaction.update(this.lineDoc(packingListId, entry.lineId), this.stripUndefined({
+            packedQty,
+            remainingQty,
+            status: updatedLine.status,
+            lastCartonNo: trimmedCartonNo,
+            updatedAt: serverTimestamp(),
+          }));
+        });
+
+        totalPackedQty = Math.min(totalPackedQty, packingList.totalRequiredQty || 0);
+        const status = this.computePackingListStatus(packingList.totalRequiredQty || 0, totalPackedQty, packingList.lineCount || 0, completedLineCount);
+        const aggregates = { totalPackedQty, completedLineCount, cartonCount: cartons.length, status, partSummaries, partyProgress, cartons };
+        transaction.update(packingListRef, this.stripUndefined({ ...aggregates, updatedAt: serverTimestamp() }));
+        return this.normalizePackingList({ ...packingList, ...aggregates });
+      });
+    }
+
+    this.patchPackingListInCache(latest!);
+    return latest!;
+  }
+
   async recalculatePackingListStatus(packingListId: string): Promise<void> {
     const [packingList, lines] = await Promise.all([
       this.getPackingListByIdOnce(packingListId),
@@ -1219,6 +1378,12 @@ export class PackingListService {
       ]);
 
       if (!plSnap.exists() || plSnap.data()?.['stockDeducted'] === true) return false;
+      // Bulk: stock already left inventory unit-by-unit at Bulk Picking
+      // (PickListService.processBulkScan) — deducting again here would
+      // count every packed piece twice. stockDeducted stays false, so a
+      // "Delete DC only" correctly returns nothing and a regenerated DC
+      // deducts nothing either.
+      if (plSnap.data()?.['packingType'] === 'bulk') return false;
 
       for (let i = 0; i < resolvedList.length; i++) {
         const invSnap = invSnaps[i];
@@ -1490,6 +1655,7 @@ export class PackingListService {
       clientId: String(raw?.clientId ?? ''),
       clientName: String(raw?.clientName ?? ''),
       packingMode,
+      packingType: raw?.packingType === 'bulk' ? 'bulk' : 'normal',
       status: raw?.status ?? summary.status,
       totalRequiredQty: Number(raw?.totalRequiredQty) || summary.totalRequiredQty,
       totalPackedQty: Number(raw?.totalPackedQty) || summary.totalPackedQty,

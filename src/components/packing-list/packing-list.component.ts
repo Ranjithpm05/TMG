@@ -32,10 +32,23 @@ import { InventoryService } from '../../services/inventory.service';
 import { DesignService } from '../../services/design.service';
 import { LoadingService } from '../../services/loading.service';
 import { priceAfterMargin } from '../../services/pricing.util';
+import {
+  BulkFlowError,
+  DcPricingInput,
+  dcDiscountSummary,
+  dcHasPricingOverride,
+  dcPricingFields,
+  dcUnitPrice,
+  invoiceUnitPrice,
+  parseDcPricingInput,
+  resolveInvoiceDiscountPct,
+} from '../../services/bulk-flow.engine';
 import { QzTrayService } from '../../services/qz-tray.service';
 import { getStageBadgeClass, getStageStatusLabel } from '../../services/document-stage.util';
 import { fetchLogoDataUri } from '../../services/company-logo.util';
 import { IncrementalList } from '../../services/incremental-list.util';
+import { BulkPackingComponent } from './bulk-packing.component';
+import { ScreenNavigationService } from '../../services/screen-navigation.service';
 import {
   DC_DELIVERY_STATUS_LABEL,
   DCDeliverySummary,
@@ -69,7 +82,7 @@ import {
   saveMrpLabelSettings,
 } from '../../services/mrp-label-zpl.util';
 
-type ViewMode = 'list' | 'view' | 'live-pack' | 'combine' | 'multi-invoice' | 'box-label-print' | 'mrp-label-print';
+type ViewMode = 'list' | 'view' | 'live-pack' | 'bulk-pack' | 'combine' | 'multi-invoice' | 'box-label-print' | 'mrp-label-print';
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', '6XL', 'Free Size'];
 
@@ -87,7 +100,7 @@ interface PendingDelivery {
 @Component({
   selector: 'app-packing-list',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, BulkPackingComponent],
   templateUrl: './packing-list.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -106,6 +119,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
   private loadingService = inject(LoadingService);
   private qzTrayService = inject(QzTrayService);
   private sanitizer = inject(DomSanitizer);
+  private screenNavigation = inject(ScreenNavigationService);
   private subscriptions: Subscription[] = [];
 
   // ─── Navigation ────────────────────────────────────────────────────────────
@@ -289,7 +303,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   // Same eligibility as "Ready to Pack" — a Pick List with existing Packing
   // Lists can still be combined again for its remaining un-packed quantity.
-  combineEligiblePickLists = computed(() => this.completedPickLists());
+  // Bulk Pick Lists are excluded: their Packing List must stay all-bulk so
+  // packing completion never deducts stock that Bulk Picking already took.
+  combineEligiblePickLists = computed(() => this.completedPickLists().filter((pl) => pl.type !== 'bulk'));
 
   combineEligibleCustomers = computed((): { clientId: string; clientName: string }[] => {
     const map = new Map<string, string>();
@@ -661,6 +677,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
     this.subscriptions.push(
       this.transportService.getTransports().subscribe({ next: (v) => this.transports.set(v) })
     );
+
+    // Hand-off from Bulk Picking's "Start Bulk Packing".
+    const nav = this.screenNavigation.consume('packingList');
+    if (nav?.intent === 'bulk-pack' && nav.packingListId) {
+      this.listTab.set('packing');
+      this.bulkPackingListId.set(nav.packingListId);
+      this.mode.set('bulk-pack');
+    }
   }
 
   // Applies the selected Transport Master record's Name/Address/GST No to
@@ -931,14 +955,24 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const invoiceClient = await this.clientService.getClientForDC(clientId, primaryDc.clientName);
     const marginPct = invoiceClient?.marginPct ?? 0;
     const clientDiscountPct = invoiceClient?.discountPct ?? 0;
+    // See generateInvoice — an Invoice has one Discount %, so DCs whose
+    // effective discounts differ must be invoiced separately.
+    let invoiceDiscountPct: number;
+    try {
+      invoiceDiscountPct = resolveInvoiceDiscountPct(selected, clientDiscountPct);
+    } catch (err: any) {
+      await Swal.fire({ icon: 'error', title: 'Cannot Invoice Together', text: err?.message ?? 'The selected Delivery Challans carry different discounts.' });
+      return;
+    }
+    const discountSource = selected.some(dcHasPricingOverride) ? 'from DC' : 'from Client Master';
 
     const { value: formValues } = await Swal.fire({
       title: 'Invoice Settings',
       html: '<div style="text-align:left;font-size:13px">'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Default HSN/SAC Code (used only if a product isn\'t in the standard list)</label>'
         + '<input id="minv-hsn" class="swal2-input" style="margin:0;width:100%" value="62059090"></div>'
-        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Discount % (from Client Master)</label>'
-        + '<input class="swal2-input" style="margin:0;width:100%;background:#f3f4f6" value="' + clientDiscountPct + '" disabled></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Discount % (' + discountSource + ')</label>'
+        + '<input class="swal2-input" style="margin:0;width:100%;background:#f3f4f6" value="' + invoiceDiscountPct + '" disabled></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Tax Rate % (total GST)</label>'
         + '<input id="minv-tax" type="number" class="swal2-input" style="margin:0;width:100%" value="5"></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Freight (&#x20B9;, added after discount &amp; taxed with the goods)</label>'
@@ -978,7 +1012,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
       if (dcs.some((dc) => !!dc.invoiceNo)) throw new Error('already_has_invoice');
 
       const { taxRate, hsnSac: defaultHsnSac } = formValues;
-      const discountPct = clientDiscountPct;
+      // Re-resolved from the fresh copies — a DC can't change pricing after
+      // generation, but this keeps the billed discount tied to what's stored.
+      const discountPct = resolveInvoiceDiscountPct(dcs, clientDiscountPct);
+      if (discountPct !== invoiceDiscountPct) throw new Error('A selected Delivery Challan changed while this dialog was open — refresh and try again.');
       const halfTax = taxRate / 2;
 
       // Same per-DC-item, per-size-MRP split as the single-DC flow
@@ -992,7 +1029,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         if (qtyByMrp.size === 0) qtyByMrp.set(dcItem.mrp, dcItem.total);
         const hsnSac = resolveHsnCode(dcItem.partName, defaultHsnSac);
         return [...qtyByMrp.entries()].map(([mrp, quantity]) => {
-          const price = priceAfterMargin(mrp, marginPct);
+          const price = invoiceUnitPrice(dc, dcItem, priceAfterMargin(mrp, marginPct));
           const amount = Math.round(quantity * price * 100) / 100;
           return {
             description: dcItem.partName,
@@ -1003,12 +1040,14 @@ export class PackingListComponent implements OnInit, OnDestroy {
         });
       }));
 
-      // Merge identical lines across DCs (same product/style/HSN/MRP/tax)
-      // into one summed row instead of duplicating them — the same item can
-      // legitimately appear on several DCs being consolidated here.
+      // Merge identical lines across DCs (same product/style/HSN/MRP/price/
+      // tax) into one summed row instead of duplicating them — the same item
+      // can legitimately appear on several DCs being consolidated here. Price
+      // is part of the key because a Flat Rate DC bills the same MRP at a
+      // different price (for other DCs price follows MRP, so nothing changes).
       const mergedByKey = new Map<string, typeof rawItems[number]>();
       for (const item of rawItems) {
-        const key = [item.description, item.styleNo ?? '', item.sleeveType ?? '', item.hsnSac, item.mrp, item.taxRate, item.discountPct].join('|');
+        const key = [item.description, item.styleNo ?? '', item.sleeveType ?? '', item.hsnSac, item.mrp, item.price, item.taxRate, item.discountPct].join('|');
         const existing = mergedByKey.get(key);
         if (existing) {
           existing.quantity += item.quantity;
@@ -1181,6 +1220,10 @@ export class PackingListComponent implements OnInit, OnDestroy {
 
   async initiateGenerate(pickList: PickList) {
     if (!pickList.id) return;
+    if (pickList.type === 'bulk') {
+      await this.generateBulkPackingList(pickList);
+      return;
+    }
 
     // A Pick List can be packed in several batches, so existing Packing
     // Lists (shown separately via getPackingListsForPickList in the
@@ -1372,6 +1415,61 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const firstPending = groups.findIndex((g) => g.lines.some((l) => l.status !== 'completed'));
     this.currentCustomerIndex.set(firstPending >= 0 ? firstPending : 0);
     this.scannerMessage.set('Scan carton box no to begin packing.');
+  }
+
+  // ─── Bulk Packing ──────────────────────────────────────────────────────────
+
+  bulkPackingListId = signal<string | null>(null);
+
+  // A Bulk Pick List has exactly one Bulk Packing List (one customer, and
+  // picking is locked once completed) — created idempotently by the service.
+  private async generateBulkPackingList(pickList: PickList) {
+    if (this.isGenerating()) return;
+    const result = await Swal.fire({
+      icon: 'question',
+      title: 'Generate Bulk Packing List?',
+      html: `<p style="font-size:13px"><strong>${pickList.pickListNo}</strong> · ${pickList.clientName}<br>${this.getRemainingToPackQty(pickList)} picked piece(s) to pack.</p>`,
+      showCancelButton: true,
+      confirmButtonText: 'Generate & Start Bulk Packing',
+      confirmButtonColor: '#ea580c',
+    });
+    if (!result.isConfirmed) return;
+
+    this.isGenerating.set(true);
+    try {
+      const packingListId = await this.packingListService.createBulkPackingList(pickList.id!);
+      await this.refreshPickListsAndPackingLists();
+      this.listTab.set('packing');
+      this.bulkPackingListId.set(packingListId);
+      this.mode.set('bulk-pack');
+    } catch (err: any) {
+      await Swal.fire({ icon: 'error', title: 'Generation Failed', text: err instanceof BulkFlowError ? err.message : err?.message ?? 'Unable to generate the Bulk Packing List.' });
+    } finally {
+      this.isGenerating.set(false);
+    }
+  }
+
+  openBulkPacking(packingList: PackingList) {
+    if (!packingList.id) return;
+    this.bulkPackingListId.set(packingList.id);
+    this.mode.set('bulk-pack');
+  }
+
+  closeBulkPacking() {
+    this.bulkPackingListId.set(null);
+    this.cancel();
+  }
+
+  // Bulk Packing hands off to the regular Packing List view for DC
+  // generation, so the one existing DC flow (dispatch info, duplicate guard,
+  // Flat Rate/Discount, LR, print) is reused unchanged — and its Generate
+  // button stays a direct click, which the print popup needs.
+  async proceedToDCFromBulkPacking(packingListId: string) {
+    const packingList = await this.packingListService.getPackingListByIdOnce(packingListId);
+    this.bulkPackingListId.set(null);
+    if (!packingList) { this.cancel(); return; }
+    await this.refreshPickListsAndPackingLists();
+    await this.openView(packingList);
   }
 
   getLineMrp(line: PackingListLine): number {
@@ -1657,14 +1755,24 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const invoiceClient = await this.clientService.getClientForDC(packingList.clientId, packingList.clientName);
     const marginPct = invoiceClient?.marginPct ?? 0;
     const clientDiscountPct = invoiceClient?.discountPct ?? 0;
+    // DCs generated with a Flat Rate/Discount bill their own discount; all
+    // others keep the Client Master Discount% (resolveInvoiceDiscountPct).
+    let invoiceDiscountPct: number;
+    try {
+      invoiceDiscountPct = resolveInvoiceDiscountPct(dcsToInvoice, clientDiscountPct);
+    } catch (err: any) {
+      await Swal.fire({ icon: 'error', title: 'Cannot Invoice Together', text: err?.message ?? 'The Delivery Challans carry different discounts.' });
+      return;
+    }
+    const discountSource = dcsToInvoice.some(dcHasPricingOverride) ? 'from DC' : 'from Client Master';
 
     const { value: formValues } = await Swal.fire({
       title: 'Invoice Settings',
       html: '<div style="text-align:left;font-size:13px">'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Default HSN/SAC Code (used only if a product isn\'t in the standard list)</label>'
         + '<input id="inv-hsn" class="swal2-input" style="margin:0;width:100%" value="62059090"></div>'
-        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Discount % (from Client Master)</label>'
-        + '<input class="swal2-input" style="margin:0;width:100%;background:#f3f4f6" value="' + clientDiscountPct + '" disabled></div>'
+        + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Discount % (' + discountSource + ')</label>'
+        + '<input class="swal2-input" style="margin:0;width:100%;background:#f3f4f6" value="' + invoiceDiscountPct + '" disabled></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Tax Rate % (total GST)</label>'
         + '<input id="inv-tax" type="number" class="swal2-input" style="margin:0;width:100%" value="5"></div>'
         + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Freight (&#x20B9;, added after discount &amp; taxed with the goods)</label>'
@@ -1698,7 +1806,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     try {
       const loaded = (await this.packingListService.getPackingListByIdOnce(packingList.id)) ?? packingList;
       const { taxRate, hsnSac: defaultHsnSac } = formValues;
-      const discountPct = clientDiscountPct;
+      const discountPct = invoiceDiscountPct;
       const halfTax = taxRate / 2;
 
       // Consolidate every DC on this Packing List into ONE Invoice: items,
@@ -1728,7 +1836,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
         // dialog's HSN field is only a fallback for a product not in it.
         const hsnSac = resolveHsnCode(dcItem.partName, defaultHsnSac);
         return [...qtyByMrp.entries()].map(([mrp, quantity]) => {
-          const price = priceAfterMargin(mrp, marginPct);
+          const price = invoiceUnitPrice(dc, dcItem, priceAfterMargin(mrp, marginPct));
           const amount = Math.round(quantity * price * 100) / 100;
           return {
             description: dcItem.partName,
@@ -3042,6 +3150,21 @@ export class PackingListComponent implements OnInit, OnDestroy {
     // below on any path that ends up not printing.
     const win = window.open('', '_blank', 'width=960,height=820');
 
+    // Bulk: a DC is only issued once Bulk Packing has packed every picked
+    // unit (checked against a fresh read, not the possibly-stale row).
+    if (packingList.packingType === 'bulk') {
+      const fresh = await this.packingListService.getPackingListByIdOnce(packingList.id);
+      if (!fresh || fresh.status !== 'Completed') {
+        win?.close();
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Bulk Packing Not Complete',
+          text: `Packed ${fresh?.totalPackedQty ?? 0} of ${fresh?.totalRequiredQty ?? 0} picked pieces. Finish Bulk Packing before generating the DC.`,
+        });
+        return;
+      }
+    }
+
     const existingDCs = await this.dcService.getDCsByPackingListIdOnce(packingList.id);
 
     // Set only when the user explicitly overrides an existing DC via
@@ -3075,6 +3198,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
       if (!result.isDenied) { win?.close(); return; }
       allowDuplicate = true;
     }
+
+    const pricing = await this.promptDcPricing(packingList);
+    if (!pricing) { win?.close(); return; }
 
     // LR (Lorry Receipt) capture — only asked when a transporter is actually
     // set (self/door delivery has no LR to record), and always skippable:
@@ -3145,7 +3271,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
           : (loaded.salesNos ?? []);
         const client = await this.clientService.getClientForDC(loaded.clientId, loaded.clientName);
         const orderNo = await this.buildOrderNoFromSalesOrderIds(salesOrderIds);
-        const dc = await this.createDCForPackingList(loaded, lines, client, salesOrderIds, salesNos, orderNo, loaded.clientName, agentName, transport, transportId, transportAddress, transportGstNo, allowDuplicate);
+        const dc = await this.createDCForPackingList(loaded, lines, client, salesOrderIds, salesNos, orderNo, loaded.clientName, agentName, transport, transportId, transportAddress, transportGstNo, allowDuplicate, pricing);
         const generatedDCs: DeliveryChallan[] = [dc];
 
         // The DC is already saved here — an LR save failure must not be
@@ -3188,6 +3314,39 @@ export class PackingListComponent implements OnInit, OnDestroy {
     } finally {
       this.isGeneratingDC.set(false);
     }
+  }
+
+  // Optional Flat Rate / Discount % for the DC about to be generated. Both
+  // blank (the default) = the existing MRP − Margin% pricing with no DC
+  // discount. Returns null only when the user cancels DC generation.
+  private async promptDcPricing(packingList: PackingList): Promise<DcPricingInput | null> {
+    const label = (text: string) => `<label style="display:block;font-size:11px;font-weight:700;color:#555;margin-bottom:3px">${text}</label>`;
+    const { value, isConfirmed } = await Swal.fire({
+      title: 'DC Pricing (optional)',
+      html: '<div style="text-align:left;font-size:13px">'
+        + `<p style="font-size:11px;color:#64748b;margin-bottom:10px">${packingList.packingType === 'bulk' ? '<strong>Bulk DC.</strong> ' : ''}Leave both fields empty to use each item's normal selling rate (MRP − Client Margin%) with no discount.</p>`
+        + '<div style="margin-bottom:10px">' + label('Flat Rate (&#x20B9; per piece, applied to every item)')
+        + '<input id="dc-flat-rate" type="number" min="0" step="0.01" class="swal2-input" style="margin:0;width:100%" placeholder="Empty = item-wise rate"></div>'
+        + '<div>' + label('Discount %')
+        + '<input id="dc-discount" type="number" min="0" max="99.99" step="0.01" class="swal2-input" style="margin:0;width:100%" placeholder="Empty = 0%"></div>'
+        + '<p style="font-size:11px;color:#64748b;margin-top:8px">When either is set, the Invoice for this DC bills this rate and discount instead of the Client Master discount.</p>'
+        + '</div>',
+      showCancelButton: true,
+      confirmButtonText: 'Continue',
+      confirmButtonColor: '#4f46e5',
+      preConfirm: () => {
+        try {
+          return parseDcPricingInput(
+            (document.getElementById('dc-flat-rate') as HTMLInputElement).value,
+            (document.getElementById('dc-discount') as HTMLInputElement).value,
+          );
+        } catch (err: any) {
+          Swal.showValidationMessage(err instanceof BulkFlowError ? err.message : 'Invalid Flat Rate / Discount.');
+          return false;
+        }
+      },
+    });
+    return isConfirmed ? (value as DcPricingInput) : null;
   }
 
   async reprintDC(dc: DeliveryChallan) {
@@ -3283,6 +3442,9 @@ export class PackingListComponent implements OnInit, OnDestroy {
   // mirror of that authoritative gate (not a substitute for it).
   canEditPackingListLines(packingList: PackingList | null): boolean {
     if (!packingList) return false;
+    // Bulk lines are locked (PackingListService guards this too) — they must
+    // match exactly what Bulk Picking took out of stock.
+    if (packingList.packingType === 'bulk') return false;
     return (packingList.dcGeneratedKeys ?? []).length === 0 && !packingList.invoiceId;
   }
 
@@ -3731,6 +3893,7 @@ export class PackingListComponent implements OnInit, OnDestroy {
     transportAddress: string,
     transportGstNo: string,
     allowDuplicate = false,
+    pricing: DcPricingInput = {},
   ): Promise<DeliveryChallan> {
     // DC quantity must reflect what was actually packed, not what the Pick
     // List/Packing List line was carrying as its to-pack (requiredQty) amount
@@ -3784,10 +3947,13 @@ export class PackingListComponent implements OnInit, OnDestroy {
     }
 
     const sizes = [...sizeSet].sort((a, b) => this.rankSize(a) - this.rankSize(b));
-    // DC applies Margin only — never Discount, which is Invoice-only.
+    // Without a Flat Rate/Discount entered at generation, a DC applies Margin
+    // only — Discount stays Invoice-only, exactly as before. A Flat Rate
+    // replaces every row's unit price; a DC Discount is applied on the total
+    // (see dcPricingFields) and carried into its Invoice.
     const marginPct = client?.marginPct ?? 0;
     const items: DCItem[] = [...rowMap.values()].map((row) => {
-      const price = priceAfterMargin(row.mrp, marginPct);
+      const price = dcUnitPrice(priceAfterMargin(row.mrp, marginPct), pricing);
       const amount = row.total * price;
       return { ...row, price, amount: Math.round(amount * 100) / 100 };
     });
@@ -3796,6 +3962,8 @@ export class PackingListComponent implements OnInit, OnDestroy {
     const boxCount = (packingList.cartons ?? []).length;
 
     return this.dcService.createDC({
+      ...dcPricingFields(totalAmount, pricing),
+      dcType: packingList.packingType === 'bulk' ? 'bulk' : undefined,
       packingListId: packingList.id!,
       packingListNo: packingList.packingListNo,
       salesOrderIds,
@@ -3922,6 +4090,9 @@ ${allDCHtml}
     const sizeHeaderCells = dc.sizes.map((s) => th2(s)).join('');
     const rs2 = (label: string, extra = '') =>
       `<th rowspan="2" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center;vertical-align:middle;${extra}">${label}</th>`;
+    // Only DCs generated with a Flat Rate/Discount print the applied unit
+    // Rate and the discount rows — every other DC prints exactly as before.
+    const showRate = dcHasPricingOverride(dc);
     const thead = `<thead>
     <tr>
       ${rs2('Description', 'text-align:left')}
@@ -3929,6 +4100,7 @@ ${allDCHtml}
       ${rs2('Sleeve')}
       ${rs2('Shade')}
       ${rs2('MRP')}
+      ${showRate ? rs2('Rate') : ''}
       ${rs2('Amount')}
       ${dc.sizes.length > 0 ? `<th colspan="${dc.sizes.length}" style="padding:5px 7px;${B}background:#e8e8e8;font-size:10px;font-weight:700;text-align:center">Size (Qty)</th>` : ''}
       ${rs2('Total')}
@@ -3955,6 +4127,7 @@ ${allDCHtml}
           ${td2(item.sleeveType || '-')}
           ${td2(item.color || '-')}
           ${td2(item.mrp ? item.mrp.toFixed(2).replace(/\.00$/, '') : '-')}
+          ${showRate ? td2(item.price ? item.price.toFixed(2) : '-', 'font-weight:700') : ''}
           ${td2(item.amount ? item.amount.toFixed(2) : '-')}
           ${sizeCells}
           ${td2(item.total, 'font-weight:700')}
@@ -3964,12 +4137,26 @@ ${allDCHtml}
 
     const totalAmount = dc.totalAmount || dc.items.reduce((s, i) => s + (i.amount ?? 0), 0);
     const totalCells = dc.sizes.map((s) => td2(sizeTotals[s] ?? '', 'font-weight:700;background:#f0f0f0')).join('');
+    const labelSpan = showRate ? 6 : 5;
     const totalRow = `<tr>
-      <td colspan="5" style="padding:5px 7px;${B}font-weight:700;font-size:10px;text-align:right;background:#f0f0f0">Total</td>
+      <td colspan="${labelSpan}" style="padding:5px 7px;${B}font-weight:700;font-size:10px;text-align:right;background:#f0f0f0">Total</td>
       <td style="padding:5px 7px;${B}font-weight:900;font-size:10px;text-align:center;background:#f0f0f0">${totalAmount > 0 ? totalAmount.toFixed(2) : '-'}</td>
       ${totalCells}
       <td style="padding:5px 7px;${B}font-weight:900;font-size:11px;text-align:center;background:#f0f0f0">${grandTotal}</td>
     </tr>`;
+    // Recomputed from discountPct (not the stored discountAmount) so a
+    // partial-delivery print discounts just that delivery's amount.
+    const discount = dcDiscountSummary(dc, totalAmount);
+    const trailingCols = dc.sizes.length + 1;
+    const summaryRow = (label: string, value: string) => `<tr>
+      <td colspan="${labelSpan}" style="padding:5px 7px;${B}font-weight:700;font-size:10px;text-align:right">${label}</td>
+      <td style="padding:5px 7px;${B}font-weight:900;font-size:10px;text-align:center">${value}</td>
+      <td colspan="${trailingCols}" style="${B}"></td>
+    </tr>`;
+    const discountRows = discount.discountPct > 0
+      ? summaryRow(`Discount (${discount.discountPct}%)`, '- ' + discount.discountAmount.toFixed(2))
+        + summaryRow('Net Amount', discount.netAmount.toFixed(2))
+      : '';
 
     const addrLines: string[] = [];
     if (dc.billingAddress) addrLines.push(dc.billingAddress);
@@ -4022,6 +4209,8 @@ ${delivery ? `<div style="font-size:11px;font-weight:700;text-align:center;margi
       ${delivery.invoiceNo ? `<tr><td style="padding:3px 6px;font-size:10px;color:#555">Invoice No.</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${delivery.invoiceNo}</td></tr>` : ''}`
         : `<tr><td style="padding:3px 6px;font-size:10px;color:#555">Total Qty</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${grandTotal}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">No.of Box</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${dc.boxCount}</td></tr>`}
+      ${dc.dcType === 'bulk' ? '<tr><td style="padding:3px 6px;font-size:10px;color:#555">DC Type</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: Bulk</td></tr>' : ''}
+      ${dc.flatRate ? `<tr><td style="padding:3px 6px;font-size:10px;color:#555">Flat Rate</td><td style="padding:3px 6px;font-size:10px;font-weight:700">: ${dc.flatRate.toFixed(2)}</td></tr>` : ''}
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Agent Name</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.agentName || '-'}</td></tr>
       <tr><td style="padding:3px 6px;font-size:10px;color:#555">Transport</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.transport || '-'}</td></tr>
       ${dc.transportGstNo ? `<tr><td style="padding:3px 6px;font-size:10px;color:#555">Transport GSTIN</td><td style="padding:3px 6px;font-size:10px;font-weight:600">: ${dc.transportGstNo}</td></tr>` : ''}
@@ -4032,8 +4221,9 @@ ${delivery ? `<div style="font-size:11px;font-weight:700;text-align:center;margi
 <table style="width:100%;border-collapse:collapse">
   ${thead}
   <tbody>
-    ${bodyRows.join('') || `<tr><td colspan="${6 + dc.sizes.length + 1}" style="padding:10px;text-align:center;color:#888">No items packed.</td></tr>`}
+    ${bodyRows.join('') || `<tr><td colspan="${labelSpan + 1 + dc.sizes.length + 1}" style="padding:10px;text-align:center;color:#888">No items packed.</td></tr>`}
     ${totalRow}
+    ${discountRows}
   </tbody>
 </table>
 ${deliverySummaryHtml}

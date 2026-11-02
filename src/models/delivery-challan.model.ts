@@ -96,7 +96,19 @@ export interface DeliveryChallan {
   transportGstNo?: string;
   items: DCItem[];
   sizes: string[];
+  // Sum of item amounts, before any DC Discount (unchanged meaning).
   totalAmount?: number;
+  // 'bulk' when generated from a Bulk Packing List. Absent = 'normal'.
+  dcType?: 'normal' | 'bulk';
+  // Optional pricing entered at DC generation (see bulk-flow.engine.ts):
+  // flatRate replaces every item's unit price; discountPct is applied on
+  // totalAmount. Either one being set makes the Invoice bill this DC's own
+  // price and discountPct instead of MRP − Margin% and the Client Master
+  // Discount% (dcHasPricingOverride). Both absent on DCs that used neither.
+  flatRate?: number;
+  discountPct?: number;
+  discountAmount?: number;
+  netAmount?: number;
   // Stamped atomically inside InvoiceService.createInvoice()'s transaction
   // once its consolidated Invoice is created — informational/DC-keyed lookup
   // only. The actual "at most one Invoice" gate lives on the owning Packing

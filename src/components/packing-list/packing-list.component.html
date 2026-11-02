@@ -88,7 +88,11 @@
                 @let firstIncomplete = getFirstIncompletePacking(existingPackings);
                 <tr class="hover:bg-gray-50">
                   <td class="px-4 py-3">
-                    <div class="font-semibold text-gray-800">{{pickList.pickListNo}}</div>
+                    <div class="font-semibold text-gray-800">{{pickList.pickListNo}}
+                      @if (pickList.type === 'bulk') {
+                        <span class="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-800">Bulk</span>
+                      }
+                    </div>
                     <div class="text-xs text-gray-400 mt-0.5">{{formatDate(pickList.createdAt)}}</div>
                   </td>
                   <td class="px-4 py-3 text-xs text-gray-600">{{(pickList.salesNos ?? []).join(', ')}}</td>
@@ -117,9 +121,14 @@
                     <div class="flex items-center justify-end gap-2 flex-wrap">
                       <button (click)="initiateGenerate(pickList)" [disabled]="isGenerating()"
                         class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition-colors">
-                        {{isGenerating() ? 'Generating...' : (existingPackings.length > 0 ? 'Generate Next Batch' : 'Generate Packing List')}}
+                        {{isGenerating() ? 'Generating...' : (existingPackings.length > 0 ? 'Generate Next Batch' : (pickList.type === 'bulk' ? 'Generate Bulk Packing List' : 'Generate Packing List'))}}
                       </button>
-                      @if (firstIncomplete) {
+                      @if (firstIncomplete && firstIncomplete.packingType === 'bulk') {
+                        <button (click)="openBulkPacking(firstIncomplete)"
+                          class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold rounded-lg transition-colors">
+                          Bulk Pack
+                        </button>
+                      } @else if (firstIncomplete) {
                         <button (click)="startPacking(firstIncomplete)"
                           class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors">
                           {{firstIncomplete.totalPackedQty > 0 ? 'Continue Packing' : 'Start Packing'}}
@@ -180,7 +189,11 @@
                 @let pkInvoice = getInvoiceForPackingList(packingList.id);
                 <tr class="hover:bg-gray-50">
                   <td class="px-4 py-3">
-                    <div class="font-semibold text-gray-800">{{packingList.packingListNo}}</div>
+                    <div class="font-semibold text-gray-800">{{packingList.packingListNo}}
+                      @if (packingList.packingType === 'bulk') {
+                        <span class="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-800">Bulk</span>
+                      }
+                    </div>
                     <div class="text-xs text-gray-400 mt-0.5">{{(packingList.pickListNos ?? []).join(', ')}} · {{formatDate(packingList.createdAt)}}</div>
                   </td>
                   <td class="px-4 py-3 text-xs text-gray-600">{{(packingList.salesNos ?? []).join(', ')}}</td>
@@ -211,7 +224,19 @@
                   </td>
                   <td class="px-4 py-3">
                     <div class="flex items-center justify-end gap-2 flex-wrap">
-                      @if (packingList.status !== 'Completed') {
+                      @if (packingList.packingType === 'bulk') {
+                        <!-- Bulk lists: item-wise Bulk Packing, or the normal carton-scan screen -->
+                        <button (click)="openBulkPacking(packingList)"
+                          class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-orange-600 text-white text-xs rounded-lg hover:bg-orange-700 transition-colors">
+                          {{packingList.status === 'Completed' ? 'Bulk Packing' : 'Bulk Pack'}}
+                        </button>
+                        @if (packingList.status !== 'Completed') {
+                          <button (click)="startPacking(packingList)"
+                            class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors">
+                            Scan Pack
+                          </button>
+                        }
+                      } @else if (packingList.status !== 'Completed') {
                         <button (click)="startPacking(packingList)"
                           class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors">
                           {{packingList.totalPackedQty > 0 ? 'Continue Packing' : 'Start Packing'}}
@@ -272,6 +297,13 @@
                 <tr class="hover:bg-gray-50">
                   <td class="px-4 py-3">
                     <div class="font-bold text-indigo-700">{{dc.dcNo}}</div>
+                    @if (dc.dcType === 'bulk' || dc.flatRate || dc.discountPct) {
+                      <div class="flex flex-wrap gap-1 mt-0.5">
+                        @if (dc.dcType === 'bulk') { <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-800">Bulk</span> }
+                        @if (dc.flatRate) { <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-100 text-sky-800">Flat ₹{{dc.flatRate}}</span> }
+                        @if (dc.discountPct) { <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-800">Disc {{dc.discountPct}}%</span> }
+                      </div>
+                    }
                   </td>
                   <td class="px-4 py-3 text-gray-800 font-medium">{{dc.clientName}}</td>
                   <td class="px-4 py-3 text-xs text-gray-600">{{dc.orderNo || dc.salesNos.join(', ') || '-'}}</td>
@@ -603,7 +635,11 @@
                       (change)="togglePickListForCombine(pickList.id ?? '')">
                   </td>
                   <td class="px-4 py-3">
-                    <div class="font-semibold text-gray-800">{{pickList.pickListNo}}</div>
+                    <div class="font-semibold text-gray-800">{{pickList.pickListNo}}
+                      @if (pickList.type === 'bulk') {
+                        <span class="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-800">Bulk</span>
+                      }
+                    </div>
                     <div class="text-xs text-gray-400 mt-0.5">{{formatDate(pickList.createdAt)}}</div>
                   </td>
                   <td class="px-4 py-3 text-xs text-gray-600">{{(pickList.salesNos ?? []).join(', ')}}</td>
@@ -1101,6 +1137,12 @@
   <!-- ══════════════════════════════════════════════════════════════════
        VIEW (read-only detail)
   ═══════════════════════════════════════════════════════════════════ -->
+  @else if (mode() === 'bulk-pack') {
+    @if (bulkPackingListId(); as bulkId) {
+      <app-bulk-packing [packingListId]="bulkId" (closed)="closeBulkPacking()" (proceedToDC)="proceedToDCFromBulkPacking($event)" />
+    }
+  }
+
   @else if (mode() === 'view') {
     @let packingList = viewPackingList();
     @if (packingList) {
@@ -1110,6 +1152,9 @@
             <div class="flex items-center gap-2.5 flex-wrap">
               <h2 class="text-2xl font-bold text-gray-800">{{packingList.packingListNo}}</h2>
               <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" [class]="packingStatusBadge(packingList.status)">{{packingList.status}}</span>
+              @if (packingList.packingType === 'bulk') {
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">Bulk Packing</span>
+              }
             </div>
             <p class="text-sm text-gray-500 mt-1">{{(packingList.salesNos ?? []).join(', ')}} · {{packingList.clientName}} · {{formatDate(packingList.createdAt)}}</p>
           </div>
@@ -1140,7 +1185,9 @@
             </div>
             <!-- Action buttons -->
             <div class="flex gap-2 flex-wrap">
-              @if (packingList.status !== 'Completed') {
+              @if (packingList.status !== 'Completed' && packingList.packingType === 'bulk') {
+                <button (click)="openBulkPacking(packingList)" class="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700">Continue Bulk Packing</button>
+              } @else if (packingList.status !== 'Completed') {
                 <button (click)="startPacking(packingList)" class="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">Continue Packing</button>
               }
               <button (click)="generateAndPrintDC(packingList)" [disabled]="isGeneratingDC()"

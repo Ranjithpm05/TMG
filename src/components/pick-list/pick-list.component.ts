@@ -32,17 +32,19 @@ import { ClientService } from '../../services/client.service';
 import { AuthService } from '../../services/auth.service';
 import { LoadingService } from '../../services/loading.service';
 import { IncrementalList } from '../../services/incremental-list.util';
+import { BulkPickingComponent } from './bulk-picking.component';
+import { bulkPickStage } from '../../services/bulk-flow.engine';
 
 declare const jsQR: any;
 
-type ViewMode = 'list' | 'select-type' | 'select-party' | 'select-orders' | 'select-items' | 'preview' | 'live-pick' | 'view' | 'edit';
+type ViewMode = 'list' | 'select-type' | 'select-party' | 'select-orders' | 'select-items' | 'preview' | 'live-pick' | 'view' | 'edit' | 'bulk';
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', '6XL', 'Free Size'];
 
 @Component({
   selector: 'app-pick-list',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, BulkPickingComponent],
   templateUrl: './pick-list.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -119,7 +121,9 @@ export class PickListComponent implements OnInit, OnDestroy {
   listTab = signal<'orders' | 'picklists'>('orders');
   searchTerm = signal('');
   statusFilter = signal<'all' | 'Pending' | 'Confirmed' | 'Shipped'>('all');
-  plTypeFilter = signal<'all' | 'direct' | 'combined' | 'itemwise' | 'party'>('all');
+  plTypeFilter = signal<'all' | 'direct' | 'combined' | 'itemwise' | 'party' | 'bulk'>('all');
+  // Bulk Pick List being continued/viewed in the Bulk Picking screen; null = start new.
+  bulkPickListId = signal<string | null>(null);
   pickType = signal<PickListType>('direct');
   selectedOrderIds = signal<Set<string>>(new Set());
   orderSearchTerm = signal('');
@@ -655,6 +659,7 @@ export class PickListComponent implements OnInit, OnDestroy {
 
   canStartPicking(pickList: PickList | null | undefined): boolean {
     if (!pickList) return false;
+    if (pickList.type === 'bulk') return !pickList.finalizedAt;
     if (pickList.legacyPickingPending) return true;
     return this.hasPickableQty(pickList);
   }
@@ -665,12 +670,15 @@ export class PickListComponent implements OnInit, OnDestroy {
 
   getPickActionLabel(pickList: PickList | null | undefined): string {
     if (!pickList) return 'Start Picking';
+    if (pickList.type === 'bulk') return 'Continue Bulk Picking';
     if (pickList.legacyPickingPending) return 'Start Picking';
     return (pickList.totalPickedQty ?? 0) > 0 ? 'Continue Picking' : 'Start Picking';
   }
 
   isDisplayablePickList(pickList: PickList | null | undefined): boolean {
     if (!pickList) return false;
+    // A Bulk Pick List starts empty and is built by scanning.
+    if (pickList.type === 'bulk') return true;
     return !!pickList.legacyPickingPending || (pickList.totalRequiredQty ?? 0) > 0 || (pickList.totalPickedQty ?? 0) > 0;
   }
 
@@ -707,11 +715,43 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   plTypeBadge(type: PickListType): string {
-    return ({ direct: 'bg-indigo-100 text-indigo-800', combined: 'bg-purple-100 text-purple-800', itemwise: 'bg-teal-100 text-teal-800', party: 'bg-pink-100 text-pink-800' } as Record<PickListType, string>)[type];
+    return ({ direct: 'bg-indigo-100 text-indigo-800', combined: 'bg-purple-100 text-purple-800', itemwise: 'bg-teal-100 text-teal-800', party: 'bg-pink-100 text-pink-800', bulk: 'bg-orange-100 text-orange-800' } as Record<PickListType, string>)[type];
   }
 
   plTypeLabel(type: PickListType): string {
-    return ({ direct: 'Direct', combined: 'Combined', itemwise: 'Item-wise', party: 'Party-wise' } as Record<PickListType, string>)[type];
+    return ({ direct: 'Direct', combined: 'Combined', itemwise: 'Item-wise', party: 'Party-wise', bulk: 'Bulk' } as Record<PickListType, string>)[type];
+  }
+
+  // Bulk lists' status alone can't distinguish "still picking" from
+  // "picked, awaiting packing" — shown under the status badge.
+  bulkStageLabel(pickList: PickList): string {
+    return ({ picking: 'Picking in progress', ready_to_pack: 'Ready for Bulk Packing', packing: 'Partly sent to Packing', packed: 'Sent to Bulk Packing' } as const)[bulkPickStage(pickList)];
+  }
+
+  // Edit is for Sales-Order lines; a Bulk Pick List is corrected on its own
+  // scan screen (remove units) instead.
+  canEditPickList(pickList: PickList | null | undefined): boolean {
+    return !!pickList && pickList.type !== 'bulk' && this.canEditOrDeletePickList(pickList);
+  }
+
+  // ─── Bulk Picking ──────────────────────────────────────────────────────────
+
+  startBulkPicking() {
+    this.bulkPickListId.set(null);
+    this.mode.set('bulk');
+  }
+
+  openBulkPickList(pickList: PickList) {
+    if (!pickList.id) return;
+    this.bulkPickListId.set(pickList.id);
+    this.mode.set('bulk');
+  }
+
+  async closeBulkPicking() {
+    this.bulkPickListId.set(null);
+    this.listTab.set('picklists');
+    this.mode.set('list');
+    await this.refreshPickLists();
   }
 
   orderPickBadge(orderId: string): string {
@@ -987,6 +1027,10 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   async openView(pickList: PickList) {
+    if (pickList.type === 'bulk') {
+      this.openBulkPickList(pickList);
+      return;
+    }
     if (pickList.id) {
       const lines = await this.pickListService.ensureLegacyPickListLines(pickList);
       const freshPickList = await this.pickListService.getPickListByIdOnce(pickList.id);
@@ -1266,6 +1310,10 @@ export class PickListComponent implements OnInit, OnDestroy {
   }
 
   async startPicking(pickList: PickList) {
+    if (pickList.type === 'bulk') {
+      this.openBulkPickList(pickList);
+      return;
+    }
     const user = this.asClaimUser();
     if (!user) {
       await Swal.fire({ icon: 'error', title: 'Login Required', text: 'Please log in again before picking.' });

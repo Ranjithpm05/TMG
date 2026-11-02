@@ -10,7 +10,8 @@
     "test:stock-adjustment": "node --test scripts/tests/stock-adjustment.engine.test.mjs",
     "test:einvoice-ewb": "node --test scripts/tests/einvoice-ewb.engine.test.mjs",
     "test:sales-return": "node --test scripts/tests/sales-return.engine.test.mjs",
-    "test:sync": "node --test scripts/tests/sync.engine.test.mjs"
+    "test:sync": "node --test scripts/tests/sync.engine.test.mjs",
+    "test:bulk-flow": "node --test scripts/tests/bulk-flow.engine.test.mjs"
   },
   "dependencies": {
     "@angular/build": "^21.0.0",
