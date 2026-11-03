@@ -38,9 +38,9 @@ export function parseBulkQty(raw: unknown): number {
 }
 
 /**
- * Validates adding `qty` units of one barcode to a Bulk Pick List. Bulk
- * Picking never lets stock go negative (unlike the Sales-Order pickers):
- * `currentStock` null means the barcode has no inventory record at all.
+ * Validates adding `qty` units of one barcode to a Bulk Pick List. Like the
+ * Sales-Order pickers, Bulk Picking may take stock negative; it only needs
+ * an inventory record to deduct from (`currentStock` null means none exists).
  */
 export function assertBulkPickAllowed(input: {
   pickList: Pick<PickList, 'type' | 'finalizedAt'>;
@@ -53,14 +53,6 @@ export function assertBulkPickAllowed(input: {
   }
   if (input.currentStock == null) {
     throw new BulkFlowError('no_stock_record', 'This item has no stock in Inventory (never received through Goods Inward).');
-  }
-  if (input.qty > input.currentStock) {
-    throw new BulkFlowError(
-      'insufficient_stock',
-      input.currentStock <= 0
-        ? 'This item is out of stock.'
-        : `Only ${input.currentStock} in stock — cannot pick ${input.qty}.`,
-    );
   }
 }
 

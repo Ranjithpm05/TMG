@@ -26,17 +26,15 @@ test('parseBulkQty: accepts positive whole numbers only', () => {
   }
 });
 
-test('Scan All Items: 1 unit per scan allowed while stock lasts', () => {
+test('Scan All Items: allowed even when stock is zero or negative', () => {
   assert.doesNotThrow(() => assertBulkPickAllowed({ pickList: openBulk, qty: 1, currentStock: 1 }));
-  assert.equal(code(() => assertBulkPickAllowed({ pickList: openBulk, qty: 1, currentStock: 0 })), 'insufficient_stock');
-  assert.equal(code(() => assertBulkPickAllowed({ pickList: openBulk, qty: 1, currentStock: -3 })), 'insufficient_stock');
+  assert.doesNotThrow(() => assertBulkPickAllowed({ pickList: openBulk, qty: 1, currentStock: 0 }));
+  assert.doesNotThrow(() => assertBulkPickAllowed({ pickList: openBulk, qty: 1, currentStock: -3 }));
 });
 
-test('Scan + Quantity: entered qty validated against live stock', () => {
+test('Scan + Quantity: entered qty may exceed live stock', () => {
   assert.doesNotThrow(() => assertBulkPickAllowed({ pickList: openBulk, qty: 12, currentStock: 12 }));
-  const err = (() => { try { assertBulkPickAllowed({ pickList: openBulk, qty: 13, currentStock: 12 }); } catch (e) { return e; } })();
-  assert.equal(err.code, 'insufficient_stock');
-  assert.match(err.message, /Only 12 in stock/);
+  assert.doesNotThrow(() => assertBulkPickAllowed({ pickList: openBulk, qty: 150, currentStock: 149 }));
 });
 
 test('Bulk picking rejects: no inventory record, completed list, non-bulk list', () => {

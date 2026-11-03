@@ -252,11 +252,6 @@ export class BulkPickingComponent implements OnInit, OnDestroy {
       this.flash('error', this.errorText(err));
       return;
     }
-    // Instant feedback from the lookup; the transaction re-checks live stock.
-    if (item.stock != null && qty > item.stock) {
-      this.flash('error', `Only ${item.stock} in stock — cannot pick ${qty}.`);
-      return;
-    }
     this.pendingItem.set(null);
     this.qtyInput.set('');
     this.enqueueScan(item.barcode, qty);

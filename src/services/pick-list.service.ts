@@ -1399,10 +1399,9 @@ export class PickListService {
   // scanning, keyed deterministically by barcode (BLK-<barcode>) so two
   // devices scanning the same item converge on one line. requiredQty always
   // equals pickedQty — there's no target to fall short of — which is what
-  // lets PackingListService.buildPackableLines() pack it unchanged. Unlike
-  // the Sales-Order pickers, stock never goes negative here: every scan is
-  // checked against the live inventory doc inside the transaction that
-  // deducts it (assertBulkPickAllowed).
+  // lets PackingListService.buildPackableLines() pack it unchanged. Like the
+  // Sales-Order pickers, a scan may take stock negative; it only needs an
+  // inventory doc to deduct from (assertBulkPickAllowed).
 
   /** The customer's Bulk Pick List still being picked (not yet completed), if any. */
   async getOpenBulkPickListForClient(clientId: string): Promise<PickList | null> {
