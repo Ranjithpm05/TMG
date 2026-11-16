@@ -60,6 +60,12 @@ export interface StockAdjustmentLine {
   scannedQty: number;
   /** User explicitly confirmed "none on hand" for a product that has book stock but could not be scanned. */
   zeroConfirmed?: boolean;
+  /**
+   * Set when the product had no inventory record (Design Master item never received
+   * via GRN); the line id is then newItemInventoryId(barcode) and completion creates
+   * the inventory doc from these fields.
+   */
+  newItem?: { designId: string; group: string; fabricType: string; WSP: number; price: number };
   lastScannedBy?: string;
   // ── Audit trail, written atomically with the inventory update on completion ──
   applied?: boolean;

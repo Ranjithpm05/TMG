@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ScanLedger, StockAdjustmentError, cancelSession, classifyScan, completeSession, indexByBarcode,
-  paths, rowFor, startSession, summarize,
+  designCatalogItems, newItemInventoryId, paths, rowFor, startSession, summarize,
 } from '../../src/services/stock-adjustment.engine.ts';
 
 const INC = Symbol('inc');
@@ -389,4 +389,65 @@ test('cancelled session cannot be completed', async () => {
   await assert.rejects(
     completeSession(store, { sessionId: id, completedBy: 'mgr', groupItems: groupItems(store, 'SHIRTS') }),
     (e) => e instanceof StockAdjustmentError && e.code === 'cancelled');
+});
+
+test('classifyScan: Design Master item with no inventory record is accepted as a new item of its group only', () => {
+  const all = [inv('a', 'ABC1', 'SHIRTS', 5)];
+  const designs = designCatalogItems([
+    { id: 'd1', styleNo: 'RTA012', color: 'BEIGE', group: 'casual trouser ', sizes: [{ size: '32', BARCODE: 'TMGPF00416', price: 999, WSP: 500 }] },
+    { id: 'd2', styleNo: 'SH1', color: 'Blue', group: 'SHIRTS', sizes: [{ size: 'M', BARCODE: 'abc1', price: 1, WSP: 1 }] },
+  ]);
+  const groupIdx = indexByBarcode([]);
+  const allIdx = indexByBarcode(all);
+  const designIdx = indexByBarcode(designs.filter((d) => !allIdx.has(d.barcode.toUpperCase())));
+
+  const ok = classifyScan('tmgpf00416', 'CASUAL TROUSER', groupIdx, allIdx, designIdx);
+  assert.equal(ok.ok, true);
+  assert.equal(ok.isNew, true);
+  assert.equal(ok.item.id, newItemInventoryId('TMGPF00416'));
+  assert.equal(ok.item.currentStock, 0);
+  assert.equal(classifyScan('TMGPF00416', 'SHIRTS', indexByBarcode(all), allIdx, designIdx).reason, 'other-group');
+  assert.equal(classifyScan('NOPE', 'CASUAL TROUSER', groupIdx, allIdx, designIdx).reason, 'unknown');
+  assert.equal(classifyScan('TMGPF00416', 'CASUAL TROUSER', groupIdx, allIdx).reason, 'unknown', 'no Design Master index → old behaviour');
+});
+
+test('complete: a new item creates its inventory doc; rollback returns it to 0; GRN-received conflict is blocked', async () => {
+  const store = new FakeStore();
+  seed(store, [inv('a', '1', 'SHIRTS', 2)]);
+  const { id } = await start(store);
+  const [item] = designCatalogItems([{ id: 'd9', styleNo: 'NEW1', color: 'Red', group: 'SHIRTS', sizes: [{ size: 'L', BARCODE: 'N-1', price: 300, WSP: 150, sleeveType: 'Full' }] }]);
+  scan(store, id, inv('a', '1', 'SHIRTS', 2), 2);
+  scan(store, id, item, 4, { sleeveType: 'Full', newItem: { designId: 'd9', group: 'SHIRTS', fabricType: '', WSP: 150, price: 300 } });
+
+  const r = await completeSession(store, { sessionId: id, completedBy: 'mgr', groupItems: [...groupItems(store, 'SHIRTS'), item] });
+  assert.equal(r.outcome, 'completed');
+  const created = store.read(paths.inventory(item.id));
+  assert.equal(created.currentStock, 4);
+  assert.equal(created.barcode, 'N-1');
+  assert.equal(created.designId, 'd9');
+  assert.equal(created.sleeveType, 'Full');
+  assert.equal(created.price, 300);
+  assert.deepEqual(r.result, { appliedLines: 2, changedLines: 1, increaseQty: 4, decreaseQty: 0 });
+  assert.equal(store.read(paths.line(id, item.id)).previousStock, 0);
+
+  // Rollback after the new doc was created leaves it at 0.
+  const store2 = new FakeStore();
+  seed(store2, [inv('b', '2', 'SHIRTS', 0)]);
+  const s2 = await start(store2);
+  scan(store2, s2.id, item, 3, { newItem: { designId: 'd9', group: 'SHIRTS', fabricType: '', WSP: 150, price: 300 } });
+  scan(store2, s2.id, inv('b', '2', 'SHIRTS', 0), 1);
+  store2.docs.delete(paths.inventory('b'));
+  await assert.rejects(completeSession(store2, { sessionId: s2.id, completedBy: 'mgr', groupItems: [item], chunkSize: 1, sleep: async () => {} }),
+    (e) => e.code === 'completion-failed');
+  assert.equal(store2.read(paths.inventory(item.id))?.currentStock ?? 0, 0);
+
+  // Received by GRN (under its own id) after it was counted as new → blocked, nothing applied.
+  const store3 = new FakeStore();
+  const s3 = await start(store3);
+  scan(store3, s3.id, item, 2, { newItem: { designId: 'd9', group: 'SHIRTS', fabricType: '', WSP: 150, price: 300 } });
+  seed(store3, [inv('grn', 'N-1', 'SHIRTS', 5)]);
+  await assert.rejects(completeSession(store3, { sessionId: s3.id, completedBy: 'mgr', groupItems: [...groupItems(store3, 'SHIRTS'), item] }),
+    (e) => e.code === 'new-item-received' && /N-1/.test(e.message));
+  assert.equal(store3.read(paths.inventory(item.id)), null);
+  assert.equal(store3.read(paths.session(s3.id)).status, 'Counting');
 });

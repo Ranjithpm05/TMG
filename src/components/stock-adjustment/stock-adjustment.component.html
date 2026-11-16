@@ -135,6 +135,7 @@
             [class]="row.status === 'scanned' ? (row.variance ? 'bg-orange-500' : 'bg-emerald-500')
                    : row.status === 'pending' ? 'bg-amber-500' : row.status === 'zero-confirmed' ? 'bg-rose-500' : 'bg-slate-400'"></span>
       {{ row.status === 'scanned' && row.variance ? 'Mismatch' : row.status === 'scanned' ? 'Matched' : statusLabel[$any(row.status)] }}
+      @if (isNewItem(row.item)) { · New Item }
     </span>
   </ng-template>
 

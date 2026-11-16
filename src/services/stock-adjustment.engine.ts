@@ -100,16 +100,75 @@ export function indexByBarcode(items: InventoryItem[]): Map<string, InventoryIte
   return index;
 }
 
+// ── Design Master items with no inventory record yet ─────────────────────────
+// An item that was never received through a GRN has no inventory doc, but it is
+// still a real product (Design Master is the item master) and may be on the shelf.
+// It is counted under a deterministic inventory id, so every scanner of the same
+// barcode writes the same line, and its inventory doc is created on completion.
+
+const NEW_ITEM_PREFIX = 'DM_';
+
+export function newItemInventoryId(barcode: unknown): string {
+  return NEW_ITEM_PREFIX + encodeURIComponent(normalizeCode(barcode));
+}
+
+export function isNewItemId(id: string): boolean {
+  return id.startsWith(NEW_ITEM_PREFIX);
+}
+
+/** Design Master fields a new item's inventory doc is created with (stored on its line). */
+export interface NewItemDetails {
+  designId: string;
+  group: string;
+  fabricType: string;
+  WSP: number;
+  price: number;
+}
+
+export function newItemDetails(item: InventoryItem): NewItemDetails {
+  return {
+    designId: item.designId ?? '', group: normalizeGroup(item.group), fabricType: item.fabricType ?? '',
+    WSP: Number(item.WSP) || 0, price: Number(item.price) || 0,
+  };
+}
+
+/** Design Master SKUs as zero-stock inventory rows keyed by newItemInventoryId(). */
+export function designCatalogItems(designs: Array<{ id?: string; styleNo?: string; color?: string; group?: string; sizes?: any[] }>): InventoryItem[] {
+  const seen = new Set<string>();
+  const items: InventoryItem[] = [];
+  for (const design of designs) {
+    for (const size of design.sizes ?? []) {
+      const barcode = String(size?.BARCODE ?? '').trim();
+      const code = normalizeCode(barcode);
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      items.push({
+        id: newItemInventoryId(code), barcode, designId: design.id ?? '',
+        styleNo: design.styleNo ?? '', color: design.color ?? '', group: normalizeGroup(design.group),
+        size: size.size ?? '', ...(size.sleeveType ? { sleeveType: size.sleeveType } : {}),
+        fabricType: size.fabricType ?? '', currentStock: 0, totalReceived: 0,
+        WSP: Number(size.WSP) || 0, price: Number(size.price) || 0,
+      });
+    }
+  }
+  return items;
+}
+
 export type ScanResult =
-  | { ok: true; item: InventoryItem }
+  | { ok: true; item: InventoryItem; isNew?: boolean }
   | { ok: false; reason: 'empty' | 'unknown' | 'other-group' | 'ambiguous'; message: string };
 
-/** Resolves a scanned barcode / item code to exactly one product of the session's group. */
+/**
+ * Resolves a scanned barcode / item code to exactly one product of the session's group.
+ * A barcode with no inventory record falls back to Design Master (`designIndex`) and is
+ * accepted as a new item when its design belongs to the session's group.
+ */
 export function classifyScan(
   rawCode: unknown,
   group: string,
   groupIndex: Map<string, InventoryItem[]>,
   allIndex: Map<string, InventoryItem[]>,
+  designIndex: Map<string, InventoryItem[]> = new Map(),
 ): ScanResult {
   const code = normalizeCode(rawCode);
   if (!code) return { ok: false, reason: 'empty', message: 'Empty scan ignored.' };
@@ -128,7 +187,16 @@ export function classifyScan(
       message: `${code} (${other.styleNo} · ${other.color} · ${other.size}) belongs to "${normalizeGroup(other.group) || 'no group'}", not "${group}". Not counted.`,
     };
   }
-  return { ok: false, reason: 'unknown', message: `Invalid barcode ${code} — not found in inventory. Not counted.` };
+
+  const design = designIndex.get(code)?.[0];
+  if (design) {
+    if (sameGroup(design.group, group)) return { ok: true, item: design, isNew: true };
+    return {
+      ok: false, reason: 'other-group',
+      message: `${code} (${design.styleNo} · ${design.color} · ${design.size}) belongs to "${normalizeGroup(design.group) || 'no group'}" in Design Master, not "${group}". Not counted.`,
+    };
+  }
+  return { ok: false, reason: 'unknown', message: `Invalid barcode ${code} — not found in inventory or Design Master. Not counted.` };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -379,6 +447,16 @@ export async function completeSession(store: AdjustmentStore, opts: CompleteOpti
   // 1. Every product with book stock must be counted (scanned or explicitly zero-confirmed).
   const lines = await store.listLines(sessionId);
   const linesById = new Map(lines.map((l) => [l.id, l]));
+  // A new item (counted without an inventory record) that a GRN has since received
+  // would otherwise get a second inventory doc for the same barcode.
+  const received = new Set(opts.groupItems.filter((i) => !isNewItemId(i.id!)).map((i) => normalizeCode(i.barcode)));
+  const conflicts = lines.filter((l) => isNewItemId(l.id) && !l.applied && (Number(l.scannedQty) || 0) > 0 && received.has(normalizeCode(l.barcode)));
+  if (conflicts.length) {
+    throw new StockAdjustmentError('new-item-received',
+      `${conflicts.map((l) => l.barcode).join(', ')} ${conflicts.length === 1 ? 'was' : 'were'} received into inventory after counting started. ` +
+      `Set the "new item" count to 0 and scan ${conflicts.length === 1 ? 'it' : 'them'} again before completing.`);
+  }
+
   const pending = opts.groupItems.map((item) => rowFor(item, linesById.get(item.id!))).filter((r) => r.status === 'pending');
   if (pending.length) {
     throw new StockAdjustmentError('pending-items',
@@ -462,13 +540,26 @@ async function applyChunk(store: AdjustmentStore, sessionId: string, lockId: str
       const counted = Math.max(0, Number(live['scannedQty']) || 0);
       if (counted === 0 && !live['zeroConfirmed']) return; // un-scanned again on another device since loading
       const inv = invDocs[i];
-      if (!inv) {
+      const newItem = live['newItem'] as NewItemDetails | undefined;
+      if (!inv && !newItem) {
         throw new StockAdjustmentError('item-missing',
           `Inventory item ${live['barcode']} (${live['styleNo']} · ${live['color']} · ${live['size']}) no longer exists`);
       }
-      const previousStock = Number(inv['currentStock']) || 0;
+      const previousStock = inv ? Number(inv['currentStock']) || 0 : 0;
       const variance = counted - previousStock;
-      if (variance !== 0) {
+      if (!inv) {
+        // First stock of a Design Master item never received via GRN.
+        if (counted > 0) {
+          tx.set(paths.inventory(line.id), {
+            barcode: live['barcode'], designId: newItem!.designId,
+            styleNo: live['styleNo'], color: live['color'], group: newItem!.group,
+            size: live['size'], ...(live['sleeveType'] ? { sleeveType: live['sleeveType'] } : {}),
+            fabricType: newItem!.fabricType, currentStock: counted, totalReceived: 0,
+            WSP: newItem!.WSP, price: newItem!.price,
+            createdAt: store.serverTime(), updatedAt: store.serverTime(),
+          });
+        }
+      } else if (variance !== 0) {
         tx.update(paths.inventory(line.id), { currentStock: counted, updatedAt: store.serverTime() });
       }
       tx.update(paths.line(sessionId, line.id), {
