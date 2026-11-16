@@ -685,6 +685,11 @@ export class DeliveryChallanService {
         : [],
       sizes: Array.isArray(raw?.sizes) ? raw.sizes.map((s: any) => String(s)) : [],
       totalAmount: Number(raw?.totalAmount) || 0,
+      dcType: raw?.dcType === 'bulk' ? 'bulk' : raw?.dcType === 'normal' ? 'normal' : undefined,
+      flatRate: Number(raw?.flatRate) > 0 ? Number(raw.flatRate) : undefined,
+      discountPct: Number(raw?.discountPct) > 0 ? Number(raw.discountPct) : undefined,
+      discountAmount: raw?.discountAmount != null ? Number(raw.discountAmount) || 0 : undefined,
+      netAmount: raw?.netAmount != null ? Number(raw.netAmount) || 0 : undefined,
       invoiceId: raw?.invoiceId ? String(raw.invoiceId) : undefined,
       invoiceNo: raw?.invoiceNo ? String(raw.invoiceNo) : undefined,
       deliveries: Array.isArray(raw?.deliveries)

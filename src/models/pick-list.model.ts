@@ -76,7 +76,15 @@ export interface PickListLine {
   packedIntoPackingListsQty?: number;
 }
 
-export type PickListType = 'direct' | 'combined' | 'itemwise' | 'party';
+// 'bulk' — started straight from the Pick List screen for one customer, with
+// no Sales Order behind it (salesOrderIds is always empty). Every line is
+// created by scanning (see PickListService.processBulkScan), with requiredQty
+// tracking pickedQty, so the list's totals are simply "what was picked".
+export type PickListType = 'direct' | 'combined' | 'itemwise' | 'party' | 'bulk';
+
+// How a Bulk Pick List is scanned: one unit per barcode scan, or one scan
+// followed by a typed quantity.
+export type BulkPickMethod = 'scan_all' | 'scan_qty';
 
 export interface PickList {
   id?: string;
@@ -129,8 +137,16 @@ export interface PickList {
   // `items` to count how many distinct parts/groups a Pick List spans.
   partGroups?: string[];
   remarks?: string;
+  // Bulk only — the picking method chosen when the list was started.
+  bulkPickMethod?: BulkPickMethod;
+  // Bulk only — id of the one Bulk Packing List generated from this list,
+  // claimed atomically before it's created (PackingListService.
+  // createBulkPackingList), so a double click / second tab reuses it.
+  bulkPackingListId?: string;
   // Stamped by the explicit "Complete Pick List" action (Party-wise type),
   // which force-closes a list regardless of remaining pending quantity.
+  // For a Bulk Pick List this is "Complete Bulk Picking": it locks the list
+  // against further scanning and makes it eligible for Bulk Packing.
   finalizedAt?: number;
   finalizedByUserId?: string;
   finalizedByUsername?: string;

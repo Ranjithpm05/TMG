@@ -431,7 +431,6 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   thead{display:table-header-group}
   tr{page-break-inside:avoid}
   section{page-break-inside:avoid}
-  .page-break{page-break-before:always}
   .toolbar{position:sticky;top:0;background:#fff;padding:8px 0;margin-bottom:10px;display:flex;gap:8px;justify-content:flex-end;border-bottom:1px solid #eee}
   .toolbar button{padding:7px 16px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer}
   .btn-print{background:#10b981;color:#fff}
@@ -449,7 +448,6 @@ export class EwayBillComponent implements OnInit, OnDestroy {
   <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
 </div>
 
-<!-- ── PAGE 1 ── -->
 <div style="display:flex;align-items:flex-start;border:2px solid #000;padding:8px;margin-bottom:8px">
   ${logoHtml}
   <div style="flex:1;text-align:center">
@@ -497,12 +495,7 @@ export class EwayBillComponent implements OnInit, OnDestroy {
 </section>
 
 <section style="border:1px solid #999;padding:8px;margin-bottom:8px">
-  <div style="font-size:11px;font-weight:700">Part - B</div>
-</section>
-
-<!-- ── PAGE 2 ── -->
-<section class="page-break">
-  <div style="font-size:11px;font-weight:700;margin:8px 0">Part - B : Vehicle / Transport Details</div>
+  <div style="font-size:11px;font-weight:700;margin-bottom:6px">Part - B : Vehicle / Transport Details</div>
   <table><thead><tr>
     ${th('Mode')}${th('Vehicle/Trans Doc No &amp; Dt.')}${th('From')}${th('Entered Date')}${th('Entered By')}${th('CEWB No. (If any)')}${th('Multi Veh.Info (If any)')}
   </tr></thead><tbody>
@@ -510,13 +503,13 @@ export class EwayBillComponent implements OnInit, OnDestroy {
       ${td(transportModeCell)}${td(vehicleDocCell)}${td((company?.place || '-').toUpperCase())}${td(this.fmtEwbDateTime(invoice.ewbDate))}${td(esc(generatorGstin))}${td('-')}${td('-')}
     </tr>
   </tbody></table>
-
-  <div style="margin-top:40px;text-align:center">
-    ${barcodeHtml}
-  </div>
 </section>
 
-<div style="margin-top:16px;font-size:8px;color:#888;text-align:center;border-top:1px solid #eee;padding-top:6px">
+<div style="margin-top:12px;text-align:center">
+  ${barcodeHtml}
+</div>
+
+<div style="margin-top:12px;font-size:8px;color:#888;text-align:center;border-top:1px solid #eee;padding-top:6px">
   Print Date : ${esc(new Date().toLocaleString('en-IN'))}
 </div>
 

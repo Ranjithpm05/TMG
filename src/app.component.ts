@@ -33,6 +33,7 @@ import { PickListWiseReportComponent } from './components/reports/pick-list-wise
 import { HsnGstWiseReportComponent } from './components/reports/hsn-gst-wise-report/hsn-gst-wise-report.component';
 import { StockRequirementReportComponent } from './components/reports/stock-requirement-report/stock-requirement-report.component';
 import { setMeterPage } from './services/firestore-read-meter';
+import { ScreenNavigationService } from './services/screen-navigation.service';
 
 type View = 'dashboard' | 'sales' | 'salesReturn' | 'clients' | 'designs' | 'transportMaster' | 'users' | 'goodsInward' | 'inventory' | 'stockAdjustment' | 'pickList' | 'packingList' | 'einvoice' | 'ewayBill'
   | 'salesReportProductWise1' | 'salesReportProductWise2' | 'salesOrderSupplyPendingReport' | 'pendingOrderCustomerWiseReport'
@@ -184,6 +185,7 @@ const NAV_GROUPS: NavGroup[] = [
 })
 export class AppComponent {
   private authService = inject(AuthService);
+  private screenNavigation = inject(ScreenNavigationService);
   protected loadingService = inject(LoadingService);
 
   isAuthenticated = computed(() => this.authService.isAuthenticated());
@@ -247,6 +249,19 @@ export class AppComponent {
       if (fallbackView) {
         this.applyView(fallbackView, 'replace');
       }
+    });
+
+    // Cross-screen hand-offs (see ScreenNavigationService) — the target
+    // screen consumes the request's intent on init; an inaccessible target
+    // just drops it.
+    effect(() => {
+      const request = this.screenNavigation.request();
+      if (!request) return;
+      untracked(() => {
+        const view = request.view as View;
+        if (this.canAccessView(view)) this.setView(view);
+        else this.screenNavigation.request.set(null);
+      });
     });
 
     // TEMPORARY (Firestore read diagnostics): attributes every read to the screen it happened on — see firestore-read-meter.ts.

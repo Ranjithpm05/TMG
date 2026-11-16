@@ -1,5 +1,9 @@
 export type PackingListLineStatus = 'ready' | 'in_progress' | 'completed';
 export type PackingMode = 'customer' | 'order';
+// 'bulk' — generated from a Bulk Pick List. Its stock already left inventory
+// unit-by-unit at bulk picking, so packing completion must NOT deduct it again
+// (see PackingListService.deductInventoryOnCompletion). Absent = 'normal'.
+export type PackingType = 'normal' | 'bulk';
 
 export interface PackingListLineSource {
   pickListId: string;
@@ -93,6 +97,7 @@ export interface PackingList {
   clientId: string;
   clientName: string;
   packingMode: PackingMode;
+  packingType?: PackingType;
   status: 'Draft' | 'Partial' | 'Completed';
   totalRequiredQty: number;
   totalPackedQty: number;

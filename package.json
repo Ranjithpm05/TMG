@@ -10,7 +10,8 @@
     "test:stock-adjustment": "node --test scripts/tests/stock-adjustment.engine.test.mjs",
     "test:einvoice-ewb": "node --test scripts/tests/einvoice-ewb.engine.test.mjs",
     "test:sales-return": "node --test scripts/tests/sales-return.engine.test.mjs",
-    "test:sync": "node --test scripts/tests/sync.engine.test.mjs"
+    "test:sync": "node --test scripts/tests/sync.engine.test.mjs",
+    "test:bulk-flow": "node --test scripts/tests/bulk-flow.engine.test.mjs"
   },
   "dependencies": {
     "@angular/build": "^21.0.0",
@@ -24,6 +25,8 @@
     "@angular/platform-browser": "^21.0.0",
     "@types/qrcode": "^1.5.6",
     "firebase": "^11.10.0",
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0",
     "jsbarcode": "^3.12.3",
     "jspdf": "^4.2.0",
     "qrcode": "^1.5.4",
