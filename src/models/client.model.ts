@@ -23,9 +23,9 @@ export interface Client {
   shipToCountry?: string;
   shipToSameAsBilling?: boolean;
 
-  // Destination — the delivery location sent as ShipTo_Loc on the E-Way Bill
-  // and pre-filled as the Invoice's Destination. Falls back to Ship To Place.
-  destination?: string;
+  // Distance (KM) from our dispatch point to this client — pre-filled as the
+  // E-Way Bill Distance. 0 lets the portal calculate it from the PIN codes.
+  distanceKm?: number;
 
   gstNo?: string;
   mobile?: string;

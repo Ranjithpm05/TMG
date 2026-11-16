@@ -217,7 +217,10 @@ export class InvoiceService {
     // still not-yet-invoiced.
     this.deliveryChallanService.invalidateCache();
     this.packingListService.invalidateCache();
-    return { id: invoiceDocRef.id, ...data };
+    // invoiceData holds serverTimestamp() sentinels — return real dates so an
+    // immediate print (before any re-read) doesn't show "Invalid Date".
+    const now = new Date();
+    return { id: invoiceDocRef.id, ...data, invoiceDate: now, createdAt: now, updatedAt: now };
   }
 
   // Sibling to createInvoice() above for the "multiple DC → single Invoice"
@@ -295,7 +298,8 @@ export class InvoiceService {
     this.invalidateCache();
     this.deliveryChallanService.invalidateCache();
     this.packingListService.invalidateCache();
-    return { id: invoiceDocRef.id, ...data };
+    const now = new Date(); // replace serverTimestamp() sentinels for immediate print
+    return { id: invoiceDocRef.id, ...data, invoiceDate: now, createdAt: now, updatedAt: now };
   }
 
   async getInvoiceByIdOnce(invoiceId: string): Promise<Invoice | null> {
@@ -465,7 +469,8 @@ export class InvoiceService {
     this.invalidateCache();
     this.deliveryChallanService.invalidateCache();
     this.packingListService.invalidateCache();
-    return { invoice: { id: invoiceDocRef.id, ...result.invoiceData } as Invoice, dc: result.dc };
+    const now = new Date(); // replace serverTimestamp() sentinels for immediate print
+    return { invoice: { id: invoiceDocRef.id, ...result.invoiceData, invoiceDate: now, createdAt: now, updatedAt: now } as Invoice, dc: result.dc };
   }
 
   // DC-side writes for the full-quantity flows (createInvoice /

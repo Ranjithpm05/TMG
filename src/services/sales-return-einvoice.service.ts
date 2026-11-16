@@ -244,7 +244,7 @@ function customerAsInvoice(client: Client, ret: SalesReturn, creditNote: CreditN
     clientZipCode: client.zipCode ?? '',
     clientPhone: client.mobile ?? '',
     clientGstin: client.gstNo || ret.clientGstin || '',
-    destination: client.destination || client.shipToPlace || client.place || '',
+    destination: client.shipToPlace || client.place || '',
     orderNo: '',
     salesNos: [],
     items: creditNote.items.map((item) => ({
