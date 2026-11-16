@@ -7,8 +7,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  SalesReturnError, billLineKey, billedLines, buildBillRows, cancelReturn, makeLine, paths, postReturn,
-  returnNetAmount, rowRef, saveDraft, summarizeLines, validateDraft,
+  SalesReturnError, billLineKey, billedLines, buildBillRows, cancelReturn, makeCustomerLine, makeLine, paths, postReturn,
+  returnNetAmount, rowRef, saveDraft, scanLineKey, summarizeLines, validateDraft,
 } from '../../src/services/sales-return.engine.ts';
 
 const INC = Symbol('inc');
@@ -108,7 +108,7 @@ const rowsOf = (invoice, returned) => buildBillRows(invoice, dcs, returned, reso
 const row = (rows, styleNo, size) => rows.find((r) => r.styleNo === styleNo && r.size === size);
 
 function input(lines, mode = 'multiple') {
-  return { mode, returnDate: '2026-10-24', clientId: 'C1', clientName: 'Acme', lines };
+  return { mode, returnDate: '2026-10-24', clientId: 'C1', clientName: 'Acme', lines, ...(mode === 'customer' ? { taxRate: 5, isInterState: false } : {}) };
 }
 const stock = (s, id) => s.read(paths.inventory(id)).currentStock;
 const damage = (s, id) => s.read(paths.damage(id))?.qty ?? 0;
@@ -334,4 +334,59 @@ test('cancel is refused while the return has an active Credit Note e-Invoice', a
   s.put(paths.salesReturn('R1'), { ...s.read(paths.salesReturn('R1')), eInvoiceStatus: 'cancelled' });
   assert.equal(await cancelReturn(s, 'R1', 'u', 'wrong'), 'cancelled');
   assert.equal(stock(s, 'invS1M'), 2);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Customer-Based Scanned Return (mode 'customer')
+// ═════════════════════════════════════════════════════════════════════════════
+const scanS1M = { barcode: 'BC-invS1M', inventoryId: 'invS1M', styleNo: 'S1', color: 'Blue', size: 'M', description: 'Shirt', mrp: 800, hsnSac: '62052000' };
+const scanT1 = { barcode: 'BC-invT1', inventoryId: 'invT1', styleNo: 'T1', color: 'Black', size: '32', description: 'Trouser', mrp: 1000, hsnSac: '62034200' };
+const custPricing = { price: 640, discountPct: 10, taxRate: 5 };
+
+test('makeCustomerLine: no invoice, keyed by barcode, valued at client price/discount and the entered GST', () => {
+  const l = makeCustomerLine(scanS1M, custPricing, 'Fresh', 3, ' Rack 1 ');
+  assert.equal(l.invoiceId, '');
+  assert.equal(l.lineKey, scanLineKey('bc-invs1m'));
+  assert.equal(l.location, 'Rack 1');
+  assert.deepEqual([l.price, l.taxRate, l.hsnSac, l.soldQty], [640, 5, '62052000', 0]);
+  // 3 × 640 = 1920, −10% = 1728, +5% GST = 86.40
+  assert.deepEqual([l.taxableValue, l.taxAmount, l.totalAmount], [1728, 86.4, 1814.4]);
+});
+
+test('validateDraft (customer): no invoice lines, GST rate range, ₹0 price, duplicate barcode+condition', () => {
+  const ok = [makeCustomerLine(scanS1M, custPricing, 'Fresh', 2, ''), makeCustomerLine(scanS1M, custPricing, 'Damage', 1, '')];
+  assert.deepEqual(validateDraft(input(ok, 'customer')), []);
+
+  const invLine = makeLine(row(rowsOf(invA), 'S1', 'M'), invA, 'Fresh', 1, '');
+  assert.match(validateDraft(input([invLine], 'customer')).join(' | '), /cannot hold invoice lines/);
+  assert.match(validateDraft(input([ok[0]], 'multiple')).join(' | '), /no invoice/);
+  assert.match(validateDraft({ ...input(ok, 'customer'), taxRate: 40 }).join(' | '), /GST rate/);
+  assert.match(validateDraft(input([makeCustomerLine(scanS1M, { ...custPricing, price: 0 }, 'Fresh', 1, '')], 'customer')).join(' | '), /MRP is ₹0/);
+  assert.match(validateDraft(input([ok[0], ok[0]], 'customer')).join(' | '), /entered twice as Fresh/);
+});
+
+test('post/cancel (customer): stock moves exactly once, no ledger written, header keeps GST basis', async () => {
+  const s = seed();
+  const lines = [makeCustomerLine(scanS1M, custPricing, 'Fresh', 4, 'R1'), makeCustomerLine(scanT1, custPricing, 'Damage', 1, 'R1')];
+  const { returnNo } = await draft(s, 'c1', lines, 'customer');
+  assert.equal(returnNo, 'SR2627-0001');
+  const saved = s.read(paths.salesReturn('c1'));
+  assert.deepEqual([saved.mode, saved.taxRate, saved.isInterState, saved.invoiceIds], ['customer', 5, false, []]);
+
+  assert.equal(await postReturn(s, 'c1', 'ravi'), 'posted');
+  assert.equal(await postReturn(s, 'c1', 'ravi'), 'already-posted');
+  assert.equal(stock(s, 'invS1M'), 6);
+  assert.equal(damage(s, 'invT1'), 1);
+  assert.equal([...s.docs.keys()].some((p) => p.startsWith('salesReturnLedger/')), false);
+
+  assert.equal(await cancelReturn(s, 'c1', 'ravi', 'wrong customer'), 'cancelled');
+  assert.equal(stock(s, 'invS1M'), 2);
+  assert.equal(damage(s, 'invT1'), 0);
+});
+
+test('post (customer) is refused when the scanned item has no inventory record left', async () => {
+  const s = seed();
+  await draft(s, 'c2', [makeCustomerLine({ ...scanS1M, inventoryId: 'gone' }, custPricing, 'Fresh', 1, '')], 'customer');
+  await assert.rejects(postReturn(s, 'c2', 'ravi'), (e) => e instanceof SalesReturnError && /no longer exists/.test(e.message));
+  assert.equal(s.read(paths.salesReturn('c2')).status, 'Draft');
 });

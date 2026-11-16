@@ -97,11 +97,15 @@ function stateLabel(state: string | undefined, gstin: string | undefined): strin
   return code ? `${name}(${code})` : name;
 }
 
+export type PartyAddress = Pick<Invoice, 'clientAddress' | 'clientPlace' | 'clientZipCode' | 'clientState' | 'clientGstin'>;
+
 export async function downloadSalesReturnPdf(
   ret: SalesReturn,
   creditNote: CreditNote,
   invoices: Invoice[],
   company: CompanySettings | null,
+  /** Customer's bill-to details when there is no invoice to take them from (Customer-Based Scanned Return). */
+  party?: PartyAddress | null,
 ): Promise<void> {
   const { default: JsPDF } = await import('jspdf');
   const doc = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -109,7 +113,7 @@ export async function downloadSalesReturnPdf(
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 10;
   const usableW = pageW - margin * 2;
-  const inv0 = invoices[0];
+  const inv0: PartyAddress | undefined = invoices[0] ?? party ?? undefined;
   doc.setLineWidth(0.2);
   doc.setDrawColor(0, 0, 0);
   doc.setTextColor(0, 0, 0);

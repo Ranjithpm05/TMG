@@ -12,9 +12,16 @@
 // goes to damageStock instead so it can never be picked/sold again. Both are
 // applied only when the return is Posted, and reversed only by cancelling it —
 // see sales-return.engine.ts.
+//
+// Modes 'single' / 'multiple' return billed lines of the selected invoice(s).
+// Mode 'customer' (Customer-Based Scanned Return) returns scanned items of a
+// customer with no invoice: its lines carry invoiceId/invoiceNo/dcId = '' and
+// their own taxRate/hsnSac, priced from Design Master MRP + Client Master
+// margin/discount the same way Invoice generation prices them. They never
+// touch salesReturnLedger, so no sold-qty cap applies to them.
 
 export type SalesReturnStatus = 'Draft' | 'Posted' | 'Cancelled';
-export type SalesReturnMode = 'single' | 'multiple';
+export type SalesReturnMode = 'single' | 'multiple' | 'customer';
 export type ReturnCondition = 'Fresh' | 'Damage';
 
 export interface SalesReturnLine {
@@ -44,6 +51,10 @@ export interface SalesReturnLine {
   taxableValue: number;
   taxAmount: number;
   totalAmount: number;
+  /** Mode 'customer' only — total GST % of the line (invoice lines take it from their invoice). */
+  taxRate?: number;
+  /** Mode 'customer' only — HSN resolved from the item's product group at entry. */
+  hsnSac?: string;
 }
 
 export interface SalesReturnTotals {
@@ -80,6 +91,10 @@ export interface SalesReturn {
   remarks?: string;
   /** Customer's own reference for the return (e.g. their debit note no.) — printed as "Reference". */
   referenceNo?: string;
+  /** Mode 'customer' only — IGST (true) vs CGST+SGST, resolved from Client Master at entry. */
+  isInterState?: boolean;
+  /** Mode 'customer' only — total GST % entered for the return (also stored per line). */
+  taxRate?: number;
   createdBy: string;
   updatedBy?: string;
   postedBy?: string;

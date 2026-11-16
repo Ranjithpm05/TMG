@@ -225,6 +225,57 @@ export function buildBillRows(
 
 export const rowRef = (invoiceId: string, lineKey: string) => `${invoiceId}|${lineKey}`;
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Customer-Based Scanned Return (mode 'customer') — no invoice
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Line key of a scanned item — one line per barcode (+ condition), like a billed line per DC item + size. */
+export function scanLineKey(barcode: string): string {
+  return `scan#${encodeURIComponent(String(barcode ?? '').trim().toUpperCase())}`;
+}
+
+/** A scanned item as resolved from Design Master (+ its inventory record). */
+export interface ScannedItem {
+  barcode: string;
+  inventoryId: string;
+  styleNo: string;
+  color: string;
+  size: string;
+  sleeveType?: string;
+  /** Product group (Design.group) — what an invoice line calls its description. */
+  description: string;
+  mrp: number;
+  hsnSac: string;
+}
+
+/**
+ * How a customer return is valued with no invoice to copy from — the same
+ * basis Invoice generation uses: price = MRP after the client's Margin%
+ * (priceAfterMargin), then the client's Discount%, then GST at taxRate.
+ */
+export interface CustomerPricing {
+  price: number;
+  discountPct: number;
+  taxRate: number;
+}
+
+export function makeCustomerLine(
+  item: ScannedItem, pricing: CustomerPricing, condition: ReturnCondition, qty: number, location: string, remarks?: string,
+): SalesReturnLine {
+  return {
+    invoiceId: '', invoiceNo: '',
+    lineKey: scanLineKey(item.barcode), dcId: '', itemIndex: -1, size: item.size,
+    condition, qty,
+    inventoryId: item.inventoryId, barcode: item.barcode,
+    styleNo: item.styleNo, color: item.color, ...(item.sleeveType ? { sleeveType: item.sleeveType } : {}),
+    description: item.description, mrp: item.mrp, price: pricing.price, soldQty: 0,
+    location: location.trim(), ...(remarks?.trim() ? { remarks: remarks.trim() } : {}),
+    ...lineAmounts({ discountPct: pricing.discountPct, cgstRate: 0, sgstRate: 0, igstRate: pricing.taxRate }, qty, pricing.price),
+    taxRate: pricing.taxRate,
+    hsnSac: item.hsnSac,
+  };
+}
+
 /** A return line for `qty` pieces of a bill row, valued at the invoice's own rates. */
 export function makeLine(
   row: BillRow, rates: TaxRates, condition: ReturnCondition, qty: number, location: string, remarks?: string,
@@ -254,6 +305,10 @@ export interface ReturnDraftInput {
   clientGstin?: string;
   remarks?: string;
   referenceNo?: string;
+  /** Mode 'customer' only. */
+  isInterState?: boolean;
+  /** Mode 'customer' only. */
+  taxRate?: number;
   lines: SalesReturnLine[];
 }
 
@@ -284,7 +339,7 @@ export function returnNetAmount(totals: Pick<SalesReturnTotals, 'totalAmount' | 
 
 export function uniqueInvoices(lines: Pick<SalesReturnLine, 'invoiceId' | 'invoiceNo'>[]): { invoiceIds: string[]; invoiceNos: string[] } {
   const byId = new Map<string, string>();
-  for (const l of lines) if (!byId.has(l.invoiceId)) byId.set(l.invoiceId, l.invoiceNo);
+  for (const l of lines) if (l.invoiceId && !byId.has(l.invoiceId)) byId.set(l.invoiceId, l.invoiceNo);
   return { invoiceIds: [...byId.keys()], invoiceNos: [...byId.values()] };
 }
 
@@ -309,10 +364,19 @@ export function validateDraft(input: ReturnDraftInput, rowsByRef?: Map<string, B
 
   const { invoiceIds } = uniqueInvoices(lines);
   if (input.mode === 'single' && invoiceIds.length > 1) errors.push('Single Bill Return can only return items of one invoice — switch to Multiple Bills Return.');
+  const customer = input.mode === 'customer';
+  if (customer && !(Number(input.taxRate) >= 0 && Number(input.taxRate) <= 28)) errors.push('Enter a GST rate between 0 and 28%.');
 
   const seen = new Set<string>();
   for (const l of lines) {
-    const label = `${l.invoiceNo} · ${lineLabel(l)}`;
+    const label = l.invoiceNo ? `${l.invoiceNo} · ${lineLabel(l)}` : lineLabel(l);
+    // An invoice line in a customer return (or vice versa) would skip — or wrongly
+    // get — the sold-qty check postReturn() runs per invoice.
+    if (customer && l.invoiceId) errors.push(`${label}: a Customer-Based Scanned Return cannot hold invoice lines.`);
+    if (!customer && !l.invoiceId) errors.push(`${label}: no invoice — scanned items without a bill belong in a Customer-Based Scanned Return.`);
+    if (customer && !l.barcode) errors.push(`${label}: item code is missing.`);
+    if (customer && !(Number(l.price) > 0)) errors.push(`${label}: MRP is ₹0 in Design Master — correct it before returning this item.`);
+    if (customer && !l.hsnSac) errors.push(`${label}: HSN code is missing.`);
     if (!Number.isInteger(l.qty) || l.qty <= 0) errors.push(`${label}: quantity must be a whole number above 0.`);
     if (!CONDITIONS.includes(l.condition)) errors.push(`${label}: choose Fresh or Damage.`);
     if (!l.inventoryId) errors.push(`${label}: no inventory record matches this item, so it cannot be taken back into stock.`);
@@ -368,6 +432,7 @@ export async function saveDraft(
     ...(input.clientGstin ? { clientGstin: input.clientGstin } : {}),
     remarks: (input.remarks ?? '').trim(),
     referenceNo: (input.referenceNo ?? '').trim(),
+    ...(input.mode === 'customer' ? { isInterState: !!input.isInterState, taxRate: Number(input.taxRate) || 0 } : {}),
     ...uniqueInvoices(lines),
     lines,
     totals: summarizeLines(lines),

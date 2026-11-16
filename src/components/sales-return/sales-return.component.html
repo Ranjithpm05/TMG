@@ -11,13 +11,13 @@
             <p class="text-lg font-black text-slate-900">{{ v.returnNo }}
               <ng-container *ngTemplateOutlet="statusPill; context: { $implicit: v.status }"></ng-container>
             </p>
-            <p class="text-sm text-slate-500">{{ v.clientName }} · {{ v.returnDate | date:'dd MMM yyyy' }} · {{ v.mode === 'single' ? 'Single Bill' : 'Multiple Bills' }}</p>
+            <p class="text-sm text-slate-500">{{ v.clientName }} · {{ v.returnDate | date:'dd MMM yyyy' }} · {{ modeLabel(v.mode) }}</p>
           </div>
           <button (click)="viewing.set(null)" class="h-9 w-9 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close">✕</button>
         </div>
         <div class="max-h-[70vh] overflow-y-auto px-5 py-4 sm:px-6">
           <div class="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-            <div class="rounded-xl bg-slate-50 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Bills</p><p class="font-semibold text-slate-800">{{ (v.invoiceNos ?? []).join(', ') }}</p></div>
+            <div class="rounded-xl bg-slate-50 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Bills</p><p class="font-semibold text-slate-800">{{ (v.invoiceNos ?? []).join(', ') || 'No invoice (customer scan)' }}</p></div>
             <div class="rounded-xl bg-emerald-50 p-3"><p class="text-[10px] font-bold uppercase text-emerald-600">Fresh PCS</p><p class="text-lg font-black text-emerald-700">{{ v.totals.freshQty }}</p></div>
             <div class="rounded-xl bg-rose-50 p-3"><p class="text-[10px] font-bold uppercase text-rose-600">Damage PCS</p><p class="text-lg font-black text-rose-700">{{ v.totals.damageQty }}</p></div>
             <div class="rounded-xl bg-slate-50 p-3"><p class="text-[10px] font-bold uppercase text-slate-400">Return Value</p><p class="text-lg font-black text-slate-900">₹{{ netAmount(v.totals) | number:'1.2-2' }}</p><p class="text-[11px] text-slate-500">Taxable ₹{{ v.totals.taxableValue | number:'1.2-2' }} · GST ₹{{ v.totals.taxAmount | number:'1.2-2' }} · R/O {{ (netAmount(v.totals) - v.totals.totalAmount) | number:'1.2-2' }}</p></div>
@@ -60,7 +60,7 @@
               <tbody class="divide-y divide-slate-100">
                 @for (l of v.lines; track $index) {
                   <tr>
-                    <td class="whitespace-nowrap px-3 py-2 font-semibold text-slate-700">{{ l.invoiceNo }}</td>
+                    <td class="whitespace-nowrap px-3 py-2 font-semibold text-slate-700">{{ l.invoiceNo || '–' }}</td>
                     <td class="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-600">{{ l.barcode }}</td>
                     <td class="px-3 py-2"><p class="font-bold text-slate-800">{{ l.styleNo }}</p><p class="text-xs text-slate-500">{{ l.color }} · {{ l.size }}@if (l.sleeveType) { · {{ l.sleeveType }} }</p></td>
                     <td class="px-3 py-2"><ng-container *ngTemplateOutlet="conditionPill; context: { $implicit: l.condition }"></ng-container></td>
@@ -166,9 +166,9 @@
         <div class="grid gap-4 lg:grid-cols-2">
           <div>
             <p class="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Return Type</p>
-            <div class="grid grid-cols-2 gap-2">
-              @for (m of [{k:'single',l:'Single Bill Return',d:'Return against one invoice'},{k:'multiple',l:'Multiple Bills Return',d:'Several invoices in one entry'}]; track m.k) {
-                <button type="button" (click)="setMode($any(m.k))" class="rounded-2xl border p-3 text-left transition-all"
+            <div class="grid gap-2 sm:grid-cols-3">
+              @for (m of [{k:'single',l:'Single Bill Return',d:'Return against one invoice'},{k:'multiple',l:'Multiple Bills Return',d:'Several invoices in one entry'},{k:'customer',l:'Customer-Based Scanned Return',d:'Scan items, no invoice'}]; track m.k) {
+                <button type="button" (click)="setMode($any(m.k))" [disabled]="!!editing() && m.k !== mode()" class="rounded-2xl border p-3 text-left transition-all disabled:cursor-not-allowed disabled:opacity-40"
                         [class]="mode() === m.k ? 'border-indigo-500 bg-indigo-50/70 ring-2 ring-indigo-500/30' : 'border-slate-200 bg-white hover:border-indigo-300'">
                   <p class="text-sm font-black text-slate-900">{{ m.l }}</p>
                   <p class="text-xs text-slate-500">{{ m.d }}</p>
@@ -198,10 +198,18 @@
           <label class="block xl:col-span-2">
             <span class="mb-1 block text-xs font-bold text-slate-600">Customer *</span>
             <select #clientSelect class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                    [value]="clientId()" (change)="selectClient(clientSelect.value, clientSelect)" [disabled]="invoicesLoading() || !!editing()">
-              <option value="">{{ invoicesLoading() ? 'Loading customers…' : 'Select customer' }}</option>
-              @for (c of clients(); track c.id) {
-                <option [value]="c.id" [selected]="c.id === clientId()">{{ c.name }}{{ c.gstin ? ' · ' + c.gstin : '' }} ({{ c.invoices }} bills)</option>
+                    [value]="clientId()" (change)="selectClient(clientSelect.value, clientSelect)"
+                    [disabled]="(isCustomerMode() ? masterClientsLoading() : invoicesLoading()) || !!editing()">
+              @if (isCustomerMode()) {
+                <option value="">{{ masterClientsLoading() ? 'Loading customers…' : 'Select customer (Client Master)' }}</option>
+                @for (c of activeMasterClients(); track c.id) {
+                  <option [value]="c.id" [selected]="c.id === clientId()">{{ c.clientName }}{{ c.gstNo ? ' · ' + c.gstNo : '' }}{{ c.place ? ' · ' + c.place : '' }}</option>
+                }
+              } @else {
+                <option value="">{{ invoicesLoading() ? 'Loading customers…' : 'Select customer' }}</option>
+                @for (c of clients(); track c.id) {
+                  <option [value]="c.id" [selected]="c.id === clientId()">{{ c.name }}{{ c.gstin ? ' · ' + c.gstin : '' }} ({{ c.invoices }} bills)</option>
+                }
               }
             </select>
           </label>
@@ -220,13 +228,138 @@
             <input type="text" placeholder="Customer's debit note no." class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                    [ngModel]="referenceNo()" (ngModelChange)="referenceNo.set($event)">
           </label>
-          <label class="block sm:col-span-2 xl:col-span-3">
+          @if (isCustomerMode()) {
+            <label class="block">
+              <span class="mb-1 block text-xs font-bold text-slate-600">GST Rate % *
+                @if (customerGst(); as g) {
+                  @if (!g.error) { <span class="font-semibold text-slate-400">· {{ g.isInterState ? 'IGST' : 'CGST + SGST' }}</span> }
+                }
+              </span>
+              <input type="number" min="0" max="28" step="0.01" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                     [ngModel]="taxRate()" (ngModelChange)="setTaxRate($event)">
+            </label>
+          }
+          <label class="block sm:col-span-2" [class.xl:col-span-3]="!isCustomerMode()" [class.xl:col-span-2]="isCustomerMode()">
             <span class="mb-1 block text-xs font-bold text-slate-600">Remarks</span>
             <input type="text" placeholder="Reason for return, LR / courier details…" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                    [ngModel]="remarks()" (ngModelChange)="remarks.set($event)">
           </label>
         </div>
 
+        @if (isCustomerMode()) {
+          <!-- Customer-Based Scanned Return -->
+          @if (!clientId()) {
+            <p class="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">Select a customer, then scan the returned items.</p>
+          } @else {
+            @if (customerGst()?.error; as gstError) {
+              <p class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{{ gstError }}</p>
+            }
+            @if (masterClient(); as mc) {
+              <p class="text-xs text-slate-500">Priced like an invoice to this customer: MRP from Design Master − Margin {{ mc.marginPct || 0 }}% − Discount {{ mc.discountPct || 0 }}% + GST {{ taxRate() }}%.
+                @if (!mc.gstNo) { <span class="font-semibold text-amber-700">No GSTIN — no e-Invoice will be generated (B2C).</span> }
+              </p>
+            }
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input type="text" placeholder="Scan item code to add 1 {{ inwardType() }} pc…" autocomplete="off" [disabled]="catalogLoading()"
+                     class="w-full rounded-xl border-2 px-3 py-2.5 font-mono text-sm focus:outline-none sm:w-80"
+                     [class]="inwardType() === 'Damage' ? 'border-rose-200 focus:border-rose-400' : 'border-emerald-200 focus:border-emerald-400'"
+                     (keydown)="onScanKey($event)">
+              <p class="text-sm font-medium"
+                 [class]="feedback().kind === 'error' ? 'text-rose-600' : feedback().kind === 'ok' ? 'text-emerald-700' : 'text-slate-400'">{{ catalogLoading() ? 'Loading items…' : feedback().message }}</p>
+            </div>
+
+            <div class="overflow-hidden rounded-2xl border border-slate-200">
+              <div class="flex items-center justify-between bg-slate-50 px-4 py-3">
+                <p class="text-sm font-black text-slate-900">Scanned Items <span class="font-semibold text-slate-500">· {{ scanned().length }} item(s) · {{ scannedQty() }} pcs</span></p>
+              </div>
+              <!-- Desktop -->
+              <div class="hidden overflow-x-auto md:block">
+                <table class="min-w-full text-sm">
+                  <thead>
+                    <tr class="border-t border-slate-100 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                      <th class="px-3 py-2.5 text-left">Item Code</th>
+                      <th class="px-3 py-2.5 text-left">Item</th>
+                      <th class="px-3 py-2.5 text-left">HSN / UOM</th>
+                      <th class="px-3 py-2.5 text-right">MRP / Rate</th>
+                      <th class="px-3 py-2.5 text-center text-emerald-700">Fresh</th>
+                      <th class="px-3 py-2.5 text-center text-rose-700">Damage</th>
+                      <th class="px-3 py-2.5 text-left">Location</th>
+                      <th class="px-3 py-2.5 text-left">Remarks</th>
+                      <th class="px-3 py-2.5 text-right">Value</th>
+                      <th class="px-3 py-2.5"><span class="sr-only">Remove</span></th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    @for (e of scanned(); track e.item.barcode) {
+                      <tr [class.bg-indigo-50/60]="lastScanned() === e.item.barcode.toUpperCase()" [class.bg-rose-50]="!(e.fresh + e.damage)">
+                        <td class="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-600">{{ e.item.barcode }}</td>
+                        <td class="px-3 py-2">
+                          <p class="font-bold text-slate-800">{{ e.item.styleNo }} <span class="font-normal text-slate-400">{{ e.item.description }}</span></p>
+                          <p class="text-xs text-slate-500">{{ e.item.color }} · {{ e.item.size }}
+                            @if (e.item.sleeveType) { <span class="ml-1 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">{{ e.item.sleeveType }}</span> }
+                          </p>
+                        </td>
+                        <td class="whitespace-nowrap px-3 py-2 text-xs text-slate-600">{{ e.item.hsnSac }} / NOS</td>
+                        <td class="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-600">{{ e.item.mrp }} / {{ pricingFor(e.item).price | number:'1.2-2' }}</td>
+                        <td class="px-2 py-2">
+                          <input type="number" min="0" step="1"
+                                 class="w-16 rounded-lg border border-emerald-200 px-2 py-1 text-right text-sm font-bold tabular-nums focus:border-emerald-400 focus:outline-none"
+                                 [ngModel]="e.fresh || null" (ngModelChange)="setScanQty(e, 'fresh', $event)">
+                        </td>
+                        <td class="px-2 py-2">
+                          <input type="number" min="0" step="1"
+                                 class="w-16 rounded-lg border border-rose-200 px-2 py-1 text-right text-sm font-bold tabular-nums focus:border-rose-400 focus:outline-none"
+                                 [ngModel]="e.damage || null" (ngModelChange)="setScanQty(e, 'damage', $event)">
+                        </td>
+                        <td class="px-2 py-2">
+                          <input type="text" [placeholder]="defaultLocation() || 'Location'" class="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none"
+                                 [ngModel]="e.location" (ngModelChange)="setScanText(e, 'location', $event)">
+                        </td>
+                        <td class="px-2 py-2">
+                          <input type="text" placeholder="Remarks" class="w-32 rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none"
+                                 [ngModel]="e.remarks" (ngModelChange)="setScanText(e, 'remarks', $event)">
+                        </td>
+                        <td class="whitespace-nowrap px-3 py-2 text-right tabular-nums">₹{{ scanEntryValue(e) | number:'1.2-2' }}</td>
+                        <td class="px-2 py-2 text-right">
+                          <button (click)="removeScan(e)" title="Remove item" class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50">✕</button>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr><td colspan="10" class="px-4 py-8 text-center text-sm text-slate-400">No items scanned yet.</td></tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <!-- Mobile -->
+              <div class="space-y-2 p-3 md:hidden">
+                @for (e of scanned(); track e.item.barcode) {
+                  <div class="rounded-xl border p-3" [class]="!(e.fresh + e.damage) ? 'border-rose-300 bg-rose-50' : 'border-slate-200'">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <p class="truncate font-bold text-slate-800">{{ e.item.styleNo }} <span class="font-normal text-slate-400">{{ e.item.description }}</span></p>
+                        <p class="truncate text-xs text-slate-500">{{ e.item.color }} · {{ e.item.size }}@if (e.item.sleeveType) { · {{ e.item.sleeveType }} } · <span class="font-mono">{{ e.item.barcode }}</span></p>
+                        <p class="text-xs text-slate-500">MRP {{ e.item.mrp }} · Rate {{ pricingFor(e.item).price | number:'1.2-2' }} · ₹{{ scanEntryValue(e) | number:'1.2-2' }}</p>
+                      </div>
+                      <button (click)="removeScan(e)" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-rose-600">✕</button>
+                    </div>
+                    <div class="mt-2 grid grid-cols-2 gap-2">
+                      <input type="number" min="0" placeholder="Fresh" class="rounded-lg border border-emerald-200 px-2 py-1.5 text-sm font-bold"
+                             [ngModel]="e.fresh || null" (ngModelChange)="setScanQty(e, 'fresh', $event)">
+                      <input type="number" min="0" placeholder="Damage" class="rounded-lg border border-rose-200 px-2 py-1.5 text-sm font-bold"
+                             [ngModel]="e.damage || null" (ngModelChange)="setScanQty(e, 'damage', $event)">
+                      <input type="text" [placeholder]="defaultLocation() || 'Location'" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                             [ngModel]="e.location" (ngModelChange)="setScanText(e, 'location', $event)">
+                      <input type="text" placeholder="Remarks" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                             [ngModel]="e.remarks" (ngModelChange)="setScanText(e, 'remarks', $event)">
+                    </div>
+                  </div>
+                } @empty {
+                  <p class="py-6 text-center text-sm text-slate-400">No items scanned yet.</p>
+                }
+              </div>
+            </div>
+          }
+        } @else {
         <!-- Bill picker -->
         @if (clientId()) {
           <div class="rounded-2xl border border-slate-200">
@@ -391,6 +524,8 @@
           }
         }
 
+        }
+
         @if (errors().length) {
           <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
             <p class="text-sm font-black text-rose-800">Please fix the following:</p>
@@ -416,8 +551,8 @@
               <button (click)="saveDraft()" [disabled]="saving() || !lines().length" class="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
                 {{ editing() ? 'Update Draft' : 'Save Draft' }}
               </button>
-              <button (click)="saveAndPost()" [disabled]="saving() || !lines().length" class="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50">
-                {{ saving() ? 'Saving…' : 'Save & Post' }}
+              <button (click)="isCustomerMode() ? completeCustomerReturn() : saveAndPost()" [disabled]="saving() || !lines().length" class="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50">
+                {{ saving() ? 'Saving…' : isCustomerMode() ? 'Complete' : 'Save & Post' }}
               </button>
             </div>
           </div>
@@ -468,7 +603,7 @@
                     <td class="whitespace-nowrap px-4 py-2.5 font-bold text-slate-800">{{ r.returnNo }}</td>
                     <td class="whitespace-nowrap px-4 py-2.5 text-slate-600">{{ r.returnDate | date:'dd MMM yyyy' }}</td>
                     <td class="px-4 py-2.5 text-slate-700">{{ r.clientName }}</td>
-                    <td class="px-4 py-2.5 text-xs text-slate-600">{{ (r.invoiceNos ?? []).join(', ') }}</td>
+                    <td class="px-4 py-2.5 text-xs text-slate-600">{{ (r.invoiceNos ?? []).join(', ') || modeLabel(r.mode) }}</td>
                     <td class="px-4 py-2.5 text-right font-bold tabular-nums text-emerald-700">{{ r.totals?.freshQty ?? 0 }}</td>
                     <td class="px-4 py-2.5 text-right font-bold tabular-nums text-rose-700">{{ r.totals?.damageQty ?? 0 }}</td>
                     <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">₹{{ netAmount(r.totals) | number:'1.2-2' }}</td>

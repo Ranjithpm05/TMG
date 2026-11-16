@@ -3,27 +3,39 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import Swal from 'sweetalert2';
+import type { Client } from '../../models/client.model';
 import type { Invoice } from '../../models/invoice.model';
 import type {
   DamageStockItem, ReturnCondition, SalesReturn, SalesReturnLine, SalesReturnMode, SalesReturnStatus,
 } from '../../models/sales-return.model';
 import { InvoiceService } from '../../services/invoice.service';
-import { SalesReturnService, type InvoiceBill } from '../../services/sales-return.service';
+import { SalesReturnService, type InvoiceBill, type ScanCatalog } from '../../services/sales-return.service';
 import { SalesReturnEInvoiceService } from '../../services/sales-return-einvoice.service';
 import { downloadSalesReturnPdf } from '../../services/sales-return-pdf.util';
 import { CANCEL_REASONS } from '../../models/einvoice.model';
 import { AuthService } from '../../services/auth.service';
+import { ClientService } from '../../services/client.service';
+import { CompanySettingsService } from '../../services/company-settings.service';
+import { resolveGstPlaceOfSupply } from '../../services/gst-state.util';
+import { priceAfterMargin } from '../../services/pricing.util';
 import { LoadingService } from '../../services/loading.service';
 import {
-  BillRow, ReturnDraftInput, invoiceNotReturnableReason, lineLabel, makeLine, returnNetAmount, rowRef, summarizeLines, validateDraft,
+  BillRow, ReturnDraftInput, ScannedItem, invoiceNotReturnableReason, lineLabel, makeCustomerLine, makeLine, returnNetAmount, rowRef,
+  summarizeLines, validateDraft,
 } from '../../services/sales-return.engine';
 
 type Tab = 'entry' | 'returns' | 'damage';
 type Entry = { fresh: number; damage: number; location: string; remarks: string };
 type ScanFeedback = { kind: 'idle' | 'ok' | 'error'; message: string };
+/** One scanned item code of a Customer-Based Scanned Return, with its Fresh / Damage qty. */
+type ScanEntry = Entry & { item: ScannedItem };
+type CustomerGst = { isInterState: boolean; error: string | null };
 
 const MAX_INVOICES_LISTED = 100;
 const EMPTY_ENTRY: Entry = { fresh: 0, damage: 0, location: '', remarks: '' };
+/** Same default the Generate Invoice dialog offers for Tax Rate %. */
+const DEFAULT_TAX_RATE = 5;
+const IDLE_FEEDBACK: ScanFeedback = { kind: 'idle', message: 'Scan or type an item code to add one piece.' };
 
 @Component({
   selector: 'app-sales-return',
@@ -38,6 +50,8 @@ export class SalesReturnComponent implements OnInit {
   private invoiceService = inject(InvoiceService);
   private authService = inject(AuthService);
   private loadingService = inject(LoadingService);
+  private clientService = inject(ClientService);
+  private companySettingsService = inject(CompanySettingsService);
 
   private readonly user = computed(() => this.authService.currentUser()?.username ?? '');
 
@@ -77,9 +91,38 @@ export class SalesReturnComponent implements OnInit {
   saving = signal(false);
   errors = signal<string[]>([]);
   scanValue = signal('');
-  feedback = signal<ScanFeedback>({ kind: 'idle', message: 'Scan or type an item code to add one piece.' });
+  feedback = signal<ScanFeedback>(IDLE_FEEDBACK);
 
-  readonly client = computed(() => this.clients().find((c) => c.id === this.clientId()) ?? null);
+  // ── Customer-Based Scanned Return (mode 'customer') ───────────────────────
+  readonly isCustomerMode = computed(() => this.mode() === 'customer');
+  masterClientsLoading = signal(false);
+  masterClients = signal<Client[]>([]);
+  catalogLoading = signal(false);
+  private catalog: ScanCatalog | null = null;
+  scanned = signal<ScanEntry[]>([]);
+  lastScanned = signal('');
+  taxRate = signal(DEFAULT_TAX_RATE);
+  /** IGST vs CGST+SGST for the selected customer, or why it can't be decided. */
+  customerGst = signal<CustomerGst | null>(null);
+
+  readonly activeMasterClients = computed(() => this.masterClients()
+    .filter((c) => c.id && c.status !== 'Inactive')
+    .sort((a, b) => a.clientName.localeCompare(b.clientName)));
+  readonly masterClient = computed(() => this.masterClients().find((c) => c.id === this.clientId()) ?? null);
+
+  readonly client = computed(() => {
+    if (!this.isCustomerMode()) return this.clients().find((c) => c.id === this.clientId()) ?? null;
+    const c = this.masterClient();
+    return c ? { id: c.id!, name: c.clientName, gstin: c.gstNo ?? '', invoices: 0 } : null;
+  });
+
+  /** Price basis of a customer return — same as Invoice generation: MRP after Margin%, then Discount%, then GST. */
+  pricingFor(item: ScannedItem): { price: number; discountPct: number; taxRate: number } {
+    const c = this.masterClient();
+    return { price: priceAfterMargin(item.mrp, c?.marginPct), discountPct: Number(c?.discountPct) || 0, taxRate: Number(this.taxRate()) || 0 };
+  }
+
+  readonly scannedQty = computed(() => this.scanned().reduce((s, e) => s + e.fresh + e.damage, 0));
 
   readonly customerInvoices = computed(() => {
     const id = this.clientId();
@@ -97,6 +140,17 @@ export class SalesReturnComponent implements OnInit {
   private readonly invoiceById = computed(() => new Map(this.bills().map((b) => [b.invoice.id!, b.invoice])));
 
   readonly lines = computed<SalesReturnLine[]>(() => {
+    if (this.isCustomerMode()) {
+      const defaultLoc = this.defaultLocation();
+      return this.scanned().flatMap((e) => {
+        const pricing = this.pricingFor(e.item);
+        const location = e.location.trim() || defaultLoc;
+        return [
+          ...(e.fresh > 0 ? [makeCustomerLine(e.item, pricing, 'Fresh', e.fresh, location, e.remarks)] : []),
+          ...(e.damage > 0 ? [makeCustomerLine(e.item, pricing, 'Damage', e.damage, location, e.remarks)] : []),
+        ];
+      });
+    }
     const entries = this.entries();
     const invoices = this.invoiceById();
     const defaultLoc = this.defaultLocation();
@@ -186,8 +240,63 @@ export class SalesReturnComponent implements OnInit {
       await this.loadInvoices();
       this.reloadReturns();
       if (this.selectedInvoiceIds().length) await this.loadBills();
+      if (this.isCustomerMode()) await this.loadCustomerSources(true);
       if (this.tab() === 'damage') await this.loadDamage();
     });
+  }
+
+  /** Client Master + scan catalog for the Customer-Based Scanned Return — loaded on first use. */
+  private async loadCustomerSources(force = false): Promise<void> {
+    const jobs: Promise<void>[] = [];
+    if (force || !this.masterClients().length) {
+      jobs.push((async () => {
+        this.masterClientsLoading.set(true);
+        try {
+          this.masterClients.set(await firstValueFrom(this.clientService.getClients()));
+        } catch (err: any) {
+          Swal.fire({ icon: 'error', title: 'Cannot Load Customers', text: err?.message ?? 'Failed to load Client Master.' });
+        } finally {
+          this.masterClientsLoading.set(false);
+        }
+      })());
+    }
+    if (force || !this.catalog) {
+      jobs.push((async () => {
+        this.catalogLoading.set(true);
+        try {
+          this.catalog = await this.salesReturnService.loadScanCatalog();
+        } catch (err: any) {
+          Swal.fire({ icon: 'error', title: 'Cannot Load Items', text: err?.message ?? 'Failed to load Design Master / inventory.' });
+        } finally {
+          this.catalogLoading.set(false);
+        }
+      })());
+    }
+    await Promise.all(jobs);
+    if (this.clientId()) await this.resolveCustomerGst();
+  }
+
+  /** CGST+SGST vs IGST exactly as Invoice generation decides it (resolveGstPlaceOfSupply) — never guessed. */
+  private async resolveCustomerGst(): Promise<void> {
+    const c = this.masterClient();
+    if (!c) { this.customerGst.set(null); return; }
+    try {
+      const company = await this.companySettingsService.getCompanySettingsOnce();
+      if (!company?.stateCode) {
+        this.customerGst.set({ isInterState: false, error: 'Company state is not set in Company Settings, so CGST+SGST vs IGST cannot be decided.' });
+        return;
+      }
+      const shipToDiffers = !!c.shipToAddress && !c.shipToSameAsBilling && c.shipToAddress.trim() !== (c.billingAddress ?? '').trim();
+      const r = resolveGstPlaceOfSupply(company.stateCode, c.gstNo, c.state, shipToDiffers, c.shipToState);
+      const error = r.buyerStateUnresolved
+        ? `State "${c.state}" of ${c.clientName} is not a recognised Indian state — fix it in Client Master (or set a valid GSTIN).`
+        : r.shipToStateUnresolved
+          ? `Ship To State "${c.shipToState}" of ${c.clientName} is not a recognised Indian state — fix it in Client Master.`
+          : null;
+      if (this.masterClient()?.id === c.id) this.customerGst.set({ isInterState: r.isInterState, error });
+    } catch (err: any) {
+      this.customerGst.set({ isInterState: false, error: err?.message ?? 'Could not load Company Settings.' });
+    }
   }
 
   async loadDamage(): Promise<void> {
@@ -220,11 +329,35 @@ export class SalesReturnComponent implements OnInit {
     this.selectedInvoiceIds.set([]);
     this.bills.set([]);
     this.entries.set({});
+    this.scanned.set([]);
+    this.lastScanned.set('');
     this.errors.set([]);
+    this.feedback.set(IDLE_FEEDBACK);
+    this.customerGst.set(null);
+    if (this.isCustomerMode()) await this.resolveCustomerGst();
   }
 
   async setMode(mode: SalesReturnMode): Promise<void> {
     if (mode === this.mode()) return;
+    // Bill lines and scanned lines can't carry across, and neither can the customer
+    // (bill modes list customers with invoices, the scanned return lists Client Master).
+    if (mode === 'customer' || this.isCustomerMode()) {
+      if ((this.lines().length || this.scanned().length || this.selectedInvoiceIds().length) &&
+          !(await this.confirmDiscard('Switching between bill-wise and customer-based return clears this entry.'))) return;
+      this.clientId.set('');
+      this.billSearch.set('');
+      this.selectedInvoiceIds.set([]);
+      this.bills.set([]);
+      this.entries.set({});
+      this.scanned.set([]);
+      this.lastScanned.set('');
+      this.customerGst.set(null);
+      this.errors.set([]);
+      this.feedback.set(IDLE_FEEDBACK);
+      this.mode.set(mode);
+      if (mode === 'customer') await this.loadCustomerSources();
+      return;
+    }
     if (mode === 'single' && this.selectedInvoiceIds().length > 1) {
       if (!(await this.confirmDiscard('Single Bill Return keeps only the first selected bill.'))) return;
       this.selectedInvoiceIds.set(this.selectedInvoiceIds().slice(0, 1));
@@ -346,6 +479,7 @@ export class SalesReturnComponent implements OnInit {
     input.value = '';
     this.scanValue.set('');
     if (!code) return;
+    if (this.isCustomerMode()) { this.onCustomerScan(code); return; }
 
     const matches = this.rows().filter((r) => (r.barcode ?? '').toUpperCase() === code);
     if (!matches.length) {
@@ -362,6 +496,57 @@ export class SalesReturnComponent implements OnInit {
     this.feedback.set({ kind: 'ok', message: `+1 ${this.inwardType()} · ${row.invoiceNo} · ${lineLabel(row)} (${this.remaining(row)} left)` });
   }
 
+  /** Adds one piece of a scanned item code — a repeat scan adds to its existing line. */
+  private onCustomerScan(code: string): void {
+    if (!this.clientId()) { this.feedback.set({ kind: 'error', message: 'Select the customer first.' }); return; }
+    if (!this.catalog) {
+      this.feedback.set({ kind: 'error', message: this.catalogLoading() ? 'Items are still loading — scan again in a moment.' : 'Items could not be loaded — press Refresh.' });
+      return;
+    }
+    const item = this.catalog.get(code);
+    if (!item) { this.feedback.set({ kind: 'error', message: `${code} is not in Design Master.` }); return; }
+    if (!item.inventoryId) { this.feedback.set({ kind: 'error', message: `${code} · ${lineLabel(item)}: no inventory record — it cannot be taken back into stock.` }); return; }
+    if (!(item.mrp > 0)) { this.feedback.set({ kind: 'error', message: `${code} · ${lineLabel(item)}: MRP is ₹0 in Design Master — correct it first.` }); return; }
+
+    const field = this.inwardType() === 'Damage' ? 'damage' : 'fresh';
+    const key = item.barcode.toUpperCase();
+    const existing = this.scanned().find((e) => e.item.barcode.toUpperCase() === key);
+    if (existing) {
+      this.scanned.update((all) => all.map((e) => (e === existing ? { ...e, [field]: e[field] + 1 } : e)));
+    } else {
+      this.scanned.update((all) => [...all, { ...EMPTY_ENTRY, item, [field]: 1 }]);
+    }
+    const now = this.scanned().find((e) => e.item.barcode.toUpperCase() === key)!;
+    this.lastScanned.set(key);
+    this.errors.set([]);
+    this.feedback.set({ kind: 'ok', message: `+1 ${this.inwardType()} · ${lineLabel(item)} (Fresh ${now.fresh} · Damage ${now.damage})` });
+  }
+
+  setScanQty(entry: ScanEntry, field: 'fresh' | 'damage', value: unknown): void {
+    const n = Math.max(0, Math.floor(Number(value) || 0));
+    this.scanned.update((all) => all.map((e) => (e === entry ? { ...e, [field]: n } : e)));
+    this.errors.set([]);
+  }
+
+  setScanText(entry: ScanEntry, field: 'location' | 'remarks', value: string): void {
+    this.scanned.update((all) => all.map((e) => (e === entry ? { ...e, [field]: value ?? '' } : e)));
+  }
+
+  removeScan(entry: ScanEntry): void {
+    this.scanned.update((all) => all.filter((e) => e !== entry));
+    this.errors.set([]);
+  }
+
+  setTaxRate(value: unknown): void {
+    this.taxRate.set(Math.max(0, Number(value) || 0));
+    this.errors.set([]);
+  }
+
+  /** Value of a scanned entry at the current customer pricing (both conditions). */
+  scanEntryValue(entry: ScanEntry): number {
+    return this.lines().filter((l) => l.barcode === entry.item.barcode).reduce((s, l) => s + l.totalAmount, 0);
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Save / post
   // ═══════════════════════════════════════════════════════════════════════════
@@ -375,13 +560,23 @@ export class SalesReturnComponent implements OnInit {
       ...(c?.gstin ? { clientGstin: c.gstin } : {}),
       remarks: this.remarks(),
       referenceNo: this.referenceNo(),
+      ...(this.isCustomerMode() ? { isInterState: !!this.customerGst()?.isInterState, taxRate: Number(this.taxRate()) || 0 } : {}),
       lines: this.lines(),
     };
   }
 
   private validate(): ReturnDraftInput | null {
     const input = this.draftInput();
-    const errors = validateDraft(input, this.rowsByRef());
+    const customer = this.isCustomerMode();
+    const errors = validateDraft(input, customer ? undefined : this.rowsByRef());
+    if (customer) {
+      const gst = this.customerGst();
+      if (input.clientId && !gst) errors.push('GST type of this customer is still being resolved — try again in a moment.');
+      if (gst?.error) errors.push(gst.error);
+      for (const e of this.scanned()) {
+        if (e.fresh + e.damage <= 0) errors.push(`${lineLabel(e.item)}: enter a return quantity or remove the item.`);
+      }
+    }
     this.errors.set(errors);
     if (errors.length) {
       Swal.fire({ icon: 'warning', title: 'Please check the return', html: this.errorHtml(errors) });
@@ -454,6 +649,86 @@ export class SalesReturnComponent implements OnInit {
     }
   }
 
+  /**
+   * Customer-Based Scanned Return: save → post (stock) → Credit Note e-Invoice.
+   * The e-Invoice is attempted only after the return is posted; if it fails (or
+   * the customer has no GSTIN) the return stays posted and the e-Invoice can be
+   * generated again from the Returns list, exactly like a bill-wise return.
+   */
+  async completeCustomerReturn(): Promise<void> {
+    if (this.saving()) return;
+    const input = this.validate();
+    if (!input) return;
+    const t = this.totals();
+    const b2b = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test((input.clientGstin ?? '').toUpperCase());
+    const r = await Swal.fire({
+      icon: 'question',
+      title: 'Complete this sales return?',
+      html: `<p><b>${this.escape(input.clientName)}</b> · ${this.scanned().length} item(s), no invoice</p>` +
+        `<p class="mt-2"><b class="text-emerald-700">${t.freshQty} Fresh</b> pcs back into inventory · <b class="text-rose-700">${t.damageQty} Damage</b> pcs to damage stock</p>` +
+        `<p class="mt-1">Return value ₹${returnNetAmount(t).toFixed(2)} (${input.isInterState ? 'IGST' : 'CGST+SGST'} ${input.taxRate}%)</p>` +
+        `<p class="mt-3 text-sm text-gray-500">Stock is updated now${b2b
+          ? ', then the Credit Note e-Invoice is generated on the GST portal'
+          : '. No e-Invoice — the customer has no valid GSTIN (B2C)'}.</p>`,
+      showCancelButton: true,
+      confirmButtonText: 'Complete',
+      confirmButtonColor: '#059669',
+    });
+    if (!r.isConfirmed) return;
+
+    this.saving.set(true);
+    const id = this.draftId;
+    let returnNo = '';
+    let posted = false;
+    let postError: string[] = [];
+    let generated: SalesReturn | null = null;
+    let eInvoiceError = '';
+    try {
+      await this.loadingService.run(async () => {
+        try {
+          returnNo = (await this.salesReturnService.saveDraft(id, input, this.user())).returnNo;
+          await this.salesReturnService.postReturn(id, this.user());
+          posted = true;
+        } catch (err: any) {
+          postError = this.messageLines(err);
+          return;
+        }
+        if (!b2b) return;
+        try {
+          generated = await this.salesReturnEInvoiceService.generate(id);
+        } catch (err: any) {
+          eInvoiceError = err?.message ?? 'Could not generate the Credit Note e-Invoice.';
+        }
+      });
+    } finally {
+      this.saving.set(false);
+      this.reloadReturns();
+    }
+
+    // Dialogs open only after loadingService.run() has finished — its overlay sits above Swal.
+    if (!posted) {
+      if (returnNo) {
+        this.editing.set({ ...(this.editing() ?? {}), id, returnNo, status: 'Draft', mode: 'customer' } as SalesReturn);
+        postError.push(`${returnNo} is saved as a Draft — no stock was changed.`);
+      }
+      Swal.fire({ icon: 'error', title: 'Sales Return Failed', html: this.errorHtml(postError) });
+      return;
+    }
+    this.resetForm();
+    this.tab.set('returns');
+    const g = generated as SalesReturn | null;
+    if (g) {
+      await Swal.fire({ icon: 'success', title: 'Sales Return Completed',
+        html: `${this.escape(returnNo)} posted — stock updated.<br>Credit Note e-Invoice IRN <code class="break-all text-xs">${this.escape(g.irn ?? '')}</code><br>Ack No. ${this.escape(g.ackNo ?? '')}` });
+    } else if (eInvoiceError) {
+      await Swal.fire({ icon: 'warning', title: 'Return Posted — e-Invoice Failed',
+        html: `<p>${this.escape(returnNo)} is posted and stock is updated.</p>${this.errorHtml(eInvoiceError.split('\n').filter(Boolean))}` +
+          `<p class="mt-2 text-sm text-gray-500">Fix the issue, then use “Generate e-Invoice (Credit Note)” on this return in the Returns list.</p>` });
+    } else {
+      await Swal.fire({ icon: 'success', title: 'Sales Return Completed', text: `${returnNo} posted — stock updated. No e-Invoice (B2C customer).` });
+    }
+  }
+
   async discardEntry(): Promise<void> {
     if ((this.lines().length || this.selectedInvoiceIds().length) && !(await this.confirmDiscard('Unsaved changes in this entry are discarded.'))) return;
     this.resetForm();
@@ -473,8 +748,12 @@ export class SalesReturnComponent implements OnInit {
     this.selectedInvoiceIds.set([]);
     this.bills.set([]);
     this.entries.set({});
+    this.scanned.set([]);
+    this.lastScanned.set('');
+    this.taxRate.set(DEFAULT_TAX_RATE);
+    this.customerGst.set(null);
     this.errors.set([]);
-    this.feedback.set({ kind: 'idle', message: 'Scan or type an item code to add one piece.' });
+    this.feedback.set(IDLE_FEEDBACK);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -503,9 +782,30 @@ export class SalesReturnComponent implements OnInit {
     this.returnDate.set(latest.returnDate);
     this.remarks.set(latest.remarks ?? '');
     this.referenceNo.set(latest.referenceNo ?? '');
-    this.selectedInvoiceIds.set(latest.invoiceIds ?? []);
     this.viewing.set(null);
     this.tab.set('entry');
+    if (latest.mode === 'customer') {
+      this.taxRate.set(latest.taxRate ?? DEFAULT_TAX_RATE);
+      await this.loadingService.run(() => this.loadCustomerSources());
+      const byCode = new Map<string, ScanEntry>();
+      for (const l of latest.lines ?? []) {
+        const code = l.barcode.toUpperCase();
+        // The saved line is the item as scanned — keep it even if Design Master changed since.
+        const e = byCode.get(code) ?? {
+          ...EMPTY_ENTRY, location: l.location ?? '', remarks: l.remarks ?? '',
+          item: {
+            barcode: l.barcode, inventoryId: l.inventoryId, styleNo: l.styleNo, color: l.color, size: l.size,
+            ...(l.sleeveType ? { sleeveType: l.sleeveType } : {}),
+            description: l.description, mrp: l.mrp, hsnSac: l.hsnSac ?? '',
+          },
+        };
+        if (l.condition === 'Damage') e.damage += l.qty; else e.fresh += l.qty;
+        byCode.set(code, e);
+      }
+      this.scanned.set([...byCode.values()]);
+      return;
+    }
+    this.selectedInvoiceIds.set(latest.invoiceIds ?? []);
     await this.loadingService.run(() => this.loadBills());
     const entries: Record<string, Entry> = {};
     for (const l of latest.lines ?? []) {
@@ -580,7 +880,7 @@ export class SalesReturnComponent implements OnInit {
       await this.loadingService.run(async () => {
         const latest = (await this.salesReturnService.getReturnOnce(ret.id!)) ?? ret;
         const ctx = await this.salesReturnEInvoiceService.loadContext(latest);
-        await downloadSalesReturnPdf(latest, ctx.creditNote, ctx.invoices, ctx.company);
+        await downloadSalesReturnPdf(latest, ctx.creditNote, ctx.invoices, ctx.company, ctx.party);
       });
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'PDF Failed', text: err?.message ?? 'Could not build the Sales Return PDF.' });
@@ -594,8 +894,9 @@ export class SalesReturnComponent implements OnInit {
     const r = await Swal.fire({
       icon: 'question',
       title: `Generate Credit Note e-Invoice for ${ret.returnNo}?`,
-      html: `<p>Registers <b>${this.escape(ret.returnNo)}</b> with the GST portal (IRP) as a Credit Note against ` +
-        `<b>${this.escape((ret.invoiceNos ?? []).join(', '))}</b> for ₹${returnNetAmount(ret.totals).toFixed(2)}.</p>` +
+      html: `<p>Registers <b>${this.escape(ret.returnNo)}</b> with the GST portal (IRP) as a Credit Note ` +
+        (ret.invoiceNos?.length ? `against <b>${this.escape(ret.invoiceNos.join(', '))}</b>` : `to <b>${this.escape(ret.clientName)}</b> (no invoice reference)`) +
+        ` for ₹${returnNetAmount(ret.totals).toFixed(2)}.</p>` +
         `<p class="mt-2 text-sm text-gray-500">Once generated it can only be cancelled within 24 hours, and the same return number cannot be registered again.</p>`,
       showCancelButton: true,
       confirmButtonText: 'Generate',
@@ -660,6 +961,10 @@ export class SalesReturnComponent implements OnInit {
   // ═══════════════════════════════════════════════════════════════════════════
   // Helpers
   // ═══════════════════════════════════════════════════════════════════════════
+  modeLabel(mode: SalesReturnMode): string {
+    return mode === 'customer' ? 'Customer Scan' : mode === 'single' ? 'Single Bill' : 'Multiple Bills';
+  }
+
   locations(item: DamageStockItem): { name: string; qty: number }[] {
     return Object.entries(item.byLocation ?? {}).map(([name, qty]) => ({ name, qty: Number(qty) || 0 }));
   }
