@@ -880,7 +880,7 @@ export class SalesReturnComponent implements OnInit {
       await this.loadingService.run(async () => {
         const latest = (await this.salesReturnService.getReturnOnce(ret.id!)) ?? ret;
         const ctx = await this.salesReturnEInvoiceService.loadContext(latest);
-        await downloadSalesReturnPdf(latest, ctx.creditNote, ctx.invoices, ctx.company, ctx.party);
+        await downloadSalesReturnPdf(latest, ctx.creditNote, ctx.invoices, ctx.company, ctx.party, mode);
       });
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: mode === 'print' ? 'Print Failed' : 'PDF Failed', text: err?.message ?? 'Could not build the Sales Return PDF.' });

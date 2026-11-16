@@ -104,6 +104,8 @@ export async function downloadSalesReturnPdf(
   creditNote: CreditNote,
   invoices: Invoice[],
   company: CompanySettings | null,
+  /** Customer's bill-to details when there is no invoice to take them from (Customer-Based Scanned Return). */
+  party?: PartyAddress | null,
   mode: 'download' | 'print' = 'download',
 ): Promise<void> {
   const { default: JsPDF } = await import('jspdf');
