@@ -588,16 +588,6 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
     }
 
     const s = this.summary();
-    if (s.pending > 0) {
-      this.reviewing.set(true);
-      this.setFilter('pending');
-      Swal.fire({
-        icon: 'warning', title: 'Products not scanned',
-        text: `${s.pending} product(s) with stock have not been scanned. Scan them, or confirm them as zero, before completing.`,
-      });
-      return;
-    }
-
     const resuming = session.status === 'Completing';
     const r = await Swal.fire({
       icon: 'question',
@@ -609,6 +599,9 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
         `<tr><td style="padding:2px 12px;color:#059669">Stock increase</td><td style="color:#059669"><b>+${s.increaseQty}</b></td></tr>` +
         `<tr><td style="padding:2px 12px;color:#e11d48">Stock decrease</td><td style="color:#e11d48"><b>−${s.decreaseQty}</b></td></tr>` +
         `</table>` +
+        (s.pending > 0
+          ? `<p class="text-sm" style="color:#d97706;margin-bottom:8px"><b>${s.pending}</b> product(s) with stock were not scanned — their stock will stay unchanged.</p>`
+          : '') +
         `<p class="text-sm">Inventory will be set to the scanned quantities. This cannot be undone.</p>`,
       input: 'checkbox',
       inputValue: 0,

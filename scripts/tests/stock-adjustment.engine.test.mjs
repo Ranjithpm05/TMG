@@ -231,19 +231,27 @@ test('complete: stock increases and decreases set inventory to the counted qty, 
   assert.equal(store.read(paths.lock('SHIRTS')), null, 'group lock released');
 });
 
-test('complete: blocked while products with stock are unscanned; zero-confirm resolves it', async () => {
+test('complete: allowed with unscanned products — they keep their stock', async () => {
+  const store = new FakeStore();
+  seed(store, [inv('a', '1', 'SHIRTS', 10), inv('b', '2', 'SHIRTS', 5)]);
+  const { id } = await start(store);
+  scan(store, id, inv('a', '1', 'SHIRTS', 10), 12);
+
+  const r = await completeSession(store, { sessionId: id, completedBy: 'mgr', groupItems: groupItems(store, 'SHIRTS') });
+  assert.equal(r.outcome, 'completed');
+  assert.equal(stock(store, 'a'), 12);
+  assert.equal(stock(store, 'b'), 5, 'unscanned product NOT silently zeroed');
+  assert.equal(store.read(paths.session(id)).status, 'Completed');
+  assert.deepEqual(r.result, { appliedLines: 1, changedLines: 1, increaseQty: 2, decreaseQty: 0 });
+});
+
+test('complete: zero-confirmed product is set to zero', async () => {
   const store = new FakeStore();
   seed(store, [inv('a', '1', 'SHIRTS', 10), inv('b', '2', 'SHIRTS', 5)]);
   const { id } = await start(store);
   scan(store, id, inv('a', '1', 'SHIRTS', 10), 10);
-
-  await assert.rejects(
-    completeSession(store, { sessionId: id, completedBy: 'mgr', groupItems: groupItems(store, 'SHIRTS') }),
-    (e) => e.code === 'pending-items' && /1 product/.test(e.message));
-  assert.equal(stock(store, 'b'), 5, 'unscanned product NOT silently zeroed');
-  assert.equal(store.read(paths.session(id)).status, 'Counting');
-
   store.put(paths.line(id, 'b'), { barcode: '2', styleNo: 'ST-b', color: 'Blue', size: 'M', startStock: 5, scannedQty: 0, zeroConfirmed: true });
+
   const r = await completeSession(store, { sessionId: id, completedBy: 'mgr', groupItems: groupItems(store, 'SHIRTS') });
   assert.equal(r.outcome, 'completed');
   assert.equal(stock(store, 'b'), 0);

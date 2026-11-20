@@ -357,7 +357,7 @@ const errorText = (err: unknown) => (err as any)?.message ?? String(err);
 export interface CompleteOptions {
   sessionId: string;
   completedBy: string;
-  /** Current inventory rows of the session's group — used to block completion while any product is still pending. */
+  /** Current inventory rows of the session's group. */
   groupItems: InventoryItem[];
   chunkSize?: number;
   rollbackRetries?: number;
@@ -376,15 +376,9 @@ export async function completeSession(store: AdjustmentStore, opts: CompleteOpti
   const chunkSize = opts.chunkSize ?? DEFAULT_CHUNK_SIZE;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
-  // 1. Every product with book stock must be counted (scanned or explicitly zero-confirmed).
+  // 1. Load the counted lines. Products not scanned (and not zero-confirmed) are left untouched —
+  //    their inventory keeps its current stock; only scanned / zero-confirmed lines are applied.
   const lines = await store.listLines(sessionId);
-  const linesById = new Map(lines.map((l) => [l.id, l]));
-  const pending = opts.groupItems.map((item) => rowFor(item, linesById.get(item.id!))).filter((r) => r.status === 'pending');
-  if (pending.length) {
-    throw new StockAdjustmentError('pending-items',
-      `${pending.length} product(s) with stock have not been scanned (e.g. ${pending.slice(0, 3).map((r) => r.item.barcode).join(', ')}). ` +
-      `Scan them or confirm them as zero before completing.`);
-  }
 
   // 2. Take the completion lock — the guard against double clicks and two devices.
   const lockId = `${store.nowMs()}-${Math.random().toString(36).slice(2)}`;

@@ -421,9 +421,8 @@
                 <button (click)="openReview()" class="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-bold text-violet-700 hover:bg-violet-100">Review</button>
               }
             }
-            <button (click)="completeAdjustment()" [disabled]="s.pending > 0 && sess.status === 'Counting'"
-                    [title]="s.pending > 0 ? 'Scan or confirm zero for every product with stock first' : ''"
-                    class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:cursor-not-allowed">
+            <button (click)="completeAdjustment()"
+                    class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700">
               {{ sess.status === 'Completing' ? 'Resume Completion' : 'Complete Adjustment' }}
             </button>
           </div>
