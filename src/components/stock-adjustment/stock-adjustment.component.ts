@@ -8,11 +8,13 @@ import Swal from 'sweetalert2';
 import { InventoryItem } from '../../models/inventory.model';
 import { ScanStatus, StockAdjustmentLine, StockAdjustmentSession } from '../../models/stock-adjustment.model';
 import { InventoryService } from '../../services/inventory.service';
+import { DesignService } from '../../services/design.service';
 import { StockAdjustmentService } from '../../services/stock-adjustment.service';
 import { AuthService } from '../../services/auth.service';
 import { LoadingService } from '../../services/loading.service';
 import {
-  GroupRow, ScanLedger, classifyScan, indexByBarcode, normalizeGroup, rowFor, sameGroup, summarize,
+  GroupRow, ScanLedger, classifyScan, designCatalogItems, indexByBarcode, isNewItemId, normalizeCode, normalizeGroup,
+  rowFor, sameGroup, summarize,
 } from '../../services/stock-adjustment.engine';
 import { exportRowsToExcel, printReportRows, type ExportRowOpts } from '../reports/report-export.util';
 
@@ -42,6 +44,7 @@ const STATUS_LABEL: Record<ScanStatus, string> = {
 export class StockAdjustmentComponent implements OnInit, OnDestroy {
   private adjustmentService = inject(StockAdjustmentService);
   private inventoryService = inject(InventoryService);
+  private designService = inject(DesignService);
   private authService = inject(AuthService);
   private loadingService = inject(LoadingService);
 
@@ -54,6 +57,8 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
   inventoryLoading = signal(true);
   sessionsLoading = signal(true);
   inventory = signal<InventoryItem[]>([]);
+  /** Design Master SKUs as zero-stock rows — lets items never received via GRN be counted. */
+  designItems = signal<InventoryItem[]>([]);
   sessions = signal<StockAdjustmentSession[]>([]);
 
   private readonly user = computed(() => this.authService.currentUser()?.username ?? '');
@@ -74,6 +79,11 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
       g.stock += stock;
       if (stock !== 0) g.withStock++;
       byName.set(key, g);
+    }
+    // Groups that exist only in Design Master (nothing received yet) can still be counted.
+    for (const item of this.designItems()) {
+      const name = normalizeGroup(item.group);
+      if (name && !byName.has(name.toUpperCase())) byName.set(name.toUpperCase(), { name, products: 0, stock: 0, withStock: 0 });
     }
     return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
@@ -97,6 +107,8 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
   private ledgerVersion = signal(0);
   zeroConfirmed = signal<Set<string>>(new Set());
   private knownLineIds = new Set<string>();
+  /** Design Master items (no inventory record) counted in this session — shown as rows of the group. */
+  private newItemIds = signal<Set<string>>(new Set());
   unsavedCount = signal(0);
   syncError = signal('');
   private flushing: Promise<void> | null = null;
@@ -111,13 +123,26 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
   /** The group shown in the grid: the session's group while counting, else the dropdown selection. */
   readonly activeGroup = computed(() => this.session()?.group ?? this.selectedGroup());
 
-  readonly groupItems = computed(() => {
+  private readonly inventoryGroupItems = computed(() => {
     const group = this.activeGroup();
     return group ? this.inventory().filter((i) => sameGroup(i.group, group)) : [];
   });
 
-  private readonly groupIndex = computed(() => indexByBarcode(this.groupItems()));
+  private readonly designItemsById = computed(() => new Map(this.designItems().map((i) => [i.id!, i])));
+
+  /** Inventory products of the group plus the new (Design Master only) items counted in this session. */
+  readonly groupItems = computed(() => {
+    const newItems = [...this.newItemIds()].map((id) => this.designItemsById().get(id)).filter((i): i is InventoryItem => !!i);
+    return newItems.length ? [...this.inventoryGroupItems(), ...newItems] : this.inventoryGroupItems();
+  });
+
+  private readonly groupIndex = computed(() => indexByBarcode(this.inventoryGroupItems()));
   private readonly allIndex = computed(() => indexByBarcode(this.inventory()));
+  /** Design Master SKUs that have no inventory record. */
+  private readonly designIndex = computed(() => {
+    const all = this.allIndex();
+    return indexByBarcode(this.designItems().filter((i) => !all.has(normalizeCode(i.barcode))));
+  });
 
   readonly rows = computed<GroupRow[]>(() => {
     this.ledgerVersion();
@@ -219,8 +244,12 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
     if (fresh) this.inventoryService.invalidateCache();
     this.inventoryLoading.set(true);
     try {
-      const items = await firstValueFrom(this.inventoryService.getInventory());
+      const [items, designs] = await Promise.all([
+        firstValueFrom(this.inventoryService.getInventory()),
+        firstValueFrom(this.designService.getDesigns()),
+      ]);
       this.inventory.set(items);
+      this.designItems.set(designCatalogItems(designs));
       return items;
     } finally {
       this.inventoryLoading.set(false);
@@ -333,6 +362,7 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
     this.ledger.load(lines);
     this.knownLineIds = new Set(lines.map((l) => l.id));
     this.zeroConfirmed.set(new Set(lines.filter((l) => l.zeroConfirmed).map((l) => l.id)));
+    this.newItemIds.set(new Set(lines.filter((l) => isNewItemId(l.id)).map((l) => l.id)));
     this.bump();
   }
 
@@ -367,6 +397,7 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
       this.ledger = new ScanLedger();
       this.unsavedCount.set(0);
       this.session.set(null);
+      this.newItemIds.set(new Set());
       this.mode.set('setup');
       this.reloadSessions();
       Swal.fire({ icon: 'success', title: 'Cancelled', timer: 1500, showConfirmButton: false });
@@ -378,6 +409,7 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
   async leaveSession(): Promise<void> {
     await this.flush();
     this.session.set(null);
+    this.newItemIds.set(new Set());
     this.reviewing.set(false);
     this.mode.set('setup');
     this.reloadSessions();
@@ -407,18 +439,20 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
       this.reject(code, 'This session is not counting any more — scans are not accepted.');
       return;
     }
-    const result = classifyScan(code, session.group, this.groupIndex(), this.allIndex());
+    const result = classifyScan(code, session.group, this.groupIndex(), this.allIndex(), this.designIndex());
     if ('message' in result) { // invalid / other group / duplicate barcode — never counted
       this.reject(code, result.message);
       return;
     }
 
     const item = result.item;
+    if (result.isNew && !this.newItemIds().has(item.id!)) this.newItemIds.update((ids) => new Set(ids).add(item.id!));
     const count = this.ledger.add(item.id!, 1);
     if (count === null) { this.reject(code, 'Could not record this scan.'); return; }
     this.bump();
     const stock = Number(item.currentStock) || 0;
-    const message = `${item.styleNo} · ${item.color} · ${item.size}${item.sleeveType ? ' · ' + item.sleeveType : ''} — scanned ${count} / stock ${stock}`;
+    const message = `${item.styleNo} · ${item.color} · ${item.size}${item.sleeveType ? ' · ' + item.sleeveType : ''} — scanned ${count} / stock ${stock}` +
+      (isNewItemId(item.id!) ? ' (new item — inventory record is created on completion)' : '');
     this.feedback.set({ kind: 'ok', message });
     this.lastScan.set({ item, count });
     this.pushRecent({ at: Date.now(), code, ok: true, message });
@@ -637,6 +671,7 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
       this.reloadSessions();
       const done = await this.waitForStatus(session.id!, ['Completed']);
       this.session.set(null);
+      this.newItemIds.set(new Set());
       if (done) await this.openHistory(done); else this.mode.set('setup');
     } catch (err: any) {
       this.completing.set(null);
@@ -721,6 +756,10 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
   // ═══════════════════════════════════════════════════════════════════════════
   // Helpers
   // ═══════════════════════════════════════════════════════════════════════════
+  isNewItem(item: InventoryItem): boolean {
+    return isNewItemId(item.id ?? '');
+  }
+
   itemName(item: InventoryItem): string {
     return [item.styleNo, item.color, item.size, item.sleeveType].filter(Boolean).join(' · ');
   }

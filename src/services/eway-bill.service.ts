@@ -25,7 +25,7 @@ export class EwayBillService {
   private clientService = inject(ClientService);
 
   // Pre-filled E-Way Bill transport form for an invoice — shared by the E-Way
-  // Bill screen and the combined E-Invoice & E-Way Bill flow. Destination
+  // Bill screen and the combined E-Invoice & E-Way Bill flow. Distance (KM)
   // comes from the live Client Master record — read directly because
   // syncClientFromMaster() is skipped once an IRN exists. The transporter is
   // matched from Transport Master — first by the exact record the invoice/DC
@@ -37,13 +37,12 @@ export class EwayBillService {
     const client = invoice?.clientId
       ? await this.clientService.getClientForDC(invoice.clientId, invoice.clientName).catch(() => null)
       : null;
-    const destination = client?.destination?.trim()
-      || invoice?.clientShipToPlace || invoice?.clientPlace || invoice?.destination || '';
+    const destination = invoice?.clientShipToPlace || invoice?.clientPlace || invoice?.destination || '';
     const matched = this.findTransportForInvoice(invoice, transports);
     return {
       transportId: matched?.id || '',
       form: {
-        distance: 0,
+        distance: client?.distanceKm || 0,
         transMode: '1',
         transporterId: matched?.gstNo || '',
         transporterName: matched?.transportName || '',

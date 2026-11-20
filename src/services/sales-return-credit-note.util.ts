@@ -3,7 +3,9 @@
 // the same figures as the return itself: every line keeps the taxable value
 // and GST the return stored for it (sales-return.engine.ts lineAmounts, at its
 // own invoice's discount and rate) — only the CGST/SGST vs IGST split and the
-// HSN code are added here, both taken from the original invoice.
+// HSN code are added here, both taken from the original invoice — or, for a
+// Customer-Based Scanned Return (no invoice), from the line's own taxRate /
+// hsnSac and the return's isInterState, all fixed when it was entered.
 
 import type { Invoice } from '../models/invoice.model';
 import type { SalesReturn, SalesReturnLine } from '../models/sales-return.model';
@@ -59,7 +61,7 @@ export function buildCreditNote(ret: Pick<SalesReturn, 'lines'>, invoicesById: M
   const items = (ret.lines ?? []).map((line): CreditNoteItem => {
     const invoice = invoicesById.get(line.invoiceId);
     const invItem = invoiceItemFor(invoice, line);
-    const gstRate = invItem?.taxRate
+    const gstRate = line.taxRate ?? invItem?.taxRate
       ?? ((Number(invoice?.cgstRate) || 0) + (Number(invoice?.sgstRate) || 0) + (Number(invoice?.igstRate) || 0));
     const rate = Number(gstRate) || 0;
     const grossAmount = round2(line.qty * line.price);
@@ -70,7 +72,7 @@ export function buildCreditNote(ret: Pick<SalesReturn, 'lines'>, invoicesById: M
     const halfTax = round2((line.taxableValue * rate) / 2 / 100);
     return {
       line,
-      hsnSac: resolveHsnCode(line.description, invItem?.hsnSac ?? invoice?.items?.[0]?.hsnSac ?? ''),
+      hsnSac: line.hsnSac || resolveHsnCode(line.description, invItem?.hsnSac ?? invoice?.items?.[0]?.hsnSac ?? ''),
       uom: invItem?.uom || 'NOS',
       gstRate: rate,
       grossAmount,

@@ -18,7 +18,7 @@ import type { StockAdjustmentLine, StockAdjustmentSession } from '../models/stoc
 import { InventoryService } from './inventory.service';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 import {
-  AdjustmentStore, CompleteOutcome, TxLike, cancelSession, completeSession, paths, startSession,
+  AdjustmentStore, CompleteOutcome, TxLike, cancelSession, completeSession, isNewItemId, newItemDetails, paths, startSession,
 } from './stock-adjustment.engine';
 
 const WRITE_BATCH_SIZE = 450;
@@ -152,6 +152,7 @@ export class StockAdjustmentService {
       size: item.size,
       ...(item.sleeveType ? { sleeveType: item.sleeveType } : {}),
       startStock: Number(item.currentStock) || 0,
+      ...(isNewItemId(item.id!) ? { newItem: newItemDetails(item) } : {}),
     };
   }
 

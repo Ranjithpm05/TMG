@@ -24,7 +24,7 @@ import { Transport } from '../../models/transport.model';
           </select>
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Distance (km)</label>
+          <label class="block text-xs font-semibold text-slate-500 mb-1.5">Distance (km) (from Client Master)</label>
           <input type="number" min="0" [value]="form().distance" [disabled]="disabled()"
             (input)="update('distance', +$any($event.target).value)"
             class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
@@ -32,7 +32,7 @@ import { Transport } from '../../models/transport.model';
       </div>
 
       <div>
-        <label class="block text-xs font-semibold text-slate-500 mb-1.5">Destination (from Client Master)</label>
+        <label class="block text-xs font-semibold text-slate-500 mb-1.5">Destination</label>
         <input type="text" [value]="form().destination || ''" [disabled]="disabled()"
           (input)="update('destination', $any($event.target).value)"
           class="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">

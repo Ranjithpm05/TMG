@@ -247,7 +247,10 @@ export class DeliveryChallanService {
     // A previous DC on this Packing List was removed with "Delete DC only",
     // which returned the packed stock — take it out again for the new DC.
     if (redeductStock) await this.packingListService.deductInventoryOnCompletion(input.packingListId);
-    return { id: dcDocRef.id, ...data };
+    // dcData holds serverTimestamp() sentinels — return real dates so an
+    // immediate print (before any re-read) doesn't show "Invalid Date".
+    const now = new Date();
+    return { id: dcDocRef.id, ...data, packedOn: now, createdAt: now, updatedAt: now };
   }
 
   // Deletes a DC and puts its stock back into inventory. Two modes:

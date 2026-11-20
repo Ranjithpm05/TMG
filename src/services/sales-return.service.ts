@@ -13,14 +13,22 @@ import { getDoc, getDocs, runTransaction } from './firestore-reads';
 import { Observable, firstValueFrom } from 'rxjs';
 import type { Invoice } from '../models/invoice.model';
 import type { DamageStockItem, SalesReturn, SalesReturnLedger } from '../models/sales-return.model';
+import { resolveHsnCode } from '../models/hsn-code.model';
 import { DeliveryChallanService } from './delivery-challan.service';
+import { DesignService } from './design.service';
 import { InventoryService } from './inventory.service';
 import { PackingListService } from './packing-list.service';
 import { SyncedCollectionCache, byCreatedAtDesc } from './synced-collection-cache.util';
 import {
-  BillRow, ReturnDraftInput, ReturnStore, TxLike, buildBillRows, cancelReturn, dcIdsNeeded, inventoryKey, paths,
+  BillRow, ReturnDraftInput, ReturnStore, ScannedItem, TxLike, buildBillRows, cancelReturn, dcIdsNeeded, inventoryKey, paths,
   postReturn, saveDraft,
 } from './sales-return.engine';
+
+/** Same fallback HSN the Generate Invoice dialog defaults to for a product not in the standard list. */
+const DEFAULT_HSN = '62059090';
+
+/** Barcode (upper-cased) → scanned item, for the Customer-Based Scanned Return. */
+export type ScanCatalog = Map<string, ScannedItem>;
 
 export interface InvoiceBill {
   invoice: Invoice;
@@ -41,6 +49,7 @@ export class SalesReturnService {
   private inventoryService = inject(InventoryService);
   private deliveryChallanService = inject(DeliveryChallanService);
   private packingListService = inject(PackingListService);
+  private designService = inject(DesignService);
   private returnsRef = collection(this.firestore, 'salesReturns');
 
   private readonly returnsCache = new SyncedCollectionCache<SalesReturn>({
@@ -116,6 +125,66 @@ export class SalesReturnService {
       const { rows, missingDcIds } = buildBillRows(invoice, dcsById, ledgers[i]?.returned, resolve);
       return { invoice, rows, missingDcIds };
     });
+  }
+
+  /**
+   * Every scannable item code: Design Master is the item master (style, colour,
+   * size, sleeve, product group, current MRP — see DesignService.getMrpByBarcodeMap
+   * for why MRP never comes from inventory); the inventory record is where a
+   * Fresh piece goes back to — by barcode, else the same styleNo/color/sleeve/size
+   * match loadBills() uses. A barcode only in inventory still resolves from it.
+   */
+  async loadScanCatalog(): Promise<ScanCatalog> {
+    const [designs, inventory] = await Promise.all([
+      firstValueFrom(this.designService.getDesigns()),
+      firstValueFrom(this.inventoryService.getInventory()),
+    ]);
+    const invByBarcode = new Map<string, string>();
+    const invByKey = new Map<string, string>();
+    for (const inv of inventory) {
+      if (!inv.id) continue;
+      const code = String(inv.barcode ?? '').trim().toUpperCase();
+      if (code && !invByBarcode.has(code)) invByBarcode.set(code, inv.id);
+      const key = inventoryKey(inv.styleNo, inv.color, inv.sleeveType, inv.size);
+      if (!invByKey.has(key)) invByKey.set(key, inv.id);
+    }
+
+    const catalog: ScanCatalog = new Map();
+    for (const design of designs) {
+      for (const size of design.sizes ?? []) {
+        const barcode = String(size.BARCODE ?? '').trim();
+        const code = barcode.toUpperCase();
+        if (!code || catalog.has(code)) continue;
+        const group = design.group ?? '';
+        catalog.set(code, {
+          barcode,
+          inventoryId: invByBarcode.get(code) ?? invByKey.get(inventoryKey(design.styleNo, design.color, size.sleeveType, size.size)) ?? '',
+          styleNo: design.styleNo ?? '',
+          color: design.color ?? '',
+          size: size.size ?? '',
+          ...(size.sleeveType ? { sleeveType: size.sleeveType } : {}),
+          description: group,
+          mrp: Number(size.price) || 0,
+          hsnSac: resolveHsnCode(group, DEFAULT_HSN),
+        });
+      }
+    }
+    for (const inv of inventory) {
+      const code = String(inv.barcode ?? '').trim().toUpperCase();
+      if (!inv.id || !code || catalog.has(code)) continue;
+      catalog.set(code, {
+        barcode: inv.barcode,
+        inventoryId: inv.id,
+        styleNo: inv.styleNo ?? '',
+        color: inv.color ?? '',
+        size: inv.size ?? '',
+        ...(inv.sleeveType ? { sleeveType: inv.sleeveType } : {}),
+        description: inv.group ?? '',
+        mrp: Number(inv.price) || 0,
+        hsnSac: resolveHsnCode(inv.group, DEFAULT_HSN),
+      });
+    }
+    return catalog;
   }
 
   async getLedger(invoiceId: string): Promise<SalesReturnLedger | null> {
