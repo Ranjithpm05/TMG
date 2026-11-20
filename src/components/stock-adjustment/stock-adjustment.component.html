@@ -516,7 +516,7 @@
                     <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-black"
                           [class]="s.pending ? 'bg-amber-100 text-amber-700' : 'bg-emerald-500 text-white'">{{ s.pending ? '!' : '✓' }}</span>
                     <span [class]="s.pending ? 'font-semibold text-amber-800' : 'text-slate-700'">
-                      @if (s.pending) { {{ s.pending }} product(s) not scanned yet } @else { All products counted }
+                      @if (s.pending) { {{ s.pending }} product(s) not scanned yet — set to 0 on completion } @else { All products counted }
                     </span>
                   </li>
                   <li class="flex items-center gap-2.5">
@@ -666,8 +666,8 @@
                   <td class="px-4 py-2.5 text-right font-bold tabular-nums" [class.text-emerald-600]="v > 0" [class.text-rose-600]="v < 0" [class.text-slate-300]="!v">{{ l.applied ? signed(v) : '–' }}</td>
                   <td class="px-4 py-2.5">
                     <span class="rounded-full px-2.5 py-1 text-[11px] font-bold"
-                          [class]="l.applied ? 'bg-emerald-100 text-emerald-800' : l.zeroConfirmed ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'">
-                      {{ l.applied ? 'Applied' : l.zeroConfirmed ? 'Confirmed Zero' : 'Counted' }}
+                          [class]="l.unscannedZeroed ? 'bg-amber-100 text-amber-800' : l.applied ? 'bg-emerald-100 text-emerald-800' : l.zeroConfirmed ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'">
+                      {{ historyStatus(l) }}
                     </span>
                   </td>
                 </tr>

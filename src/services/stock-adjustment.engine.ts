@@ -444,8 +444,9 @@ export async function completeSession(store: AdjustmentStore, opts: CompleteOpti
   const chunkSize = opts.chunkSize ?? DEFAULT_CHUNK_SIZE;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
-  // 1. Load the counted lines. Products not scanned (and not zero-confirmed) are left untouched —
-  //    their inventory keeps its current stock; only scanned / zero-confirmed lines are applied.
+  // 1. Load the counted lines. A completed adjustment is a full count of the group: products
+  //    with book stock that were neither scanned nor zero-confirmed are set to 0 as well
+  //    (line flagged unscannedZeroed), so inventory always equals the scanned total.
   const lines = await store.listLines(sessionId);
   // A new item (counted without an inventory record) that a GRN has since received
   // would otherwise get a second inventory doc for the same barcode.
@@ -476,7 +477,11 @@ export async function completeSession(store: AdjustmentStore, opts: CompleteOpti
   if (lockOutcome !== 'locked') return { outcome: lockOutcome };
 
   // 3. Apply in chunks. Lines already applied by an interrupted earlier attempt are skipped.
-  const toApply = lines.filter((l) => !l.applied && ((Number(l.scannedQty) || 0) > 0 || l.zeroConfirmed));
+  const linesById = new Map(lines.map((l) => [l.id, l]));
+  const toApply: ApplyEntry[] = [
+    ...lines.filter((l) => !l.applied && ((Number(l.scannedQty) || 0) > 0 || l.zeroConfirmed)).map((l) => ({ id: l.id })),
+    ...unscannedWithStock(opts.groupItems, linesById).map((item) => ({ id: item.id!, unscanned: item })),
+  ];
   const chunks = chunk(toApply, chunkSize);
   try {
     for (let c = 0; c < chunks.length; c++) {
@@ -517,22 +522,53 @@ export async function completeSession(store: AdjustmentStore, opts: CompleteOpti
   }
 }
 
-async function applyChunk(store: AdjustmentStore, sessionId: string, lockId: string, lines: StockAdjustmentLine[]): Promise<void> {
+/** A line to apply; `unscanned` = a product with book stock that was never counted (applied as 0). */
+interface ApplyEntry {
+  id: string;
+  unscanned?: InventoryItem;
+}
+
+/** Group products with book stock (incl. negative) that have no scan, zero-confirmation or applied line. */
+export function unscannedWithStock(groupItems: InventoryItem[], linesById: Map<string, StockAdjustmentLine>): InventoryItem[] {
+  return groupItems.filter((item) => {
+    if (isNewItemId(item.id!) || (Number(item.currentStock) || 0) === 0) return false;
+    const line = linesById.get(item.id!);
+    return !line || (!line.applied && !line.zeroConfirmed && (Number(line.scannedQty) || 0) <= 0);
+  });
+}
+
+async function applyChunk(store: AdjustmentStore, sessionId: string, lockId: string, entries: ApplyEntry[]): Promise<void> {
   const sessionPath = paths.session(sessionId);
   await store.runTransaction(async (tx) => {
     // All reads first (Firestore requires reads before writes in a transaction).
     const session = await tx.get(sessionPath);
     assertLock(session, lockId);
-    const liveLines = await Promise.all(lines.map((l) => tx.get(paths.line(sessionId, l.id))));
-    const invDocs = await Promise.all(lines.map((l) => tx.get(paths.inventory(l.id))));
+    const liveLines = await Promise.all(entries.map((e) => tx.get(paths.line(sessionId, e.id))));
+    const invDocs = await Promise.all(entries.map((e) => tx.get(paths.inventory(e.id))));
 
     let applied = 0, changed = 0, increase = 0, decrease = 0;
-    lines.forEach((line, i) => {
-      const live = liveLines[i];
-      if (!live || live['applied']) return;
-      const counted = Math.max(0, Number(live['scannedQty']) || 0);
-      if (counted === 0 && !live['zeroConfirmed']) return; // un-scanned again on another device since loading
+    entries.forEach((line, i) => {
       const inv = invDocs[i];
+      let live = liveLines[i];
+      if (live?.['applied']) return;
+      const counted = Math.max(0, Number(live?.['scannedQty']) || 0);
+      let unscannedZeroed = false;
+      let createLine = false;
+      if (counted === 0 && !live?.['zeroConfirmed']) {
+        // Scanned on another device since loading → applied with its count above; otherwise a
+        // listed line un-scanned again is skipped, and a never-counted product with stock goes to 0.
+        if (!line.unscanned || !inv) return;
+        unscannedZeroed = true;
+        if (!live) {
+          const item = line.unscanned;
+          createLine = true;
+          live = {
+            barcode: item.barcode, styleNo: item.styleNo, color: item.color, size: item.size,
+            ...(item.sleeveType ? { sleeveType: item.sleeveType } : {}),
+            startStock: Number(item.currentStock) || 0, scannedQty: 0,
+          };
+        }
+      }
       const newItem = live['newItem'] as NewItemDetails | undefined;
       if (!inv && !newItem) {
         throw new StockAdjustmentError('item-missing',
@@ -555,10 +591,14 @@ async function applyChunk(store: AdjustmentStore, sessionId: string, lockId: str
       } else if (variance !== 0) {
         tx.update(paths.inventory(line.id), { currentStock: counted, updatedAt: store.serverTime() });
       }
-      tx.update(paths.line(sessionId, line.id), {
+      const audit = {
         applied: true, previousStock, countedQty: counted, variance,
+        ...(unscannedZeroed ? { unscannedZeroed: true } : {}),
         appliedAt: store.serverTime(), updatedAt: store.serverTime(),
-      });
+      };
+      // One write per doc per transaction: a line created here is set in full.
+      if (createLine) tx.set(paths.line(sessionId, line.id), { ...live, ...audit });
+      else tx.update(paths.line(sessionId, line.id), audit);
       applied++;
       if (variance !== 0) changed++;
       if (variance > 0) increase += variance;
@@ -615,7 +655,7 @@ async function rollbackSession(
         tx.update(paths.line(sessionId, line.id), {
           applied: false,
           previousStock: store.deleteField(), countedQty: store.deleteField(),
-          variance: store.deleteField(), appliedAt: store.deleteField(),
+          variance: store.deleteField(), appliedAt: store.deleteField(), unscannedZeroed: store.deleteField(),
           updatedAt: store.serverTime(),
         });
         reverted++;

@@ -72,6 +72,8 @@ export interface StockAdjustmentLine {
   previousStock?: number;
   countedQty?: number;
   variance?: number;
+  /** Product had book stock but was never scanned or zero-confirmed — completion set it to 0. */
+  unscannedZeroed?: boolean;
   appliedAt?: any;
   updatedAt?: any;
 }

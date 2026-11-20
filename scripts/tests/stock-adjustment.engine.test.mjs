@@ -231,18 +231,105 @@ test('complete: stock increases and decreases set inventory to the counted qty, 
   assert.equal(store.read(paths.lock('SHIRTS')), null, 'group lock released');
 });
 
-test('complete: allowed with unscanned products — they keep their stock', async () => {
+test('complete: unscanned products with stock are set to 0 — group stock equals the scanned total', async () => {
   const store = new FakeStore();
-  seed(store, [inv('a', '1', 'SHIRTS', 10), inv('b', '2', 'SHIRTS', 5)]);
+  seed(store, [inv('a', '1', 'SHIRTS', 10), inv('b', '2', 'SHIRTS', 5), inv('c', '3', 'SHIRTS', -2),
+    inv('d', '4', 'SHIRTS', 0), inv('x', '9', 'PANTS', 7)]);
   const { id } = await start(store);
   scan(store, id, inv('a', '1', 'SHIRTS', 10), 12);
 
   const r = await completeSession(store, { sessionId: id, completedBy: 'mgr', groupItems: groupItems(store, 'SHIRTS') });
   assert.equal(r.outcome, 'completed');
   assert.equal(stock(store, 'a'), 12);
-  assert.equal(stock(store, 'b'), 5, 'unscanned product NOT silently zeroed');
-  assert.equal(store.read(paths.session(id)).status, 'Completed');
-  assert.deepEqual(r.result, { appliedLines: 1, changedLines: 1, increaseQty: 2, decreaseQty: 0 });
+  assert.equal(stock(store, 'b'), 0, 'unscanned product zeroed');
+  assert.equal(stock(store, 'c'), 0, 'negative book stock zeroed too');
+  assert.equal(stock(store, 'd'), 0);
+  assert.equal(store.read(paths.line(id, 'd')), null, 'zero-stock product needs no line');
+  assert.equal(stock(store, 'x'), 7, 'other group untouched');
+  const b = store.read(paths.line(id, 'b'));
+  assert.deepEqual([b.applied, b.unscannedZeroed, b.previousStock, b.countedQty, b.variance, b.scannedQty, b.barcode], [true, true, 5, 0, -5, 0, '2']);
+  assert.equal(store.read(paths.line(id, 'a')).unscannedZeroed, undefined);
+  assert.deepEqual(r.result, { appliedLines: 3, changedLines: 3, increaseQty: 4, decreaseQty: 5 });
+  const total = groupItems(store, 'SHIRTS').reduce((s, i) => s + i.currentStock, 0);
+  assert.equal(total, 12, 'group stock = scanned total');
+});
+
+test('complete: an unscanned product scanned on another device just before completion keeps its count', async () => {
+  const store = new FakeStore();
+  seed(store, [inv('a', '1', 'SHIRTS', 10), inv('b', '2', 'SHIRTS', 5)]);
+  const { id } = await start(store);
+  scan(store, id, inv('a', '1', 'SHIRTS', 10), 10);
+  const items = groupItems(store, 'SHIRTS'); // loaded before the late scan
+  let injected = false;
+  store.beforeCommit = (_txNo, writes) => {
+    if (injected || !writes.some(([, p]) => p.includes('/lines/'))) return;
+    injected = true;
+    scan(store, id, inv('b', '2', 'SHIRTS', 5), 3); // forces a retry, which must see the scan
+  };
+  const r = await completeSession(store, { sessionId: id, completedBy: 'mgr', groupItems: items });
+  assert.equal(r.outcome, 'completed');
+  assert.equal(stock(store, 'b'), 3);
+  assert.equal(store.read(paths.line(id, 'b')).unscannedZeroed, undefined);
+});
+
+test('complete: rollback restores unscanned-zeroed products; resume after an interruption zeroes each only once', async () => {
+  const store = new FakeStore();
+  const items = ['a', 'b', 'c', 'd'].map((k, i) => inv(k, String(i), 'SHIRTS', 4));
+  seed(store, items);
+  const { id } = await start(store);
+  scan(store, id, items[0], 6);
+
+  let applyChunks = 0;
+  store.beforeCommit = (_txNo, writes) => {
+    if (!writes.some(([, p, d]) => p.includes('/lines/') && d?.applied === true)) return;
+    if (++applyChunks === 2) throw new Error('DEADLINE_EXCEEDED');
+  };
+  await assert.rejects(
+    completeSession(store, { sessionId: id, completedBy: 'mgr', groupItems: groupItems(store, 'SHIRTS'), chunkSize: 2, sleep: async () => {} }),
+    (e) => e.code === 'completion-failed');
+  assert.deepEqual(items.map((it) => stock(store, it.id)), [4, 4, 4, 4], 'everything restored');
+  assert.ok((await store.listLines(id)).every((l) => !l.applied && !l.unscannedZeroed));
+
+  store.beforeCommit = null;
+  const r = await completeSession(store, { sessionId: id, completedBy: 'mgr', groupItems: groupItems(store, 'SHIRTS'), chunkSize: 2 });
+  assert.equal(r.outcome, 'completed');
+  assert.deepEqual(items.map((it) => stock(store, it.id)), [6, 0, 0, 0]);
+  assert.deepEqual(r.result, { appliedLines: 4, changedLines: 4, increaseQty: 2, decreaseQty: 12 });
+});
+
+test('end-to-end: multiple items, repeated scans, bulk qty and two adjustments — scanned = adjusted = inventory', async () => {
+  const store = new FakeStore();
+  const items = ['a', 'b', 'c', 'e'].map((k, i) => inv(k, `B${i}`, 'DENIM', [3, 0, 8, 2][i]));
+  seed(store, items);
+  const idx = indexByBarcode(groupItems(store, 'DENIM'));
+  const ledger = new ScanLedger();
+  for (const code of ['b0', 'B0', ' B0 ', 'B1', 'B1', 'B2']) { // repeated + case/whitespace variants
+    const res = classifyScan(code, 'DENIM', idx, idx);
+    assert.ok(res.ok, code);
+    ledger.add(res.item.id, 1);
+  }
+  ledger.add('c', 4); // bulk "Set qty" for a carton
+  const { id } = await start(store, 'DENIM');
+  for (const [lineId, delta] of ledger.takePending()) scan(store, id, items.find((i) => i.id === lineId), delta);
+
+  const r = await completeSession(store, { sessionId: id, completedBy: 'mgr', groupItems: groupItems(store, 'DENIM') });
+  assert.equal(r.outcome, 'completed');
+  const expected = { a: 3, b: 2, c: 5, e: 0 };
+  for (const [k, q] of Object.entries(expected)) {
+    assert.equal(stock(store, k), q, `inventory ${k}`);
+    const line = store.read(paths.line(id, k));
+    assert.equal(line.countedQty, q, `countedQty ${k}`);
+    assert.equal(line.scannedQty, q, `scannedQty ${k}`);
+  }
+  const scannedTotal = 10;
+  assert.equal(groupItems(store, 'DENIM').reduce((s, i) => s + i.currentStock, 0), scannedTotal);
+
+  // Second adjustment of the same group starts from the first one's result.
+  const second = await start(store, 'DENIM');
+  scan(store, second.id, { ...items[2], currentStock: 5 }, 5);
+  const r2 = await completeSession(store, { sessionId: second.id, completedBy: 'mgr', groupItems: groupItems(store, 'DENIM') });
+  assert.deepEqual(r2.result, { appliedLines: 3, changedLines: 2, increaseQty: 0, decreaseQty: 5 });
+  assert.deepEqual(['a', 'b', 'c', 'e'].map((k) => stock(store, k)), [0, 0, 5, 0]);
 });
 
 test('complete: zero-confirmed product is set to zero', async () => {

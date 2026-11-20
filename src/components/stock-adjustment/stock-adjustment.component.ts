@@ -622,6 +622,11 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
     }
 
     const s = this.summary();
+    // Unscanned products with book stock are set to 0 on completion — include them in the totals.
+    const pendingStock = this.rows().filter((row) => row.status === 'pending').map((row) => row.existingStock);
+    const pendingUnits = pendingStock.reduce((sum, n) => sum + n, 0);
+    const increaseQty = s.increaseQty + pendingStock.filter((n) => n < 0).reduce((sum, n) => sum - n, 0);
+    const decreaseQty = s.decreaseQty + pendingStock.filter((n) => n > 0).reduce((sum, n) => sum + n, 0);
     const resuming = session.status === 'Completing';
     const r = await Swal.fire({
       icon: 'question',
@@ -629,12 +634,14 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
       html: `<p><b>${session.adjustmentNo}</b> · ${this.escape(session.group)}</p>` +
         `<table style="margin:12px auto;text-align:left;font-size:14px">` +
         `<tr><td style="padding:2px 12px">Products counted</td><td><b>${s.scanned + s.zeroConfirmed}</b></td></tr>` +
-        `<tr><td style="padding:2px 12px">Products with variance</td><td><b>${s.varianceProducts}</b></td></tr>` +
-        `<tr><td style="padding:2px 12px;color:#059669">Stock increase</td><td style="color:#059669"><b>+${s.increaseQty}</b></td></tr>` +
-        `<tr><td style="padding:2px 12px;color:#e11d48">Stock decrease</td><td style="color:#e11d48"><b>−${s.decreaseQty}</b></td></tr>` +
+        `<tr><td style="padding:2px 12px">Products with variance</td><td><b>${s.varianceProducts + s.pending}</b></td></tr>` +
+        `<tr><td style="padding:2px 12px;color:#059669">Stock increase</td><td style="color:#059669"><b>+${increaseQty}</b></td></tr>` +
+        `<tr><td style="padding:2px 12px;color:#e11d48">Stock decrease</td><td style="color:#e11d48"><b>−${decreaseQty}</b></td></tr>` +
+        `<tr><td style="padding:2px 12px">Stock after adjustment</td><td><b>${s.scannedUnits}</b> pcs (= scanned)</td></tr>` +
         `</table>` +
         (s.pending > 0
-          ? `<p class="text-sm" style="color:#d97706;margin-bottom:8px"><b>${s.pending}</b> product(s) with stock were not scanned — their stock will stay unchanged.</p>`
+          ? `<p class="text-sm" style="color:#e11d48;margin-bottom:8px"><b>${s.pending}</b> product(s) with stock (<b>${pendingUnits}</b> pcs) were not scanned — their stock will be set to <b>0</b>. ` +
+            `Go back and scan them if they are on hand.</p>`
           : '') +
         `<p class="text-sm">Inventory will be set to the scanned quantities. This cannot be undone.</p>`,
       input: 'checkbox',
@@ -717,6 +724,11 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
     return line.applied ? Number(line.variance) || 0 : 0;
   }
 
+  historyStatus(line: StockAdjustmentLine): string {
+    if (line.applied) return line.unscannedZeroed ? 'Not Scanned → 0' : 'Applied';
+    return line.zeroConfirmed ? 'Confirmed Zero' : 'Counted';
+  }
+
   async exportHistory(): Promise<void> {
     const s = this.historySession();
     if (!s) return;
@@ -736,7 +748,7 @@ export class StockAdjustmentComponent implements OnInit, OnDestroy {
     const body = lines.map((l) => [
       l.barcode, l.styleNo, l.color, `${l.size}${l.sleeveType ? ' ' + l.sleeveType : ''}`,
       l.applied ? l.previousStock ?? '' : l.startStock, l.applied ? l.countedQty ?? '' : l.scannedQty,
-      l.applied ? l.variance ?? 0 : '', l.applied ? 'Applied' : l.zeroConfirmed ? 'Confirmed Zero' : 'Counted',
+      l.applied ? l.variance ?? 0 : '', this.historyStatus(l),
     ]);
     const sum = (f: (l: StockAdjustmentLine) => number) => lines.reduce((s, l) => s + f(l), 0);
     const total = ['Grand Total', '', '', '',
